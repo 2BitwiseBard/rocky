@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pebble — Batch 3 Addendum: Sensing + Connectors (2026-07-30)</title>
+<style>
+  :root{
+    --bg:#12141a; --panel:#1b1e27; --panel2:#20242f; --ink:#e8e9ee; --dim:#9aa0b0;
+    --accent:#8f7df0; --good:#5fc98e; --warn:#e8b45a; --bad:#e07a6a; --line:#2c3140;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:24px;margin:0 0 4px} h1 .v{color:var(--accent)}
+  .sub{color:var(--dim);font-size:13.5px;margin-bottom:18px}
+  .traps{background:#241d14;border:1px solid #4a3a20;border-radius:10px;padding:14px 16px;margin:18px 0}
+  .traps h2{font-size:14px;margin:0 0 8px;color:var(--warn)}
+  .traps li{font-size:13.5px;margin:6px 0;color:#d8cdb8}
+  .cart{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:20px 0;overflow:hidden}
+  .cart>header{padding:12px 16px;background:var(--panel2);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .cart>header h2{font-size:15.5px;margin:0}
+  .cart>header .ship{font-size:12px;color:var(--dim)}
+  .item{display:grid;grid-template-columns:26px 1fr auto;gap:10px;padding:11px 16px;border-bottom:1px solid var(--line);align-items:start}
+  .item:last-child{border-bottom:none}
+  .item input{width:17px;height:17px;margin-top:3px;accent-color:var(--accent);cursor:pointer}
+  .item .name{font-size:14px;font-weight:600}
+  .item .note{font-size:12.5px;color:var(--dim);margin-top:2px}
+  .item .note a{color:#a99df5;text-decoration:none}
+  .item .note a:hover{text-decoration:underline}
+  .item .price{font-size:14px;font-weight:600;white-space:nowrap;text-align:right}
+  .item .price .unv{display:block;font-size:10.5px;color:var(--dim);font-weight:400}
+  .badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;padding:1.5px 7px;border-radius:99px;vertical-align:2px;margin-left:7px}
+  .b-core{background:#233b2e;color:var(--good)} .b-opt{background:#2a2f42;color:#9aa8e8}
+  .b-warn{background:#3d2f1a;color:var(--warn)} .b-up{background:#33243d;color:#cf9df0}
+  .mass{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:20px 0;padding:14px 16px}
+  .mass h2{font-size:15px;margin:0 0 10px;color:var(--accent)}
+  .mass table{width:100%;border-collapse:collapse;font-size:13px}
+  .mass td,.mass th{padding:4px 8px;text-align:right;border-bottom:1px solid var(--line)}
+  .mass td:first-child,.mass th:first-child{text-align:left}
+  .mass .ok{color:var(--good);font-weight:700}
+  .totalbar{position:fixed;bottom:0;left:0;right:0;background:#0d0f14ee;border-top:1px solid var(--line);backdrop-filter:blur(6px)}
+  .totalbar .in{max-width:880px;margin:0 auto;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .totalbar b{font-size:18px;color:var(--good)}
+  .totalbar .n{color:var(--dim);font-size:12.5px}
+  .foot{color:var(--dim);font-size:12px;margin-top:26px}
+  @media print{.totalbar{position:static;background:none} body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pebble <span class="v">Batch 3 addendum</span> — sensing + connectors</h1>
+  <div class="sub">Project ROCKY · prices live-verified 2026-07-30 · adds the session-4 sensing plan (SENSING_PLAN.md), the D016/D020 connector kit (WIRING_HARNESS.md), and <b>promotes the 360° lidar to CORE</b> — a $15–17 vacuum pull replaces the old $99 optional line. Order with (or after) Batch 2; nothing here blocks the leg gate.</div>
+
+  <div class="traps">
+    <h2>⚠ The traps, batch-3 edition</h2>
+    <ul>
+      <li><b>Vacuum-lidar pulls: buy LDS02RR, not Neato.</b> Xiaomi/Roborock LDS02RR pulls are $15–17 with an actively maintained ROS2 driver (Maker's Pet, updated 2026-06). Neato XV-11 units have aged into ~$60 collector stock — skip.</li>
+      <li><b>Ultrasonics: US-100, not HC-SR04.</b> The Pi is 3.3 V; HC-SR04 echoes at 5 V (level shifting per sensor). US-100 is 3.3 V native with a UART mode + temp compensation. Worth the extra dollars ×5.</li>
+      <li><b>ReSpeaker: v2.0 only.</b> The v1 (WM8960) is retired; Seeed's v2.0 (TLV320AIC3104, $13.99) is the buyable one with working kernel-6.x drivers.</li>
+      <li><b>Genuine Amass lives at RC-battery shops.</b> XT30/XT60 pairs cost ~¼ of the Amazon "Amass" multipacks. Same order as the UBEC.</li>
+    </ul>
+  </div>
+
+  <!-- CART 1: the lidar decision -->
+  <div class="cart">
+    <header><h2>Cart 1 · The lidar (CORE now — pick ONE path)</h2><span class="ship">pull: AliExpress 2–3 wk (or Maker's Pet US, days) · new: US resellers, days</span></header>
+    <div class="item"><input type="checkbox" data-p="17.00" checked>
+      <div><div class="name">Xiaomi/Roborock LDS02RR lidar pull <span class="badge b-core">CORE</span><span class="badge b-warn">GAMBLE-CHEAP</span></div>
+      <div class="note">$15–17 shipped on AliExpress (working pulls); de-risked option: <a href="https://makerspet.com/product/lds02rr-lidar-distance-sensor/">Maker's Pet $30 w/ adapter+cable, US stock</a> — their <a href="https://makerspet.com/blog/xiaomi-lds02rr-lidar-support/">ROS2 driver</a> is maintained. ~190 g. sim/laserscan_spec.json + slam pipeline already built against this class.</div></div>
+      <div class="price">$17.00<span class="unv">or $30 de-risked US</span></div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="89.99">
+      <div><div class="name">LDROBOT LD19/D500 kit, NEW <span class="badge b-opt">ALT PATH</span></div>
+      <div class="note">The no-gamble option: 42 g (¼ the pull's mass!), 12 m range, ROS1/2. <a href="https://www.hiwonder.com/products/ld19-d300-lidar">Hiwonder $89.99 (819 in stock)</a> · <a href="https://www.robotshop.com/products/hiwonder-ld19-d500-lidar-developer-kit-360-dtof-laser-scanner-supports-ros1-2-raspberry-pi-jetson-nano">RobotShop US $103.99</a> · direct $69 pre-order (stock spotty). <a href="https://www.waveshare.com/rplidar-c1.htm">RPLidar C1 $79.99</a> also fine (110 g).</div></div>
+      <div class="price">$89.99<span class="unv">UNCHECK the pull if chosen</span></div>
+    </div>
+  </div>
+
+  <!-- CART 2: Adafruit -->
+  <div class="cart">
+    <header><h2>Cart 2 · Adafruit — sensor skirt + I²C plumbing</h2><span class="ship">US, in stock, days</span></header>
+    <div class="item"><input type="checkbox" data-p="34.75" checked>
+      <div><div class="name">5× US-100 ultrasonic (3.3 V, UART mode) <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.adafruit.com/product/4019">#4019, $6.95 ea ($6.26 @10+)</a>. One per shell sector = 360° skirt at 72° pitch (SENSING_PLAN pods). ~45 g total.</div></div>
+      <div class="price">$34.75</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="6.95" checked>
+      <div><div class="name">TCA9548A I²C multiplexer <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.adafruit.com/product/2717">#2717 $6.95</a>. Lives on the avionics-tray bulkhead (I4); slow sensors behind it, the 100 Hz IMU never shares wire time.</div></div>
+      <div class="price">$6.95</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="13.50" checked>
+      <div><div class="name">10× JST-SH 3-pin pre-crimped pigtails <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.adafruit.com/product/6404">#6404 plug-plug 100 mm, $1.50 ea</a> (or Amazon 140-pc SH kit ~$12). Tool sockets (I2) + sensor pods. Hand-crimping SH is misery — buy pre-crimped, always.</div></div>
+      <div class="price">$13.50</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="44.95">
+      <div><div class="name">AMG8833 8×8 thermal <span class="badge b-opt">OPTIONAL</span></div>
+      <div class="note"><a href="https://www.adafruit.com/product/3538">#3538 $44.95</a> (drifted up from $39.95) · eBay US clone $35. <b>Better 2026 buy:</b> <a href="https://www.waveshare.com/mlx90640-d55-thermal-camera.htm">MLX90640 32×24 @ $54.99</a> — 12× pixels for +$10; costs more CPU + I²C traffic. Pick one or none.</div></div>
+      <div class="price">$44.95<span class="unv">or MLX90640 $54.99</span></div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="10.90">
+      <div><div class="name">MAX98357A I²S amp + 40 mm 4 Ω speaker <span class="badge b-up">PHASE-4 PREVIEW</span></div>
+      <div class="note"><a href="https://www.adafruit.com/product/3006">#3006 $5.95</a> + <a href="https://www.adafruit.com/product/3968">#3968 $4.95</a> — chord-speak's mouth (samples shipped this session in <code>audio/</code>). Cheap to piggyback now.</div></div>
+      <div class="price">$10.90</div>
+    </div>
+  </div>
+
+  <!-- CART 3: Seeed + Pimoroni -->
+  <div class="cart">
+    <header><h2>Cart 3 · Seeed + Pimoroni</h2><span class="ship">Seeed US warehouse, days · Pimoroni UK, 1–2 wk</span></header>
+    <div class="item"><input type="checkbox" data-p="13.99" checked>
+      <div><div class="name">ReSpeaker 2-Mics Pi HAT v2.0 <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.seeedstudio.com/ReSpeaker-2-Mics-Pi-HAT.html">Seeed $13.99, US stock</a>. Chord-speak's ears + wake word. v1 retired — v2.0 (TLV320) only. Sits via the tray standard (I4), not a pod.</div></div>
+      <div class="price">$13.99</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="14.00" checked>
+      <div><div class="name">BME688 breakout <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://shop.pimoroni.com/products/bme688-breakout">Pimoroni ~£11 (~$14), 30% off, in stock</a> — Adafruit #5046 is OOS again. Temp/RH/pressure/VOC pod ("the basement smells weird").</div></div>
+      <div class="price">$14.00</div>
+    </div>
+  </div>
+
+  <!-- CART 4: RC shop -->
+  <div class="cart">
+    <header><h2>Cart 4 · rcbattery.com — the D016/D020 connector kit</h2><span class="ship">US, in stock, days — one checkout</span></header>
+    <div class="item"><input type="checkbox" data-p="4.38" checked>
+      <div><div class="name">10 pairs XT30U, genuine Amass <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://rcbattery.com/genuine-amass-xt30u-male-female-pair-plugs-5-pairs.html">$2.19 per 5-pair ×2</a>. Leg-port power drops (I1) + dock spare taps (I5) + spares. ~¼ of Amazon pricing.</div></div>
+      <div class="price">$4.38</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="2.99" checked>
+      <div><div class="name">5 pairs XT60, genuine Amass <span class="badge b-core">CORE</span></div>
+      <div class="note">Battery sled nose + dock + spares (I5 blind-mate). Same cart.</div></div>
+      <div class="price">$2.99</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="8.99" checked>
+      <div><div class="name">Hobbywing UBEC-3A (5 V/6 V jumper) <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.hobbywingdirect.com/products/ubec-3a-2-6s-lipo-input">Hobbywing direct $8.99 (sale)</a> — set 6 V: the hand-servo power domain D016 exists for. Peak 5 A. (Separate checkout if rcbattery lacks it — still one shipping wave.)</div></div>
+      <div class="price">$8.99</div>
+    </div>
+  </div>
+
+  <!-- CART 5: Amazon/omni -->
+  <div class="cart">
+    <header><h2>Cart 5 · Amazon / hardware store — small hardware</h2><span class="ship">days · prices are typical-range (Amazon blocks live verification)</span></header>
+    <div class="item"><input type="checkbox" data-p="8.00" checked>
+      <div><div class="name">3× AM312 mini PIR (3.3 V) <span class="badge b-core">CORE</span></div>
+      <div class="note">HiLetgo-class, ~$7–8/3 (10-pk ~$11). Quiet 3.3 V output, no retrigger-pot fiddling — the SR501 is noisier on 3.3 V rails. Presence pod; gates the Phase-4 camera wake.</div></div>
+      <div class="price">~$8.00</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="8.99" checked>
+      <div><div class="name">20× M3×10 knurled thumbscrews <span class="badge b-core">CORE</span></div>
+      <div class="note"><a href="https://www.walmart.com/ip/Uxcell-M3-x-10mm-Knurled-Head-Thumb-Screw-Black-for-Computer-PC-Case-20-pack/183621401">uxcell 20-pk $8.99</a>. Leg-port captives (I1) + dovetail set-knobs (I6). Or print <code>thumb_knob_m3</code> over plain SHCS first — free, already in cad/out.</div></div>
+      <div class="price">$8.99</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="13.00" checked>
+      <div><div class="name">JST-XH 2.54 kit (2–5 pin, w/ 5-pin housings) <span class="badge b-core">CORE</span></div>
+      <div class="note">560-pc kits run $11–15. The I1 data drop is a 5-pin XH (data, GND, 6 V, 2 spares — WIRING_HARNESS.md). Needs a crimper you already own… verify.</div></div>
+      <div class="price">~$13.00</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="9.00" checked>
+      <div><div class="name">50× N35 disc magnets Ø6×3 <span class="badge b-core">CORE</span></div>
+      <div class="note">Generic 50-pk ~$8–10 (Amazon/eBay). Panel standard (I3) + future palm magnets (B6). Quality-graded alt: <a href="https://www.kjmagnetics.com/proddetail.asp?prod=D42">K&J D42 $0.41 ea</a>. Polarity convention: NORTH faces out, always.</div></div>
+      <div class="price">~$9.00</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="18.00">
+      <div><div class="name">100× M3 heat-set inserts (ruthex-class) <span class="badge b-opt">OPTIONAL</span></div>
+      <div class="note">~$18 Amazon (generic ~$9). I1 deck inserts + I4 rails + jig. You may have stock — check the bin first.</div></div>
+      <div class="price">~$18.00</div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="8.00" checked>
+      <div><div class="name">Hardware store: M3 washers (ballast) + 0.8 mm piano wire <span class="badge b-core">CORE</span></div>
+      <div class="note">Trim-cup ballast (B3) + whiskers (B11). Local, ~$8.</div></div>
+      <div class="price">~$8.00</div>
+    </div>
+  </div>
+
+  <!-- existing batch 3 core -->
+  <div class="cart">
+    <header><h2>Existing Batch-3 core (master plan §6 — re-verify at order time)</h2><span class="ship">unchanged lines, listed for one-checkout convenience</span></header>
+    <div class="item"><input type="checkbox" data-p="24.95" checked>
+      <div><div class="name">BNO085 IMU breakout <span class="badge b-core">CORE</span></div>
+      <div class="note">Adafruit #4754 class, ~$24.95 (not re-verified this pass). On-chip fusion → the legged-odom EKF's gyro/accel. Mounts on B4 grommets.</div></div>
+      <div class="price">~$24.95<span class="unv">re-verify</span></div>
+    </div>
+    <div class="item"><input type="checkbox" data-p="35.00" checked>
+      <div><div class="name">Pi Camera Module 3 Wide + pan servo <span class="badge b-core">CORE</span></div>
+      <div class="note">~$35 + SG92R-class ~$6 (not re-verified). Phase-3 streaming, Phase-4 VLM eyes.</div></div>
+      <div class="price">~$41.00<span class="unv">re-verify</span></div>
+    </div>
+  </div>
+
+  <div class="mass">
+    <h2>Mass audit vs the payload margin</h2>
+    <table>
+      <tr><th>added mass (on-robot)</th><th>pull-lidar build</th><th>LD19 build</th></tr>
+      <tr><td>lidar (top-center — good CoM)</td><td>190 g</td><td>42 g</td></tr>
+      <tr><td>5× US-100 + pod shoes (printed)</td><td>75 g</td><td>75 g</td></tr>
+      <tr><td>ReSpeaker HAT</td><td>20 g</td><td>20 g</td></tr>
+      <tr><td>BME688 + PIR + mux + wiring</td><td>15 g</td><td>15 g</td></tr>
+      <tr><td>thermal (if AMG8833)</td><td>5 g</td><td>5 g</td></tr>
+      <tr><td>speaker + amp (Phase-4 preview)</td><td>29 g</td><td>29 g</td></tr>
+      <tr><td>BNO085 + cam + turret</td><td>35 g</td><td>35 g</td></tr>
+      <tr><td>connectors/harness delta (D020 ports)</td><td>30 g</td><td>30 g</td></tr>
+      <tr><th>total sensing payload</th><th>~399 g</th><th>~251 g</th></tr>
+      <tr><td>payload margin (plan §1: 20% of 2.25 kg)</td><td>450 g</td><td>450 g</td></tr>
+      <tr><td class="ok">slack remaining</td><td class="ok">~51 g ⚠ tight</td><td class="ok">~199 g ✓</td></tr>
+    </table>
+    <div style="font-size:12px;color:var(--dim);margin-top:8px">
+    Both fit. The pull-lidar build eats most of the margin — fine for Phase 3
+    (the margin exists to be spent), but it argues for the 42 g LD19 if the
+    $73 delta ever feels cheap, and for actually using the trim cups (B3) to
+    re-center. Torque check: +399 g ≈ +15% body mass → walking hips move from
+    22–32% to ~25–37% of stall — still inside the comfortable band; 3-leg
+    manip stays tucked-feet-only (D015 unchanged).</div>
+  </div>
+
+  <div class="foot">
+    Verified 2026-07-30 by live price research (links inline; Amazon lines are
+    typical-range, marked "~"). Core addendum ≈ <b>$155</b>; with every
+    optional ≈ $240. The old plan's $99 optional lidar line is superseded by
+    the $17 pull (or $90 LD19). Check items as ordered — running total below.
+  </div>
+</div>
+
+<div class="totalbar"><div class="in">
+  <span class="n">checked items</span>
+  <span><b id="total">$0.00</b> <span class="n" id="count"></span></span>
+</div></div>
+<script>
+function recalc(){
+  let t=0,n=0;
+  document.querySelectorAll('.item input').forEach(cb=>{
+    if(cb.checked){t+=parseFloat(cb.dataset.p);n++;}
+  });
+  document.getElementById('total').textContent='$'+t.toFixed(2);
+  document.getElementById('count').textContent=n+' items';
+}
+document.querySelectorAll('.item input').forEach(cb=>cb.addEventListener('change',recalc));
+recalc();
+</script>
+</body>
+</html>

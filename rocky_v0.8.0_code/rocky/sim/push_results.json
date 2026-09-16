@@ -1,0 +1,104 @@
+{
+ "stand": {
+  "0": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "30": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "60": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "90": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "120": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "150": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "180": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "210": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "240": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "270": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "300": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "330": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  }
+ },
+ "walk": {
+  "0": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "30": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "60": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "90": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "120": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "150": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "180": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "210": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "240": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "270": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "300": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  },
+  "330": {
+   "force_n": 27,
+   "impulse_ns": 4.05
+  }
+ },
+ "dur_s": 0.15,
+ "note": "force on torso for 0.15 s; last survived per direction"
+}

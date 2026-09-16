@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!-- ros2_control description for Pebble.
+
+     Three interchangeable hardware backends, chosen by xacro arg:
+       hw:=mock    ros2_control's built-in mock (kinematic echo) — CI / RViz
+       hw:=topic   topic_based_ros2_control -> our Python bridge node, which
+                   drives the tested rocky_driver stack (RECOMMENDED Phase 1-2)
+       hw:=serial  the C++ RockySystem plugin (ros2/rocky_driver), once built
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="hw" default="mock"/>
+
+  <ros2_control name="pebble_system" type="system">
+    <hardware>
+      <xacro:if value="${'$(arg hw)' == 'mock'}">
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="calculate_dynamics">true</param>
+      </xacro:if>
+      <xacro:if value="${'$(arg hw)' == 'topic'}">
+        <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+        <param name="joint_commands_topic">/pebble/joint_commands</param>
+        <param name="joint_states_topic">/pebble/joint_states_hw</param>
+      </xacro:if>
+      <xacro:if value="${'$(arg hw)' == 'serial'}">
+        <plugin>rocky_driver/RockySystem</plugin>
+        <param name="port">/dev/ttyACM0</param>
+        <param name="baud">1000000</param>
+        <param name="calibration">bench/calibration.yaml</param>
+      </xacro:if>
+    </hardware>
+
+    <xacro:macro name="leg_ifaces" params="i">
+      <joint name="yaw${i}">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="hip${i}">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="knee${i}">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+        <state_interface name="effort"/>
+      </joint>
+      <joint name="claw${i}">
+        <command_interface name="position"/>
+        <state_interface name="position"/>
+      </joint>
+    </xacro:macro>
+    <xacro:leg_ifaces i="0"/>
+    <xacro:leg_ifaces i="1"/>
+    <xacro:leg_ifaces i="2"/>
+    <xacro:leg_ifaces i="3"/>
+    <xacro:leg_ifaces i="4"/>
+  </ros2_control>
+</robot>

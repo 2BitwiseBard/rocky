@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ROCKY — Print Night (session 8: what's left)</title>
+<style>
+  :root { --bg:#17131f; --card:#221c2e; --ink:#e9e3f2; --dim:#a79cbb; --acc:#a98ae0; --ok:#7fd1a6; --warn:#f2c46b; --bad:#f08a8a; --line:#3a3050; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:980px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:34px 0 10px; color:var(--acc); border-bottom:1px solid var(--line); padding-bottom:6px; }
+  h3 { font-size:16px; margin:18px 0 6px; }
+  .sub { color:var(--dim); margin:0 0 18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin:12px 0; }
+  .banner { border-left:4px solid var(--warn); }
+  .good { border-left:4px solid var(--ok); }
+  .bad { border-left:4px solid var(--bad); }
+  table { width:100%; border-collapse:collapse; margin:10px 0; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; }
+  code { background:#2d2540; padding:1px 6px; border-radius:4px; font-size:13px; color:#d9cdf5; }
+  .tag { display:inline-block; font-size:11.5px; padding:1px 7px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+  .new { background:#4b3a7a; color:#e9defc; }
+  .done { background:#274a3a; color:#bff0d3; }
+  .gate { background:#5a4a22; color:#ffe6a8; }
+  ul { margin:6px 0 6px 18px; padding:0; }
+  li { margin:3px 0; }
+  .wrap { overflow-x:auto; }
+  pre { background:#120e1a; border:1px solid var(--line); border-radius:8px; padding:12px; font-size:13px; overflow-x:auto; color:#d9cdf5; }
+  .muted { color:var(--dim); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:720px) { .two { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1>Print Night — session 8: what's left</h1>
+<p class="sub">Picks up exactly where the session-6 weekend plan stopped. Everything below prints from <code>cad/out/*.stl</code> in the <strong>v0.7.9</strong> repo — not the v0.7.4/v0.7.6 files the old plan pointed at. All PLA (D011).</p>
+
+<div class="card banner">
+  <strong>Read this first — eight STLs changed since the file you printed from.</strong>
+  A tree-wide audit (D036) found six printable parts that had been shipping as <em>two or more disconnected bodies</em> — pieces sitting in mid-air that a slicer would print as islands or that would simply fall off. All are fixed and boolean-proven single solids now. If you have any of these sliced or queued from an older zip, <strong>delete that plate and re-import from v0.7.9</strong>:
+  <div class="wrap"><table>
+    <tr><th>part</th><th>what was wrong</th><th>fix</th><th>affects you now?</th></tr>
+    <tr><td><code>hand_hub</code></td><td>six hinge lugs floating 4.3 mm above the hub (the islands you saw)</td><td>knuckle collar; pins now go in from outside</td><td><strong>yes — plate A</strong></td></tr>
+    <tr><td><code>tool_scoop</code></td><td>three bodies: bowl, neck and bayonet socket never touched</td><td>neck rooted into the socket cap, fused into the floor</td><td><strong>yes — plate A</strong></td></tr>
+    <tr><td><code>coxa_fork</code></td><td>the −X "high collar" wall attached to nothing (0.3 mm from the back wall)</td><td>end walls run through the back wall</td><td><strong>yes — plate B (leg)</strong></td></tr>
+    <tr><td><code>shell_sector</code></td><td>both web feet (latch pad + magnet) floating 13 mm inboard of the skirt</td><td>flange feet reach into the wall</td><td>bonus sectors only</td></tr>
+    <tr><td><code>stand_section</code></td><td>skirt never touched its own tube (0.3 mm gap)</td><td>3 mm seat ring</td><td>no — sections can wait</td></tr>
+    <tr><td><code>battery_sled</code></td><td>finger scallop cut the floor clean through; tail lip severed</td><td>scallop raised, 1.8 mm floor kept</td><td>no — Batch 2</td></tr>
+    <tr><td><code>jig_column</code></td><td>deck-proxy plate stopped 6 mm short of the spine</td><td>plate runs across the column</td><td>no — bench jig, when needed</td></tr>
+    <tr><td><code>fit_ladder</code></td><td>row-D index dots were engraved inside the slots (invisible)</td><td>dots moved beside the slots</td><td><strong>no reprint</strong> — your printed ladder is valid, see below</td></tr>
+    <tr><td colspan="4" class="muted" style="padding-top:12px">…and a second pass with a new <em>print-physics</em> audit (every STL sliced layer-by-layer in its print pose — mid-air islands, thin walls, big overhangs, D038) found these:</td></tr>
+    <tr><td><code>coxa_fork</code> v0.2.2</td><td>floor plate sat 2.5 mm above the hub — "hub down, no support" printed a 73×39 plate in mid-air; AND the floor covered all four yaw-horn screw holes (unbolt-able since v0.1)</td><td>floor to the horn plane (flat underside), Ø4.2 counterbored screw access, pattern rotated 45°</td><td><strong>yes — plate B</strong></td></tr>
+    <tr><td><code>tibia_sea_outer</code></td><td>0.8 mm skin behind each slider keyway (two perimeters)</td><td>external ribs, skin 2.8</td><td><strong>yes — plate B</strong></td></tr>
+    <tr><td><code>shell_sector</code></td><td>interior was FOUR sealed chambers with 2.4 mm floors spanning 80–100 mm (unprintable, un-supportable, no LED wire route); LED groove left 0.4 mm skin; feed notch 0.8 mm from the seam; outer gill 0.5 mm from the seam</td><td>one connected cavity with 45° ceilings, groove 1.4 deep, notch + gills moved — sector 41 → 24 cm³</td><td>bonus sectors only</td></tr>
+    <tr><td><code>dock_base</code></td><td>approach ramp dipped 2.4 mm below the floor plane: the whole plate floated on a knife-edge</td><td>trimmed at z = 0</td><td>no — Batch 2</td></tr>
+    <tr><td><code>jig_column</code></td><td>on its back, spine face and flange edge bridged 84 mm</td><td>two more gussets (bridges ≤ 28 mm)</td><td>no — bench jig</td></tr>
+  </table></div>
+  <span class="muted">Unchanged and safe as printed: <code>hand_cam</code>, <code>hand_finger</code> ×3, every P2 coupon.</span>
+</div>
+
+<h2>Where you are</h2>
+<div class="two">
+  <div class="card good">
+    <strong>Done <span class="tag done">printed</span></strong>
+    <ul>
+      <li>P1 · <code>fit_ladder</code> v2</li>
+      <li>P2 · all interface coupons (latch ×2, knobs ×2, dovetail pair, coupler + recess demo, port coupon pair)</li>
+      <li>P3 (partial) · <code>hand_cam</code> + <code>hand_finger</code> ×3</li>
+    </ul>
+  </div>
+  <div class="card">
+    <strong>Owed before the leg plate <span class="tag gate">10 min</span></strong>
+    <p style="margin:6px 0">The ladder is printed but not measured. The leg and deck carry the same bores — measure first, then print (D032: numbers land in NOTES_INBOX; slicer XY-hole compensation is the bores-only fallback for tonight).</p>
+  </div>
+</div>
+
+<h2>0 · Calipers on the ladder you already have</h2>
+<div class="card">
+  <p><strong>One trap in your printed ladder:</strong> row D's 1/2/3 dots were engraved <em>inside</em> the slots, so the slots carry no index marks. They are, left to right, <strong>3.8 / 4.2 / 4.6 mm</strong> wide. Everything else is labeled.</p>
+  <div class="wrap"><table>
+    <tr><th>measure</th><th>result</th><th>then</th></tr>
+    <tr><td>Row A — which bore does the Ø3.95 peg <em>slide</em> into?</td><td>4.30 slides, 4.20 binds</td><td>Printer matches params. <strong>GO</strong> as-is.</td></tr>
+    <tr><td></td><td>only 4.40 / 4.50 slides</td><td>Holes print small → PrusaSlicer <em>XY hole compensation +0.05…+0.10</em>, GO, and write the numbers down.</td></tr>
+    <tr><td></td><td>4.15 / 4.20 already slides</td><td>True-to-CAD or roomy; GO, note it (regen may tighten to 0.20).</td></tr>
+    <tr><td>Row D — does the port-coupon lip drop through the middle (4.2) slot?</td><td>yes / only the 4.6</td><td>Yes → GO. Only 4.6 → same +0.1 compensation story.</td></tr>
+    <tr><td>Row E — which hole is snug on Ø2 filament?</td><td>2.10 target</td><td>Loose at 2.00 → glue-in pins, fine. Binds at 2.20 → ream the finger pin holes with a 2 mm bit.</td></tr>
+    <tr><td>Port dance on the coupons</td><td>docks without force?</td><td>Binds at the dowels → hold the deck (plate C), report which step. Slop after pivot → note, proceed.</td></tr>
+  </table></div>
+  <p class="muted">Rows B (M3 taps), C (heat-sets) and the bearing/tube columns still wait on hardware from the un-placed carts.</p>
+</div>
+
+<h2>1 · Tonight, in order</h2>
+
+<h3>Plate A — finish the hand + I2 <span class="tag new">re-slice: hub + scoop changed</span></h3>
+<div class="card">
+  <div class="wrap"><table>
+    <tr><th>STL</th><th>qty</th><th>~g</th><th>~min</th><th>orientation / settings</th></tr>
+    <tr><td><code>hand_hub</code> v0.2.2</td><td>1</td><td>16</td><td>52</td><td>Boss (bayonet socket) UP, collar ring on the bed. The hub disc now overhangs <em>inside</em> the collar and the servo-pocket ceiling bridges 24 mm — turn supports ON (organic/tree if you have them); they pull straight out of the open collar. 0.2 mm, 3 walls, 25 %.</td></tr>
+    <tr><td><code>tibia_sea_slider</code></td><td>1</td><td>2</td><td>7</td><td>Stub up, flat face down. 3 walls.</td></tr>
+    <tr><td><code>tool_hook</code></td><td>1</td><td>5</td><td>15</td><td>Socket down, hook up; support under the hook nose only.</td></tr>
+    <tr><td><code>tool_scoop</code> v0.2</td><td>1</td><td>8</td><td>25</td><td>Socket down; support under the pitched bowl. 3 walls.</td></tr>
+    <tr><td colspan="2"><strong>plate A</strong></td><td><strong>≈31</strong></td><td><strong>≈1.7 h</strong></td><td></td></tr>
+  </table></div>
+  <p><strong>Dry-fit when it's off the bed:</strong> pin the three fingers with Ø2 filament — the pins now go in <em>from outside</em>, through the collar, and the far collar wall stops them walking out. Turn the cam by hand 0→55°: no scrape anywhere. Then the I2 dance: slider stub into the hub socket, quarter-turn, tug — must retain; swap both tools on the same socket.</p>
+</div>
+
+<h3>Plate B — one full leg + servo blanks <span class="tag new">re-slice: coxa_fork changed</span> <span class="tag gate">after calipers</span></h3>
+<div class="card">
+  <div class="wrap"><table>
+    <tr><th>STL</th><th>qty</th><th>~g</th><th>~min</th><th>orientation / settings</th></tr>
+    <tr><td><code>coxa_yaw_base</code></td><td>1</td><td>19</td><td>61</td><td>Plate down — but the I1 hook lip holds the plate 9.5 mm off the bed, so it needs <strong>support from the build plate under the whole plate</strong> plus the crown arm (the audit caught the old "crown arm only" note). Your port coupon printed the same way.</td></tr>
+    <tr><td><code>coxa_fork</code> v0.2.2</td><td>1</td><td>22</td><td>65</td><td>Hub down — the floor now sits flat on the bed. Support only a 3 × 22 mm strip under the −X collar wall (it starts 5 mm above the floor to clear the crown arm). Four M2 × 5 go in from above through the counterbores AFTER the horn is on its spline.</td></tr>
+    <tr><td><code>femur_link</code></td><td>1</td><td>11</td><td>36</td><td>Flat on its side. CF-PLA if the hardened nozzle is on, else PLA.</td></tr>
+    <tr><td><code>tibia_knee_carrier</code></td><td>1</td><td>15</td><td>47</td><td>Floor down; support under the tube boss.</td></tr>
+    <tr><td><code>tibia_sea_outer</code></td><td>1</td><td>4</td><td>12</td><td>Socket down. Two small external ribs are new (keyway skin).</td></tr>
+    <tr><td><code>horn_coupler</code></td><td>3</td><td>5</td><td>16</td><td>Flat. (You have one from P2 — print 3 more or 2, your call.)</td></tr>
+    <tr><td><code>servo_blank</code></td><td>3</td><td>48</td><td>~130</td><td>Case flat on its BOTTOM, horn disc UP, no support (the audit: side-down leaves the horn disc as a mid-air island). 2 walls, 10 % — stand-ins; retire them on servo day.</td></tr>
+    <tr><td colspan="2"><strong>plate B</strong></td><td><strong>≈124</strong></td><td><strong>≈6.6 h</strong></td><td>4 walls / 30–40 % on all structural parts.</td></tr>
+  </table></div>
+  <p>With three blanks the whole chain assembles rigid: blank in the coxa cradle → fork on its horn → blank in the fork rails → femur_link on the horn disc → blank in the knee carrier. That's your "body + one leg" with zero servos in the house.</p>
+</div>
+
+<h3>Plate C — the body deck <span class="tag gate">only after the port coupons dock clean</span></h3>
+<div class="card">
+  <div class="wrap"><table>
+    <tr><th>STL</th><th>qty</th><th>~g</th><th>~h</th><th>notes</th></tr>
+    <tr><td><code>body_deck</code></td><td>1</td><td>79</td><td>4.2 (slicer will say 5–7)</td><td>190 × 181 — biggest part in the project. Brim ON, dry filament, watch the far corners on layer one. 4 walls / 30 % gyroid. Unchanged geometry.</td></tr>
+  </table></div>
+</div>
+
+<h3>Plate D — service stand (base + crown)</h3>
+<div class="card">
+  <div class="wrap"><table>
+    <tr><th>STL</th><th>qty</th><th>~g</th><th>~h</th><th>notes</th></tr>
+    <tr><td><code>stand_base</code></td><td>1</td><td>56</td><td>2.0</td><td rowspan="2">Base + crown alone = the 47 mm cradle, useful from day one. 0.3 mm layers, 2 walls, 15 %. Unchanged geometry. <code>stand_section</code> (fixed this session) can wait until the leg needs the full 172 mm envelope.</td></tr>
+    <tr><td><code>stand_crown</code></td><td>1</td><td>53</td><td>2.0</td></tr>
+    <tr><td colspan="5" class="muted">Crown: its top plate spans the hollow skirt (≈80 mm) — turn on <strong>supports from the build plate inside the skirt</strong>; they pull straight out of the open bottom. Base needs none.</td></tr>
+  </table></div>
+</div>
+
+<h3>Bonus — two carapace sectors <span class="tag new">re-slice: feet fixed</span></h3>
+<div class="card">
+  <p><code>shell_sector</code> ×2 · ≈36 g · ≈1.9 h (was 61 g — the interior floors are gone). 0.25 mm, 3 walls, 12 % gyroid, brim. The interior is now one connected cavity with 45° self-supporting terrace ceilings; the web feet reach the skirt through a real flange. Support only under the flange feet and the leg arch — nothing inside. Print two to feel the seam tongue-and-groove.</p>
+</div>
+
+<h2>2 · Totals</h2>
+<div class="card">
+  <div class="wrap"><table>
+    <tr><th>plate</th><th>~g</th><th>~h</th><th>status</th></tr>
+    <tr><td>A · hand + I2 remainder</td><td>31</td><td>1.7</td><td>tonight</td></tr>
+    <tr><td>B · leg + blanks</td><td>124</td><td>6.6</td><td>after calipers</td></tr>
+    <tr><td>C · deck</td><td>79</td><td>4.2</td><td>after port dance</td></tr>
+    <tr><td>D · stand base + crown</td><td>109</td><td>4.0</td><td>any time</td></tr>
+    <tr><td>bonus · 2 sectors</td><td>36</td><td>1.9</td><td>any time</td></tr>
+    <tr><td><strong>remaining</strong></td><td><strong>≈380 g</strong></td><td><strong>≈18.4 h</strong></td><td>fits the rest of the spool with margin</td></tr>
+  </table></div>
+  <p class="muted">Estimates from <code>cad/print_estimate.py</code>, ±30 %. If the slicer disagrees wildly, suspect a wrong-scale import before suspecting the slicer.</p>
+</div>
+
+<h2>3 · NOTES_INBOX block (copy, fill, paste)</h2>
+<pre>fit ladder v2: sliding dowel bore = 4.__ ; snug Ø2 pin hole = 2.__ ;
+2.2 lip passes slot (3.8 / 4.2 / 4.6, left→right) = __ ; M3 tap (if screws found) = 2.__
+port coupon: dance works? which step binds? slop after pivot?
+hand v0.2.2: cam 0..55 free? fingers nest closed? pins retained by the collar? binding where?
+I2: slider→hub retains on tug? hook / scoop swap clean?
+leg (if printed): chain assembles rigid with blanks? what bound?
+deck (if printed): all five port stations dock? which binds?
+sectors (if printed): seam tongue-and-groove engagement? feet sit flat?
+printer: Live-Z __ , PLA temps __ /__ , XY hole comp used = __ , anything weird
+orders: placed? which carts? __
+failures → graveyard box + one line here. Failures are first-class data.</pre>
+</main>
+</body>
+</html>

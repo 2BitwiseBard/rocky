@@ -1,0 +1,29 @@
+[
+ {
+  "scene": "flat_straight",
+  "dist_m": 0.959,
+  "drift_end_mm": 60.5,
+  "drift_pct": 6.3,
+  "rms_mm": 33.6,
+  "naive_end_mm": 96.6,
+  "yaw_err_deg": 6.08
+ },
+ {
+  "scene": "flat_turny",
+  "dist_m": 0.888,
+  "drift_end_mm": 60.1,
+  "drift_pct": 6.76,
+  "rms_mm": 33.8,
+  "naive_end_mm": 211.4,
+  "yaw_err_deg": 6.78
+ },
+ {
+  "scene": "rubble20_walk",
+  "dist_m": 1.198,
+  "drift_end_mm": 12.2,
+  "drift_pct": 1.02,
+  "rms_mm": 10.1,
+  "naive_end_mm": 311.2,
+  "yaw_err_deg": 6.79
+ }
+]

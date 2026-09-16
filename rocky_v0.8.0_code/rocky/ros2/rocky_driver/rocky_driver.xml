@@ -1,0 +1,7 @@
+<library path="rocky_system">
+  <class name="rocky_driver/RockySystem"
+         type="rocky_driver::RockySystem"
+         base_class_type="hardware_interface::SystemInterface">
+    <description>Feetech dual-protocol bus SystemInterface for Pebble (skeleton)</description>
+  </class>
+</library>

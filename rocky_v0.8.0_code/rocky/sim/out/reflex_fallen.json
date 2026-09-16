@@ -1,0 +1,182 @@
+[
+ {
+  "seed": 0,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.04,
+    "PLANT"
+   ],
+   [
+    3.49,
+    "BRACE"
+   ],
+   [
+    5.0,
+    "RECOVER"
+   ],
+   [
+    5.74,
+    "FALLEN"
+   ],
+   [
+    15.74,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 5.74,
+  "t_righted": 15.742,
+  "walked_after_m": 0.231,
+  "end_tilt": 0.5,
+  "end_h": 0.129
+ },
+ {
+  "seed": 1,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.02,
+    "PLANT"
+   ],
+   [
+    3.47,
+    "BRACE"
+   ],
+   [
+    4.97,
+    "RECOVER"
+   ],
+   [
+    6.21,
+    "FALLEN"
+   ],
+   [
+    16.21,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 6.206,
+  "t_righted": 16.208000000000002,
+  "walked_after_m": 0.211,
+  "end_tilt": 0.4,
+  "end_h": 0.129
+ },
+ {
+  "seed": 2,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.02,
+    "PLANT"
+   ],
+   [
+    3.47,
+    "BRACE"
+   ],
+   [
+    4.98,
+    "RECOVER"
+   ],
+   [
+    7.26,
+    "FALLEN"
+   ],
+   [
+    8.05,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 7.26,
+  "t_righted": 8.048,
+  "walked_after_m": 0.588,
+  "end_tilt": 0.5,
+  "end_h": 0.129
+ },
+ {
+  "seed": 3,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.04,
+    "PLANT"
+   ],
+   [
+    3.49,
+    "BRACE"
+   ],
+   [
+    4.99,
+    "RECOVER"
+   ],
+   [
+    5.75,
+    "FALLEN"
+   ],
+   [
+    8.7,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 5.75,
+  "t_righted": 8.700000000000001,
+  "walked_after_m": 0.558,
+  "end_tilt": 0.7,
+  "end_h": 0.128
+ },
+ {
+  "seed": 4,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.03,
+    "PLANT"
+   ],
+   [
+    3.48,
+    "BRACE"
+   ],
+   [
+    4.98,
+    "RECOVER"
+   ],
+   [
+    5.69,
+    "FALLEN"
+   ],
+   [
+    9.02,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 5.69,
+  "t_righted": 9.018,
+  "walked_after_m": 0.543,
+  "end_tilt": 0.7,
+  "end_h": 0.128
+ }
+]

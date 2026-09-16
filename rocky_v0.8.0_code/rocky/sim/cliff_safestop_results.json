@@ -1,0 +1,126 @@
+{
+ "hardstop": {
+  "mode": "hardstop",
+  "fell": false,
+  "body_overhang_mm": -133.5,
+  "voids": [
+   [
+    4.94,
+    2
+   ],
+   [
+    5.06,
+    2
+   ],
+   [
+    5.14,
+    4
+   ],
+   [
+    5.28,
+    4
+   ],
+   [
+    5.4,
+    4
+   ],
+   [
+    5.52,
+    4
+   ],
+   [
+    5.64,
+    4
+   ],
+   [
+    5.78,
+    4
+   ],
+   [
+    5.9,
+    1
+   ],
+   [
+    5.9,
+    4
+   ],
+   [
+    6.02,
+    1
+   ]
+  ],
+  "stop_margin_mm": 187.5,
+  "post_halt": {
+   "contact_breaks": 24,
+   "mean_speed_mms": 10.2,
+   "max_tilt_deg": 0.68
+  },
+  "supervisor_states": null
+ },
+ "safestop": {
+  "mode": "safestop",
+  "fell": false,
+  "body_overhang_mm": -132.9,
+  "voids": [
+   [
+    4.94,
+    2
+   ],
+   [
+    5.06,
+    2
+   ],
+   [
+    5.14,
+    4
+   ],
+   [
+    5.28,
+    4
+   ],
+   [
+    5.4,
+    4
+   ],
+   [
+    5.52,
+    4
+   ],
+   [
+    5.64,
+    4
+   ],
+   [
+    5.78,
+    4
+   ],
+   [
+    5.9,
+    4
+   ],
+   [
+    5.94,
+    1
+   ],
+   [
+    6.02,
+    4
+   ],
+   [
+    6.06,
+    1
+   ]
+  ],
+  "stop_margin_mm": 184.8,
+  "post_halt": {
+   "contact_breaks": 0,
+   "mean_speed_mms": 12.1,
+   "max_tilt_deg": 0.49
+  },
+  "supervisor_states": [
+   "BRACE",
+   "NORMAL",
+   "RECOVER"
+  ]
+ }
+}

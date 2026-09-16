@@ -1,0 +1,173 @@
+{
+ "masses_g": {
+  "torso": 1462.4,
+  "coxa": 86.2,
+  "femur": 15.7,
+  "tibia": 135.0,
+  "hand": 38.6,
+  "robot": 2839.9
+ },
+ "stall_nm": {
+  "ST3215": 2.94,
+  "STS3250": 4.9
+ },
+ "cases": [
+  {
+   "case": "stand_5leg",
+   "note": "nominal stance, W/5 per foot",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.167,
+    "knee": 0.28
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 5.7,
+     "STS3250": 3.4
+    },
+    "knee": {
+     "ST3215": 9.5,
+     "STS3250": 5.7
+    }
+   }
+  },
+  {
+   "case": "walk_4leg",
+   "note": "wave-gait stance share, W/4",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.209,
+    "knee": 0.35
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 7.1,
+     "STS3250": 4.3
+    },
+    "knee": {
+     "ST3215": 11.9,
+     "STS3250": 7.1
+    }
+   }
+  },
+  {
+   "case": "stance_3leg",
+   "note": "two legs raised, W/3 per planted foot",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.279,
+    "knee": 0.467
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 9.5,
+     "STS3250": 5.7
+    },
+    "knee": {
+     "ST3215": 15.9,
+     "STS3250": 9.5
+    }
+   }
+  },
+  {
+   "case": "arm_untucked",
+   "note": "airborne leg, femur+tibia horizontal",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.284,
+    "knee": 0.115
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 9.7,
+     "STS3250": 5.8
+    },
+    "knee": {
+     "ST3215": 3.9,
+     "STS3250": 2.3
+    }
+   }
+  },
+  {
+   "case": "carry_100g",
+   "note": "untucked + 100 g in hand",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.51,
+    "knee": 0.247
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 17.3,
+     "STS3250": 10.4
+    },
+    "knee": {
+     "ST3215": 8.4,
+     "STS3250": 5.0
+    }
+   }
+  },
+  {
+   "case": "selfright_push",
+   "note": "crouched geometry, W/2 through one leg",
+   "tau": {
+    "yaw": 0.0,
+    "hip": 0.226,
+    "knee": 1.465
+   },
+   "margin_pct": {
+    "yaw": {
+     "ST3215": 0.0,
+     "STS3250": 0.0
+    },
+    "hip": {
+     "ST3215": 7.7,
+     "STS3250": 4.6
+    },
+    "knee": {
+     "ST3215": 49.8,
+     "STS3250": 29.9
+    }
+   }
+  }
+ ],
+ "worst": {
+  "hip": {
+   "tau_nm": 0.51,
+   "case": "carry_100g",
+   "st3215_pct": 17.3,
+   "st3250_pct": 10.4,
+   "st3215": "OK",
+   "st3250": "OK"
+  },
+  "knee": {
+   "tau_nm": 1.465,
+   "case": "selfright_push",
+   "st3215_pct": 49.8,
+   "st3250_pct": 29.9,
+   "st3215": "WARM",
+   "st3250": "OK"
+  }
+ },
+ "method": "static J^T F on CAD-derived masses (D039); holding torques, dynamics ride on top"
+}

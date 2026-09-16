@@ -1,0 +1,18 @@
+{
+ "topic": "/pebble/scan",
+ "msg": "sensor_msgs/LaserScan",
+ "frame_id": "lidar_link",
+ "tf_chain": "odom (legged_odom EKF) -> base_link -> lidar_link (xyz 0 0 0.060, from URDF once the puck mount exists)",
+ "angle_min": -3.141592653589793,
+ "angle_max": 3.12413936106985,
+ "angle_increment": 0.017453292519943295,
+ "time_increment": 0.0,
+ "scan_time": 0.125,
+ "range_min": 0.12,
+ "range_max": 6.0,
+ "slam_toolbox_notes": [
+  "mode: mapping, odom from /pebble/odom (EKF, ~1-7% drift)",
+  "the puck tilts with the body (<=2 deg walking) \u2014 within slam_toolbox tolerance; pause scans during BRACE reflex",
+  "vacuum pucks: ~1800-2000 samples/rev at 5 Hz typical \u2014 this spec's 360x8 Hz is deliberately conservative"
+ ]
+}

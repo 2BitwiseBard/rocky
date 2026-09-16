@@ -1,0 +1,9 @@
+resumed runs/recover1/latest.pt: update 1953, 1,999,872 steps, 34.1 min trained
+device cuda | 8 envs (async) | batch 2048 | 1953 updates to 4,000,000 steps | DR=on push=0.03
+Traceback (most recent call last):
+  File "/home/bitwisebard/Development/rocky/rocky_v0.8.0_code/rocky/sim/train_ppo.py", line 408, in <module>
+    main()
+  File "/home/bitwisebard/Development/rocky/rocky_v0.8.0_code/rocky/sim/train_ppo.py", line 403, in main
+    save(update)
+         ^^^^^^
+UnboundLocalError: cannot access local variable 'update' where it is not associated with a value

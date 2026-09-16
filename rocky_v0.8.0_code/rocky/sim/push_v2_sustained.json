@@ -1,0 +1,42 @@
+{
+ "0": {
+  "base": {
+   "force": 16,
+   "skid_mm": 279
+  },
+  "v2": {
+   "force": 16,
+   "skid_mm": 229
+  }
+ },
+ "90": {
+  "base": {
+   "force": 16,
+   "skid_mm": 167
+  },
+  "v2": {
+   "force": 16,
+   "skid_mm": 161
+  }
+ },
+ "180": {
+  "base": {
+   "force": 16,
+   "skid_mm": 3
+  },
+  "v2": {
+   "force": 16,
+   "skid_mm": 2
+  }
+ },
+ "270": {
+  "base": {
+   "force": 12,
+   "skid_mm": 53
+  },
+  "v2": {
+   "force": 12,
+   "skid_mm": 55
+  }
+ }
+}

@@ -1,0 +1,333 @@
+--- a/harness/sim_backend.py
++++ b/harness/sim_backend.py
+@@ -16,12 +16,26 @@
+     binding when it lands (v0.1).
+   * say/gesture validate against the real lexicons and log; rendering
+     audio/gesture motion in-world is the B18/session-7 demo.
++
++Laptop additions (2026-09-08, Tyler's machine — declared in NOTES_INBOX):
++  * ROCKY_VIEWER=1 opens the passive MuJoCo window on this backend, so
++    chat-driving (Claude over MCP, local_brain, intent) is WATCHABLE;
++    motion then paces to real time instead of running CPU-fast. Fail-soft:
++    no display -> a stderr note and the backend runs headless as before.
++  * gesture() now renders the gesture in physics (same fn(gait, t) tables
++    the playground uses) instead of only logging it; FELL is reported the
++    way goto reports it.
++  * ROCKY_AUDIO=1 plays the chord-speak sample for say() through
++    aplay/ffplay when audio/samples_v2/<word>.wav exists.
+ """
+ from __future__ import annotations
+ 
+ import asyncio
+ import os
++import shutil
++import subprocess
+ import sys
++import time
+ 
+ import numpy as np
+ 
+@@ -66,6 +80,22 @@
+         self.mode = "idle"
+         self._stop_req = False
+         self._reset()
++        # laptop 2026-09-08: optional live window + speakers (both default off)
++        self.viewer = None
++        self._t_wall = 0.0
++        if os.environ.get("ROCKY_VIEWER", "").lower() in ("1", "true", "yes"):
++            try:
++                import mujoco.viewer
++                self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
++            except Exception as e:                       # no display, no GL…
++                print(f"[sim_backend] viewer unavailable ({e}); running "
++                      "headless", file=sys.stderr)
++        self._player = None
++        if os.environ.get("ROCKY_AUDIO", "").lower() in ("1", "true", "yes"):
++            self._player = next((p for p in ("aplay", "ffplay")
++                                 if shutil.which(p)), None)
++        self._chord_dir = os.path.join(HERE, "..", "audio", "samples_v2")
++        self._gestures = None
+ 
+     def _reset(self):
+         mujoco = self._mujoco
+@@ -90,21 +120,33 @@
+             return {"ok": False, "error": f"unknown chord word {word!r}",
+                     "hint": f"lexicon: {', '.join(CHORD_WORDS)}"}
+         self.events.append(("say", word))
+-        return {"ok": True, "word": word, "note": "logged (audio render is "
+-                "the session-7 demo)"}
++        wav = os.path.join(self._chord_dir, f"{word}.wav")
++        if self._player and os.path.exists(wav):
++            cmd = (["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", wav]
++                   if self._player == "ffplay" else [self._player, wav])
++            subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
++                             stderr=subprocess.DEVNULL)
++            return {"ok": True, "word": word, "note": "played on the speakers"}
++        return {"ok": True, "word": word, "note": "logged (ROCKY_AUDIO=1 + "
++                "audio/samples_v2 rendered plays it on the speakers)"}
+ 
+     async def gesture(self, name: str) -> dict:
+         if name not in GESTURES:
+             return {"ok": False, "error": f"unknown gesture {name!r}",
+                     "hint": f"available: {', '.join(GESTURES)}"}
+-        if self.mode == "walking":
++        if self.mode in ("walking", "gesturing"):
+             return {"ok": False, "error": "busy",
+                     "hint": "stop() first or wait for the goto"}
+         self.events.append(("gesture", name))
+-        return {"ok": True, "gesture": name, "note": "logged"}
++        self.mode = "gesturing"
++        try:
++            return await asyncio.to_thread(self._gesture_blocking, name)
++        finally:
++            if self.mode == "gesturing":
++                self.mode = "idle"
+ 
+     async def goto(self, x: float, y: float) -> dict:
+-        if self.mode == "walking":
++        if self.mode in ("walking", "gesturing"):
+             return {"ok": False, "error": "busy",
+                     "hint": "one motion intent at a time in the sim "
+                             "backend (v0); stop() or wait"}
+@@ -129,12 +171,14 @@
+         t_settle, t_cap = 1.0, 20.0
+         stop_sent = False
+         outcome = None
++        self._t_wall = time.monotonic()
+         for k in range(int(t_cap / DT)):
+             t = k * DT
+             p = data.xpos[self.torso]
+             if t < t_settle:
+                 data.ctrl[:15] = self._q0
+                 mujoco.mj_step(model, data)
++                self._sync_viewer(k)
+                 continue
+             tw = t - t_settle
+             dx, dy = tx - p[0], ty - p[1]
+@@ -148,6 +192,13 @@
+             ramp = min(tw / 0.6, 1.0)
+             if outcome is None:
+                 ux, uy = (dx / dist, dy / dist) if dist > 1e-6 else (0, 0)
++                # the gait takes BODY-frame velocities; the target is map
++                # frame — rotate by the current yaw or any heading change
++                # (turn_in_place, drift) walks the robot off-target
++                Rm = data.xmat[self.torso].reshape(3, 3)
++                yaw = float(np.arctan2(Rm[1, 0], Rm[0, 0]))
++                cy, sy = np.cos(yaw), np.sin(yaw)
++                ux, uy = cy * ux + sy * uy, -sy * ux + cy * uy
+                 vx, vy = V * ramp * ux, V * ramp * uy
+                 vx, vy, wz = react.command(tw, vx, vy, 0.0)
+                 halted = (react.retreat_until is not None and
+@@ -174,10 +225,8 @@
+                     react.on_void(tw)
+                     self.events.append(("void", round(float(p[0]), 3)))
+             mujoco.mj_step(model, data)
+-            z = data.xmat[self.torso].reshape(3, 3)[:, 2]
+-            tilt = np.rad2deg(np.arccos(np.clip(z[2], -1, 1)))
+-            if tilt > 50 or p[2] < self.plat_h - 0.02:
+-                self.mode = "fallen"
++            self._sync_viewer(k)
++            if self._fell():
+                 return {"ok": False, "stopped": "FELL", "pose": self._pose(),
+                         "detail": "physics says no — this is a bug, report it"}
+             # linger 1.5 s after an outcome so the safe-stop completes
+@@ -249,3 +298,81 @@
+     def _pose(self):
+         p = self.data.xpos[self.torso]
+         return {"x": round(float(p[0]), 3), "y": round(float(p[1]), 3)}
++
++    def _fell(self):
++        """Same fall test goto has always used; sets mode='fallen'."""
++        p = self.data.xpos[self.torso]
++        z = self.data.xmat[self.torso].reshape(3, 3)[:, 2]
++        tilt = np.rad2deg(np.arccos(np.clip(z[2], -1, 1)))
++        if tilt > 50 or p[2] < self.plat_h - 0.02:
++            self.mode = "fallen"
++            return True
++        return False
++
++    # ------------------------------------------- laptop: viewer + gestures
++    def _sync_viewer(self, k):
++        """With the live window: refresh it (every 4th 500 Hz step is plenty)
++        and hold the motion loop to real time — otherwise a 20 s goto is a
++        0.3 s blur. Without it: no-op, physics runs CPU-fast as before."""
++        v = self.viewer
++        if v is None:
++            return
++        if not v.is_running():                 # user closed the window
++            self.viewer = None
++            return
++        if k % 4 == 0:
++            v.sync()
++        self._t_wall += self.model.opt.timestep
++        lag = self._t_wall - time.monotonic()
++        if lag > 0:
++            time.sleep(lag)
++
++    def _gesture_table(self):
++        if self._gestures is None:
++            from pebble_gestures import (jazz_hands, fist_bump, beckon,
++                                         JAZZ_TOTAL, BUMP_TOTAL, BECKON_TOTAL)
++            from pebble_gestures2 import GESTURES2
++            t = {"jazz_hands": (jazz_hands, JAZZ_TOTAL),
++                 "fist_bump": (fist_bump, BUMP_TOTAL),
++                 "beckon": (beckon, BECKON_TOTAL)}
++            t.update({k: (fn, total) for k, (fn, total, _ev) in GESTURES2.items()})
++            self._gestures = t
++        return self._gestures
++
++    def _gesture_blocking(self, name):
++        """Play the gesture's joint-space script (run_gestures2's loop:
++        settle -> fn(gait, t) -> tail on the planted pose). stop() cuts it
++        short; a fall is reported like goto reports it."""
++        mujoco = self._mujoco
++        model, data = self.model, self.data
++        fn, total = self._gesture_table()[name]
++        DT = model.opt.timestep
++        t_settle, t_tail = 0.5, 0.8
++        has_claw = model.nu >= 20
++        self._t_wall = time.monotonic()
++        cut = False
++        for k in range(int((t_settle + total + t_tail) / DT)):
++            t = k * DT
++            if self._stop_req and not cut:
++                cut = True
++            if cut or t < t_settle or t >= t_settle + total:
++                data.ctrl[:15] = self._q0
++                if has_claw:
++                    data.ctrl[15:20] = 0.0
++            else:
++                q, claw = fn(self.gait, t - t_settle)
++                data.ctrl[:15] = q.flatten()
++                if has_claw:
++                    data.ctrl[15:20] = claw
++            mujoco.mj_step(model, data)
++            self._sync_viewer(k)
++            if self._fell():
++                return {"ok": False, "gesture": name, "stopped": "FELL",
++                        "pose": self._pose(),
++                        "detail": "physics says no — this is a bug, report it"}
++        self._stop_req = False
++        out = {"ok": not cut, "gesture": name, "duration_s": round(total, 1),
++               "pose": self._pose(), "note": "rendered in physics"}
++        if cut:
++            out["stopped"] = "user"
++        return out
+--- a/harness/local_brain.py
++++ b/harness/local_brain.py
+@@ -25,6 +25,17 @@
+ Requires: `pip install ollama` and a running Ollama daemon (except
+ --mock-llm). Tool-calling quality varies by model; qwen2.5 7B+ and
+ llama3.1 8B+ behave well.
++
++OpenAI-compatible servers (2026-09-08, laptop addition): llama-swap,
++llama.cpp's llama-server, vLLM, LM Studio… anything speaking
++/v1/chat/completions with tools. `pip install openai`, then
++
++    python3 -m harness.local_brain --base-url http://127.0.0.1:8080/v1 \
++        --model qwen3.6-35b-a3b            # ROCKY_LLM_API_KEY if it needs one
++
++(or ROCKY_LLM_BASE_URL / ROCKY_LLM_MODEL in the environment). Same tool
++loop, same guards; thinking is switched off for snappy tool calls unless
++you pass --think.
+ """
+ from __future__ import annotations
+ import argparse
+@@ -122,18 +133,83 @@
+                            for n, a in calls]}}
+ 
+ 
++class OpenAIChat:
++    """Any OpenAI-compatible /v1/chat/completions server (llama-swap,
++    llama-server, vLLM, LM Studio…) behind the same .chat(model, messages,
++    tools) surface as the ollama client, so the tool loop below does not
++    care which brain it got. The loop keeps an ollama-shaped transcript;
++    this converts it on the way out and hands back an ollama-shaped reply."""
++
++    def __init__(self, base_url, api_key, think=False):
++        from openai import OpenAI
++        self.client = OpenAI(base_url=base_url, api_key=api_key or "none")
++        # Qwen3/GLM-style templates: thinking off = one short hop per tool
++        self.extra = None if think else {
++            "chat_template_kwargs": {"enable_thinking": False}}
++
++    @staticmethod
++    def _to_openai(messages):
++        out = []
++        for m in messages:
++            if m["role"] == "assistant":
++                mm = {"role": "assistant", "content": m.get("content") or ""}
++                tcs = [{"id": tc.get("id") or f"call_{i}", "type": "function",
++                        "function": {
++                            "name": tc["function"]["name"],
++                            "arguments": json.dumps(tc["function"]["arguments"])}}
++                       for i, tc in enumerate(m.get("tool_calls") or [])]
++                if tcs:
++                    mm["tool_calls"] = tcs
++                out.append(mm)
++            elif m["role"] == "tool":
++                out.append({"role": "tool",
++                            "tool_call_id": m.get("tool_call_id") or "call_0",
++                            "content": m["content"]})
++            else:
++                out.append({"role": m["role"], "content": m["content"]})
++        return out
++
++    def chat(self, model, messages, tools):
++        r = self.client.chat.completions.create(
++            model=model, messages=self._to_openai(messages), tools=tools,
++            extra_body=self.extra)
++        msg = r.choices[0].message
++        calls = []
++        for tc in msg.tool_calls or []:
++            try:
++                targs = json.loads(tc.function.arguments or "{}")
++            except json.JSONDecodeError:
++                targs = {}
++            calls.append({"id": tc.id, "function": {"name": tc.function.name,
++                                                    "arguments": targs}})
++        return {"message": {"content": msg.content or "", "tool_calls": calls}}
++
++
+ async def main():
+     ap = argparse.ArgumentParser()
+-    ap.add_argument("--model", default="qwen2.5:7b")
++    ap.add_argument("--model", default=os.environ.get("ROCKY_LLM_MODEL",
++                                                      "qwen2.5:7b"))
+     ap.add_argument("--backend", default="sim", choices=["sim", "mock"])
+     ap.add_argument("--mock-llm", action="store_true",
+                     help="scripted fake LLM — tests the loop without Ollama")
+     ap.add_argument("--once", default=None,
+                     help="one prompt, then exit (for scripting/tests)")
++    ap.add_argument("--base-url", default=os.environ.get("ROCKY_LLM_BASE_URL"),
++                    help="OpenAI-compatible endpoint instead of Ollama, e.g. "
++                         "http://127.0.0.1:8080/v1 (llama-swap/llama-server/"
++                         "vLLM/LM Studio); key via ROCKY_LLM_API_KEY")
++    ap.add_argument("--think", action="store_true",
++                    help="(--base-url) leave the model's thinking mode on")
+     args = ap.parse_args()
+ 
+     if args.mock_llm:
+         client = MockLLM()
++    elif args.base_url:
++        try:
++            client = OpenAIChat(args.base_url, os.environ.get("ROCKY_LLM_API_KEY"),
++                                think=args.think)
++        except ImportError:
++            sys.exit("pip install openai for --base-url, or use --mock-llm")
+     else:
+         try:
+             import ollama
+@@ -172,10 +248,12 @@
+                 name = f["name"] if isinstance(f, dict) else f.name
+                 raw = f["arguments"] if isinstance(f, dict) else f.arguments
+                 targs = raw if isinstance(raw, dict) else json.loads(raw or "{}")
++                tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                 print(f"  [tool] {name}({json.dumps(targs)})")
+                 result = await call_tool(backend, name, targs)
+                 print(f"         -> {json.dumps(result)[:160]}")
+                 messages.append({"role": "tool", "name": name,
++                                 "tool_call_id": tc_id,
+                                  "content": json.dumps(result)})
+         if args.once:
+             break

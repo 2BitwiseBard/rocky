@@ -1,0 +1,148 @@
+# ============================================================
+# Project ROCKY / Pebble — Design Parameters (single source of truth)
+# Units: millimeters unless noted.
+# VERIFY = measure on real hardware with calipers before printing 5x of anything.
+# Both the CAD scripts and (later) the URDF xacro read this file.
+# ============================================================
+
+meta:
+  version: 0.1
+  robot: pebble
+
+servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm
+  body_l: 45.2           # VERIFY  case length
+  body_w: 24.7           # VERIFY  case width
+  body_h: 32.0           # VERIFY  case height, bottom to top face (excl. output boss)
+  boss_d: 6.0            # VERIFY  output boss diameter
+  boss_h: 3.0            # VERIFY  output boss height above case
+  shaft_offset: 11.25    # VERIFY  output axis distance from front end of case, on width centerline
+  horn_d: 20.0           # VERIFY  metal disc horn diameter
+  horn_h: 3.0            # VERIFY  horn thickness
+  horn_bcd: 14.0         # VERIFY  bolt circle diameter of 4x M2 horn holes
+  horn_screw_d: 2.2      # M2 clearance
+  mass_g: 60             # VERIFY
+
+servo_scs0009:           # hand/claw drive (modeled later)
+  body_l: 23.6           # VERIFY
+  body_w: 11.8           # VERIFY
+  body_h: 23.8           # VERIFY
+
+bearing_683zz:           # coxa yaw support bearing 3x7x3
+  id: 3.0
+  od: 7.0
+  w: 3.0
+
+leg:
+  l1_coxa: 45.0          # yaw axis -> femur pivot axis
+  l2_femur: 95.0         # femur pivot -> knee axis (center to center)
+  l3_tibia: 135.0        # knee axis -> foot contact point
+  tibia_tube_od: 10.0    # carbon tube OD (VERIFY purchased tube)
+  tibia_tube_id: 8.0
+  sea_travel: 7.0        # spring travel in foot cartridge
+
+body:
+  circumradius: 110.0    # pentagon center -> leg station
+  deck_t: 4.0            # printed deck thickness
+
+bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
+  port_hint: /dev/ttyACM0      # Waveshare Bus Servo Adapter (A) — VERIFY on host
+  baud: 1000000
+  leg_ids:                     # leg i: [yaw, hip(femur), knee] = 3i+1..3i+3
+    - [1, 2, 3]                # leg 0 (north station, 90 deg)
+    - [4, 5, 6]                # leg 1
+    - [7, 8, 9]                # leg 2
+    - [10, 11, 12]             # leg 3
+    - [13, 14, 15]             # leg 4
+  hand_ids: [16, 17, 18, 19, 20]   # SCS0009, protocol 0, 5-6 V domain (D016!)
+  soft_limits_deg:             # mirror of CAD-validated sweeps (D008) + MJCF
+    yaw: [-40, 40]
+    hip: [-70, 90]
+    knee: [-150, -20]
+    claw: [0, 55]              # capped until hand v0.3 (see BUILD_LOG 07-28)
+  safety:                      # SafetyMonitor limits (master plan §7)
+    temp_warn_c: 60
+    temp_cut_c: 65
+    volt_min_v: 9.9
+    volt_max_v: 12.9
+    load_warn_pct: 60
+
+interfaces:              # D020 — see docs/INTERFACES.md. Loads through
+                         # dowels/lips/shoulders, NEVER latches. FROZEN.
+  leg_port:              # I1: deck <-> coxa base
+    dowel_d: 4.0
+    dowel_engage: 8.0
+    dowel_xy: [[-28, 19], [-28, -19]]     # on-deck (r 84.2 < pentagon 88.4)
+                                          # and clear of the cradle walls
+    thumbscrew_m: 3.0
+    thumbscrew_xy: [[-41, 17], [-41, -17]]  # inboard corners: reachable with
+                                          # the servo installed (mid-pair was
+                                          # NOT — and sat off-pentagon, see
+                                          # BUILD_LOG 07-30)
+    thumbscrew_head_d: 12.0               # printed knurled head
+    hook_lip_w: 24.0                      # tangential width, INBOARD edge
+    hook_slot_x: -48.0                    # deck through-slot center (leg-local)
+    hook_slot_w: 4.2                      # slot x-width (lip 2.2 + swing room)
+    hook_lip_t: 3.0                       # lip down-turn thickness
+    hook_foot: 3.5                        # under-deck hook reach (toward -x)
+    conn_power: XT30
+    conn_data: JST-XH-5                   # data, GND, 6V, spare, spare
+  tool_socket:           # I2: SEA stub <-> hand/tool (quarter-turn bayonet)
+    stub_d: 10.0                          # = tibia_tube_od
+    lug_d: 2.5
+    lug_h: 2.2
+    lug_z_from_face: 9.0
+    entry_len: 6.0
+    twist_deg: 90.0
+    detent_bump: 0.6
+    conn: JST-SH-3                        # 6V, GND, TTL
+  panel_latch:           # I3: replaceable quarter-turn insert + magnets
+    housing_d: 14.0
+    housing_pocket_d: 14.3
+    housing_t: 6.0
+    rotor_cam_rise: 0.8
+    throw_deg: 90.0
+    magnet_d: 6.0
+    magnet_t: 3.0
+  avionics_tray:         # I4
+    plate_w: 84.0
+    plate_l: 70.0
+    plate_t: 3.0
+    rail: 3.0
+    bulkhead_w: 70.0
+    bulkhead_h: 26.0
+  battery_sled:          # I5 (bay VERIFY against the purchased 3S 5200 pack)
+    bay_l: 175.0         # sled 168 (pack 138 + walls + XT60 nose + tail lip)
+                         # + insertion travel — the belly shell cavity length
+    bay_w: 50.0
+    bay_h: 30.0
+    pack_l: 138.0        # VERIFY
+    pack_w: 46.0         # VERIFY
+    pack_h: 25.0         # VERIFY
+    xt60_float: 0.8
+  dovetail:              # I6 accessory ring
+    base_w: 12.0
+    crest_w: 8.0
+    depth: 4.0
+    segment_len: 24.0
+
+print:                   # old-Prusa-friendly design rules
+  clearance_fit: 0.30    # mating printed parts
+  clearance_press: 0.15  # press-fit seats (bearings), finish with light ream
+  wall_min: 2.4          # = 6 perimeters at 0.4mm
+  screw_m3_clear: 3.4
+  screw_m3_tap: 2.8      # thread-forming into plastic
+  screw_m2_clear: 2.4
+  screw_m25_clear: 2.9
+  heatset_m3_d: 4.6      # insert pocket dia
+  heatset_m3_h: 5.7
+
+mass_hw:                 # non-printed masses (g) for the sim mass audit — ALL VERIFY on a kitchen scale
+  servo_st3215: 60.0     # = servo_st3215.mass_g
+  servo_scs0009: 13.0    # hand claw servo (spec ~12-14 g)
+  battery_3s_5200: 380.0 # typical 3S 5200 mAh LiPo, VERIFY on purchase
+  electronics_pod: 400.0 # sensors + compute + bus adapter + wiring (status log 07-30 audit, lidar-pull variant)
+  tibia_tube: 5.0        # Ø10 carbon, ~120 mm
+  sea_spring_switch: 4.0 # spring + KW10 + wire
+  fasteners_per_leg: 8.0 # M2/M3 + heat-sets + pins
+  bearing_683zz: 1.0
+  foot_pad_tpu: 4.0

@@ -1,0 +1,19 @@
+# --- Python environments and caches ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.ipynb_checkpoints/
+
+# --- bench outputs (per the code drop's own .gitignore) ---
+bench/out/
+rocky_v0.8.0_code/rocky/bench/out/
+bench/calibration.yaml
+rocky_v0.8.0_code/rocky/bench/calibration.yaml
+
+# --- OS noise ---
+.DS_Store
+*.swp

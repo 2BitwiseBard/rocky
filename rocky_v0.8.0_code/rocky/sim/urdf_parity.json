@@ -1,0 +1,175 @@
+{
+ "joints": {
+  "yaw0": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -40.0,
+    40.0
+   ]
+  },
+  "hip0": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -70.0,
+    90.0
+   ]
+  },
+  "knee0": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -150.0,
+    -20.0
+   ]
+  },
+  "claw0": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    0.0,
+    55.0
+   ]
+  },
+  "yaw1": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -40.0,
+    40.0
+   ]
+  },
+  "hip1": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -70.0,
+    90.0
+   ]
+  },
+  "knee1": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -150.0,
+    -20.0
+   ]
+  },
+  "claw1": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    0.0,
+    55.0
+   ]
+  },
+  "yaw2": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -40.0,
+    40.0
+   ]
+  },
+  "hip2": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -70.0,
+    90.0
+   ]
+  },
+  "knee2": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -150.0,
+    -20.0
+   ]
+  },
+  "claw2": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    0.0,
+    55.0
+   ]
+  },
+  "yaw3": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -40.0,
+    40.0
+   ]
+  },
+  "hip3": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -70.0,
+    90.0
+   ]
+  },
+  "knee3": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -150.0,
+    -20.0
+   ]
+  },
+  "claw3": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    0.0,
+    55.0
+   ]
+  },
+  "yaw4": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -40.0,
+    40.0
+   ]
+  },
+  "hip4": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -70.0,
+    90.0
+   ]
+  },
+  "knee4": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    -150.0,
+    -20.0
+   ]
+  },
+  "claw4": {
+   "axis_ok": true,
+   "range_ok": true,
+   "range_deg": [
+    0.0,
+    55.0
+   ]
+  }
+ },
+ "fk": {
+  "samples": 60,
+  "worst_urdf_vs_mjcf_mm": 0.0444,
+  "worst_urdf_vs_analytic_mm": 0.0,
+  "tol_mm": 0.5
+ },
+ "mass": {
+  "urdf_kg": 3.09,
+  "mjcf_kg": 3.091
+ },
+ "pass": true
+}

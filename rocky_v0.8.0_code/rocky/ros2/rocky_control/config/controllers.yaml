@@ -1,0 +1,35 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100          # Hz; servo bus itself syncs at 50 Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    leg_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+    claw_position_controller:
+      type: position_controllers/JointGroupPositionController
+
+leg_position_controller:
+  ros__parameters:
+    joints:                   # ORDER IS THE CONTRACT with gait_node.py
+      - yaw0
+      - hip0
+      - knee0
+      - yaw1
+      - hip1
+      - knee1
+      - yaw2
+      - hip2
+      - knee2
+      - yaw3
+      - hip3
+      - knee3
+      - yaw4
+      - hip4
+      - knee4
+
+claw_position_controller:
+  ros__parameters:
+    joints: [claw0, claw1, claw2, claw3, claw4]

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "rocky": {
+      "command": "/home/bitwisebard/Development/rocky/rocky_v0.8.0_code/rocky/.venv/bin/python",
+      "args": ["-m", "harness.server"],
+      "env": {"ROCKY_BACKEND": "sim", "ROCKY_WORLD": "flat",
+              "ROCKY_VIEWER": "1", "ROCKY_AUDIO": "1", "MUJOCO_GL": "glfw"},
+      "cwd": "/home/bitwisebard/Development/rocky/rocky_v0.8.0_code/rocky"
+    }
+  }
+}

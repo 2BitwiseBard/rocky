@@ -1,0 +1,233 @@
+{
+ "P1 fit ladder": {
+  "parts": [
+   {
+    "part": "fit_ladder",
+    "qty": 1,
+    "solid_cm3": 39.3,
+    "est_g": 26.8,
+    "est_min": 86
+   }
+  ],
+  "total_g": 27,
+  "total_h": 1.4
+ },
+ "P2 interface coupons": {
+  "parts": [
+   {
+    "part": "latch_housing",
+    "qty": 2,
+    "solid_cm3": 0.4,
+    "est_g": 0.8,
+    "est_min": 2
+   },
+   {
+    "part": "latch_rotor",
+    "qty": 2,
+    "solid_cm3": 0.6,
+    "est_g": 1.4,
+    "est_min": 5
+   },
+   {
+    "part": "thumb_knob_m3",
+    "qty": 2,
+    "solid_cm3": 0.7,
+    "est_g": 1.2,
+    "est_min": 4
+   },
+   {
+    "part": "dovetail_male_coupon",
+    "qty": 1,
+    "solid_cm3": 3.2,
+    "est_g": 2.8,
+    "est_min": 9
+   },
+   {
+    "part": "dovetail_shoe",
+    "qty": 1,
+    "solid_cm3": 4.0,
+    "est_g": 3.0,
+    "est_min": 10
+   },
+   {
+    "part": "horn_coupler",
+    "qty": 1,
+    "solid_cm3": 1.9,
+    "est_g": 1.6,
+    "est_min": 5
+   },
+   {
+    "part": "coupler_recess_demo",
+    "qty": 1,
+    "solid_cm3": 8.4,
+    "est_g": 6.3,
+    "est_min": 20
+   },
+   {
+    "part": "port_coupon_deck",
+    "qty": 1,
+    "solid_cm3": 13.6,
+    "est_g": 9.3,
+    "est_min": 30
+   },
+   {
+    "part": "port_coupon_plate",
+    "qty": 1,
+    "solid_cm3": 8.5,
+    "est_g": 6.3,
+    "est_min": 20
+   }
+  ],
+  "total_g": 33,
+  "total_h": 1.7
+ },
+ "P3 hand + I2": {
+  "parts": [
+   {
+    "part": "hand_hub",
+    "qty": 1,
+    "solid_cm3": 21.8,
+    "est_g": 16.2,
+    "est_min": 52
+   },
+   {
+    "part": "hand_cam",
+    "qty": 1,
+    "solid_cm3": 2.3,
+    "est_g": 2.2,
+    "est_min": 7
+   },
+   {
+    "part": "hand_finger",
+    "qty": 3,
+    "solid_cm3": 2.4,
+    "est_g": 7.2,
+    "est_min": 23
+   },
+   {
+    "part": "tibia_sea_slider",
+    "qty": 1,
+    "solid_cm3": 2.1,
+    "est_g": 2.1,
+    "est_min": 7
+   },
+   {
+    "part": "tool_hook",
+    "qty": 1,
+    "solid_cm3": 5.9,
+    "est_g": 4.7,
+    "est_min": 15
+   },
+   {
+    "part": "tool_scoop",
+    "qty": 1,
+    "solid_cm3": 11.3,
+    "est_g": 7.7,
+    "est_min": 25
+   }
+  ],
+  "total_g": 40,
+  "total_h": 2.1
+ },
+ "P4 one leg (+3 blanks)": {
+  "parts": [
+   {
+    "part": "coxa_yaw_base",
+    "qty": 1,
+    "solid_cm3": 27.9,
+    "est_g": 19.0,
+    "est_min": 61
+   },
+   {
+    "part": "coxa_fork",
+    "qty": 1,
+    "solid_cm3": 32.1,
+    "est_g": 21.9,
+    "est_min": 70
+   },
+   {
+    "part": "femur_link",
+    "qty": 1,
+    "solid_cm3": 15.3,
+    "est_g": 11.4,
+    "est_min": 36
+   },
+   {
+    "part": "tibia_knee_carrier",
+    "qty": 1,
+    "solid_cm3": 23.8,
+    "est_g": 14.7,
+    "est_min": 47
+   },
+   {
+    "part": "tibia_sea_outer",
+    "qty": 1,
+    "solid_cm3": 4.6,
+    "est_g": 4.0,
+    "est_min": 13
+   },
+   {
+    "part": "horn_coupler",
+    "qty": 3,
+    "solid_cm3": 1.9,
+    "est_g": 4.9,
+    "est_min": 16
+   },
+   {
+    "part": "servo_blank",
+    "qty": 3,
+    "solid_cm3": 36.6,
+    "est_g": 47.7,
+    "est_min": 153
+   }
+  ],
+  "total_g": 124,
+  "total_h": 6.6
+ },
+ "P5 body deck": {
+  "parts": [
+   {
+    "part": "body_deck",
+    "qty": 1,
+    "solid_cm3": 128.2,
+    "est_g": 79.5,
+    "est_min": 254
+   }
+  ],
+  "total_g": 79,
+  "total_h": 4.2
+ },
+ "P6 stand base+crown": {
+  "parts": [
+   {
+    "part": "stand_base",
+    "qty": 1,
+    "solid_cm3": 113.2,
+    "est_g": 56.1,
+    "est_min": 123
+   },
+   {
+    "part": "stand_crown",
+    "qty": 1,
+    "solid_cm3": 106.9,
+    "est_g": 53.0,
+    "est_min": 117
+   }
+  ],
+  "total_g": 109,
+  "total_h": 4.0
+ },
+ "bonus: 2 shell sectors": {
+  "parts": [
+   {
+    "part": "shell_sector",
+    "qty": 2,
+    "solid_cm3": 24.3,
+    "est_g": 36.1,
+    "est_min": 116
+   }
+  ],
+  "total_g": 36,
+  "total_h": 1.9
+ }
+}

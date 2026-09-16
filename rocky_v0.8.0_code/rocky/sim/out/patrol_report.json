@@ -1,0 +1,322 @@
+{
+ "world": "room",
+ "alert_m": 0.45,
+ "waypoints": [
+  {
+   "target": [
+    0.55,
+    0.0
+   ],
+   "goto": {
+    "ok": true,
+    "stopped": "arrived",
+    "pose": {
+     "x": 0.525,
+     "y": 0.004
+    }
+   },
+   "scan": {
+    "nearest_m": 0.822,
+    "nearest_bearing_deg": 54.9,
+    "sectors": [
+     {
+      "bearing_deg": -158,
+      "min_range_m": 1.646,
+      "clear": false
+     },
+     {
+      "bearing_deg": -113,
+      "min_range_m": 1.284,
+      "clear": false
+     },
+     {
+      "bearing_deg": -68,
+      "min_range_m": 1.284,
+      "clear": false
+     },
+     {
+      "bearing_deg": -23,
+      "min_range_m": 1.055,
+      "clear": false
+     },
+     {
+      "bearing_deg": 22,
+      "min_range_m": 1.055,
+      "clear": false
+     },
+     {
+      "bearing_deg": 67,
+      "min_range_m": 0.822,
+      "clear": false
+     },
+     {
+      "bearing_deg": 112,
+      "min_range_m": 1.276,
+      "clear": false
+     },
+     {
+      "bearing_deg": 157,
+      "min_range_m": 1.625,
+      "clear": false
+     }
+    ]
+   },
+   "chord": "acknowledge"
+  },
+  {
+   "target": [
+    0.0,
+    0.55
+   ],
+   "goto": {
+    "ok": true,
+    "stopped": "arrived",
+    "pose": {
+     "x": 0.018,
+     "y": 0.543
+    }
+   },
+   "scan": {
+    "nearest_m": 0.737,
+    "nearest_bearing_deg": 90.2,
+    "sectors": [
+     {
+      "bearing_deg": -158,
+      "min_range_m": 1.598,
+      "clear": false
+     },
+     {
+      "bearing_deg": -113,
+      "min_range_m": 1.6,
+      "clear": false
+     },
+     {
+      "bearing_deg": -68,
+      "min_range_m": 1.823,
+      "clear": false
+     },
+     {
+      "bearing_deg": -23,
+      "min_range_m": 1.562,
+      "clear": false
+     },
+     {
+      "bearing_deg": 22,
+      "min_range_m": 0.962,
+      "clear": false
+     },
+     {
+      "bearing_deg": 67,
+      "min_range_m": 0.737,
+      "clear": false
+     },
+     {
+      "bearing_deg": 112,
+      "min_range_m": 0.737,
+      "clear": false
+     },
+     {
+      "bearing_deg": 157,
+      "min_range_m": 0.944,
+      "clear": false
+     }
+    ]
+   },
+   "chord": "acknowledge"
+  },
+  {
+   "target": [
+    -0.55,
+    0.0
+   ],
+   "goto": {
+    "ok": true,
+    "stopped": "arrived",
+    "pose": {
+     "x": -0.54,
+     "y": 0.023
+    }
+   },
+   "scan": {
+    "nearest_m": 0.856,
+    "nearest_bearing_deg": -120.2,
+    "sectors": [
+     {
+      "bearing_deg": -158,
+      "min_range_m": 1.041,
+      "clear": false
+     },
+     {
+      "bearing_deg": -113,
+      "min_range_m": 0.856,
+      "clear": false
+     },
+     {
+      "bearing_deg": -68,
+      "min_range_m": 1.303,
+      "clear": false
+     },
+     {
+      "bearing_deg": -23,
+      "min_range_m": 1.87,
+      "clear": false
+     },
+     {
+      "bearing_deg": 22,
+      "min_range_m": 1.658,
+      "clear": false
+     },
+     {
+      "bearing_deg": 67,
+      "min_range_m": 1.257,
+      "clear": false
+     },
+     {
+      "bearing_deg": 112,
+      "min_range_m": 0.865,
+      "clear": false
+     },
+     {
+      "bearing_deg": 157,
+      "min_range_m": 1.04,
+      "clear": false
+     }
+    ]
+   },
+   "chord": "acknowledge"
+  },
+  {
+   "target": [
+    0.0,
+    -0.55
+   ],
+   "goto": {
+    "ok": true,
+    "stopped": "arrived",
+    "pose": {
+     "x": -0.017,
+     "y": -0.536
+    }
+   },
+   "scan": {
+    "nearest_m": 0.744,
+    "nearest_bearing_deg": -89.9,
+    "sectors": [
+     {
+      "bearing_deg": -158,
+      "min_range_m": 0.943,
+      "clear": false
+     },
+     {
+      "bearing_deg": -113,
+      "min_range_m": 0.744,
+      "clear": false
+     },
+     {
+      "bearing_deg": -68,
+      "min_range_m": 0.744,
+      "clear": false
+     },
+     {
+      "bearing_deg": -23,
+      "min_range_m": 1.055,
+      "clear": false
+     },
+     {
+      "bearing_deg": 22,
+      "min_range_m": 1.597,
+      "clear": false
+     },
+     {
+      "bearing_deg": 67,
+      "min_range_m": 1.581,
+      "clear": false
+     },
+     {
+      "bearing_deg": 112,
+      "min_range_m": 1.609,
+      "clear": false
+     },
+     {
+      "bearing_deg": 157,
+      "min_range_m": 1.563,
+      "clear": false
+     }
+    ]
+   },
+   "chord": "acknowledge"
+  },
+  {
+   "target": [
+    0.0,
+    0.0
+   ],
+   "goto": {
+    "ok": true,
+    "stopped": "arrived",
+    "pose": {
+     "x": 0.004,
+     "y": -0.025
+    }
+   },
+   "scan": {
+    "nearest_m": 1.186,
+    "nearest_bearing_deg": -142.8,
+    "sectors": [
+     {
+      "bearing_deg": -158,
+      "min_range_m": 1.186,
+      "clear": false
+     },
+     {
+      "bearing_deg": -113,
+      "min_range_m": 1.256,
+      "clear": false
+     },
+     {
+      "bearing_deg": -68,
+      "min_range_m": 1.255,
+      "clear": false
+     },
+     {
+      "bearing_deg": -23,
+      "min_range_m": 1.576,
+      "clear": false
+     },
+     {
+      "bearing_deg": 22,
+      "min_range_m": 1.212,
+      "clear": false
+     },
+     {
+      "bearing_deg": 67,
+      "min_range_m": 1.305,
+      "clear": false
+     },
+     {
+      "bearing_deg": 112,
+      "min_range_m": 1.305,
+      "clear": false
+     },
+     {
+      "bearing_deg": 157,
+      "min_range_m": 1.229,
+      "clear": false
+     }
+    ]
+   },
+   "chord": "acknowledge"
+  }
+ ],
+ "complete": true,
+ "chords": [
+  "startup",
+  "acknowledge",
+  "acknowledge",
+  "acknowledge",
+  "acknowledge",
+  "acknowledge",
+  "discovery"
+ ],
+ "nearest_obstacle_overall_m": 0.737
+}

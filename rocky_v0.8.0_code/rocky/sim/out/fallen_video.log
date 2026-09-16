@@ -1,0 +1,8 @@
+righter: /home/claude/rocky/rocky/sim/runs/recover2/latest.pt
+  seed 0: fell=True ok=True trace=[(0.0, 'NORMAL'), (3.04, 'PLANT'), (3.49, 'BRACE'), (5.0, 'RECOVER'), (5.74, 'FALLEN'), (15.74, 'RIGHTED')] walked_after=0.232 m end_tilt=0.5°
+  seed 1: fell=True ok=True trace=[(0.0, 'NORMAL'), (3.02, 'PLANT'), (3.47, 'BRACE'), (4.97, 'RECOVER'), (6.21, 'FALLEN'), (16.21, 'RIGHTED')] walked_after=0.21 m end_tilt=0.4°
+  seed 2: fell=True ok=True trace=[(0.0, 'NORMAL'), (3.02, 'PLANT'), (3.47, 'BRACE'), (4.98, 'RECOVER'), (7.26, 'FALLEN'), (14.18, 'RIGHTED')] walked_after=0.305 m end_tilt=0.6°
+  seed 3: fell=True ok=True trace=[(0.0, 'NORMAL'), (3.04, 'PLANT'), (3.49, 'BRACE'), (4.99, 'RECOVER'), (5.75, 'FALLEN'), (10.37, 'RIGHTED')] walked_after=0.481 m end_tilt=0.5°
+  seed 4: fell=True ok=True trace=[(0.0, 'NORMAL'), (3.03, 'PLANT'), (3.48, 'BRACE'), (4.98, 'RECOVER'), (5.69, 'FALLEN'), (11.22, 'RIGHTED')] walked_after=0.442 m end_tilt=0.4°
+shove 120 N: fell 5/5, full fall->recover->walk cycles 5/5
+wrote pebble_fallen_recover.mp4 (seed 0, ok=True)

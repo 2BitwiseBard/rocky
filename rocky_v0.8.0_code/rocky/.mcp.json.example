@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "rocky": {
+      "command": "python3",
+      "args": ["-m", "harness.server"],
+      "env": {"ROCKY_BACKEND": "sim"},
+      "cwd": "REPLACE_WITH_ABSOLUTE_PATH_TO/rocky"
+    }
+  }
+}

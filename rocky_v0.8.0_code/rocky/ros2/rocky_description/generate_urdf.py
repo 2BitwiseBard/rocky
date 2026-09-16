@@ -1,0 +1,245 @@
+#!/usr/bin/env python3
+"""Generate pebble.urdf.xacro (+ expanded pebble.urdf) from cad/params.yaml.
+
+Single source of truth (D004): the same params file drives CAD, the MJCF
+(sim/build_mjcf.py), and this URDF. One leg macro instantiated 5x at 72 deg.
+Joint conventions MATCH the gait engine + MJCF exactly:
+
+  yaw   axis +Z, range +/-40 deg          (soft_limits_deg.yaw)
+  hip   axis  0 -1 0, +q = femur up       (range -70..90)
+  knee  axis  0 -1 0, 0 = straight, -down (range -150..-20)
+  claw  axis +Z (visual gripper prong)    (range 0..55)
+
+Masses/geometry mirror sim/build_mjcf.py's budget model; URDF inertials are
+computed analytically for each primitive so MuJoCo/Gazebo/RViz all agree.
+
+Run:  python3 generate_urdf.py        (writes urdf/pebble.urdf.xacro + .urdf)
+Verify parity against the MJCF:  python3 ../../sim/check_urdf_parity.py
+"""
+import os
+import subprocess
+import sys
+
+import numpy as np
+import yaml
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
+with open(os.path.join(REPO, "cad", "params.yaml")) as f:
+    P = yaml.safe_load(f)
+
+MM = 1e-3
+L1 = P["leg"]["l1_coxa"] * MM
+L2 = P["leg"]["l2_femur"] * MM
+L3 = P["leg"]["l3_tibia"] * MM
+RB = P["body"]["circumradius"] * MM
+Z_HIP = 58.0 * MM                       # femur pivot height (CAD status log)
+LIM = P["bus"]["soft_limits_deg"]
+STALL = 2.94                            # N*m (D002)
+VEL = 5.2                               # rad/s (~0.2 s/60 deg @ 12 V)
+
+# mass budget — MUST match sim/build_mjcf.py
+M_TORSO = 1.35
+M_COXA = 0.14
+M_FEMUR = 0.03
+M_TIBIA = 0.17
+
+
+def inertia_cylinder(m, r, h):
+    ixx = m * (3 * r * r + h * h) / 12
+    return ixx, ixx, m * r * r / 2
+
+
+def inertia_box(m, x, y, z):
+    return (m * (y * y + z * z) / 12, m * (x * x + z * z) / 12,
+            m * (x * x + y * y) / 12)
+
+
+def inertia_capsule_x(m, r, length):
+    """Capsule along X approximated as a cylinder (fine at these masses)."""
+    iyy = m * (3 * r * r + length * length) / 12
+    return m * r * r / 2, iyy, iyy
+
+
+def inertial(m, i, com=(0, 0, 0)):
+    return (f'<inertial><origin xyz="{com[0]:.6f} {com[1]:.6f} {com[2]:.6f}"/>'
+            f'<mass value="{m}"/>'
+            f'<inertia ixx="{i[0]:.3e}" ixy="0" ixz="0" '
+            f'iyy="{i[1]:.3e}" iyz="0" izz="{i[2]:.3e}"/></inertial>')
+
+
+def deg(v):
+    return f"{np.deg2rad(v):.6f}"
+
+
+PURPLE = '<material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>'
+
+
+def leg_macro() -> str:
+    coxa_i = inertia_box(M_COXA, 0.060, 0.032, 0.060)
+    femur_i = inertia_capsule_x(M_FEMUR, 0.012, L2)
+    tib_m_link, tib_m_foot = M_TIBIA * 0.7, M_TIBIA * 0.3
+    tibia_i = inertia_capsule_x(tib_m_link, 0.010, L3 * 0.92)
+    foot_i = tuple([2 / 5 * tib_m_foot * 0.013 ** 2] * 3)
+    return f"""
+  <xacro:macro name="pebble_leg" params="i angle">
+    <link name="coxa${{i}}">
+      {inertial(M_COXA, coxa_i, (0.020, 0, 0.030))}
+      <visual><origin xyz="0.020 0 0.030"/>
+        <geometry><box size="0.060 0.032 0.060"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="0.020 0 0.030"/>
+        <geometry><box size="0.060 0.032 0.060"/></geometry></collision>
+    </link>
+    <joint name="yaw${{i}}" type="revolute">
+      <parent link="base_link"/><child link="coxa${{i}}"/>
+      <origin xyz="${{{RB:.4f}*cos(angle)}} ${{{RB:.4f}*sin(angle)}} 0"
+              rpy="0 0 ${{angle}}"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="{deg(LIM['yaw'][0])}" upper="{deg(LIM['yaw'][1])}"
+             effort="{STALL}" velocity="{VEL}"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="femur${{i}}">
+      {inertial(M_FEMUR, femur_i, (L2 / 2, 0, 0))}
+      <visual><origin xyz="{L2 / 2:.4f} 0 0" rpy="0 {np.pi / 2:.6f} 0"/>
+        <geometry><cylinder radius="0.012" length="{L2:.4f}"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="{L2 / 2:.4f} 0 0" rpy="0 {np.pi / 2:.6f} 0"/>
+        <geometry><cylinder radius="0.012" length="{L2:.4f}"/></geometry></collision>
+    </link>
+    <joint name="hip${{i}}" type="revolute">
+      <parent link="coxa${{i}}"/><child link="femur${{i}}"/>
+      <origin xyz="{L1:.4f} 0 {Z_HIP:.4f}"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="{deg(LIM['hip'][0])}" upper="{deg(LIM['hip'][1])}"
+             effort="{STALL}" velocity="{VEL}"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="tibia${{i}}">
+      {inertial(tib_m_link, tibia_i, (L3 * 0.92 / 2, 0, 0))}
+      <visual><origin xyz="{L3 * 0.92 / 2:.4f} 0 0" rpy="0 {np.pi / 2:.6f} 0"/>
+        <geometry><cylinder radius="0.010" length="{L3 * 0.92:.4f}"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="{L3 * 0.92 / 2:.4f} 0 0" rpy="0 {np.pi / 2:.6f} 0"/>
+        <geometry><cylinder radius="0.010" length="{L3 * 0.92:.4f}"/></geometry></collision>
+    </link>
+    <joint name="knee${{i}}" type="revolute">
+      <parent link="femur${{i}}"/><child link="tibia${{i}}"/>
+      <origin xyz="{L2:.4f} 0 0"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="{deg(LIM['knee'][0])}" upper="{deg(LIM['knee'][1])}"
+             effort="{STALL}" velocity="{VEL}"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="foot${{i}}">
+      {inertial(tib_m_foot + 0.004, foot_i)}  <!-- +0.004: fixed claw prong (MJCF parity) -->
+      <visual><geometry><sphere radius="0.013"/></geometry>
+        <material name="pebble"/></visual>
+      <visual><origin xyz="0.012 0.0075 0" rpy="0 0 0.28"/>
+        <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><geometry><sphere radius="0.013"/></geometry></collision>
+    </link>
+    <joint name="foot_fix${{i}}" type="fixed">
+      <parent link="tibia${{i}}"/><child link="foot${{i}}"/>
+      <origin xyz="{L3:.4f} 0 0"/>
+    </joint>
+
+    <link name="claw${{i}}_link">
+      {inertial(0.004, (1e-7, 1e-7, 1e-7))}
+      <visual><origin xyz="0.012 -0.0075 0" rpy="0 0 -0.28"/>
+        <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
+        <material name="pebble"/></visual>
+    </link>
+    <joint name="claw${{i}}" type="revolute">
+      <parent link="foot${{i}}"/><child link="claw${{i}}_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="{deg(LIM['claw'][0])}" upper="{deg(LIM['claw'][1])}"
+             effort="0.23" velocity="6.0"/>
+      <dynamics damping="0.01"/>
+    </joint>
+  </xacro:macro>
+"""
+
+
+def build_xacro() -> str:
+    legs = "\n".join(
+        f'  <xacro:pebble_leg i="{i}" angle="${{radians({90 + 72 * i})}}"/>'
+        for i in range(5))
+    return f"""<?xml version="1.0"?>
+<!-- AUTO-GENERATED from cad/params.yaml by generate_urdf.py — edit THAT, not this -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="pebble">
+  {PURPLE}
+
+  <link name="base_link">
+    __TORSO_INERTIAL__
+    <visual><origin xyz="0 0 0.018"/>
+      <geometry><cylinder radius="{RB:.4f}" length="0.024"/></geometry>
+      <material name="pebble"/></visual>
+    <visual><origin xyz="0 0 0.044"/>
+      <geometry><cylinder radius="{RB * 0.7:.4f}" length="0.028"/></geometry>
+      <material name="pebble"/></visual>
+    <collision><origin xyz="0 0 0.018"/>
+      <geometry><cylinder radius="{RB:.4f}" length="0.024"/></geometry></collision>
+    <collision><origin xyz="0 0 0.044"/>
+      <geometry><cylinder radius="{RB * 0.7:.4f}" length="0.028"/></geometry></collision>
+  </link>
+{leg_macro()}
+{legs}
+
+  <xacro:include filename="$(find rocky_description)/urdf/rocky.ros2_control.xacro"/>
+</robot>
+"""
+
+
+def combine_torso_inertia():
+    """Two stacked disks -> one inertial about a combined CoM (URDF wants one)."""
+    m1, m2 = M_TORSO * 0.75, M_TORSO * 0.25
+    z1, z2 = 0.018, 0.044
+    zc = (m1 * z1 + m2 * z2) / (m1 + m2)
+    i1 = inertia_cylinder(m1, RB, 0.024)
+    i2 = inertia_cylinder(m2, RB * 0.7, 0.028)
+    # parallel axis for ixx/iyy
+    ixx = i1[0] + m1 * (z1 - zc) ** 2 + i2[0] + m2 * (z2 - zc) ** 2
+    izz = i1[2] + i2[2]
+    return (m1 + m2), (ixx, ixx, izz), (0, 0, zc)
+
+
+def main():
+    urdf_dir = os.path.join(HERE, "urdf")
+    os.makedirs(urdf_dir, exist_ok=True)
+    # base_link carries ONE inertial = both deck disks combined (parallel axis)
+    m, i, com = combine_torso_inertia()
+    xacro_txt = build_xacro().replace("__TORSO_INERTIAL__", inertial(m, i, com))
+    xacro_path = os.path.join(urdf_dir, "pebble.urdf.xacro")
+    with open(xacro_path, "w") as f:
+        f.write(xacro_txt)
+    print("wrote", xacro_path)
+
+    # expanded URDF for tools without xacro (incl. our MuJoCo parity check):
+    # drop the ros2_control include (plugin tags mean nothing to MuJoCo)
+    plain = xacro_txt.replace(
+        '  <xacro:include filename="$(find rocky_description)/urdf/'
+        'rocky.ros2_control.xacro"/>\n', "")
+    tmp = os.path.join(urdf_dir, "_plain.xacro")
+    with open(tmp, "w") as f:
+        f.write(plain)
+    urdf_path = os.path.join(urdf_dir, "pebble.urdf")
+    try:
+        import xacro as xacro_mod
+        doc = xacro_mod.process_file(tmp)
+        with open(urdf_path, "w") as f:
+            f.write(doc.toprettyxml(indent="  "))
+    except ImportError:
+        subprocess.run(["xacro", tmp, "-o", urdf_path], check=True)
+    os.remove(tmp)
+    print("wrote", urdf_path)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

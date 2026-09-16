@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+# regenerable exports — comment these out if you prefer committing them
+# cad/out/
+bench/out/
+bench/calibration.yaml

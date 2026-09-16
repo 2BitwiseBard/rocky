@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<!-- AUTO-GENERATED from cad/params.yaml by generate_urdf.py — edit THAT, not this -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="pebble">
+  <material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>
+
+  <link name="base_link">
+    <inertial><origin xyz="0.000000 0.000000 0.024500"/><mass value="1.35"/><inertia ixx="3.805e-03" ixy="0" ixz="0" iyy="3.805e-03" iyz="0" izz="7.126e-03"/></inertial>
+    <visual><origin xyz="0 0 0.018"/>
+      <geometry><cylinder radius="0.1100" length="0.024"/></geometry>
+      <material name="pebble"/></visual>
+    <visual><origin xyz="0 0 0.044"/>
+      <geometry><cylinder radius="0.0770" length="0.028"/></geometry>
+      <material name="pebble"/></visual>
+    <collision><origin xyz="0 0 0.018"/>
+      <geometry><cylinder radius="0.1100" length="0.024"/></geometry></collision>
+    <collision><origin xyz="0 0 0.044"/>
+      <geometry><cylinder radius="0.0770" length="0.028"/></geometry></collision>
+  </link>
+
+  <xacro:macro name="pebble_leg" params="i angle">
+    <link name="coxa${i}">
+      <inertial><origin xyz="0.020000 0.000000 0.030000"/><mass value="0.14"/><inertia ixx="5.395e-05" ixy="0" ixz="0" iyy="8.400e-05" iyz="0" izz="5.395e-05"/></inertial>
+      <visual><origin xyz="0.020 0 0.030"/>
+        <geometry><box size="0.060 0.032 0.060"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="0.020 0 0.030"/>
+        <geometry><box size="0.060 0.032 0.060"/></geometry></collision>
+    </link>
+    <joint name="yaw${i}" type="revolute">
+      <parent link="base_link"/><child link="coxa${i}"/>
+      <origin xyz="${0.1100*cos(angle)} ${0.1100*sin(angle)} 0"
+              rpy="0 0 ${angle}"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-0.698132" upper="0.698132"
+             effort="2.94" velocity="5.2"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="femur${i}">
+      <inertial><origin xyz="0.047500 0.000000 0.000000"/><mass value="0.03"/><inertia ixx="2.160e-06" ixy="0" ixz="0" iyy="2.364e-05" iyz="0" izz="2.364e-05"/></inertial>
+      <visual><origin xyz="0.0475 0 0" rpy="0 1.570796 0"/>
+        <geometry><cylinder radius="0.012" length="0.0950"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="0.0475 0 0" rpy="0 1.570796 0"/>
+        <geometry><cylinder radius="0.012" length="0.0950"/></geometry></collision>
+    </link>
+    <joint name="hip${i}" type="revolute">
+      <parent link="coxa${i}"/><child link="femur${i}"/>
+      <origin xyz="0.0450 0 0.0580"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="-1.221730" upper="1.570796"
+             effort="2.94" velocity="5.2"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="tibia${i}">
+      <inertial><origin xyz="0.062100 0.000000 0.000000"/><mass value="0.119"/><inertia ixx="5.950e-06" ixy="0" ixz="0" iyy="1.559e-04" iyz="0" izz="1.559e-04"/></inertial>
+      <visual><origin xyz="0.0621 0 0" rpy="0 1.570796 0"/>
+        <geometry><cylinder radius="0.010" length="0.1242"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><origin xyz="0.0621 0 0" rpy="0 1.570796 0"/>
+        <geometry><cylinder radius="0.010" length="0.1242"/></geometry></collision>
+    </link>
+    <joint name="knee${i}" type="revolute">
+      <parent link="femur${i}"/><child link="tibia${i}"/>
+      <origin xyz="0.0950 0 0"/>
+      <axis xyz="0 -1 0"/>
+      <limit lower="-2.617994" upper="-0.349066"
+             effort="2.94" velocity="5.2"/>
+      <dynamics damping="0.05"/>
+    </joint>
+
+    <link name="foot${i}">
+      <inertial><origin xyz="0.000000 0.000000 0.000000"/><mass value="0.05500000000000001"/><inertia ixx="3.448e-06" ixy="0" ixz="0" iyy="3.448e-06" iyz="0" izz="3.448e-06"/></inertial>  <!-- +0.004: fixed claw prong (MJCF parity) -->
+      <visual><geometry><sphere radius="0.013"/></geometry>
+        <material name="pebble"/></visual>
+      <visual><origin xyz="0.012 0.0075 0" rpy="0 0 0.28"/>
+        <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
+        <material name="pebble"/></visual>
+      <collision><geometry><sphere radius="0.013"/></geometry></collision>
+    </link>
+    <joint name="foot_fix${i}" type="fixed">
+      <parent link="tibia${i}"/><child link="foot${i}"/>
+      <origin xyz="0.1350 0 0"/>
+    </joint>
+
+    <link name="claw${i}_link">
+      <inertial><origin xyz="0.000000 0.000000 0.000000"/><mass value="0.004"/><inertia ixx="1.000e-07" ixy="0" ixz="0" iyy="1.000e-07" iyz="0" izz="1.000e-07"/></inertial>
+      <visual><origin xyz="0.012 -0.0075 0" rpy="0 0 -0.28"/>
+        <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
+        <material name="pebble"/></visual>
+    </link>
+    <joint name="claw${i}" type="revolute">
+      <parent link="foot${i}"/><child link="claw${i}_link"/>
+      <origin xyz="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="0.000000" upper="0.959931"
+             effort="0.23" velocity="6.0"/>
+      <dynamics damping="0.01"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:pebble_leg i="0" angle="${radians(90)}"/>
+  <xacro:pebble_leg i="1" angle="${radians(162)}"/>
+  <xacro:pebble_leg i="2" angle="${radians(234)}"/>
+  <xacro:pebble_leg i="3" angle="${radians(306)}"/>
+  <xacro:pebble_leg i="4" angle="${radians(378)}"/>
+
+  <xacro:include filename="$(find rocky_description)/urdf/rocky.ros2_control.xacro"/>
+</robot>

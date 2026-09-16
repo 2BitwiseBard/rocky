@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ROCKY — Print Weekend (session 6 plan)</title>
+<style>
+ body{font-family:system-ui,sans-serif;background:#17121f;color:#e8e2f2;max-width:880px;margin:2rem auto;padding:0 1rem}
+ h1{font-size:1.35rem;color:#c9b6e8;margin-bottom:.2rem} h2{font-size:1.05rem;color:#c9b6e8;margin-top:1.6rem}
+ .sub{color:#9a8fb0;margin-bottom:1rem;line-height:1.45}
+ table{border-collapse:collapse;width:100%;margin:.6rem 0} th,td{border-bottom:1px solid #2a2338;padding:.4rem .55rem;text-align:left;font-size:.9rem;vertical-align:top}
+ th{color:#c9b6e8;white-space:nowrap} .note{color:#9a8fb0;font-size:.85rem;line-height:1.4}
+ .warn{background:#2a1414;border:1px solid #7a2a2a;border-radius:8px;padding:.7rem .9rem;margin:1rem 0;color:#e89090;font-size:.92rem}
+ .amber{background:#2a1f14;border:1px solid #7a5a2a;border-radius:8px;padding:.7rem .9rem;margin:1rem 0;color:#e8c890;font-size:.9rem}
+ .ok{background:#142a1a;border:1px solid #2a7a3a;border-radius:8px;padding:.7rem .9rem;margin:1rem 0;color:#a0e8b0;font-size:.9rem}
+ code,pre{background:#221b30;border-radius:5px;padding:.1rem .35rem;font-size:.86rem;color:#d8cef0}
+ pre{padding:.7rem .9rem;overflow-x:auto;line-height:1.5}
+ .tag{display:inline-block;background:#3a2f55;color:#c9b6e8;border-radius:4px;padding:0 .45rem;font-size:.78rem;margin-left:.4rem}
+ li{margin:.25rem 0;font-size:.92rem}
+</style></head><body>
+
+<h1>Print Weekend — session 6 plan</h1>
+<div class="sub">Everything below prints from <code>cad/out/*.stl</code> in the v0.7.4 repo
+(session-6 build — fit ladder v2 and the tibia clamp fix are in). All plates are
+<b>PLA</b> (D011: dial the machine on the cheap spool; the purple PETG stays in
+the drawer until parts stop changing).</div>
+
+<div class="warn"><b>Before the printer warms up: place the Batch 0+1 carts.</b>
+The AliExpress/Waveshare servo cart is a 1–4 week lead and gates the entire bench
+phase — calibration, the caliper session, params v1, first real walking. A perfect
+print weekend without that order is plastic waiting on a boat.
+<code>bom/ORDER_SHEET_batch01.html</code> has every cart linked; the servo cart is
+the only line that can stall the project a month.</div>
+
+<h2>0 · Machine prep (textured sheet, PLA)</h2>
+<ul>
+<li>Sheet: the <b>textured PEI you own is the right sheet</b> for this project — PETG
+releases from it without glue and PLA holds fine a touch warmer. A smooth sheet is a
+someday nice-to-have, not a blocker.</li>
+<li>Wash the sheet: dish soap + hot water, dry with a paper towel. (IPA alone smears
+finger oils around textured plates.)</li>
+<li>PLA on textured: nozzle 210–215 °C, <b>bed 60 °C first layer / 60–65 °C rest</b>.
+If corners of the fit ladder lift, go 65 °C + a 3 mm brim.</li>
+<li><b>Re-run Live-Z on THIS sheet</b> — textured needs a noticeably lower (more
+negative) offset than smooth; your calibration from the z-tune may not carry over.
+Textured plates forgive slight over-squish; err a hair closer.</li>
+<li>Slicer: 0.2 mm layers, <b>elephant-foot compensation 0.15 mm ON</b> (first-layer
+squish eats bore diameters otherwise), seam = rear/aligned.</li>
+</ul>
+
+<h2>1 · Friday night — the coupons (measure the printer before feeding it 10-hour jobs)</h2>
+<table>
+<tr><th>plate</th><th>STLs</th><th>~time</th><th>what it proves</th></tr>
+<tr><td><b>P1</b></td><td><code>fit_ladder</code> <span class="tag">v2</span></td><td>~40 min · 27 g</td>
+<td>The printer's personality. v2 adds row E: Ø2 pin holes (testable tonight with Ø2
+filament), 683ZZ press pockets + Ø10 tube sockets (re-test when hardware lands).
+3 walls, 25%.</td></tr>
+<tr><td><b>P2</b></td><td><code>latch_housing</code>+<code>latch_rotor</code> ×2,
+<code>thumb_knob_m3</code> ×2, <code>dovetail_male_coupon</code>+<code>dovetail_shoe</code>,
+<code>horn_coupler</code>+<code>coupler_recess_demo</code>,
+<code>port_coupon_deck</code>+<code>port_coupon_plate</code></td><td>~1.7 h · 33 g</td>
+<td>Every frozen interface in 40 g: I3 quarter-turn, I6 dovetail, the sacrificial
+coupler castellation, and the <b>I1 port dance</b> (tilt 15° → lip through slot →
+slide to hook → pivot flat onto dowels — must dock without force).</td></tr>
+<tr><td><b>P3</b></td><td><code>hand_hub</code>, <code>hand_cam</code>,
+<code>hand_finger</code> ×3, <code>tibia_sea_slider</code>, <code>tool_hook</code>,
+<code>tool_scoop</code></td><td>~2 h · 36 g</td>
+<td>The iris hand (pin fingers with Ø2 filament, turn the cam by hand 0→55° — no
+scrape) + the I2 bayonet: slider stub into hub socket and both tools — insert free,
+quarter-turn, tug: must retain. Hub prints boss-up with minimal support under the
+lug ring; fingers on their wedge side face.</td></tr>
+</table>
+<div class="note">Optional Friday overnight: <code>shell_sector</code> ×2 (0.25 mm,
+3 walls, 12% gyroid, brim) — purely to feel the seam tongue-and-groove and hold the
+creature in your hand. ~95 g.</div>
+
+<h2>2 · Saturday morning — calipers, then the GO/NO-GO table</h2>
+<p class="note">Fill the NOTES_INBOX block (bottom of this page) as you go. Then:</p>
+<table>
+<tr><th>measurement</th><th>result</th><th>action</th></tr>
+<tr><td rowspan="3">Row A: which bore does the Ø3.95 peg <b>slide</b> into?</td>
+<td>4.30 slides, 4.20 binds</td><td class="ok" style="display:table-cell">Printer matches params
+(fit 0.30). <b>GO</b> — print the weekend big parts as-is.</td></tr>
+<tr><td>only 4.40 / 4.50 slides</td><td>Holes print small. Set PrusaSlicer
+<b>XY hole compensation +0.05…+0.10 mm</b> and GO — then report the numbers so the
+next regen bakes them into params properly.</td></tr>
+<tr><td>4.15 / 4.20 already slides</td><td>Holes print true-to-CAD; the 0.30 default
+is roomy on your machine. GO (nothing binds), note it — regen may tighten to 0.20
+for a crisper dock.</td></tr>
+<tr><td>Row D: does the port-coupon lip drop through the 4.2 slot?</td><td>yes / only 4.6</td>
+<td>Yes → GO. Only 4.6 → same XY-hole story; +0.1 compensation and GO.</td></tr>
+<tr><td>Row E pins: which hole is snug on Ø2 filament?</td><td>2.10 target</td>
+<td>Loose at 2.00 → pins glue-in (fine). Binds at 2.20 → ream finger pin holes with
+a 2 mm bit; note it.</td></tr>
+<tr><td>Port dance on the coupons</td><td>docks without force?</td>
+<td>Binds at the dowels → don't print the deck yet; report which step binds.
+Slop after pivot → note, proceed (thumbscrews close that gap later).</td></tr>
+<tr><td>Hand cam sweep</td><td>0→55° free?</td><td>Scrape → note WHERE (hub? skirt?
+cam rim?) and hold the leg plate's hand… the leg still GOes; the hand is its own
+print anyway.</td></tr>
+</table>
+<div class="amber">Rows B (M3 taps), C (heat-sets) and row E bearing/tube columns
+need screws, inserts, bearings and tube that are <b>on the un-placed carts</b> — if
+you have any M3 screws in a junk drawer, row B is worth testing tonight. Everything
+else keeps: the ladder coupon stays on the bench and gets re-measured the day
+hardware lands.</div>
+
+<h2>3 · Saturday afternoon / overnight — the leg, then the body</h2>
+<table>
+<tr><th>plate</th><th>STLs</th><th>~time</th><th>notes</th></tr>
+<tr><td><b>P4 · one full leg</b></td><td><code>coxa_yaw_base</code>,
+<code>coxa_fork</code>, <code>femur_link</code>, <code>tibia_knee_carrier</code>,
+<code>tibia_sea_outer</code>, <code>horn_coupler</code> ×3,
+<b><code>servo_blank</code> ×3</b> <span class="tag">new</span></td><td>~6–7 h · 119 g</td>
+<td>Coxa base plate-down (support under crown arm only); fork hub-down, no support;
+femur flat on its side — <b>CF-PLA if the hardened nozzle is mounted</b>, else PLA
+(it's an iteration part); carrier floor-down, support under the tube boss; outer
+socket-down. 4 walls / 30–40% on all.</td></tr>
+<tr><td><b>P5 · the body</b> (overnight)</td><td><code>body_deck</code></td><td>~5–7 h · 79 g</td>
+<td>190×181 — biggest part in the project. Brim ON, dry filament, watch the first
+layer on the far corners. 4 walls / 30% gyroid. Only commit after the port coupons
+dock clean (the deck carries five of those ports).</td></tr>
+<tr><td><b>P6 · Sunday bonus</b></td><td><code>stand_base</code> +
+<code>stand_crown</code></td><td>~4–6 h · 109 g</td>
+<td>Base+crown alone = the 47 mm service cradle — genuinely useful for deck/leg
+assembly work from day one. 0.3 mm layers, 2 walls, 15%. Sections can wait.</td></tr>
+</table>
+
+<div class="ok"><b>Spool budget:</b> the whole weekend — P1–P6 plus two bonus
+sectors — totals <b>≈ 460 g</b>: one 1 kg PLA spool covers everything with
+real margin. (Estimates from <code>cad/print_estimate.py</code>, ±30 %; grams
+per part in <code>cad/out/print_estimate.json</code>. If the slicer disagrees
+WILDLY with these numbers, suspect a wrong-scale import before suspecting the
+slicer.)</div>
+
+<h2>4 · Sunday — dry-fit: what "body + one leg together" means with zero hardware</h2>
+<ul>
+<li><b>Works now:</b> the port dance on the REAL deck × coxa base (all five stations);
+hand fully assembles (filament pins + cam) and bayonets onto the slider; tools swap
+on the same socket; couplers seat in the recess demo; latches click into the deck
+strikes; dovetail shoes slide the sector bars; two sectors interlock at the seam.</li>
+<li><b>New this session — <code>servo_blank</code>:</b> a printed, dimensionally
+exact ST3215 stand-in (boolean-proven to drop into all three cradles; horn disc
+takes real M2 screws). With 3 blanks the WHOLE leg chain assembles rigid: blank in
+the coxa cradle, fork on its horn, blank in the fork rails, femur_link screwed to
+its horn disc, blank in the knee carrier — joints frozen at print angle, every
+interface real. That is your "body + one leg together" this weekend.</li>
+<li><b>Still waits for hardware:</b> tube + spring + switch = the shin below the
+carrier; bearings = the crown steady; inserts + thumbscrews = the port's final
+clamp; and nothing MOVES until real servos land. This weekend buys verified
+interfaces and dialed tolerances, so servo-arrival day is pure assembly.</li>
+<li>Failed prints go in the graveyard box and get a line in NOTES_INBOX — failures
+are first-class data.</li>
+</ul>
+
+<h2>5 · NOTES_INBOX template (copy, fill, paste)</h2>
+<pre>
+fit ladder v2: sliding dowel bore = 4.__ ; snug Ø2 pin hole = 2.__ ;
+  2.2 lip passes slot = __ ; M3 tap best (if screws found) = 2.__ ;
+  [when hardware lands] bearing press pocket = 6.__ ; tube socket = 10.__
+latch: turns? cam bite at 90°? | knob hex: M3 head fits?
+dovetail: slide force? knob locks? | coupler: seats? wobble?
+port coupon: dance works? which step binds? slop after pivot?
+hand: cam 0..55 free? fingers nest closed? binding where?
+I2: slider->hub retains on tug? tools swap clean?
+sectors (if printed): seam tongue-and-groove engagement?
+printer: Live-Z __ , PLA temps __ /__ , XY hole comp used = __ , anything weird
+orders: placed? which carts? __
+</pre>
+
+</body></html>

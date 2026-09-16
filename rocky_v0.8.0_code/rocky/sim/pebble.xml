@@ -1,0 +1,149 @@
+<mujoco model="pebble">
+  <option timestep="0.002" integrator="implicitfast"/>
+  <visual>
+    <global offwidth="720" offheight="480"/>
+    <headlight ambient="0.4 0.4 0.45" diffuse="0.7 0.7 0.7"/>
+    <quality shadowsize="2048"/>
+  </visual>
+  <asset>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.16 0.14 0.20" rgb2="0.22 0.19 0.29" width="300" height="300"/>
+    <material name="grid" texture="grid" texrepeat="12 12" reflectance="0.05"/>
+  </asset>
+  <worldbody>
+    <light pos="0.5 -0.5 1.5" dir="-0.3 0.3 -1" diffuse="0.8 0.8 0.8"/>
+    <geom name="floor" type="plane" size="6 6 0.1" material="grid" friction="1.2 0.01 0.001"/>
+    <body name="torso" pos="0 0 0.135">
+      <freejoint/>
+      <geom type="cylinder" size="0.1100 0.012" pos="0 0 0.018" mass="1.097" rgba="0.62 0.50 0.82 1"/>
+      <geom type="cylinder" size="0.0770 0.014" pos="0 0 0.044" mass="0.366" rgba="0.55 0.42 0.75 1"/>
+      
+      <body name="coxa0" pos="0.0000 0.1100 0" euler="0 0 90">
+        <joint name="yaw0" type="hinge" axis="0 0 1" range="-40 40" damping="0.05" armature="0.005"/>
+        <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="0.0862" rgba="0.35 0.30 0.45 1"/>
+        <body name="femur0" pos="0.0450 0 0.0580">
+          <joint name="hip0" type="hinge" axis="0 -1 0" range="-70 90" damping="0.05" armature="0.005"/>
+          <geom type="capsule" fromto="0 0 0 0.0950 0 0" size="0.012" mass="0.0157" rgba="0.55 0.42 0.75 1"/>
+          <body name="tibia0" pos="0.0950 0 0">
+            <joint name="knee0" type="hinge" axis="0 -1 0" range="-150 -20" damping="0.05" armature="0.005"/>
+            <geom type="capsule" fromto="0 0 0 0.1242 0 0" size="0.010" mass="0.095" rgba="0.55 0.42 0.75 1"/>
+            <geom name="foot0" type="sphere" pos="0.1350 0 0" size="0.013" mass="0.041"
+                  rgba="0.42 0.32 0.58 1" friction="1.2 0.01 0.001" condim="3"/>
+            <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
+                  mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            <body name="clawb0" pos="0.1350 0 0">
+              <joint name="claw0" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
+                    mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="coxa1" pos="-0.1046 0.0340 0" euler="0 0 162">
+        <joint name="yaw1" type="hinge" axis="0 0 1" range="-40 40" damping="0.05" armature="0.005"/>
+        <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="0.0862" rgba="0.35 0.30 0.45 1"/>
+        <body name="femur1" pos="0.0450 0 0.0580">
+          <joint name="hip1" type="hinge" axis="0 -1 0" range="-70 90" damping="0.05" armature="0.005"/>
+          <geom type="capsule" fromto="0 0 0 0.0950 0 0" size="0.012" mass="0.0157" rgba="0.55 0.42 0.75 1"/>
+          <body name="tibia1" pos="0.0950 0 0">
+            <joint name="knee1" type="hinge" axis="0 -1 0" range="-150 -20" damping="0.05" armature="0.005"/>
+            <geom type="capsule" fromto="0 0 0 0.1242 0 0" size="0.010" mass="0.095" rgba="0.55 0.42 0.75 1"/>
+            <geom name="foot1" type="sphere" pos="0.1350 0 0" size="0.013" mass="0.041"
+                  rgba="0.42 0.32 0.58 1" friction="1.2 0.01 0.001" condim="3"/>
+            <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
+                  mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            <body name="clawb1" pos="0.1350 0 0">
+              <joint name="claw1" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
+                    mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="coxa2" pos="-0.0647 -0.0890 0" euler="0 0 234">
+        <joint name="yaw2" type="hinge" axis="0 0 1" range="-40 40" damping="0.05" armature="0.005"/>
+        <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="0.0862" rgba="0.35 0.30 0.45 1"/>
+        <body name="femur2" pos="0.0450 0 0.0580">
+          <joint name="hip2" type="hinge" axis="0 -1 0" range="-70 90" damping="0.05" armature="0.005"/>
+          <geom type="capsule" fromto="0 0 0 0.0950 0 0" size="0.012" mass="0.0157" rgba="0.55 0.42 0.75 1"/>
+          <body name="tibia2" pos="0.0950 0 0">
+            <joint name="knee2" type="hinge" axis="0 -1 0" range="-150 -20" damping="0.05" armature="0.005"/>
+            <geom type="capsule" fromto="0 0 0 0.1242 0 0" size="0.010" mass="0.095" rgba="0.55 0.42 0.75 1"/>
+            <geom name="foot2" type="sphere" pos="0.1350 0 0" size="0.013" mass="0.041"
+                  rgba="0.42 0.32 0.58 1" friction="1.2 0.01 0.001" condim="3"/>
+            <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
+                  mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            <body name="clawb2" pos="0.1350 0 0">
+              <joint name="claw2" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
+                    mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="coxa3" pos="0.0647 -0.0890 0" euler="0 0 306">
+        <joint name="yaw3" type="hinge" axis="0 0 1" range="-40 40" damping="0.05" armature="0.005"/>
+        <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="0.0862" rgba="0.35 0.30 0.45 1"/>
+        <body name="femur3" pos="0.0450 0 0.0580">
+          <joint name="hip3" type="hinge" axis="0 -1 0" range="-70 90" damping="0.05" armature="0.005"/>
+          <geom type="capsule" fromto="0 0 0 0.0950 0 0" size="0.012" mass="0.0157" rgba="0.55 0.42 0.75 1"/>
+          <body name="tibia3" pos="0.0950 0 0">
+            <joint name="knee3" type="hinge" axis="0 -1 0" range="-150 -20" damping="0.05" armature="0.005"/>
+            <geom type="capsule" fromto="0 0 0 0.1242 0 0" size="0.010" mass="0.095" rgba="0.55 0.42 0.75 1"/>
+            <geom name="foot3" type="sphere" pos="0.1350 0 0" size="0.013" mass="0.041"
+                  rgba="0.42 0.32 0.58 1" friction="1.2 0.01 0.001" condim="3"/>
+            <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
+                  mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            <body name="clawb3" pos="0.1350 0 0">
+              <joint name="claw3" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
+                    mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="coxa4" pos="0.1046 0.0340 0" euler="0 0 378">
+        <joint name="yaw4" type="hinge" axis="0 0 1" range="-40 40" damping="0.05" armature="0.005"/>
+        <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="0.0862" rgba="0.35 0.30 0.45 1"/>
+        <body name="femur4" pos="0.0450 0 0.0580">
+          <joint name="hip4" type="hinge" axis="0 -1 0" range="-70 90" damping="0.05" armature="0.005"/>
+          <geom type="capsule" fromto="0 0 0 0.0950 0 0" size="0.012" mass="0.0157" rgba="0.55 0.42 0.75 1"/>
+          <body name="tibia4" pos="0.0950 0 0">
+            <joint name="knee4" type="hinge" axis="0 -1 0" range="-150 -20" damping="0.05" armature="0.005"/>
+            <geom type="capsule" fromto="0 0 0 0.1242 0 0" size="0.010" mass="0.095" rgba="0.55 0.42 0.75 1"/>
+            <geom name="foot4" type="sphere" pos="0.1350 0 0" size="0.013" mass="0.041"
+                  rgba="0.42 0.32 0.58 1" friction="1.2 0.01 0.001" condim="3"/>
+            <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
+                  mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            <body name="clawb4" pos="0.1350 0 0">
+              <joint name="claw4" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
+                    mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="yaw0" joint="yaw0" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="hip0" joint="hip0" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="knee0" joint="knee0" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="yaw1" joint="yaw1" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="hip1" joint="hip1" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="knee1" joint="knee1" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="yaw2" joint="yaw2" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="hip2" joint="hip2" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="knee2" joint="knee2" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="yaw3" joint="yaw3" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="hip3" joint="hip3" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="knee3" joint="knee3" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="yaw4" joint="yaw4" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="hip4" joint="hip4" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="knee4" joint="knee4" kp="20" kv="0.6" forcerange="-2.94 2.94"/>
+    <position name="claw0" joint="claw0" kp="0.5" kv="0.02" forcerange="-0.2 0.2"/>
+    <position name="claw1" joint="claw1" kp="0.5" kv="0.02" forcerange="-0.2 0.2"/>
+    <position name="claw2" joint="claw2" kp="0.5" kv="0.02" forcerange="-0.2 0.2"/>
+    <position name="claw3" joint="claw3" kp="0.5" kv="0.02" forcerange="-0.2 0.2"/>
+    <position name="claw4" joint="claw4" kp="0.5" kv="0.02" forcerange="-0.2 0.2"/>
+  </actuator>
+</mujoco>
