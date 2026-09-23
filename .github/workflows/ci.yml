@@ -22,7 +22,7 @@ jobs:
       - run: pip install -e ".[sim,harness,dev]"
       - name: unit suites (driver, gait, harness fast)
         run: python -m pytest driver/tests gait harness -m "not slow" -q
-      - name: sim smoke — the bare wave gait walks (no GL on the runner: physics + metrics only)
+      - name: "sim smoke: the bare wave gait walks (no GL on the runner, physics + metrics only)"
         run: |
           set -o pipefail
           python sim/build_mjcf.py
