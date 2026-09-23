@@ -54,7 +54,11 @@ for _ in range(int(0.8 / DT)):
     data.ctrl[:15] = q0
     mujoco.mj_step(model, data)
 
-renderer = mujoco.Renderer(model, 480, 720)
+try:                                   # headless boxes without EGL/OSMesa (CI) still run the physics
+    renderer = mujoco.Renderer(model, 480, 720)
+except Exception as e:                 # noqa: BLE001
+    renderer = None
+    print(f"no offscreen renderer ({type(e).__name__}): physics + metrics only, no video/contact sheet")
 cam = mujoco.MjvCamera()
 cam.distance, cam.elevation = 0.9, -22
 
@@ -83,8 +87,9 @@ for vx, vy, wz, dur, label in SEGMENTS:
         # camera follows torso
         cam.lookat[:] = data.xpos[torso] + np.array([0, 0, -0.02])
         cam.azimuth = -55 + 6 * np.sin(t_video * 0.25)
-        renderer.update_scene(data, camera=cam)
-        frames.append(renderer.render().copy())
+        if renderer is not None:
+            renderer.update_scene(data, camera=cam)
+            frames.append(renderer.render().copy())
         # metrics
         zaxis = data.xmat[torso].reshape(3, 3)[:, 2]
         metrics["height"].append(data.xpos[torso][2] * 1000)
@@ -95,9 +100,10 @@ for vx, vy, wz, dur, label in SEGMENTS:
     if label == "walk +X":
         pos_end_walk = data.xpos[torso].copy()
 
-imageio.mimsave(os.path.join(HERE, "pebble_sim.mp4"), frames, fps=FPS,
-                codec="libx264", quality=8)
-print(f"video saved: {len(frames)} frames")
+if frames:
+    imageio.mimsave(os.path.join(HERE, "pebble_sim.mp4"), frames, fps=FPS,
+                    codec="libx264", quality=8)
+    print(f"video saved: {len(frames)} frames")
 
 # ---- metrics report ----
 h = np.array(metrics["height"]); tilt = np.array(metrics["tilt"])
@@ -113,15 +119,16 @@ print(f"walk +X displacement: {walk_disp[0]:.0f} mm (commanded ~{commanded:.0f} 
       f"lateral drift {walk_disp[1]:.0f} mm")
 print(f"fell over: {'YES' if h.min() < 60 or tilt.max() > 30 else 'no'}")
 
-# contact sheet for inspection
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-ks = np.linspace(0, len(frames) - 1, 9).astype(int)
-fig, axes = plt.subplots(3, 3, figsize=(12, 8), dpi=80)
-for ax, k in zip(axes.flat, ks):
-    ax.imshow(frames[k]); ax.axis("off")
-    ax.set_title(f"t={k/FPS:.1f}s {seg[k]}", fontsize=8)
-plt.tight_layout()
-plt.savefig(os.path.join(HERE, "sim_contact_sheet.png"))
-print("contact sheet saved")
+if frames:
+    # contact sheet for inspection
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    ks = np.linspace(0, len(frames) - 1, 9).astype(int)
+    fig, axes = plt.subplots(3, 3, figsize=(12, 8), dpi=80)
+    for ax, k in zip(axes.flat, ks):
+        ax.imshow(frames[k]); ax.axis("off")
+        ax.set_title(f"t={k/FPS:.1f}s {seg[k]}", fontsize=8)
+    plt.tight_layout()
+    plt.savefig(os.path.join(HERE, "sim_contact_sheet.png"))
+    print("contact sheet saved")

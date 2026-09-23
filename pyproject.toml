@@ -21,7 +21,7 @@ harness = ["mcp<2", "pytest-asyncio", "openai", "httpx"]
 # real servo bus
 hw = ["pyserial"]
 # parametric CAD + the check suite + print pack
-cad = ["build123d>=0.9", "trimesh", "shapely", "rtree", "numpy-stl", "matplotlib", "reportlab"]
+cad = ["build123d>=0.9", "trimesh", "networkx", "shapely", "rtree", "numpy-stl", "matplotlib", "reportlab"]
 dev = ["pytest", "pytest-asyncio", "ruff"]
 
 [tool.setuptools]

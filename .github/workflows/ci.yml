@@ -22,18 +22,16 @@ jobs:
       - run: pip install -e ".[sim,harness,dev]"
       - name: unit suites (driver, gait, harness fast)
         run: python -m pytest driver/tests gait harness -m "not slow" -q
-      - name: sim smoke — the bare wave gait walks
-        env: { MUJOCO_GL: egl }
+      - name: sim smoke — the bare wave gait walks (no GL on the runner: physics + metrics only)
         run: |
+          set -o pipefail
           python sim/build_mjcf.py
           python sim/run_sim.py | tail -3
       - name: URDF == MJCF == analytic FK
-        env: { MUJOCO_GL: egl }
         run: |
           python ros2/rocky_description/generate_urdf.py
           python sim/check_urdf_parity.py
-      - name: harness slow test (physics-backed goto)
-        env: { MUJOCO_GL: egl }
+      - name: harness slow test (physics-backed goto, no rendering)
         run: python -m pytest harness -m slow -q
 
   cad:
