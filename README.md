@@ -15,7 +15,7 @@ claim from "it works on hardware".
 | `rocky_v0.8.0_code/rocky/` | The live tree. Everything below is relative to it. |
 | `rocky_v0.8.0_assets_cad/` | CAD export drop. `cad/out` in the live tree is a symlink into here. |
 | `rocky_v0.8.0_assets_av_s8d/` | Audio and video drop. |
-| `patches/` | Drop-vs-local record: the 2026-09-08 harness diff plus the pristine files it applies to. |
+| `patches/` | Historical: the 2026-09-08/17 diffs against the last delivered drop. Git is the record since 2026-09-22. |
 | `rocky.sh` | Launcher for this laptop. Not part of any drop. |
 
 Inside the live tree: `cad/` parametric parts and the check suite ·
@@ -56,16 +56,19 @@ These are the ones that have actually cost something when broken.
 - `BUILD_LOG.md` — engineering notebook, newest entry first.
 - `docs/decisions.md` — numbered decisions, the D-numbers cited elsewhere.
 - `NOTES_INBOX.md` — raw dump of measurements and results, filed later.
-- `docs/NEXT_SESSION.md` — what the next session should pick up.
 - `docs/RL_TOUR.md` — the reinforcement-learning ladder and what each
   rung was worth.
 
-## Current state (2026-09-08)
+## Current state (2026-09-22)
 
-CAD is print-clean and waiting on caliper measurements before the final
-regen. The sim robot walks, gestures, self-rights after a shove, patrols
-with lidar, and answers to text, a local model, or Claude over MCP. The
-servo order has not been placed, so there is no bench day yet.
+The leg chain was rebuilt on 2026-09-22 around a measured STEP of the real
+ST3215 servo (D047) after the first prints showed the old servo model was a
+guess; nothing from the old leg prints again. The sim robot walks, gestures,
+self-rights after a shove, patrols with lidar, and answers to text, a local
+model, or Claude over MCP. The servo order has not been placed. Read
+`rocky_v0.8.0_code/rocky/docs/REVIEW_2026-09-22.md` for the state of every
+area, `docs/PRINT_PLAN_2026-09-22.md` for what to print, and
+`bom/SHOPPING_LIST_2026-09-22.md` for what to buy.
 
 The shipped self-righting policy is `recover1`, which stands up 10 times
 in 20 on this machine. Two later attempts to improve it scored 7 and 3.

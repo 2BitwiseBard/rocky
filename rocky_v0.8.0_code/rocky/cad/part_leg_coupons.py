@@ -1,40 +1,43 @@
-"""D046 joint COUPONS — one-hour prints of the real joint geometry, both
-mating parts clipped to the joint itself. Assemble on the bench BEFORE any
-full leg part reprints. Because they are boolean clips of the production
-solids, a coupon that fits proves the production part fits.
+"""D047 joint COUPONS — one-hour prints of the real joint geometry, clipped
+out of the production solids. Assemble on the bench BEFORE any full leg part
+reprint; because they are boolean clips of the production parts, a coupon
+that fits proves the production part fits.
 
-  J1 (yaw):  coupon_j1_hub  = fork hub + boss + floor stub (x -14..7)
-             coupon_j1_post = base plate stub + crown post (x -45..-33)
-             + coxa_crown_cap (full part) + 683ZZ + M3 x 10 axle + 2x M3 x 8
-             + a servo_blank (or its horn zone: coupon_j2_horn) under the hub
-  J2/J3:     coupon_j2_hub  = femur link hub A with recess + clamp holes
-             coupon_j2_horn = servo blank horn zone with nut slots (z 29..38)
-             + horn_coupler (full part) + 4x M2 x 8 + 4x M2 nuts + 2x M3 x 8
+  coupon_cup      : one servo cup (the same shape holds all three servos).
+                    Slide a blank (or a real servo) in, drive the four rim
+                    screws. Proves case fit, rim clearance, screw positions.
+  coupon_yaw_hub  : the fork's lower hub — horn OD pocket + slotted holes.
+                    Bolt it to a blank's horn (or the real horn: this is the
+                    print that answers M2-or-M3 and the hole radius).
+  coupon_hip_hub  : femur plate A hub A with the coupler recess + clamp holes
+                    (+ horn_coupler, 2x M3 x 8).
+  coupon_idler    : femur plate B hub A tower — the idler pocket with its
+                    plug notch, on a blank_idler or the real idler.
 """
 from build123d import *
 from common import export
-from part_coxa import coxa_fork, coxa_yaw_base
-from part_femur import femur_link
-from part_servo_blank import servo_blank
+from part_coxa import coxa_fork
+from part_femur import femur_link, femur_plate_b, YA0, YB0, YB1
+from servo_mount import servo_cup
 
 
-def coupon_j1_hub():
-    return coxa_fork() & Pos((-14 + 7) / 2, 0, 43) * Box(21, 30, 12)
+def coupon_cup():
+    return servo_cup()
 
 
-def coupon_j1_post():
-    return coxa_yaw_base() & Pos(-39, 0, 22) * Box(12, 24, 54)
+def coupon_yaw_hub():
+    return coxa_fork() & Pos(0, 0, 5) * Box(30, 30, 10)
 
 
-def coupon_j2_hub():
-    return femur_link() & Pos(0, 3, 0) * Box(32, 8, 32)
+def coupon_hip_hub():
+    return femur_link() & Pos(0, (YA0 + YA0 + 6) / 2, 0) * Box(34, 6.2, 34)
 
 
-def coupon_j2_horn():
-    return servo_blank() & Pos(0, 0, 33.5) * Box(22, 22, 9.2)
+def coupon_idler():
+    return femur_plate_b() & Pos(0, (YB0 + YB1) / 2, 0) * Box(30, YB1 - YB0 + 0.2, 40)
 
 
 if __name__ == "__main__":
-    for fn in (coupon_j1_hub, coupon_j1_post, coupon_j2_hub, coupon_j2_horn):
+    for fn in (coupon_cup, coupon_yaw_hub, coupon_hip_hub, coupon_idler):
         export(fn(), fn.__name__)
     print("part_leg_coupons: 4 coupons exported (single-solid gate passed)")

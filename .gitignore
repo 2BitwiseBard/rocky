@@ -17,3 +17,7 @@ rocky_v0.8.0_code/rocky/bench/calibration.yaml
 # --- OS noise ---
 .DS_Store
 *.swp
+
+# --- local machine config (the .example is the portable one) ---
+.mcp.json
+rocky_v0.8.0_code/rocky/.mcp.json

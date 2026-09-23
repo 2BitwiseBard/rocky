@@ -74,11 +74,15 @@ PLATES = {
     ],
     "P4 one leg (+3 blanks)": [
         ("coxa_yaw_base", 1, 0.55, 0.2), ("coxa_fork", 1, 0.55, 0.2),
-        ("coxa_crown_cap", 1, 0.6, 0.2), ("coxa_fork_strap", 1, 0.6, 0.2),
-        ("tibia_knee_strap", 1, 0.6, 0.2),
-        ("femur_link", 1, 0.6, 0.2), ("tibia_knee_carrier", 1, 0.5, 0.2),
-        ("tibia_sea_outer", 1, 0.7, 0.2), ("horn_coupler", 3, 0.7, 0.2),
-        ("servo_blank", 3, 0.35, 0.2),  # 2 walls / 10 % — deliberately airy
+        ("femur_link", 1, 0.6, 0.2), ("femur_plate_b", 1, 0.55, 0.2),
+        ("tibia_knee_carrier", 1, 0.55, 0.2), ("tibia_sea_outer", 1, 0.8, 0.2),
+        ("horn_coupler", 2, 0.85, 0.2),
+        ("servo_blank", 3, 0.35, 0.2), ("blank_idler", 3, 0.9, 0.2),
+    ],
+    "P4a D047 joint coupons": [
+        ("coupon_cup", 1, 0.7, 0.2), ("coupon_yaw_hub", 1, 0.7, 0.2),
+        ("coupon_hip_hub", 1, 0.7, 0.2), ("coupon_idler", 1, 0.7, 0.2),
+        ("horn_coupler", 1, 0.85, 0.2), ("servo_blank", 1, 0.35, 0.2), ("blank_idler", 1, 0.9, 0.2),
     ],
     "P5 body deck": [("body_deck", 1, 0.5, 0.2)],
     "P6 stand base+crown": [

@@ -27,3 +27,5 @@ rocky_v0.8.0_code/rocky/cad/pebble_viewer.html filter=lfs diff=lfs merge=lfs -te
 *.yaml  text
 *.yml   text
 *.json  text
+*.jpg   filter=lfs diff=lfs merge=lfs -text
+*.pdf   filter=lfs diff=lfs merge=lfs -text

@@ -33,16 +33,24 @@ L1 = P["leg"]["l1_coxa"] * MM
 L2 = P["leg"]["l2_femur"] * MM
 L3 = P["leg"]["l3_tibia"] * MM
 RB = P["body"]["circumradius"] * MM
-Z_HIP = 58.0 * MM                       # femur pivot height (CAD status log)
+Z_HIP = P["leg"]["hip_axis_z"] * MM     # femur pivot height (params SSOT, D047)
 LIM = P["bus"]["soft_limits_deg"]
 STALL = 2.94                            # N*m (D002)
 VEL = 5.2                               # rad/s (~0.2 s/60 deg @ 12 V)
 
-# mass budget — MUST match sim/build_mjcf.py
-M_TORSO = 1.35
-M_COXA = 0.14
-M_FEMUR = 0.03
-M_TIBIA = 0.17
+# mass budget: the CAD-derived sim/mass_budget.json (D039) — the same file
+# sim/build_mjcf.py reads, so URDF and MJCF cannot drift apart again (they did:
+# D046 updated the budget, this file still carried the session-2 hand budget)
+_MB_PATH = os.path.join(REPO, "sim", "mass_budget.json")
+if os.path.exists(_MB_PATH):
+    import json
+    with open(_MB_PATH) as _f:
+        _mb = json.load(_f)
+    M_TORSO, M_COXA, M_FEMUR, M_TIBIA = (_mb[k] / 1000.0 for k in ("torso", "coxa", "femur", "tibia"))
+    MASS_SOURCE = "mass_budget.json"
+else:                                    # session-2 hand budget, kept as the fallback
+    M_TORSO, M_COXA, M_FEMUR, M_TIBIA = 1.35, 0.14, 0.03, 0.17
+    MASS_SOURCE = "fallback constants"
 
 
 def inertia_cylinder(m, r, h):
@@ -235,10 +243,36 @@ def main():
         doc = xacro_mod.process_file(tmp)
         with open(urdf_path, "w") as f:
             f.write(doc.toprettyxml(indent="  "))
+        how = "xacro module"
     except ImportError:
-        subprocess.run(["xacro", tmp, "-o", urdf_path], check=True)
+        try:
+            subprocess.run(["xacro", tmp, "-o", urdf_path], check=True)
+            how = "xacro CLI"
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            with open(urdf_path, "w") as f:      # no ROS on this machine: expand the one macro ourselves
+                f.write(expand_plain(plain))
+            how = "built-in expander (no xacro installed)"
     os.remove(tmp)
-    print("wrote", urdf_path)
+    print("wrote", urdf_path, f"({how}; masses: {MASS_SOURCE})")
+
+
+def expand_plain(xacro_txt: str) -> str:
+    """Minimal expander for THIS file: one macro, ${...} python expressions
+    with i/angle bound, no other xacro features. Keeps the parity check
+    runnable on a laptop without ROS."""
+    import re
+    m = re.search(r"<xacro:macro name=\"pebble_leg\" params=\"i angle\">(.*?)</xacro:macro>", xacro_txt, re.S)
+    body = m.group(1)
+    head = xacro_txt[:m.start()]
+    tail = xacro_txt[m.end():]
+    legs = []
+    for inst in re.finditer(r'<xacro:pebble_leg i="(\d+)" angle="\$\{radians\(([\d.]+)\)\}"/>', tail):
+        i, ang = int(inst.group(1)), np.radians(float(inst.group(2)))
+        ns = {"i": i, "angle": ang, "cos": np.cos, "sin": np.sin, "radians": np.radians, "pi": np.pi}
+        legs.append(re.sub(r"\$\{([^}]*)\}", lambda mm: str(eval(mm.group(1), {}, ns)), body))
+    tail = re.sub(r'<xacro:pebble_leg [^>]*/>\n?', "", tail)
+    out = head + "".join(legs) + tail
+    return out.replace(' xmlns:xacro="http://www.ros.org/wiki/xacro"', "")
 
 
 if __name__ == "__main__":

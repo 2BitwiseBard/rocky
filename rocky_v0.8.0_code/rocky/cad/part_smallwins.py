@@ -6,8 +6,8 @@
                      washers at any deck grid point. Measured mass, no glue.
   imu_grommet      : TPU top-hat isolator for the BNO085 on the avionics
                      tray (4x). Kills gait-frequency vibration at the IMU.
-  calib_gauge_hip  : bench-jig tower whose cradle holds the KNEE SERVO CASE
-                     bottom at leg z 45.65 => femur exactly horizontal
+  calib_gauge_hip  : bench-jig tower whose cradle holds the TIBIA CUP floor
+                     (knee servo cradle, D047) at leg z 45.0 => femur horizontal
                      (hip = 0) during center calibration.
   calib_gauge_knee : V-block that plumbs the tibia tube vertical at x = 140
                      => knee exactly -90. Registers in the jig base groove.
@@ -62,8 +62,10 @@ def imu_grommet():
 
 
 def calib_gauge_hip():
-    """Tower: base pad + shaft + top cradle at jig z 179.65 (leg 45.65)."""
-    cradle_z = LEG_Z0_IN_JIG + 45.65 - 0.3                # -0.3: case FIT gap
+    """Tower: base pad + shaft + top cradle under the TIBIA CUP floor (D047:
+    the knee servo sits in a cup; its floor underside is the reference)."""
+    from leg_frame import Z_CUP_FLOOR_TOP
+    cradle_z = LEG_Z0_IN_JIG + (Z_CUP_FLOOR_TOP - 3.0) - 0.3   # 45.0: cup floor underside - FIT
     h = cradle_z - JIG_BASE_TOP
     base = Pos(0, 0, JIG_BASE_TOP + 3) * Box(60, 44, 6)
     shaft = Pos(0, 0, JIG_BASE_TOP + h / 2) * Box(26, 20, h)
@@ -121,5 +123,7 @@ if __name__ == "__main__":
               f"{'  (print lying down)' if big > 200 else ''}")
     # gauge height sanity
     hip = parts["calib_gauge_hip"].bounding_box()
+    from leg_frame import Z_CUP_FLOOR_TOP
+    cradle_z = LEG_Z0_IN_JIG + (Z_CUP_FLOOR_TOP - 3.0) - 0.3
     print(f"hip gauge cradle top at jig z {hip.max.Z:.1f} "
-          f"(target {LEG_Z0_IN_JIG + 45.65 - 0.3 + 6:.1f} incl. cheeks)")
+          f"(target {cradle_z + 6:.1f} incl. cheeks)")

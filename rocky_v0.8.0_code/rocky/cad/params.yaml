@@ -9,18 +9,64 @@ meta:
   version: 0.1
   robot: pebble
 
-servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm
-  body_l: 45.2           # VERIFY  case length
-  body_w: 24.7           # VERIFY  case width
-  body_h: 32.0           # VERIFY  case height, bottom to top face (excl. output boss)
-  boss_d: 6.0            # VERIFY  output boss diameter
-  boss_h: 3.0            # VERIFY  output boss height above case
-  shaft_offset: 11.25    # VERIFY  output axis distance from front end of case, on width centerline
-  horn_d: 20.0           # VERIFY  metal disc horn diameter
-  horn_h: 3.0            # VERIFY  horn thickness
-  horn_bcd: 14.0         # VERIFY  bolt circle diameter of 4x M2 horn holes
-  horn_screw_d: 2.2      # M2 clearance
-  mass_g: 60             # VERIFY
+servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm (STS3250 = same case)
+  # v2 (D047, 2026-09-22): every number below was MEASURED on the real servo's
+  # STEP model (cad/ref/STS3215_03a.step, SO-ARM100, Apache-2.0) by ray-casting
+  # its mesh, replacing the v0.1 guesses (case 32 tall, horn top at 38, horn
+  # holes on 0/90/180/270, no rear idler, no connectors). "from STEP" stays
+  # VERIFY until a servo is calipered; the two numbers the STEP itself is
+  # ambiguous about (horn hole radius, horn thread) are hedged in the parts.
+  # Frame: output axis = +Z at the origin, case hangs -X, z=0 = case BOTTOM flat
+  # face (the idler/connector face). The horn face is +Z.
+  body_l: 45.4           # from STEP (spec sheet says 45.2)
+  body_w: 24.8           # from STEP (spec 24.7)
+  body_h: 28.8           # from STEP: flat-to-flat (the spec's "32" is rim-to-rim)
+  shaft_offset: 10.2     # from STEP: output axis -> case FRONT (short) end (v0.1: 11.25)
+  rim:                   # 1.5 mm raised frame on BOTH faces over the rear of the case;
+    x0: -35.2            # the four screw holes per face sit in it (rel. axis)
+    x1: -6.3
+    h: 1.5               # top rim face at 30.3, bottom rim face at -1.5
+  plateau:               # gearbox cover on the horn face, proud of the rim
+    x0: -35.2
+    x1: -11.3
+    half_w: 7.0
+    h: 2.6               # plateau face at 31.4
+  case_screw:            # self-tapper holes in the rims (the SO-ARM100 / Feetech bracket mount)
+    y: 10.1
+    top_x: [-29.0, -7.8] # horn face, from STEP (rel. axis)
+    bot_x: [-32.85, -7.8] # idler face
+    pilot_d: 1.5         # hole in the STEP; the kit's self-tapper size is VERIFY (PA2.0?)
+    clear_d: 2.4         # bracket clearance hole
+    head_d: 4.0
+  out_boss_d: 9.0        # from STEP: output flange under the horn
+  out_boss_h: 1.8        # 28.8 -> 30.6
+  horn_d: 20.0           # metal disc horn, from STEP
+  horn_t: 2.5            # from STEP: 30.6 -> 33.1 (horn TOP is 33.1 above the case bottom; v0.1 said 38)
+  horn_bcd: 14.0         # nominal; the STEP's holes read as 14-16 BCD depending on the probe -> parts use a radial SLOT
+  horn_bcd_slot: 1.6     # extra radial slot length in every horn-bolted part (covers BCD 14.0..15.6)
+  horn_pattern_deg: 45   # from STEP: holes at 45/135/225/315 — NOT 0/90/180/270 as v0.1 assumed
+  horn_hole_d: 2.5       # from STEP = M3 tap drill; RobotShop's kit list says "M3 x 6 machine screws"
+  horn_screw_m: 3        # VERIFY with ONE screw on arrival; if the horn is M2-tapped use M2 + washer in the same slots
+  horn_screw_clear_d: 3.4
+  horn_screw_head_d: 5.8 # counterbore for an M3 pan/button head (an M2 head + M2 washer also seats)
+  horn_center_head_d: 5.4
+  horn_center_head_h: 1.0
+  idler_d: 19.9          # from STEP: rear idler wheel on the case bottom (ships with the servo: "two steering wheels")
+  idler_t: 2.1
+  idler_gap: 1.2         # case bottom -> idler underside: the disc spans z -1.2 .. -3.3
+  idler_boss_d: 6.0      # from STEP: rear axle boss the idler sits on (z -1.2 .. 0)
+  idler_center_head_d: 6.0
+  idler_center_head_h: 0.6   # to z -3.9
+  conn:                  # cable side = the idler face (rel. axis, +-y)
+    housing_x: [-29.85, -16.6] # connector housing, 3.3 proud, inside the rim frame
+    housing_half_w: 9.15
+    housing_h: 3.3
+    pins_x: [-15.0, -13.1]     # two 3-pin headers side by side, 3 mm behind the idler edge
+    pins_y: [1.5, 8.45]
+    pins_h: 5.0
+    plug_h: 12.0         # VERIFY: how far a mated plug + wire bend stands off the pin tips
+    plug_pad: 1.0        # keep-out margin around the pin rows
+  mass_g: 55             # spec (STS3250: 74.5)
 
 servo_scs0009:           # hand/claw drive (modeled later)
   body_l: 23.6           # VERIFY
@@ -33,7 +79,8 @@ bearing_683zz:           # coxa yaw support bearing 3x7x3
   w: 3.0
 
 leg:
-  l1_coxa: 45.0          # yaw axis -> femur pivot axis
+  l1_coxa: 45.0          # yaw axis -> femur pivot axis (horizontal)
+  hip_axis_z: 61.0       # femur pivot height above the deck plane (D047; was a hard-coded 58 in gait/sim/urdf)
   l2_femur: 95.0         # femur pivot -> knee axis (center to center)
   l3_tibia: 135.0        # knee axis -> foot contact point
   tibia_tube_od: 10.0    # carbon tube OD (VERIFY purchased tube)

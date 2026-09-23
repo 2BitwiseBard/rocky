@@ -4,7 +4,7 @@
   <material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>
 
   <link name="base_link">
-    <inertial><origin xyz="0.000000 0.000000 0.024500"/><mass value="1.35"/><inertia ixx="3.805e-03" ixy="0" ixz="0" iyy="3.805e-03" iyz="0" izz="7.126e-03"/></inertial>
+    <inertial><origin xyz="0.000000 0.000000 0.024500"/><mass value="1.4489"/><inertia ixx="4.084e-03" ixy="0" ixz="0" iyy="4.084e-03" iyz="0" izz="7.648e-03"/></inertial>
     <visual><origin xyz="0 0 0.018"/>
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry>
       <material name="pebble"/></visual>
@@ -19,7 +19,7 @@
 
   <xacro:macro name="pebble_leg" params="i angle">
     <link name="coxa${i}">
-      <inertial><origin xyz="0.020000 0.000000 0.030000"/><mass value="0.14"/><inertia ixx="5.395e-05" ixy="0" ixz="0" iyy="8.400e-05" iyz="0" izz="5.395e-05"/></inertial>
+      <inertial><origin xyz="0.020000 0.000000 0.030000"/><mass value="0.0783"/><inertia ixx="3.017e-05" ixy="0" ixz="0" iyy="4.698e-05" iyz="0" izz="3.017e-05"/></inertial>
       <visual><origin xyz="0.020 0 0.030"/>
         <geometry><box size="0.060 0.032 0.060"/></geometry>
         <material name="pebble"/></visual>
@@ -37,7 +37,7 @@
     </joint>
 
     <link name="femur${i}">
-      <inertial><origin xyz="0.047500 0.000000 0.000000"/><mass value="0.03"/><inertia ixx="2.160e-06" ixy="0" ixz="0" iyy="2.364e-05" iyz="0" izz="2.364e-05"/></inertial>
+      <inertial><origin xyz="0.047500 0.000000 0.000000"/><mass value="0.034"/><inertia ixx="2.448e-06" ixy="0" ixz="0" iyy="2.679e-05" iyz="0" izz="2.679e-05"/></inertial>
       <visual><origin xyz="0.0475 0 0" rpy="0 1.570796 0"/>
         <geometry><cylinder radius="0.012" length="0.0950"/></geometry>
         <material name="pebble"/></visual>
@@ -46,7 +46,7 @@
     </link>
     <joint name="hip${i}" type="revolute">
       <parent link="coxa${i}"/><child link="femur${i}"/>
-      <origin xyz="0.0450 0 0.0580"/>
+      <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
              effort="2.94" velocity="5.2"/>
@@ -54,7 +54,7 @@
     </joint>
 
     <link name="tibia${i}">
-      <inertial><origin xyz="0.062100 0.000000 0.000000"/><mass value="0.119"/><inertia ixx="5.950e-06" ixy="0" ixz="0" iyy="1.559e-04" iyz="0" izz="1.559e-04"/></inertial>
+      <inertial><origin xyz="0.062100 0.000000 0.000000"/><mass value="0.0917"/><inertia ixx="4.585e-06" ixy="0" ixz="0" iyy="1.202e-04" iyz="0" izz="1.202e-04"/></inertial>
       <visual><origin xyz="0.0621 0 0" rpy="0 1.570796 0"/>
         <geometry><cylinder radius="0.010" length="0.1242"/></geometry>
         <material name="pebble"/></visual>
@@ -71,7 +71,7 @@
     </joint>
 
     <link name="foot${i}">
-      <inertial><origin xyz="0.000000 0.000000 0.000000"/><mass value="0.05500000000000001"/><inertia ixx="3.448e-06" ixy="0" ixz="0" iyy="3.448e-06" iyz="0" izz="3.448e-06"/></inertial>  <!-- +0.004: fixed claw prong (MJCF parity) -->
+      <inertial><origin xyz="0.000000 0.000000 0.000000"/><mass value="0.043300000000000005"/><inertia ixx="2.657e-06" ixy="0" ixz="0" iyy="2.657e-06" iyz="0" izz="2.657e-06"/></inertial>  <!-- +0.004: fixed claw prong (MJCF parity) -->
       <visual><geometry><sphere radius="0.013"/></geometry>
         <material name="pebble"/></visual>
       <visual><origin xyz="0.012 0.0075 0" rpy="0 0 0.28"/>

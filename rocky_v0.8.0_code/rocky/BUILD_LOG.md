@@ -8,6 +8,64 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-22 · Session 9 (laptop) — full review, then the leg is rebuilt around the real servo (D047); reprint plan + shopping list; repo goes public-ready
+
+**Done**
+- **Review** (`docs/REVIEW_2026-09-22.md`): three parallel passes over the
+  D046 tree — mechanical, electronics/BOM, software/repo — with every
+  finding dispositioned. Headline: `servo_st3215.py` v0.1 was a guessed box
+  wrong in five independent ways, so every leg part Tyler printed (photo in
+  `media/`) was designed for a servo that does not exist; the D046 yaw
+  stage would have failed structurally (~240 N through a 683ZZ 15 mm from
+  the horn). Electronics: all-ST3215, ESP32 driver board is core, per-leg
+  12 V fan-out, LiPo alarm. Software: 85 fast tests green, URDF parity
+  had drifted since D046.
+- **Servo model v2 from a measured STEP** (`cad/ref/STS3215_03a.step`,
+  SO-ARM100): case 28.8 flat-to-flat with 1.5 mm rims carrying the screw
+  holes, 2.6 mm plateau, axis 10.2 from the front, horn top 33.1, 45° hole
+  pattern, Ø19.9 rear idler, connector housing + pins, plug keep-out. The
+  model's self-check now diffs it against the STEP (43 mm³ unexplained).
+- **D047 leg chain**: yaw servo shaft-down in a cup on the I1 base; one
+  C-fork riding horn + idler; twin-plate femur (plate A on couplers, plate
+  B on idlers, bridged, 4× M3); knee cup on the tibia; `servo_cup` = one
+  retention shape for all three servos (four rim self-tappers); coupler
+  re-cut (lobes 0/90/180/270, slotted M3/M2 holes); blank v0.3 + glue-on
+  idler; four coupons that are clips of the production solids. Hip axis
+  61 = `params.leg.hip_axis_z`, read by gait, MJCF and URDF (three hard-
+  coded 58s gone). **CAD CI 23/23 tree clean**, joint suite clean with four
+  new check classes, mass 2665 g, sim walk unchanged, URDF parity OK.
+- **Docs**: `docs/PRINT_PLAN_2026-09-22.md` (batch 1 coupons → batch 2 one
+  leg → batch 3 body), `bom/SHOPPING_LIST_2026-09-22.md` (bench kit ≈
+  $300–370, full robot adds ≈ $900–1,050), D047 row, B22–B28, print pack
+  v0.5, viewer rebuilt.
+- **Repo**: everything committed to git (drop/patch workflow retired),
+  MIT LICENSE, `.mcp.json` untracked, duplicates and `NEXT_SESSION.md`
+  removed, jpg/pdf on LFS.
+
+**Broke / caught**
+- Printability's first pass on D047 caught three real things: plate A's
+  hub rim was 0.3 mm outside the coupler pocket (Ø26 → Ø30), the blank's
+  rims-down pose had a 10.8 mm overhang (bottom filled flat), the idler
+  puck's centre nub was a 6.6 mm overhang (omitted).
+- OCC booleans return garbage on coincident faces: the STEP comparison had
+  to run against a 0.02 mm-inflated model.
+- The knee cup's two horn-face rim screws sit under plate A's beam: the
+  suite now models them as driven before the femur goes on (B22).
+- `generate_urdf.py` needed xacro (not installed here) and hard-coded
+  session-2 masses; it now reads `mass_budget.json` and expands its own
+  macro.
+
+**Decisions**: D047.
+
+**Next**
+- Fit ladder numbers → `params.print` (B28) — still the gate for every fit.
+- Order the bench kit (shopping list part A); one servo answers B23.
+- Print batch 1 (four coupons + blank), file fits; then batch 2 (one leg).
+- Repo pass 2: flatten the tree, CI on the fast suites, pyproject extras,
+  demo GIF.
+
+---
+
 ## 2026-09-01 · Session 8d — the robot gets back up on its own: FALLEN reflex branch + recovery retrain, talk-to-Pebble intent layer, live lidar + patrol, torque re-audit, servo order v2
 
 **Done**

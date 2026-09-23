@@ -72,16 +72,19 @@ ORIENT = {
     "hand_finger": lay_on_face_normal([-np.sin(np.deg2rad(58)), np.cos(np.deg2rad(58)), 0]),
     "tibia_sea_slider": None, "tool_hook": None, "tool_scoop": None,
     # leg
-    "coxa_yaw_base": None, "coxa_fork": None,
-    "coxa_crown_cap": rot([1, 0, 0], 180),       # bearing pocket UP (D046)
-    "coxa_fork_strap": rot([1, 0, 0], 180),      # bar on the bed, downstand up
-    "tibia_knee_strap": rot([1, 0, 0], 180),
-    "femur_link": rot([1, 0, 0], 90),            # flat, recess face UP
+    "coxa_yaw_base": None,                        # plate DOWN
+    "coxa_fork": None,                            # lower hub DOWN, upright as assembled (D047)
+    "femur_link": lay_on_face_normal([0, -1, 0]), # plate A outer face DOWN: recesses up, bridge walls vertical
+    "femur_plate_b": lay_on_face_normal([0, 1, 0]),   # outer face DOWN: idler pockets up
     "tibia_knee_carrier": None, "tibia_sea_outer": None,
     "horn_coupler": None,
-    "coupon_j1_hub": None, "coupon_j1_post": None,          # D046 joint coupons
-    "coupon_j2_hub": rot([1, 0, 0], 90), "coupon_j2_horn": None,
-    "servo_blank": None,                          # horn UP (audit: the side-down pose islands the horn disc)
+    "coupon_cup": lay_on_face_normal([-1, 0, 0]),     # D047 coupons: cup back wall DOWN
+    "coupon_yaw_hub": None,
+    "coupon_hip_hub": lay_on_face_normal([0, -1, 0]),
+    "coupon_idler": lay_on_face_normal([0, 1, 0]),
+    "servo_cup": lay_on_face_normal([-1, 0, 0]),
+    "servo_blank": None,                          # bottom DOWN (D047: rims on the bed, horn up)
+    "blank_idler": None,
     # body / stand / shell
     "body_deck": None, "stand_base": None, "stand_crown": None,
     "stand_section": None, "shell_sector": None, "shell_cap": None,
@@ -117,9 +120,9 @@ SUPPORT_POLICY = {
     "servo_blank": "none", "calib_gauge_hip": "none", "stand_crown": "yes",
     "coxa_fork": "yes",   # only a 3 x 22 mm strip under the -X collar
     "hand_cam": "none", "femur_link": "none",
-    "coxa_crown_cap": "none", "coxa_fork_strap": "none", "tibia_knee_strap": "none",
-    "coupon_j1_hub": "none", "coupon_j1_post": "none", "coupon_j2_hub": "none",
-    "coupon_j2_horn": "none",
+    "femur_plate_b": "none", "coupon_cup": "none", "coupon_yaw_hub": "none",
+    "coupon_hip_hub": "none", "coupon_idler": "none", "servo_cup": "none",
+    "blank_idler": "none",
     "tibia_sea_outer": "none", "horn_coupler": "none", "fit_ladder": "none",
     "body_deck": "none",
 }

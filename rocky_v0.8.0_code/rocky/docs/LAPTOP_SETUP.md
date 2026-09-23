@@ -118,7 +118,7 @@ Checkpoints save atomically every 10 updates; `--resume auto` continues
 a run-dir; `train_log.jsonl` is plottable with pandas in two lines. The
 shipped checkpoints: `runs/robust_fwd2` (forward, 3 M steps, return
 228.6), `runs/cmd_sample3` (all-command, 7 M), `runs/recover1`
-(self-righting, 2 M — 12/20 falls end standing via the hybrid handoff).
+(self-righting, 2 M — 12/20 falls end standing via the hybrid handoff in the cloud run; 10/20 on this laptop with mujoco 3.12, which is the baseline for any comparison here).
 Read `docs/RL_TOUR.md` before changing rewards — it's the ground-up
 guide with the experiment ladder.
 

@@ -19,6 +19,7 @@ import os
 P = params()
 S = P["servo_st3215"]
 L1 = P["leg"]["l1_coxa"]; L2 = P["leg"]["l2_femur"]; L3 = P["leg"]["l3_tibia"]
+Z_HIP = P["leg"]["hip_axis_z"]
 R_BODY = P["body"]["circumradius"]
 
 COARSE = dict(tolerance=0.2, angular_tolerance=0.5)
@@ -46,11 +47,11 @@ def leg_shell_solid():
     from part_hand import hand_assembly
     knee_x = L1 + L2
     # femur fairing: chunky taper hip->knee
-    fem = Pos((L1 + knee_x)/2, 0, 58) * Rot(0, 90, 0) * Cone(24, 16, L2 + 14)
+    fem = Pos((L1 + knee_x)/2, 0, Z_HIP) * Rot(0, 90, 0) * Cone(24, 16, L2 + 14)
     # hip bulb over the coxa fork zone
     hip = Pos(L1 - 12, 0, 56) * Sphere(24)
     # knee bulb over the tibia servo
-    knee = Pos(knee_x + 6, 2, 58) * Sphere(21)
+    knee = Pos(knee_x + 6, 2, Z_HIP) * Sphere(21)
     # tibia fairing: taper down the shin
     tib = Pos(knee_x, 0, 12) * Cone(15, 10, 66)
     shell = fem + hip + knee + tib

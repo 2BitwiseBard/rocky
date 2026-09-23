@@ -4,13 +4,19 @@ A radially symmetric pentapod robot inspired by Rocky from *Project Hail Mary*.
 Current phase: **Pebble** — the 1:3 subscale prototype (cat-sized, ~2.7 kg,
 15× ST3215 bus servos, transforming three-finger hands, purple).
 
-**The three memory layers of this project:**
+## Status (2026-09-22)
 
-| Layer | Lives where | Holds |
+| area | state | evidence |
 |---|---|---|
-| This repo | your machine / GitHub | source of truth: CAD, code, BOM, logs |
-| Claude Project docs | claude.ai "Robotics" project | cross-session memory: plan, status log, conventions |
-| `BUILD_LOG.md` + `NOTES_INBOX.md` | repo root | the engineering notebook (see below) |
+| CAD | print-clean, **rebuilt around the real servo** (D047): every leg part is derived from a measured STEP of the ST3215; four joint coupons gate the reprint | `cad/run_all_checks.py` 23/23, `check_assembly.py` clean |
+| Physical build | nothing assembled yet; the first prints (pre-D047) did not fit and are retired; servos not ordered | `media/2026-09-22_first_prints.jpg`, `docs/PRINT_PLAN_2026-09-22.md`, `bom/SHOPPING_LIST_2026-09-22.md` |
+| Sim + control | wave gait walks (264 mm / 1° tilt), self-righting is a hybrid (RL rights the body, an analytic ramp stands it: 10/20 on this machine, 12/20 in the cloud run; pure-RL 0/20); two retrains scored worse and are recorded as negatives | `sim/run_sim.py`, `sim/eval_recover.py`, `docs/RL_TOUR.md` |
+| Tests | driver 58, harness 22, gait 6, intent 14 → 85 fast tests in ~2 s; URDF ≡ MJCF ≡ analytic FK | `pytest driver/tests gait harness -m "not slow"`, `sim/check_urdf_parity.py` |
+| Harness | six-tool MCP server on a mock and on MuJoCo; a local LLM or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
+| Review | full project review with dispositions | `docs/REVIEW_2026-09-22.md` |
+
+`BUILD_LOG.md` is the engineering notebook (newest first); `docs/decisions.md`
+the numbered decisions; `NOTES_INBOX.md` the raw inbox.
 
 ## Layout
 
@@ -46,7 +52,8 @@ rocky/
 ├── ros2/                ROS 2 Jazzy packages (URDF generated from params, parity-checked)
 ├── audio/               chord-speak v0.2 "Eridian" voice + event narrator + A/B audition
 ├── docs/                decisions, interfaces, harness, star-board, sensing,
-│                        VISION_PLAN (VLM/interaction), NEXT_SESSION, backlog
+│                        VISION_PLAN (VLM/interaction), backlog, the 2026-09-22
+│                        review + print plan
 └── media/               renders, screenshots
 ```
 
@@ -82,7 +89,7 @@ cd ros2/rocky_description && python3 generate_urdf.py && \
     python3 ../../sim/check_urdf_parity.py           # URDF == MJCF == analytic FK
 ```
 
-## Status (2026-07-31, session 5 — see BUILD_LOG for the full story)
+## Status history (2026-07-31, session 5 — see BUILD_LOG for the full story)
 
 - **Bench + ROS 2 readiness: DONE** (session 4) — servo-arrival day is a
   runbook; URDF/MJCF/analytic FK in parity.

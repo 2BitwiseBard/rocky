@@ -16,7 +16,7 @@ L1 = P["leg"]["l1_coxa"] * MM
 L2 = P["leg"]["l2_femur"] * MM
 L3 = P["leg"]["l3_tibia"] * MM
 RB = P["body"]["circumradius"] * MM
-Z_HIP = 58.0 * MM
+Z_HIP = P["leg"]["hip_axis_z"] * MM   # params SSOT (D047)
 STALL = 2.94                       # N*m @12V
 
 # mass budget (kg). Session 8: derived from the CAD tree by mass_audit.py

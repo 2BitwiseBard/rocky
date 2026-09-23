@@ -1,6 +1,6 @@
 """Automated interference check: pairwise intersection volumes of posed solids.
 Anything above ~1 mm^3 between parts that shouldn't touch = a real clash.
-D046: the cap, straps and couplers joined the assembly.
+D047: two-sided joints — fork on horn + idler, femur plate B on the idlers.
 """
 from build123d import *
 from leg_assembly import build
@@ -10,13 +10,10 @@ pairs = [
     ("coxa_yaw_base", "servo_yaw"),
     ("coxa_yaw_base", "coxa_fork"),
     ("coxa_yaw_base", "servo_femur"),
-    ("coxa_crown_cap", "coxa_fork"),
-    ("coxa_crown_cap", "coxa_yaw_base"),
-    ("coxa_crown_cap", "servo_femur"),
     ("coxa_fork", "servo_femur"),
-    ("coxa_fork", "servo_yaw"),
-    ("coxa_fork_strap", "servo_femur"),
+    ("coxa_fork", "servo_yaw"),           # rides horn + idler in pockets: ~0
     ("coxa_fork", "femur_link"),
+    ("coxa_fork", "femur_plate_b"),
     ("coupler_hip", "servo_femur"),      # disc rests on the horn top: ~0
     ("coupler_hip", "femur_link"),       # lobes in the recess: ~0
     ("coupler_hip", "coxa_fork"),
@@ -26,8 +23,11 @@ pairs = [
     ("femur_link", "servo_femur"),
     ("femur_link", "servo_tibia"),
     ("femur_link", "tibia_knee_carrier"),
+    ("femur_plate_b", "servo_femur"),
+    ("femur_plate_b", "servo_tibia"),
+    ("femur_plate_b", "tibia_knee_carrier"),
+    ("femur_plate_b", "femur_link"),
     ("tibia_knee_carrier", "servo_tibia"),
-    ("tibia_knee_strap", "servo_tibia"),
 ]
 print(f"{'pair':46s} intersection mm^3")
 worst = 0.0
@@ -37,12 +37,12 @@ for a, b in pairs:
     worst = max(worst, v)
     flag = "  <-- CLASH" if v > 1.0 else ""
     print(f"{a+' x '+b:46s} {v:10.2f}{flag}")
-print("\nYaw sweep vs fixed coxa_yaw_base + cap:")
+print("\nYaw sweep vs the fixed coxa_yaw_base (+ yaw servo):")
 rotating = None
-for k in ("coxa_fork", "coxa_fork_strap", "servo_femur", "coupler_hip", "femur_link",
-          "coupler_knee", "servo_tibia", "tibia_knee_carrier", "tibia_knee_strap"):
+for k in ("coxa_fork", "servo_femur", "coupler_hip", "femur_link", "femur_plate_b",
+          "coupler_knee", "servo_tibia", "tibia_knee_carrier"):
     rotating = parts[k] if rotating is None else rotating + parts[k]
-fixed = parts["coxa_yaw_base"] + parts["coxa_crown_cap"]
+fixed = parts["coxa_yaw_base"] + parts["servo_yaw"]
 for ang in (-40, -25, 25, 40):
     swept = Rot(0, 0, ang) * rotating
     inter = fixed & swept

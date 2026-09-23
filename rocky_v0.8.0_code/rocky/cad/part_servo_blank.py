@@ -1,104 +1,131 @@
-"""Printed ST3215 servo BLANK v0.2 (D046) — dry-fit stand-in for the real thing.
+"""Printed ST3215 servo BLANK v0.3 (D047) — dry-fit stand-in for the real thing.
 
 Why: servos are the joints; without them the chain can't hang together. This
-is a dimensionally exact PLA stand-in for the ST3215 envelope (case + output
-boss + horn disc) so every cradle, lip, strap and horn-coupler interface can
-be exercised before hardware lands.
+is a dimensionally exact PLA stand-in for the ST3215 envelope as MEASURED on
+the STEP (servo_st3215 v2) so every cup, hub pocket and coupler interface can
+be exercised before hardware lands — and, once the servos are here, kept as
+the bench dummy for print-fit tests.
 
-v0.1 gave the horn disc Ø1.7 pilots for self-tapping M2s: 3 mm of PLA
-thread per screw, then 3 mm of AIR under the disc (the BCD sits outside
-the Ø6 boss), then un-piloted case — and a Ø20 disc on a Ø6 boss printed
-"horn up, no support" is 7 mm of 90° overhang. v0.2:
-  * the boss undercut is filled to Ø14 (r 7 = the BCD) from case top to
-    horn — no overhang, and a floor for the nuts. Ø14 not Ø20 so the
-    cradles' retention lips (4 mm reach) still clear it;
-  * 4x Ø2.4 THROUGH holes on the BCD with side-loaded M2 nut slots
-    (4.3 x 1.9, z 33.0..34.9): the coupler's M2 x 8 screws pull the nut up
-    against the 3.1 mm horn flange. Real servo: horn is tapped, M2 x 6;
-  * 3-dot engraving on both case sides = blank, not a servo.
+Two prints per blank:
+  servo_blank : case + rims + plateau + output flange + horn disc. Bottom-down,
+                no support. Declared deviations vs the reference solid: the
+                connector housing and pins are omitted (the cable side is open
+                in every cup anyway), the horn's undercut is filled to Ø20 so
+                the disc is not a 5.5 mm cantilever, and the bottom is filled
+                flat to the rim plane (the real case is recessed 1.5 mm there)
+                so the rims-down print has no overhang. The horn carries four Ø2.5 pilots
+                on the nominal pattern (self-tap M3 x 6 / M2 x 6 straight
+                into PLA — dry-fit only) and the idler pocket.
+  blank_idler : the rear idler wheel (Ø19.9 x 2.1 + centre head) with a Ø6
+                stub (= the real axle boss) that glues into the case bottom. Separate because a disc
+                under the case would be an island in any print pose.
 
-Print: horn UP, 0.2 mm, 2 walls, 10 % — ~25 g, qty 4. NOT structural.
-
-Frame: identical to servo_st3215.servo_body — shaft axis +Z at origin,
-case hanging -X, base at z=0.
+Frame: identical to servo_st3215.servo_body — shaft axis +Z at origin, case
+hanging -X, z=0 at the case bottom flat face.
 """
 from build123d import *
 from common import params, export
-from servo_st3215 import servo_body, horn_screw_positions
+from servo_st3215 import servo_body, horn_screw_positions, spec, z_levels, case_xspan
 
 P = params()
-S = P["servo_st3215"]
+S = spec(P)
+Z = z_levels(P)
 PR = P["print"]
-FILL_D = S["horn_bcd"]                     # 14: undercut fill diameter
-NUT_AF, NUT_T = 4.0, 1.6                   # M2 hex nut
-NUT_Z0 = S["body_h"] + 1.0                 # slot floor 1 mm above the case top
+STUB_D = 6.0                          # = the real axle boss; the puck's stub runs through the gap into a glue pocket
+STUB_INTO_CASE = 2.5
 
 
 def _undercut_fill(extra=0.0):
-    return Pos(0, 0, S["body_h"] + S["boss_h"]/2) * Cylinder(FILL_D/2 + extra, S["boss_h"])
+    return Pos(0, 0, (Z["top"] + Z["horn0"]) / 2) * Cylinder(S["horn_d"] / 2 + extra, Z["horn0"] - Z["top"])
+
+
+def _bottom_fill(extra=0.0):
+    """The blank's bottom is FLAT at the rim plane (the real case is recessed
+    1.5 mm around the idler): prints rims-down with no overhang. Every part
+    that rides the idler clears the rim plane by 0.3 anyway."""
+    x0, x1 = case_xspan(P)
+    w = S["body_w"] / 2
+    return Pos((x0 + x1) / 2, 0, Z["rim_bot"] / 2) * Box(x1 - x0 + 2 * extra, 2 * w + 2 * extra, -Z["rim_bot"] + 0.001)
+
+
+def _idler_and_pins(extra=0.0):
+    """The bottom-face features the blank omits (idler, its head, housing, pins)."""
+    cn = S["conn"]
+    d = Pos(0, 0, (Z["idler0"] + Z["idler1"]) / 2 - 0.5) * Cylinder(S["idler_d"] / 2 + extra, S["idler_t"] + 1)
+    d += Pos(0, 0, Z["idler0"] / 2 - 0.5) * Cylinder(S["idler_boss_d"] / 2 + extra, -Z["idler0"] + 1)
+    d += Pos(0, 0, (Z["idler1"] + Z["idler_head"]) / 2 - 0.5) * Cylinder(S["idler_center_head_d"] / 2 + extra, S["idler_center_head_h"] + 1)
+    d += Pos((cn["housing_x"][0] + cn["housing_x"][1]) / 2, 0, Z["housing"] / 2 - 0.5) * \
+        Box(cn["housing_x"][1] - cn["housing_x"][0] + 2 * extra, 2 * cn["housing_half_w"] + 2 * extra, -Z["housing"] + 1)
+    d += Pos((cn["pins_x"][0] + cn["pins_x"][1]) / 2, 0, Z["pins"] / 2 - 0.5) * \
+        Box(cn["pins_x"][1] - cn["pins_x"][0] + 2 * extra, 2 * cn["pins_y"][1] + 2 * extra, -Z["pins"] + 1)
+    return d
 
 
 def servo_blank():
-    blank = servo_body(P, clearance=0.0) + _undercut_fill()
-    horn_top = S["body_h"] + S["boss_h"] + S["horn_h"]
-    r = S["horn_bcd"] / 2
-    for k, (hx, hy) in enumerate(horn_screw_positions(P)):
-        ang = k * 90.0
-        blank -= Pos(hx, hy, horn_top - 4) * Cylinder(PR["screw_m2_clear"]/2, 12)   # through
-        slot_r0, slot_r1 = r - (NUT_AF + 0.3)/2, S["horn_d"]/2 + 1.0            # side-loaded nut
-        blank -= Rot(0, 0, ang) * Pos((slot_r0 + slot_r1)/2, 0, NUT_Z0 + (NUT_T + 0.3)/2) * \
-            Box(slot_r1 - slot_r0, NUT_AF + 0.3, NUT_T + 0.3)
-    blank -= Pos(0, 0, horn_top - 5) * Cylinder(2.1 / 2, 10)                   # centre pilot
-    front = S["shaft_offset"]
-    cx = front - S["body_l"] / 2
-    for sy in (1, -1):
+    blank = servo_body(P, clearance=0.0) - _idler_and_pins() + _undercut_fill() + _bottom_fill()
+    for hx, hy in horn_screw_positions(P):                    # pilots through the horn + fill
+        blank -= Pos(hx, hy, Z["horn1"] - 4) * Cylinder(S["horn_hole_d"] / 2, 12)
+    blank -= Pos(0, 0, (STUB_INTO_CASE + Z["rim_bot"]) / 2) * Cylinder((STUB_D + 0.2) / 2, STUB_INTO_CASE - Z["rim_bot"] + 0.01)   # idler stub glue pocket (through the fill)
+    x0, x1 = case_xspan(P)
+    cx = (x0 + x1) / 2
+    for sy in (1, -1):                                        # 3-dot engraving = blank
         for d in range(3):
-            blank -= Pos(cx - 6 + 6 * d, sy * (S["body_w"] / 2 - 0.5),
-                         S["body_h"] / 2) * Rot(90, 0, 0) * Cylinder(1.5, 1.2)
+            blank -= Pos(cx - 6 + 6 * d, sy * (S["body_w"] / 2 - 0.5), S["body_h"] / 2) * \
+                Rot(90, 0, 0) * Cylinder(1.5, 1.2)
     return blank
+
+
+def blank_idler():
+    """Local: disc on the bed (z 0..2.1), glue stub up. The idler's centre
+    screw head is omitted (declared): a 0.6 mm nub under the disc would be a
+    7 mm overhang, and every pocket that rides the idler relieves the head."""
+    d = Pos(0, 0, S["idler_t"] / 2) * Cylinder(S["idler_d"] / 2, S["idler_t"])
+    stub_h = S["idler_gap"] + STUB_INTO_CASE
+    d += Pos(0, 0, S["idler_t"] + stub_h / 2) * Cylinder(STUB_D / 2, stub_h)
+    return d
+
+
+def blank_with_idler():
+    """The blank with its idler glued on, posed like servo_body (for dry-fits)."""
+    return servo_blank() + Pos(0, 0, Z["idler1"]) * blank_idler()
 
 
 if __name__ == "__main__":
     import sys
-    b = servo_blank()
-    export(b, "servo_blank")
     v = lambda x: 0.0 if x is None else x.volume
+    b, idl = servo_blank(), blank_idler()
+    export(b, "servo_blank")
+    export(idl, "blank_idler")
     fails = []
-    # 1: envelope identity — nothing outside the reference dummy except the
-    # declared Ø14 undercut fill
-    ref = servo_body(P, clearance=0.001) + _undercut_fill(0.001)
+    # 1: envelope identity — nothing outside the reference solid except the declared fill
+    ref = servo_body(P, clearance=0.001) + _undercut_fill(0.001) + _bottom_fill(0.001)
     v_ex = v(b - ref)
-    print(f"blank outside reference envelope (+Ø{FILL_D} fill): {v_ex:.2f} mm^3 "
+    print(f"blank outside reference envelope (+Ø{S['horn_d']} horn fill, + flat bottom): {v_ex:.2f} mm^3 "
           f"({'OK' if v_ex < 1.0 else 'OVERSIZE — would bind'})")
     if v_ex >= 1: fails.append("envelope")
-    # 2: drops into all three cradles like the real dummy, and is RETAINED
-    from part_coxa import coxa_yaw_base, coxa_fork, coxa_fork_strap, CASE_BASE_Y, Z_FEMUR_AXIS, L1
-    from part_tibia import tibia_knee_carrier, tibia_knee_strap, KNEE_X, Z_AXIS
-    fork, carrier = coxa_fork(), tibia_knee_carrier()
-    poses = [
-        ("coxa base cradle (yaw pose)", coxa_yaw_base(), None, b),
-        ("coxa fork rails (femur pose)", fork, coxa_fork_strap(),
-         Pos(L1, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90, 0, 0) * b),
-        ("knee carrier (knee pose)", carrier, tibia_knee_strap(),
-         Pos(KNEE_X, CASE_BASE_Y, Z_AXIS) * Rot(90, 0, 0) * b),
-    ]
-    for name, cradle, strap, posed in poses:
+    full = blank_with_idler()
+    v_ex2 = v(full - ref)
+    print(f"blank + idler outside reference: {v_ex2:.2f} mm^3 ({'OK' if v_ex2 < 1.0 else 'OVERSIZE'})")
+    if v_ex2 >= 1: fails.append("idler envelope")
+    # 2: sits in all three cradles exactly like the reference, and is captured
+    from part_coxa import coxa_yaw_base, coxa_fork
+    from part_tibia import tibia_knee_carrier
+    from leg_frame import YAW_TF, HIP_TF, KNEE_TF
+    base, fork, carrier = coxa_yaw_base(), coxa_fork(), tibia_knee_carrier()
+    for name, cradle, posed in (("coxa base cup (yaw pose)", base, YAW_TF * full),
+                                ("fork hip cup (hip pose)", fork, HIP_TF * full),
+                                ("knee carrier cup", carrier, KNEE_TF * full)):
         fit = v(cradle & posed)
-        line = f"blank x {name}: {fit:.2f} mm^3 ({'OK' if fit < 1.0 else 'BINDS'})"
+        held = min(v((Pos(0, 2, 0) * posed) & cradle), v((Pos(0, -2, 0) * posed) & cradle),
+                   v((Pos(0, 0, 2) * posed) & cradle), v((Pos(0, 0, -2) * posed) & cradle))
+        print(f"blank x {name}: {fit:.2f} mm^3 ({'OK' if fit < 1 else 'BINDS'}); "
+              f"weakest 2 mm nudge meets {held:.0f} mm^3 ({'held' if held > 1 else 'FREE'})")
         if fit >= 1: fails.append(name)
-        if strap is not None:
-            lips = v((Pos(0, -2, 0) * posed) & cradle)
-            held = v((Pos(0, 0, 2) * posed) & strap)
-            line += f"; nudge -Y {lips:.0f} mm^3 ({'lips hold' if lips > 1 else 'FREE'}), " \
-                    f"+Z {held:.0f} mm^3 ({'strap holds' if held > 1 else 'FREE'})"
-            if lips <= 1 or held <= 1: fails.append(name + " retention")
-        print(line)
-    # 3: nut slots empty, M2 passes coupler-side to nut
-    for k, (hx, hy) in enumerate(horn_screw_positions(P)):
-        pin = Pos(hx, hy, S["body_h"] + 3) * Cylinder(1.0, 8)
-        if v(pin & b) > 0.5: fails.append(f"M2 path {k}")
-    print(f"M2 through-paths clear: {'yes' if not any(f.startswith('M2') for f in fails) else 'NO'}")
+        if held <= 1: fails.append(name + " retention")
+    check_fork = v(fork & (YAW_TF * full))
+    print(f"fork rides the blank's horn + idler: {check_fork:.2f} mm^3 ({'OK' if check_fork < 1 else 'BINDS'})")
+    if check_fork >= 1: fails.append("fork on blank")
     bb = b.bounding_box()
-    print(f"servo_blank: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm — PLA, horn UP, 2 walls, 10%, qty 4")
+    print(f"servo_blank: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm — PLA, bottom DOWN, 2 walls, 15%, qty 3 (+3 idlers)")
     print(f"part_servo_blank checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
     if fails: sys.exit(1)

@@ -112,7 +112,7 @@ Do them in order; each is one evening or less on your machine.
    your best case study (D045).** The v2 reward (success = the handoff
    criterion + a feet term, `--reward v2`) produced training-time
    successes v1 never had — and the deterministic policy REGRESSED to
-   2/20 (recover1: 12/20) because sigma inflated into bang-bang control
+   2/20 (recover1: 12/20 cloud, 10/20 laptop) because sigma inflated into bang-bang control
    (clip + rate limit make wide actions a strategy; entropy grew even
    with ent_coef 0). The counter is shipped: `--log-std-max -0.5`. The
    open experiment is now the CAPPED v2 retrain — beating 12/20 is still

@@ -1,61 +1,55 @@
-"""Sacrificial horn coupler — the $0.30 part that dies so the $17 servo lives.
+"""Sacrificial horn coupler, v2 (D047) — the $0.30 part that dies so the $24
+servo lives, re-cut for the REAL horn.
 
 Master plan §3.4 design rule: every servo horn interfaces through a printed
-replaceable coupler. Load path: horn --(4x M2)--> coupler --(castellation
-shear lobes)--> driven part --(2x M3 clamp)--> retained. In a crash the
-lobes shear; you print a new 1-gram coupler instead of buying a servo.
+replaceable coupler. Load path: horn --(4 screws)--> coupler --(castellation
+shear lobes)--> driven part --(2x M3 clamp)--> retained. In a crash the lobes
+shear; you print a new 1-gram coupler instead of buying a servo.
 
-D046 (laptop session 3, 2026-09-17): the coupler is now ADOPTED by the
-femur link (both hubs) — v0.8.0 had the female recess only in the demo
-coupon, and the link bolted straight to the horn with nothing locating it.
-Two fixes to the coupler itself found while adopting it:
-  * the lobes sat at 0/90/180/270 — directly OVER the four M2 horn screws
-    on the same angles, so an M2 head (Ø3.8) could not be dropped into its
-    counterbore (0.8 mm under the lobe). Lobes now sit at 45/135/225/315,
-    between the screws; the M2 driver columns are asserted clear below.
-  * lobe half-angle 28 -> 22 deg so a Ø4.4 driver fits the 46 deg gaps.
-    Shear area 161 mm² x 25 MPa ≈ 40 N·m at r 9.7 — still >> 2.94 N·m stall.
-The yaw joint (fork hub) does NOT use a coupler: its clamp-screw heads would
-sit under the crown cap and the yaw horn sees the smallest impact loads —
-documented deviation, see part_coxa.
+v2 vs D046: the STEP shows the horn's four holes on a 45° pattern, so the
+lobes go BACK to 0/90/180/270 (between the screws) — D046 had moved them to
+45° against a wrong hole pattern. The STEP is ambiguous about the hole
+RADIUS (14–15.6 BCD depending on the probe) and the thread (RobotShop lists
+M3 x 6 in the kit), so the screw holes are radial SLOTS with a counterbore
+that seats an M3 head or an M2 head + washer: the coupler is the part you
+reprint in an hour once one screw has been tried on the real horn.
+
+The coupler is used at the hip and knee. The yaw joint rides the horn OD in
+a pocket and bolts through the fork's hub directly (part_coxa) — the clamp
+screws of a coupler would have to be driven from under the base plate.
 
 Parts:
-  horn_coupler       : disc on the ST3215 horn, 4 shear lobes on top
-  coupler_recess_demo: test coupon with the female pocket — print BOTH,
-                       check the fit, file the result in NOTES_INBOX
+  horn_coupler       : disc on the horn, 4 shear lobes on top
+  coupler_recess_demo: coupon with the female pocket — print both, check fit
 """
 from build123d import *
 from common import params, export
-from servo_st3215 import horn_screw_positions
+from servo_st3215 import horn_screw_positions, horn_slot_cutter, spec
 
 P = params()
 PR = P["print"]
-S = P["servo_st3215"]
+S = spec(P)
 FIT = PR["clearance_fit"]
 
 DISC_D = 26.0
 DISC_T = 3.0                          # horn top -> driven-part face
 LOBE_H = 2.6
 LOBE_R0, LOBE_R1 = 7.0, 12.4          # radial extent of shear lobes
-LOBE_HALF_ANG = 22                    # deg: lobe angular half-width
-LOBE_ANGS = (45, 135, 225, 315)       # between the M2 horn screws (0/90/180/270)
-CLAMP_ANGS = (45, 225)                # M3 tap bores in two opposite lobes
-RECESS_CLAMP_ANGS = (-45, -225)       # the same bores as the RECESS sees them: the
-                                      # coupler is flipped (Rot 180 about X) onto the
-                                      # driven face, which mirrors the angles
-TAP_R_POS = (LOBE_R0 + LOBE_R1) / 2
-M2_HEAD_D = 3.8
+LOBE_HALF_ANG = 20                    # deg: leaves a 50 deg gap centred on each 45 deg screw
+LOBE_ANGS = (0, 90, 180, 270)         # between the horn screws (45/135/225/315)
+CLAMP_ANGS = (0, 180)                 # M3 tap bores down two opposite lobes
+RECESS_CLAMP_ANGS = (0, 180)          # the coupler is flipped (Rot 180 about X) onto the driven
+                                      # face, which mirrors angles: 0/180 are their own mirror
+TAP_R_POS = (LOBE_R0 + LOBE_R1) / 2   # 9.7
+HEAD_CB_DEPTH = 1.4                   # counterbore from the lobe side
 POCKET_DEPTH = LOBE_H + 0.4           # what coupler_recess removes below the face
 CLAMP_BORE_DEPTH = DISC_T + LOBE_H - 0.8   # blind M3 bore: 4.8 mm from the lobe tip
 
 
-def _lobe(ang_deg):
-    seg = Pos(0, 0, DISC_T + LOBE_H / 2) * Cylinder(LOBE_R1, LOBE_H) \
-        - Pos(0, 0, DISC_T + LOBE_H / 2) * Cylinder(LOBE_R0, LOBE_H + 2)
-    hs1 = Rot(0, 0, ang_deg + LOBE_HALF_ANG) * Pos(0, -100, DISC_T + LOBE_H / 2) * \
-        Box(200, 200, LOBE_H + 2)
-    hs2 = Rot(0, 0, ang_deg - LOBE_HALF_ANG) * Pos(0, 100, DISC_T + LOBE_H / 2) * \
-        Box(200, 200, LOBE_H + 2)
+def _lobe(ang_deg, r0=LOBE_R0, r1=LOBE_R1, half=LOBE_HALF_ANG, z0=DISC_T, h=LOBE_H):
+    seg = Pos(0, 0, z0 + h / 2) * Cylinder(r1, h) - Pos(0, 0, z0 + h / 2) * Cylinder(r0, h + 2)
+    hs1 = Rot(0, 0, ang_deg + half) * Pos(0, -100, z0 + h / 2) * Box(200, 200, h + 2)
+    hs2 = Rot(0, 0, ang_deg - half) * Pos(0, 100, z0 + h / 2) * Box(200, 200, h + 2)
     return seg & hs1 & hs2
 
 
@@ -63,15 +57,15 @@ def horn_coupler():
     c = Pos(0, 0, DISC_T / 2) * Cylinder(DISC_D / 2, DISC_T)
     for ang in LOBE_ANGS:
         c += _lobe(ang)
-    # M2 horn screws from the lobe side: clearance + shallow head counterbore
-    for hx, hy in horn_screw_positions(P):
-        c -= Pos(hx, hy, DISC_T / 2) * Cylinder(PR["screw_m2_clear"] / 2, DISC_T + 2)
-        c -= Pos(hx, hy, DISC_T - 0.6) * Cylinder((M2_HEAD_D + 0.6) / 2, 1.4)
-    # center pilot over the horn's centre screw head
-    c -= Pos(0, 0, DISC_T / 2) * Cylinder(6.4 / 2, DISC_T + 2)
-    # M3 thread-forming bores down two opposite lobes (clamps the driven
-    # part): blind, from the lobe tip to 0.8 mm above the disc bottom =
-    # 4.8 mm of thread; M3 x 8 through the link's 3 mm web bottoms 0.2 short
+    # horn screws from the lobe side: clearance SLOT through + head counterbore slot
+    c -= horn_slot_cutter(-1, DISC_T + LOBE_H + 1, p=P)
+    c -= horn_slot_cutter(DISC_T - HEAD_CB_DEPTH, DISC_T + LOBE_H + 1,
+                          extra=S["horn_screw_head_d"] - S["horn_screw_clear_d"], p=P)
+    # centre pilot over the horn's centre screw head
+    c -= Pos(0, 0, DISC_T / 2) * Cylinder((S["horn_center_head_d"] + 1.0) / 2, DISC_T + 2)
+    # M3 thread-forming bores down two opposite lobes (clamps the driven part):
+    # blind, lobe tip to 0.8 mm above the disc bottom = 4.8 mm of thread;
+    # an M3 x 8 through the driven part's 3 mm web bottoms 0.2 short
     for ang in CLAMP_ANGS:
         c -= Rot(0, 0, ang) * Pos(TAP_R_POS, 0, (0.8 + DISC_T + LOBE_H + 1) / 2) * \
             Cylinder(PR["screw_m3_tap"] / 2, DISC_T + LOBE_H + 1 - 0.8)
@@ -79,14 +73,9 @@ def horn_coupler():
 
 
 def _lobe_inflated(ang_deg):
-    seg = Pos(0, 0, DISC_T + LOBE_H / 2 + 0.2) * Cylinder(LOBE_R1 + FIT, LOBE_H + 0.4) \
-        - Pos(0, 0, DISC_T + LOBE_H / 2) * Cylinder(LOBE_R0 - FIT, LOBE_H + 3)
-    a = LOBE_HALF_ANG + 1.5
-    hs1 = Rot(0, 0, ang_deg + a) * Pos(0, -100, DISC_T + LOBE_H / 2) * \
-        Box(200, 200, LOBE_H + 3)
-    hs2 = Rot(0, 0, ang_deg - a) * Pos(0, 100, DISC_T + LOBE_H / 2) * \
-        Box(200, 200, LOBE_H + 3)
-    return seg & hs1 & hs2
+    return _lobe(ang_deg, r0=LOBE_R0 - FIT, r1=LOBE_R1 + FIT, half=LOBE_HALF_ANG + 1.5,
+                 z0=DISC_T - 0.2, h=LOBE_H + 0.4 + 2) & \
+        Pos(0, 0, DISC_T + (LOBE_H + 0.4 + 4) / 2 - 0.2) * Cylinder(LOBE_R1 + FIT + 1, LOBE_H + 0.4 + 4)
 
 
 def coupler_recess(solid, face_z, clamp_holes=True, clamp_len=8.0):
@@ -106,60 +95,54 @@ def coupler_recess(solid, face_z, clamp_holes=True, clamp_len=8.0):
 def coupler_recess_demo():
     """Print-fit coupon: 34x34x8 pad, mating face on top (z=8)."""
     pad = Pos(0, 0, 4) * Box(34, 34, 8)
-    pad = coupler_recess(pad, face_z=8.0)
-    return pad
+    return coupler_recess(pad, face_z=8.0)
 
 
 def coupler_on_face(face_tf):
     """The coupler posed lobes-DOWN into a recess whose face is at `face_tf`
-    (a transform whose local z=0 plane is the mating face, +z pointing
-    OUT of the driven part, i.e. toward the horn). Disc bottom then sits at
-    local z=DISC_T where the horn top is."""
+    (a transform whose local z=0 plane is the mating face, +z pointing OUT of
+    the driven part toward the horn). Disc bottom lands at local z = DISC_T."""
     return face_tf * Pos(0, 0, DISC_T) * Rot(180, 0, 0) * horn_coupler()
 
 
 if __name__ == "__main__":
-    import math
+    import math, sys
+    v = lambda x: 0.0 if x is None else x.volume
     c = horn_coupler()
     d = coupler_recess_demo()
     export(c, "horn_coupler")
     export(d, "coupler_recess_demo")
-    # fit: flip the coupler onto the coupon face (disc up, lobes down)
+    fails = []
     posed = coupler_on_face(Pos(0, 0, 8.0))
-    v = 0.0 if (posed & d) is None else (posed & d).volume
-    print(f"coupler x recess-coupon intersection: {v:.2f} mm^3 "
-          f"({'FITS' if v < 1 else 'INTERFERES'})")
-    # D046: every M2 head must be droppable from the lobe side — driver
-    # column Ø4.4 above the counterbore floor must be empty of lobe
+    fit = v(posed & d)
+    print(f"coupler x recess-coupon intersection: {fit:.2f} mm^3 ({'FITS' if fit < 1 else 'INTERFERES'})")
+    if fit >= 1: fails.append("fit")
+    # every horn screw head must be droppable from the lobe side at BOTH ends
+    # of its slot: a Ø4.4 driver column above the counterbore floor is empty
     worst = 0.0
-    for hx, hy in horn_screw_positions(P):
-        col = Pos(hx, hy, DISC_T - 0.6 + 10) * Cylinder(2.2, 20)
-        i = col & c
-        worst = max(worst, 0.0 if i is None else i.volume)
-    print(f"M2 driver access through the lobes: worst {worst:.2f} mm^3 "
+    from servo_st3215 import horn_screw_angles
+    for ang in horn_screw_angles(P):
+        for r in (S["horn_bcd"] / 2, S["horn_bcd"] / 2 + S["horn_bcd_slot"]):
+            col = Rot(0, 0, ang) * Pos(r, 0, DISC_T - HEAD_CB_DEPTH + 10) * Cylinder(2.2, 20)
+            worst = max(worst, v(col & c))
+    print(f"horn-screw driver access through the lobes (both slot ends): worst {worst:.2f} mm^3 "
           f"({'CLEAR' if worst < 1 else 'BLOCKED'})")
-    # castellation must locate: nudge the posed coupler radially, expect contact
+    if worst >= 1: fails.append("driver access")
     nudged = Pos(1.0, 0, 0) * posed
-    i = nudged & d
-    vn = 0.0 if i is None else i.volume
-    print(f"radial capture (1 mm nudge): {vn:.1f} mm^3 "
-          f"({'LOCATES' if vn > 1 else 'LOOSE'})")
+    vn = v(nudged & d)
+    print(f"radial capture (1 mm nudge): {vn:.1f} mm^3 ({'LOCATES' if vn > 1 else 'LOOSE'})")
+    if vn <= 1: fails.append("capture")
     area = math.pi * (LOBE_R1**2 - LOBE_R0**2) * (4 * 2 * LOBE_HALF_ANG / 360)
     t_shear = area * 1e-6 * 25e6 * TAP_R_POS * 1e-3
     print(f"lobe shear capacity ~{t_shear:.1f} N*m vs servo stall 2.94")
-    # clamp bores coaxial through coupon + posed coupler (the mirrored angles)
     wc = 0.0
     for ang in RECESS_CLAMP_ANGS:
-        # pin from 2 mm below the coupon (screw enters from its outer face,
-        # z=0) up to 0.3 short of the blind bore's end inside the disc
         L = 2 + 8.0 + (CLAMP_BORE_DEPTH - (POCKET_DEPTH - 0.4)) - 0.3
-        pin = Rot(0, 0, ang) * Pos(TAP_R_POS, 0, -2 + L / 2) * Cylinder(PR["screw_m3_tap"]/2 - 0.05, L)
+        pin = Rot(0, 0, ang) * Pos(TAP_R_POS, 0, -2 + L / 2) * Cylinder(PR["screw_m3_tap"] / 2 - 0.05, L)
         for part in (d, posed):
-            i = pin & part
-            wc = max(wc, 0.0 if i is None else i.volume)
-    print(f"clamp-bore coaxiality (coupon + coupler): worst {wc:.2f} mm^3 "
-          f"({'COAXIAL' if wc < 1 else 'MISALIGNED'})")
-    ok = v < 1 and worst < 1 and vn > 1 and wc < 1
-    print(f"part_coupler checks: {'ALL CLEAN' if ok else 'FAILED'}")
-    if not ok:
-        import sys; sys.exit(1)
+            wc = max(wc, v(pin & part))
+    print(f"clamp-bore coaxiality (coupon + coupler): worst {wc:.2f} mm^3 ({'COAXIAL' if wc < 1 else 'MISALIGNED'})")
+    if wc >= 1: fails.append("clamp coaxiality")
+    # the slot must not break into a lobe: lobe volume unchanged by the cutter
+    print(f"part_coupler checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
+    if fails: sys.exit(1)

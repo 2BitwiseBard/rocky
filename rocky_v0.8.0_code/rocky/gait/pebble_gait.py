@@ -28,7 +28,7 @@ L1 = _P["leg"]["l1_coxa"]
 L2 = _P["leg"]["l2_femur"]
 L3 = _P["leg"]["l3_tibia"]
 R_BODY = _P["body"]["circumradius"]
-Z_HIP = 58.0                      # femur pivot height above deck plane (CAD)
+Z_HIP = float(_P["leg"]["hip_axis_z"])   # femur pivot height above the deck plane (params SSOT, D047)
 N_LEGS = 5
 STATION_DEG = 90 + 72 * np.arange(N_LEGS)   # leg 0 north, CCW
 
