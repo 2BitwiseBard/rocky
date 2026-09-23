@@ -29,6 +29,7 @@ MODULES = [
     "part_coupler", "part_footpad", "part_fit_ladder", "part_smallwins",
     "part_shell", "part_busboard", "part_stand", "part_tools",
     "part_clips", "part_dock", "part_servo_blank",
+    "part_leg_coupons", "check_assembly",        # D046: joint coupons + joint suite
 ]
 
 

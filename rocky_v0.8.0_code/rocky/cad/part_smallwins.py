@@ -70,6 +70,11 @@ def calib_gauge_hip():
     guss = Pos(0, 14, JIG_BASE_TOP + 30) * Box(20, 8, 54)
     guss += Pos(0, -14, JIG_BASE_TOP + 30) * Box(20, 8, 54)
     top = Pos(0, 0, cradle_z - 2) * Box(34, 30, 4)        # cradle shelf
+    # D046 cantilever rule: the shelf overhung the 26 x 20 shaft by 4-5 mm at
+    # 90° with "no support" (a drooping REFERENCE surface). Lofted pedestal,
+    # 34-40° from vertical, carries the shelf edge support-free.
+    top += loft([Plane.XY.offset(cradle_z - 10) * Rectangle(26, 20),
+                 Plane.XY.offset(cradle_z - 4) * Rectangle(34, 30)])
     for sy in (1, -1):                                    # side cheeks
         top += Pos(0, sy * 14.2, cradle_z + 2) * Box(34, 2.4, 8)
     t = base + shaft + guss + top

@@ -15,12 +15,14 @@
   "overhang_area": 996.0,
   "widest_overhang_step": 12.4,
   "widest_overhang_z": 11.3,
+  "widest_cantilever": 12.4,
+  "widest_cantilever_z": 11.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 15.18,
   "hard": [],
   "warn": [
-   "overhang step 12.4 mm wide at z=11.3",
+   "overhang step 12.4 mm wide at z=11.3 (cantilever)",
    "walls < 1.6 mm: 15.2 mm\u00b2 in a layer"
   ]
  },
@@ -40,6 +42,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 4.33,
@@ -89,6 +93,8 @@
   "overhang_area": 161.8,
   "widest_overhang_step": 0.8,
   "widest_overhang_z": 6.3,
+  "widest_cantilever": 0.8,
+  "widest_cantilever_z": 6.3,
   "thin_hard_area": 1.24,
   "thin_hard_z": 12.1,
   "thin_soft_area": 9.46,
@@ -114,6 +120,8 @@
   "overhang_area": 31.8,
   "widest_overhang_step": 2.3,
   "widest_overhang_z": 2.5,
+  "widest_cantilever": 2.3,
+  "widest_cantilever_z": 2.5,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 4.99,
@@ -145,13 +153,15 @@
   "overhang_area": 235.5,
   "widest_overhang_step": 9.6,
   "widest_overhang_z": 14.7,
+  "widest_cantilever": 2.8,
+  "widest_cantilever_z": 7.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.27,
   "hard": [],
   "warn": [
    "islands need support: 2 from the part (expected)",
-   "overhang step 9.6 mm wide at z=14.7"
+   "overhang step 9.6 mm wide at z=14.7 (bridge/step)"
   ]
  },
  {
@@ -187,13 +197,15 @@
   "overhang_area": 788.7,
   "widest_overhang_step": 9.6,
   "widest_overhang_z": 14.7,
+  "widest_cantilever": 3.3,
+  "widest_cantilever_z": 25.7,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 36.69,
   "hard": [],
   "warn": [
    "islands need support: 2 from the BED (first z=25.7, 5.5 mm\u00b2) (expected)",
-   "overhang step 9.6 mm wide at z=14.7",
+   "overhang step 9.6 mm wide at z=14.7 (cantilever)",
    "walls < 1.6 mm: 36.7 mm\u00b2 in a layer"
   ]
  },
@@ -202,23 +214,25 @@
   "size": [
    72.5,
    44.0,
-   63.5
+   60.8
   ],
   "bed_ok": true,
-  "layers": 317,
+  "layers": 304,
   "bed_support_islands": [],
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 3492.4,
+  "overhang_area": 2764.3,
   "widest_overhang_step": 43.9,
   "widest_overhang_z": 9.5,
+  "widest_cantilever": 43.9,
+  "widest_cantilever_z": 9.5,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 6.22,
   "hard": [],
   "warn": [
-   "overhang step 43.9 mm wide at z=9.5",
+   "overhang step 43.9 mm wide at z=9.5 (cantilever)",
    "walls < 1.6 mm: 6.2 mm\u00b2 in a layer"
   ]
  },
@@ -235,16 +249,91 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 128.0,
-  "widest_overhang_step": 3.3,
-  "widest_overhang_z": 13.1,
-  "thin_hard_area": 0.0,
-  "thin_hard_z": null,
-  "thin_soft_area": 1.93,
+  "overhang_area": 147.4,
+  "widest_overhang_step": 3.5,
+  "widest_overhang_z": 15.7,
+  "widest_cantilever": 3.5,
+  "widest_cantilever_z": 15.7,
+  "thin_hard_area": 0.71,
+  "thin_hard_z": 36.1,
+  "thin_soft_area": 11.29,
   "hard": [],
   "warn": [
-   "overhang step 3.3 mm wide at z=13.1"
+   "overhang step 3.5 mm wide at z=15.7 (cantilever)",
+   "walls < 1.6 mm: 11.3 mm\u00b2 in a layer"
   ]
+ },
+ {
+  "part": "coxa_crown_cap",
+  "size": [
+   52.4,
+   18.0,
+   5.0
+  ],
+  "bed_ok": true,
+  "layers": 25,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.83,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "coxa_fork_strap",
+  "size": [
+   52.4,
+   10.0,
+   7.7
+  ],
+  "bed_ok": true,
+  "layers": 38,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.6,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "tibia_knee_strap",
+  "size": [
+   52.4,
+   10.0,
+   7.7
+  ],
+  "bed_ok": true,
+  "layers": 38,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.6,
+  "hard": [],
+  "warn": []
  },
  {
   "part": "femur_link",
@@ -262,6 +351,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.0,
@@ -272,7 +363,7 @@
   "part": "tibia_knee_carrier",
   "size": [
    52.4,
-   37.4,
+   38.3,
    56.0
   ],
   "bed_ok": true,
@@ -281,15 +372,18 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 1752.8,
+  "overhang_area": 1739.1,
   "widest_overhang_step": 26.7,
   "widest_overhang_z": 22.1,
-  "thin_hard_area": 0.0,
-  "thin_hard_z": null,
-  "thin_soft_area": 2.76,
+  "widest_cantilever": 26.7,
+  "widest_cantilever_z": 22.1,
+  "thin_hard_area": 0.71,
+  "thin_hard_z": 55.1,
+  "thin_soft_area": 7.59,
   "hard": [],
   "warn": [
-   "overhang step 26.7 mm wide at z=22.1"
+   "overhang step 26.7 mm wide at z=22.1 (cantilever)",
+   "walls < 1.6 mm: 7.6 mm\u00b2 in a layer"
   ]
  },
  {
@@ -308,12 +402,14 @@
   "overhang_area": 126.4,
   "widest_overhang_step": 9.6,
   "widest_overhang_z": 11.1,
+  "widest_cantilever": 2.8,
+  "widest_cantilever_z": 27.3,
   "thin_hard_area": 0.83,
   "thin_hard_z": 13.1,
   "thin_soft_area": 4.12,
   "hard": [],
   "warn": [
-   "overhang step 9.6 mm wide at z=11.1",
+   "overhang step 9.6 mm wide at z=11.1 (bridge/step)",
    "walls < 1.6 mm: 4.1 mm\u00b2 in a layer"
   ]
  },
@@ -330,16 +426,116 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 22.5,
-  "widest_overhang_step": 1.9,
-  "widest_overhang_z": 3.1,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 6.83,
+  "thin_soft_area": 6.82,
   "hard": [],
   "warn": [
    "walls < 1.6 mm: 6.8 mm\u00b2 in a layer"
   ]
+ },
+ {
+  "part": "coupon_j1_hub",
+  "size": [
+   20.0,
+   28.0,
+   9.2
+  ],
+  "bed_ok": true,
+  "layers": 46,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 22.1,
+  "widest_overhang_step": 1.5,
+  "widest_overhang_z": 3.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 10.46,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 10.5 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "coupon_j1_post",
+  "size": [
+   12.0,
+   24.0,
+   51.5
+  ],
+  "bed_ok": true,
+  "layers": 258,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.76,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "coupon_j2_hub",
+  "size": [
+   31.0,
+   30.0,
+   6.0
+  ],
+  "bed_ok": true,
+  "layers": 30,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.28,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "coupon_j2_horn",
+  "size": [
+   22.0,
+   22.0,
+   9.1
+  ],
+  "bed_ok": true,
+  "layers": 46,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 157.6,
+  "widest_overhang_step": 2.7,
+  "widest_overhang_z": 6.3,
+  "widest_cantilever": 2.7,
+  "widest_cantilever_z": 6.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.88,
+  "hard": [],
+  "warn": []
  },
  {
   "part": "servo_blank",
@@ -354,16 +550,16 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 275.1,
-  "widest_overhang_step": 6.7,
+  "overhang_area": 163.8,
+  "widest_overhang_step": 2.7,
   "widest_overhang_z": 35.1,
+  "widest_cantilever": 2.7,
+  "widest_cantilever_z": 35.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 2.21,
+  "thin_soft_area": 2.89,
   "hard": [],
-  "warn": [
-   "overhang step 6.7 mm wide at z=35.1"
-  ]
+  "warn": []
  },
  {
   "part": "body_deck",
@@ -381,6 +577,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 4.86,
@@ -405,6 +603,8 @@
   "overhang_area": 115.6,
   "widest_overhang_step": 2.5,
   "widest_overhang_z": 19.1,
+  "widest_cantilever": 2.5,
+  "widest_cantilever_z": 19.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.74,
@@ -427,12 +627,14 @@
   "overhang_area": 7268.6,
   "widest_overhang_step": 59.9,
   "widest_overhang_z": 21.1,
+  "widest_cantilever": 13.9,
+  "widest_cantilever_z": 22.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.66,
   "hard": [],
   "warn": [
-   "overhang step 59.9 mm wide at z=21.1"
+   "overhang step 59.9 mm wide at z=21.1 (cantilever)"
   ]
  },
  {
@@ -451,12 +653,14 @@
   "overhang_area": 1086.8,
   "widest_overhang_step": 5.7,
   "widest_overhang_z": 18.1,
+  "widest_cantilever": 5.7,
+  "widest_cantilever_z": 18.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.8,
   "hard": [],
   "warn": [
-   "overhang step 5.7 mm wide at z=18.1"
+   "overhang step 5.7 mm wide at z=18.1 (cantilever)"
   ]
  },
  {
@@ -475,12 +679,14 @@
   "overhang_area": 3740.6,
   "widest_overhang_step": 27.7,
   "widest_overhang_z": 58.5,
+  "widest_cantilever": 27.7,
+  "widest_cantilever_z": 58.5,
   "thin_hard_area": 1.23,
   "thin_hard_z": 6.1,
   "thin_soft_area": 14.32,
   "hard": [],
   "warn": [
-   "overhang step 27.7 mm wide at z=58.5",
+   "overhang step 27.7 mm wide at z=58.5 (cantilever)",
    "walls < 1.6 mm: 14.3 mm\u00b2 in a layer"
   ]
  },
@@ -500,12 +706,14 @@
   "overhang_area": 741.1,
   "widest_overhang_step": 5.6,
   "widest_overhang_z": 3.3,
+  "widest_cantilever": 3.9,
+  "widest_cantilever_z": 2.5,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 2.98,
   "hard": [],
   "warn": [
-   "overhang step 5.6 mm wide at z=3.3"
+   "overhang step 5.6 mm wide at z=3.3 (cantilever)"
   ]
  },
  {
@@ -524,6 +732,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 19.55,
@@ -548,6 +758,8 @@
   "overhang_area": 49.5,
   "widest_overhang_step": 2.2,
   "widest_overhang_z": 3.3,
+  "widest_cantilever": 2.2,
+  "widest_cantilever_z": 3.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.4,
@@ -570,6 +782,8 @@
   "overhang_area": 76.0,
   "widest_overhang_step": 2.1,
   "widest_overhang_z": 0.9,
+  "widest_cantilever": 2.1,
+  "widest_cantilever_z": 0.9,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.55,
@@ -592,6 +806,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.95,
@@ -614,6 +830,8 @@
   "overhang_area": 16.7,
   "widest_overhang_step": 0.6,
   "widest_overhang_z": 3.1,
+  "widest_cantilever": 0.6,
+  "widest_cantilever_z": 3.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.55,
@@ -636,12 +854,14 @@
   "overhang_area": 218.9,
   "widest_overhang_step": 8.0,
   "widest_overhang_z": 4.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.11,
   "hard": [],
   "warn": [
-   "overhang step 8.0 mm wide at z=4.5"
+   "overhang step 8.0 mm wide at z=4.5 (bridge/step)"
   ]
  },
  {
@@ -660,6 +880,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.55,
@@ -682,6 +904,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.55,
@@ -704,12 +928,14 @@
   "overhang_area": 1890.6,
   "widest_overhang_step": 32.7,
   "widest_overhang_z": 9.5,
+  "widest_cantilever": 32.7,
+  "widest_cantilever_z": 9.5,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 5.86,
   "hard": [],
   "warn": [
-   "overhang step 32.7 mm wide at z=9.5",
+   "overhang step 32.7 mm wide at z=9.5 (cantilever)",
    "walls < 1.6 mm: 5.9 mm\u00b2 in a layer"
   ]
  },
@@ -729,6 +955,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 4.35,
@@ -753,6 +981,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 5.82,
@@ -777,12 +1007,14 @@
   "overhang_area": 9411.4,
   "widest_overhang_step": 21.3,
   "widest_overhang_z": 40.1,
+  "widest_cantilever": 6.0,
+  "widest_cantilever_z": 58.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 17.98,
   "hard": [],
   "warn": [
-   "overhang step 21.3 mm wide at z=40.1",
+   "overhang step 21.3 mm wide at z=40.1 (cantilever)",
    "walls < 1.6 mm: 18.0 mm\u00b2 in a layer"
   ]
  },
@@ -802,12 +1034,14 @@
   "overhang_area": 1464.0,
   "widest_overhang_step": 15.8,
   "widest_overhang_z": 1.1,
+  "widest_cantilever": 15.8,
+  "widest_cantilever_z": 1.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.58,
   "hard": [],
   "warn": [
-   "overhang step 15.8 mm wide at z=1.1"
+   "overhang step 15.8 mm wide at z=1.1 (cantilever)"
   ]
  },
  {
@@ -823,16 +1057,16 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 478.9,
-  "widest_overhang_step": 5.0,
-  "widest_overhang_z": 175.5,
+  "overhang_area": 6.8,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.16,
   "hard": [],
-  "warn": [
-   "overhang step 5.0 mm wide at z=175.5"
-  ]
+  "warn": []
  },
  {
   "part": "trim_cup",
@@ -850,6 +1084,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.0,
@@ -872,6 +1108,8 @@
   "overhang_area": 88.4,
   "widest_overhang_step": 2.1,
   "widest_overhang_z": 3.1,
+  "widest_cantilever": 2.1,
+  "widest_cantilever_z": 3.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.0,
@@ -894,6 +1132,8 @@
   "overhang_area": 134.7,
   "widest_overhang_step": 1.2,
   "widest_overhang_z": 3.3,
+  "widest_cantilever": 0.4,
+  "widest_cantilever_z": 0.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 19.68,
@@ -918,6 +1158,8 @@
   "overhang_area": 29.4,
   "widest_overhang_step": 1.4,
   "widest_overhang_z": 4.3,
+  "widest_cantilever": 1.4,
+  "widest_cantilever_z": 4.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 10.53,
@@ -942,6 +1184,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 73.86,
@@ -966,12 +1210,14 @@
   "overhang_area": 1305.2,
   "widest_overhang_step": 10.0,
   "widest_overhang_z": 11.9,
+  "widest_cantilever": 10.0,
+  "widest_cantilever_z": 11.9,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 397.41,
   "hard": [],
   "warn": [
-   "overhang step 10.0 mm wide at z=11.9",
+   "overhang step 10.0 mm wide at z=11.9 (cantilever)",
    "walls < 1.6 mm: 397.4 mm\u00b2 in a layer"
   ]
  },
@@ -991,6 +1237,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.84,
   "thin_hard_z": 1.1,
   "thin_soft_area": 10.56,
@@ -1015,6 +1263,8 @@
   "overhang_area": 457.5,
   "widest_overhang_step": 2.7,
   "widest_overhang_z": 1.1,
+  "widest_cantilever": 2.7,
+  "widest_cantilever_z": 1.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 6.93,
@@ -1039,12 +1289,14 @@
   "overhang_area": 184.8,
   "widest_overhang_step": 3.3,
   "widest_overhang_z": 6.7,
+  "widest_cantilever": 3.3,
+  "widest_cantilever_z": 6.7,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 5.54,
   "hard": [],
   "warn": [
-   "overhang step 3.3 mm wide at z=6.7",
+   "overhang step 3.3 mm wide at z=6.7 (cantilever)",
    "walls < 1.6 mm: 5.5 mm\u00b2 in a layer"
   ]
  },
@@ -1064,12 +1316,14 @@
   "overhang_area": 589.4,
   "widest_overhang_step": 27.3,
   "widest_overhang_z": 0.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.55,
   "hard": [],
   "warn": [
-   "overhang step 27.3 mm wide at z=0.5"
+   "overhang step 27.3 mm wide at z=0.5 (bridge/step)"
   ]
  },
  {
@@ -1088,12 +1342,14 @@
   "overhang_area": 6395.3,
   "widest_overhang_step": 35.9,
   "widest_overhang_z": 4.1,
+  "widest_cantilever": 35.9,
+  "widest_cantilever_z": 4.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.11,
   "hard": [],
   "warn": [
-   "overhang step 35.9 mm wide at z=4.1"
+   "overhang step 35.9 mm wide at z=4.1 (cantilever)"
   ]
  },
  {
@@ -1112,6 +1368,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.88,
@@ -1134,6 +1392,8 @@
   "overhang_area": 0.0,
   "widest_overhang_step": 0.0,
   "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 2.86,
@@ -1156,6 +1416,8 @@
   "overhang_area": 482.1,
   "widest_overhang_step": 0.5,
   "widest_overhang_z": 0.3,
+  "widest_cantilever": 0.5,
+  "widest_cantilever_z": 0.3,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 108.13,
@@ -1180,13 +1442,15 @@
   "overhang_area": 1445.8,
   "widest_overhang_step": 23.8,
   "widest_overhang_z": 18.9,
+  "widest_cantilever": 23.8,
+  "widest_cantilever_z": 18.9,
   "thin_hard_area": 2.21,
   "thin_hard_z": 16.1,
   "thin_soft_area": 6.6,
   "hard": [],
   "warn": [
    "deliberate flexure walls < 0.8 mm (2.2 mm\u00b2)",
-   "overhang step 23.8 mm wide at z=18.9",
+   "overhang step 23.8 mm wide at z=18.9 (cantilever)",
    "walls < 1.6 mm: 6.6 mm\u00b2 in a layer"
   ]
  },
@@ -1206,12 +1470,14 @@
   "overhang_area": 680.1,
   "widest_overhang_step": 8.9,
   "widest_overhang_z": 2.1,
+  "widest_cantilever": 8.9,
+  "widest_cantilever_z": 2.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 3.15,
   "hard": [],
   "warn": [
-   "overhang step 8.9 mm wide at z=2.1"
+   "overhang step 8.9 mm wide at z=2.1 (cantilever)"
   ]
  },
  {
@@ -1230,12 +1496,14 @@
   "overhang_area": 219.1,
   "widest_overhang_step": 8.0,
   "widest_overhang_z": 4.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 1.68,
   "hard": [],
   "warn": [
-   "overhang step 8.0 mm wide at z=4.5"
+   "overhang step 8.0 mm wide at z=4.5 (bridge/step)"
   ]
  },
  {
@@ -1254,6 +1522,8 @@
   "overhang_area": 63.8,
   "widest_overhang_step": 0.4,
   "widest_overhang_z": 4.9,
+  "widest_cantilever": 0.4,
+  "widest_cantilever_z": 4.9,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
   "thin_soft_area": 0.0,

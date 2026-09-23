@@ -36,7 +36,10 @@ def parts_row(part_list, start_x=-170, gap=28):
 PARTS_MECH = [
     ("coxa_yaw_base", "Coxa yaw base", [0.49, 0.36, 0.75]),
     ("coxa_fork", "Coxa fork", [0.61, 0.48, 0.83]),
-    ("femur_link", "Femur link", [0.70, 0.62, 0.86]),
+    ("coxa_crown_cap", "Crown cap (D046)", [0.66, 0.52, 0.84]),
+    ("femur_link", "Femur link v0.2", [0.70, 0.62, 0.86]),
+    ("horn_coupler", "Horn coupler", [0.76, 0.68, 0.88]),
+    ("servo_blank", "Servo blank v0.2", [0.34, 0.33, 0.40]),
     ("hand_hub", "Hand hub", [0.55, 0.44, 0.79]),
     ("hand_finger", "Hand finger", [0.66, 0.52, 0.84]),
     ("hand_cam", "Hand cam disc", [0.76, 0.68, 0.88]),
@@ -100,11 +103,11 @@ MODES = [
          ]),
     dict(id="weekend", label="Print weekend", target=[70, 0, 15], radius=470,
          grid_z=-8,
-         hint="Session 6: what Sunday night looks like — the leg chain "
-              "dry-fitted with printed SERVO BLANKS in all three cradles "
-              "(boolean-verified 0.00 mm³), plus the fit ladder v2 and the "
-              "closed hand. No servos were harmed (or owned) in this "
-              "assembly.",
+         hint="D046 (2026-09-17): the leg chain dry-fit rebuilt around its "
+              "joints — bolt-on crown cap + M3 axle, horn couplers in the "
+              "femur hubs, lips + straps in every cradle, blanks v0.2 with "
+              "nut slots. check_assembly.py proves the assembly ORDER, not "
+              "just non-overlap. Print the J1/J2 coupons first.",
          items=[
             dict(label="Coxa base (I1 plate)", color=[0.49, 0.36, 0.75],
                  data=b64("coxa_yaw_base"), offset=[0, 0, 0]),
@@ -112,8 +115,12 @@ MODES = [
                  data=b64("coxa_fork"), offset=[0, 0, 0]),
             dict(label="Servo blanks ×3", color=[0.34, 0.33, 0.40],
                  data=b64("dryfit_blanks_posed"), offset=[0, 0, 0]),
-            dict(label="Femur link", color=[0.70, 0.62, 0.86],
+            dict(label="Femur link v0.2", color=[0.70, 0.62, 0.86],
                  data=b64("femur_link_posed"), offset=[0, 0, 0]),
+            dict(label="Horn couplers ×2", color=[0.76, 0.68, 0.88],
+                 data=b64("dryfit_couplers_posed"), offset=[0, 0, 0]),
+            dict(label="Crown cap + straps", color=[0.66, 0.52, 0.84],
+                 data=b64("dryfit_cap_straps_posed"), offset=[0, 0, 0]),
             dict(label="Knee carrier", color=[0.55, 0.44, 0.79],
                  data=b64("tibia_knee_carrier"), offset=[0, 0, 0]),
             dict(label="Hand (closed = foot)", color=[0.66, 0.52, 0.84],

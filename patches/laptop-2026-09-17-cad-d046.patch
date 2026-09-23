@@ -1,0 +1,1583 @@
+diff --git a/rocky_v0.8.0_code/rocky/cad/check_assembly.py b/rocky_v0.8.0_code/rocky/cad/check_assembly.py
+new file mode 100644
+index 0000000..2566166
+--- /dev/null
++++ b/rocky_v0.8.0_code/rocky/cad/check_assembly.py
+@@ -0,0 +1,99 @@
++"""D046 joint suite — the checks the per-part modules can't ask: can each
++LEG-CHAIN joint be put together in order, and what holds it once it is.
++
++Five joints: J1 yaw horn<->fork (+cap/axle), J2 hip horn<->coupler<->femur,
++J3 knee horn<->coupler<->femur, J4 knee servo<->carrier, J5 carrier<->tube
++(pinch clamp, checked in part_tibia). Each joint: alignment across both
++parts, driver access against EVERYTHING present when the screw is driven,
++thread/nut path, and capture (a 2 mm nudge must meet material — or be a
++declared bolted direction). Written against the v0.8.0 tree, where it found
++the coxa assembly deadlock and the unlocated femur link (NOTES_INBOX
++2026-09-17); it must stay CLEAN from here on. Exit code = failures.
++"""
++import math, sys
++from build123d import *
++from common import params
++from servo_st3215 import horn_screw_positions
++from part_coxa import (coxa_yaw_base, coxa_fork, coxa_crown_cap, fork_screw_positions,
++                       H_HORN_TOP, HUB_T, Z_BOSS_TOP, HEAD_POCKET_Z1, L1, CASE_BASE_Y,
++                       Z_FEMUR_AXIS, HORN_TOP_Y)
++from part_coupler import RECESS_CLAMP_ANGS, TAP_R_POS, DISC_T
++from part_femur import T as FEM_T
++from part_tibia import KNEE_X, Z_AXIS
++from leg_assembly import build_dryfit
++
++P = params(); S = P["servo_st3215"]; PR = P["print"]
++v = lambda x: 0.0 if x is None else x.volume
++fails = []
++def check(name, val, good, ok_msg="OK", bad_msg="FAIL"):
++    ok = good(val)
++    print(f"  {name}: {val:.2f} mm^3 ({ok_msg if ok else bad_msg})")
++    if not ok: fails.append(name)
++
++df = build_dryfit()
++base, fork, cap = df["coxa_yaw_base"], df["coxa_fork"], df["coxa_crown_cap"]
++link, carrier = df["femur_link"], df["tibia_knee_carrier"]
++
++print("== J1 yaw: horn <-> fork <-> cap/axle")
++for hx, hy in fork_screw_positions():
++    col = Pos(hx, hy, (H_HORN_TOP + HUB_T + 60) / 2) * Cylinder(1.9, 60 - (H_HORN_TOP + HUB_T))
++    check(f"M2 driver column ({hx:+.1f},{hy:+.1f}) vs fork+base", v(col & fork) + v(col & base),
++          lambda x: x < 1, "CLEAR", "BLOCKED")
++worst = max(v((Pos(0, 0, dz) * fork) & (base + df["blank_yaw"])) for dz in (20, 10, 5, 1))
++check("fork drop-on path (+Z) vs base+servo", worst, lambda x: x < 1, "OPEN", "BLOCKED")
++worst = max(v((Pos(0, 0, dz) * cap) & (base + fork)) for dz in (30, 20, 10, 5, 1))
++check("cap drop-on path (+Z) vs base+fork", worst, lambda x: x < 1, "OPEN", "BLOCKED")
++axle = Pos(0, 0, (HEAD_POCKET_Z1 + 56) / 2) * Cylinder(1.4, 56 - HEAD_POCKET_Z1)   # M3 shank
++check("axle M3 path through cap Ø3.4 (pin Ø2.8)", v(axle & cap), lambda x: x < 1, "CLEAR", "BLOCKED")
++check("fork+axle nudged 2 mm x cap (yaw stage captured)", v((Pos(2, 0, 0) * (fork + axle)) & cap),
++      lambda x: x > 1, "CAPTURED", "FREE")
++check("cap x fork at rest (0.4 mm boss gap)", v(cap & fork), lambda x: x < 1, "OK", "CLASH")
++
++for J, which, blank_key, cradle_key, cx in (("J2 hip", "A", "blank_femur", "coxa_fork", L1),
++                                            ("J3 knee", "B", "blank_knee", "tibia_knee_carrier", KNEE_X)):
++    print(f"== {J}: horn <-> coupler <-> femur hub {which}")
++    c = df["coupler_hip" if which == "A" else "coupler_knee"]
++    blank, cradle = df[blank_key], df[cradle_key]
++    check("coupler lobes in hub recess", v(c & link), lambda x: x < 1, "FITS", "INTERFERES")
++    check("coupler disc on horn top", v(c & blank), lambda x: x < 1, "OK", "CLASH")
++    check("coupler x cradle", v(c & cradle), lambda x: x < 1, "OK", "CLASH")
++    check("link nudged +X x coupler (castellation)", v((Pos(2, 0, 0) * link) & c), lambda x: x > 1, "LOCATES", "LOOSE")
++    check("link nudged +Z x coupler (castellation)", v((Pos(0, 0, 2) * link) & c), lambda x: x > 1, "LOCATES", "LOOSE")
++    # M2 horn screws: driven from the lobe side BEFORE the link goes on
++    worst = 0.0
++    for hx, hz in horn_screw_positions(P):
++        col = Pos(cx + hx, HORN_TOP_Y - DISC_T - 15, Z_FEMUR_AXIS + hz) * Rot(90, 0, 0) * Cylinder(2.2, 30)
++        worst = max(worst, v(col & cradle), v(col & blank), v(col & c))
++        pin = Pos(cx + hx, HORN_TOP_Y - 2, Z_FEMUR_AXIS + hz) * Rot(90, 0, 0) * Cylinder(1.0, 12)
++        worst = max(worst, v(pin & blank), v(pin & c))
++    check("M2 driver columns + Ø2.0 pin to the nut", worst, lambda x: x < 1, "CLEAR", "BLOCKED")
++    # M3 clamps: driven from the outboard face of the link, into the lobes
++    worst = 0.0
++    for ang in RECESS_CLAMP_ANGS:
++        pin = Pos(cx, HORN_TOP_Y - DISC_T - FEM_T, Z_FEMUR_AXIS) * Rot(-90, 0, 0) * \
++            Rot(0, 0, ang) * Pos(TAP_R_POS, 0, -2 + 9.9 / 2) * Cylinder(PR["screw_m3_tap"]/2 - 0.05, 9.9)
++        col = Pos(cx, HORN_TOP_Y - DISC_T - FEM_T - 12, Z_FEMUR_AXIS) * Rot(-90, 0, 0) * \
++            Rot(0, 0, ang) * Pos(TAP_R_POS, 0, 0) * Cylinder(3.0, 24)
++        worst = max(worst, v(pin & link), v(pin & c), v(col & cradle), v(col & blank))
++    check("M3 clamp bores coaxial + driver columns", worst, lambda x: x < 1, "CLEAR", "BLOCKED")
++
++print("== J4 servo retention in every cradle (2 mm nudges)")
++for name, blank, cradle, strap in (("yaw", df["blank_yaw"], base + fork + cap, None),
++                                   ("femur", df["blank_femur"], fork, df["coxa_fork_strap"]),
++                                   ("knee", df["blank_knee"], carrier, df["tibia_knee_strap"])):
++    if strap is None:
++        # yaw servo: horn bolted to the fork, fork pinned by the cap — the
++        # servo moves WITH the fork; the cradle walls take its torque reaction
++        check(f"{name} servo+fork+axle nudged +X x base+cap", v((Pos(2, 0, 0) * (blank + fork + axle)) & (base + cap)),
++              lambda x: x > 1, "CAPTURED", "FREE")
++        check(f"{name} servo yawed 5 deg x base (torque reaction)", v((Rot(0, 0, 5) * blank) & base),
++              lambda x: x > 1, "WALLS TAKE IT", "FREE")
++    else:
++        check(f"{name} servo nudged -Y x cradle (lips)", v((Pos(0, -2, 0) * blank) & cradle), lambda x: x > 1, "HELD", "FREE")
++        check(f"{name} servo nudged +Z x strap", v((Pos(0, 0, 2) * blank) & strap), lambda x: x > 1, "HELD", "FREE")
++        check(f"{name} servo nudged +X x cradle", v((Pos(2, 0, 0) * blank) & cradle), lambda x: x > 1, "HELD", "FREE")
++
++print()
++print("check_assembly:", "CLEAN" if not fails else f"{len(fails)} FAILURES")
++for f in fails: print("  -", f)
++sys.exit(len(fails))
+diff --git a/rocky_v0.8.0_code/rocky/cad/check_interference.py b/rocky_v0.8.0_code/rocky/cad/check_interference.py
+index 8a83a5a..1b5af94 100644
+--- a/rocky_v0.8.0_code/rocky/cad/check_interference.py
++++ b/rocky_v0.8.0_code/rocky/cad/check_interference.py
+@@ -1,5 +1,6 @@
+ """Automated interference check: pairwise intersection volumes of posed solids.
+ Anything above ~1 mm^3 between parts that shouldn't touch = a real clash.
++D046: the cap, straps and couplers joined the assembly.
+ """
+ from build123d import *
+ from leg_assembly import build
+@@ -9,10 +10,24 @@ pairs = [
+     ("coxa_yaw_base", "servo_yaw"),
+     ("coxa_yaw_base", "coxa_fork"),
+     ("coxa_yaw_base", "servo_femur"),
++    ("coxa_crown_cap", "coxa_fork"),
++    ("coxa_crown_cap", "coxa_yaw_base"),
++    ("coxa_crown_cap", "servo_femur"),
+     ("coxa_fork", "servo_femur"),
+     ("coxa_fork", "servo_yaw"),
++    ("coxa_fork_strap", "servo_femur"),
+     ("coxa_fork", "femur_link"),
+-    ("femur_link", "servo_femur"),   # expect ~0 (0.3 gap off the horn face)
++    ("coupler_hip", "servo_femur"),      # disc rests on the horn top: ~0
++    ("coupler_hip", "femur_link"),       # lobes in the recess: ~0
++    ("coupler_hip", "coxa_fork"),
++    ("coupler_knee", "servo_tibia"),
++    ("coupler_knee", "femur_link"),
++    ("coupler_knee", "tibia_knee_carrier"),
++    ("femur_link", "servo_femur"),
++    ("femur_link", "servo_tibia"),
++    ("femur_link", "tibia_knee_carrier"),
++    ("tibia_knee_carrier", "servo_tibia"),
++    ("tibia_knee_strap", "servo_tibia"),
+ ]
+ print(f"{'pair':46s} intersection mm^3")
+ worst = 0.0
+@@ -22,15 +37,18 @@ for a, b in pairs:
+     worst = max(worst, v)
+     flag = "  <-- CLASH" if v > 1.0 else ""
+     print(f"{a+' x '+b:46s} {v:10.2f}{flag}")
+-# Sweep check: rotate everything that yaws (fork + femur servo + link) about Z
+-# and re-test against the fixed base across the +/-40 deg gait range.
+-print("\nYaw sweep vs fixed coxa_yaw_base:")
+-rotating = parts["coxa_fork"] + parts["servo_femur"] + parts["femur_link"]
++print("\nYaw sweep vs fixed coxa_yaw_base + cap:")
++rotating = None
++for k in ("coxa_fork", "coxa_fork_strap", "servo_femur", "coupler_hip", "femur_link",
++          "coupler_knee", "servo_tibia", "tibia_knee_carrier", "tibia_knee_strap"):
++    rotating = parts[k] if rotating is None else rotating + parts[k]
++fixed = parts["coxa_yaw_base"] + parts["coxa_crown_cap"]
+ for ang in (-40, -25, 25, 40):
+     swept = Rot(0, 0, ang) * rotating
+-    inter = parts["coxa_yaw_base"] & swept
++    inter = fixed & swept
+     v = inter.volume if inter is not None else 0.0
+     worst = max(worst, v)
+     flag = "  <-- CLASH" if v > 1.0 else ""
+     print(f"  yaw {ang:+d} deg: {v:10.2f} mm^3{flag}")
+ print("RESULT:", "CLEAN" if worst <= 1.0 else "CLASHES PRESENT")
++import sys; sys.exit(0 if worst <= 1.0 else 1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/check_printability.py b/rocky_v0.8.0_code/rocky/cad/check_printability.py
+index 680d4e0..6423c17 100644
+--- a/rocky_v0.8.0_code/rocky/cad/check_printability.py
++++ b/rocky_v0.8.0_code/rocky/cad/check_printability.py
+@@ -42,6 +42,8 @@ OUT = os.path.join(HERE, "out")
+ 
+ LAYER = 0.2
+ OVERHANG_STEP = 0.30       # mm of outward step per layer before it's an overhang
++CANTILEVER_ADJ = 0.6      # boundary fraction touching the layer below: less = cantilever
++CANTILEVER_HARD = 3.0     # mm of unsupported cantilever that fails a 'no support' plan
+ THIN_HARD = 0.8            # < 2 perimeters at 0.4 mm: unprintable
+ THIN_SOFT = 1.6            # < 4 perimeters: weak, worth knowing
+ THIN_MIN_AREA = 2.0        # mm² for a single thin blob before it's a wall (feather-edges are ~0.2)
+@@ -71,9 +73,14 @@ ORIENT = {
+     "tibia_sea_slider": None, "tool_hook": None, "tool_scoop": None,
+     # leg
+     "coxa_yaw_base": None, "coxa_fork": None,
+-    "femur_link": rot([1, 0, 0], 90),            # flat on its side
++    "coxa_crown_cap": rot([1, 0, 0], 180),       # bearing pocket UP (D046)
++    "coxa_fork_strap": rot([1, 0, 0], 180),      # bar on the bed, downstand up
++    "tibia_knee_strap": rot([1, 0, 0], 180),
++    "femur_link": rot([1, 0, 0], 90),            # flat, recess face UP
+     "tibia_knee_carrier": None, "tibia_sea_outer": None,
+     "horn_coupler": None,
++    "coupon_j1_hub": None, "coupon_j1_post": None,          # D046 joint coupons
++    "coupon_j2_hub": rot([1, 0, 0], 90), "coupon_j2_horn": None,
+     "servo_blank": None,                          # horn UP (audit: the side-down pose islands the horn disc)
+     # body / stand / shell
+     "body_deck": None, "stand_base": None, "stand_crown": None,
+@@ -110,6 +117,9 @@ SUPPORT_POLICY = {
+     "servo_blank": "none", "calib_gauge_hip": "none", "stand_crown": "yes",
+     "coxa_fork": "yes",   # only a 3 x 22 mm strip under the -X collar
+     "hand_cam": "none", "femur_link": "none",
++    "coxa_crown_cap": "none", "coxa_fork_strap": "none", "tibia_knee_strap": "none",
++    "coupon_j1_hub": "none", "coupon_j1_post": "none", "coupon_j2_hub": "none",
++    "coupon_j2_horn": "none",
+     "tibia_sea_outer": "none", "horn_coupler": "none", "fit_ladder": "none",
+     "body_deck": "none",
+ }
+@@ -182,6 +192,12 @@ def audit(name, verbose=False):
+         hits = ray.intersects_any(origins, dirs)
+         return bool(np.any(hits))
+     overhang_area, widest_step, widest_z = 0.0, 0.0, None
++    # D046 (2026-09-17): a CANTILEVER is an overhang blob whose boundary
++    # mostly does NOT touch the layer below (a disc on a boss); a BRIDGE
++    # (roof over a bore) touches it all round. The v0.1 servo blank's Ø20
++    # horn disc on a Ø6 boss — 7 mm of 90° cantilever, "no support" — only
++    # ever produced a warning here.
++    widest_cant, widest_cant_z = 0.0, None
+     thin_hard_max, thin_soft_max, thin_hard_z = 0.0, 0.0, None
+     prev_thin = []
+     max_layer_area = 0.0
+@@ -211,6 +227,10 @@ def audit(name, verbose=False):
+                         w = _width_of_blob(b)
+                         if w > widest_step:
+                             widest_step, widest_z = w, float(z)
++                        bl = b.boundary.length
++                        adj = b.boundary.intersection(prev.buffer(0.35)).length / bl if bl else 1.0
++                        if adj < CANTILEVER_ADJ and w > widest_cant:
++                            widest_cant, widest_cant_z = w, float(z)
+         if k % THIN_EVERY == 0:
+             # hard: the LARGEST single thin blob (a real wall segment); the
+             # summed area is dominated by 0.2 mm² feather-edges where bores
+@@ -239,6 +259,8 @@ def audit(name, verbose=False):
+         "overhang_area": round(overhang_area, 1),
+         "widest_overhang_step": round(widest_step, 1),
+         "widest_overhang_z": None if widest_z is None else round(widest_z, 1),
++        "widest_cantilever": round(widest_cant, 1),
++        "widest_cantilever_z": None if widest_cant_z is None else round(widest_cant_z, 1),
+         "thin_hard_area": round(thin_hard_max, 2),
+         "thin_hard_z": None if thin_hard_z is None else round(thin_hard_z, 2),
+         "thin_soft_area": round(thin_soft_max, 2),
+@@ -259,6 +281,9 @@ def audit(name, verbose=False):
+         hard.append(f"wall segment < {THIN_HARD} mm: {thin_hard_max:.1f} mm² at z={thin_hard_z:.1f}")
+     if not res["bed_ok"]:
+         hard.append(f"does not fit the bed: {res['size']}")
++    if policy == "none" and widest_cant >= CANTILEVER_HARD:
++        hard.append(f"{widest_cant:.1f} mm cantilevered overhang at z={widest_cant_z:.1f} "
++                    f"but the plan says NO support")
+     res["hard"] = hard
+     warn = []
+     if islands and policy != "none":
+@@ -273,7 +298,8 @@ def audit(name, verbose=False):
+     if name in THIN_OK and thin_hard_max > THIN_MIN_AREA:
+         warn.append(f"deliberate flexure walls < {THIN_HARD} mm ({thin_hard_max:.1f} mm²)")
+     if widest_step >= 3.0:
+-        warn.append(f"overhang step {widest_step:.1f} mm wide at z={widest_z:.1f}")
++        kind = "cantilever" if widest_cant >= 3.0 else "bridge/step"
++        warn.append(f"overhang step {widest_step:.1f} mm wide at z={widest_z:.1f} ({kind})")
+     if thin_soft_max > 4.0:
+         warn.append(f"walls < {THIN_SOFT} mm: {thin_soft_max:.1f} mm² in a layer")
+     res["warn"] = warn
+diff --git a/rocky_v0.8.0_code/rocky/cad/gen_print_pack.py b/rocky_v0.8.0_code/rocky/cad/gen_print_pack.py
+index 5f2fefb..4530d41 100644
+--- a/rocky_v0.8.0_code/rocky/cad/gen_print_pack.py
++++ b/rocky_v0.8.0_code/rocky/cad/gen_print_pack.py
+@@ -29,10 +29,24 @@ PARTS = [
+      "5 walls / 40%", 1, "Bearing pocket: test-fit 683ZZ, ream gently. Print 1, verify, then more."),
+     ("coxa_fork", "PETG", "hub DOWN", "none", "5 walls / 40%", 1,
+      "Zip-slot bridges are small and print fine. Stub is fragile until installed."),
+-    ("femur_link", "CF-PLA (hardened nozzle)", "flat on side", "none", "6 walls / 40%", 1,
+-     "Layer lines along the beam = correct strength orientation."),
++    ("coxa_crown_cap", "PETG", "bearing pocket UP (flipped)", "none", "5 walls / 40%", 1,
++     "D046: bolts onto the post AFTER the fork is on. 683ZZ light press; M3 x 10 axle through it."),
++    ("coxa_fork_strap", "PETG", "bar DOWN (flipped)", "none", "4 walls / 30%", 1,
++     "D046: 2x M3 x 8 into the rail tops; replaces the zip ties."),
++    ("femur_link", "CF-PLA (hardened nozzle)", "flat, recess face UP", "none", "6 walls / 40%", 1,
++     "Layer lines along the beam. D046: hubs take the horn coupler (2x M3 x 8 clamps each)."),
++    ("horn_coupler", "PETG", "disc DOWN", "none", "4 walls / 40%", 2,
++     "D046: one per hip/knee horn. M2 x 8 + nut on a blank; M2 x 6 into a real horn."),
+     ("tibia_knee_carrier", "PETG", "floor DOWN", "under tube boss",
+      "5 walls / 40%", 1, "Pinch-bolt slit prints as-is; run an M3 tap or bolt through after."),
++    ("tibia_knee_strap", "PETG", "bar DOWN (flipped)", "none", "4 walls / 30%", 1,
++     "D046: 2x M3 x 8 into the carrier wall tops."),
++    ("coupon_j1_hub", "PETG", "hub DOWN", "none", "4 walls / 30%", 1,
++     "D046 J1 COUPON — print with coupon_j1_post + cap FIRST; assemble with a 683ZZ + M3 x 10."),
++    ("coupon_j1_post", "PETG", "plate DOWN", "none", "4 walls / 30%", 1, "D046 J1 coupon, post half."),
++    ("coupon_j2_hub", "PLA", "flat, recess UP", "none", "4 walls / 30%", 1,
++     "D046 J2 COUPON — with coupon_j2_horn + horn_coupler: 4x M2 x 8 + nuts, 2x M3 x 8."),
++    ("coupon_j2_horn", "PLA", "horn UP", "none", "2 walls / 20%", 1, "D046 J2 coupon, horn half (nut slots)."),
+     ("tibia_sea_outer", "PETG", "tube socket DOWN", "none", "4 walls / 35%", 1,
+      "Verify slider glides in bore before gluing tube. Switch pocket: KW10-class."),
+     ("tibia_sea_slider", "PETG", "flange DOWN", "none", "4 walls / 35%", 1,
+diff --git a/rocky_v0.8.0_code/rocky/cad/leg_assembly.py b/rocky_v0.8.0_code/rocky/cad/leg_assembly.py
+index be4fc1f..3c7873c 100644
+--- a/rocky_v0.8.0_code/rocky/cad/leg_assembly.py
++++ b/rocky_v0.8.0_code/rocky/cad/leg_assembly.py
+@@ -1,56 +1,73 @@
+-"""Leg skeleton assembly, v0.1 — everything posed in the coxa frame (yaw axis = Z).
++"""Leg skeleton assembly, v0.2 (D046) — everything posed in the coxa frame
++(yaw axis = Z). Neutral pose: femur horizontal (+X), tibia vertical (down).
+ 
+ Exports one combined STL for visualization plus the posed sub-solids.
+-Neutral pose: femur horizontal (+X), tibia vertical (down).
+ """
+ from build123d import *
+ from common import params, export
+ from servo_st3215 import servo_body
+-from part_coxa import (coxa_yaw_base, coxa_fork, femur_servo_placed,
+-                       Z_FEMUR_AXIS, L1, CASE_BASE_Y, HORN_TOP_Y)
+-from part_femur import femur_link, T as FEM_T
++from part_coxa import (coxa_yaw_base, coxa_fork, coxa_crown_cap, coxa_fork_strap,
++                       femur_servo_placed, Z_FEMUR_AXIS, L1, CASE_BASE_Y, HORN_TOP_Y)
++from part_femur import femur_link, hub_face_tf, T as FEM_T
++from part_coupler import coupler_on_face, DISC_T
++from part_tibia import tibia_knee_carrier, tibia_knee_strap, KNEE_X, Z_AXIS
+ 
+ P = params()
+ S = P["servo_st3215"]
+ L2 = P["leg"]["l2_femur"]
+ L3 = P["leg"]["l3_tibia"]
+ 
++LINK_TF = Pos(L1, HORN_TOP_Y - DISC_T - FEM_T, Z_FEMUR_AXIS)   # link-local -> leg
++
++
++def femur_link_placed():
++    """Plate y -25..-19; its +Y face sits on the coupler discs (horn top -3)."""
++    return LINK_TF * femur_link()
++
++
++def coupler_placed(which="A"):
++    """Hip (A) / knee (B) coupler: lobes in the link hub, disc on the horn."""
++    return LINK_TF * coupler_on_face(hub_face_tf(which))
++
++
+ def build():
+     parts = {}
+     parts["coxa_yaw_base"] = coxa_yaw_base()
+     parts["coxa_fork"] = coxa_fork()
++    parts["coxa_crown_cap"] = coxa_crown_cap()
++    parts["coxa_fork_strap"] = coxa_fork_strap()
+     parts["servo_yaw"] = servo_body(P)
+     parts["servo_femur"] = femur_servo_placed()
+-    # femur link plate rides just outboard of the horn top plane (y = HORN_TOP_Y = -16)
+-    # link local: plate spans y 0..T, hub A at origin -> place so plate is at y -22.3..-16.3
+-    parts["femur_link"] = Pos(L1, HORN_TOP_Y - 0.3 - FEM_T, Z_FEMUR_AXIS) * femur_link()
+-    # tibia servo (body lives in the shin; its horn drives hub B), same orientation
+-    knee_x = L1 + L2
+-    parts["servo_tibia"] = Pos(knee_x, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90, 0, 0) * servo_body(P)
+-    # tibia stand-in: carbon tube from knee downward
+-    parts["tibia_tube"] = Pos(knee_x, 0, Z_FEMUR_AXIS - L3/2) * \
++    parts["coupler_hip"] = coupler_placed("A")
++    parts["femur_link"] = femur_link_placed()
++    parts["coupler_knee"] = coupler_placed("B")
++    parts["servo_tibia"] = Pos(KNEE_X, CASE_BASE_Y, Z_AXIS) * Rot(90, 0, 0) * servo_body(P)
++    parts["tibia_knee_carrier"] = tibia_knee_carrier()
++    parts["tibia_knee_strap"] = tibia_knee_strap()
++    parts["tibia_tube"] = Pos(KNEE_X, 0, Z_FEMUR_AXIS - L3/2) * \
+         Cylinder(P["leg"]["tibia_tube_od"]/2, L3)
+-    # foot ball
+-    parts["foot"] = Pos(knee_x, 0, Z_FEMUR_AXIS - L3) * Sphere(9)
++    parts["foot"] = Pos(KNEE_X, 0, Z_FEMUR_AXIS - L3) * Sphere(9)
+     return parts
+ 
++
+ def build_dryfit():
+-    """Session 6: the PRINT-WEEKEND dry-fit — real printed parts only, with
+-    servo BLANKS (part_servo_blank) in all three cradles instead of servo
+-    dummies, and no tube/SEA (carbon tube isn't in hand until Batch 0).
+-    This is exactly what sits on Tyler's bench Sunday night."""
++    """The bench dry-fit: printed parts only, servo BLANKS in all three
++    cradles, couplers on the blank horns, cap + straps on. No tube/SEA."""
+     from part_servo_blank import servo_blank
+-    from part_tibia import tibia_knee_carrier, KNEE_X, Z_AXIS
+     b = servo_blank()
+     parts = {
+         "coxa_yaw_base": coxa_yaw_base(),
+         "coxa_fork": coxa_fork(),
++        "coxa_crown_cap": coxa_crown_cap(),
++        "coxa_fork_strap": coxa_fork_strap(),
+         "blank_yaw": b,
+         "blank_femur": Pos(L1, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90, 0, 0) * b,
+         "blank_knee": Pos(KNEE_X, CASE_BASE_Y, Z_AXIS) * Rot(90, 0, 0) * b,
+-        "femur_link": Pos(L1, HORN_TOP_Y - 0.3 - FEM_T, Z_FEMUR_AXIS) *
+-                      femur_link(),
++        "coupler_hip": coupler_placed("A"),
++        "coupler_knee": coupler_placed("B"),
++        "femur_link": femur_link_placed(),
+         "tibia_knee_carrier": tibia_knee_carrier(),
++        "tibia_knee_strap": tibia_knee_strap(),
+     }
+     return parts
+ 
+@@ -61,15 +78,17 @@ if __name__ == "__main__":
+     for name, solid in parts.items():
+         combined = solid if combined is None else combined + solid
+     export(combined, "leg_skeleton_assembly", multi=True)
+-
+-    # ---- session 6: posed dry-fit exports for the viewer's weekend mode ----
+     df = build_dryfit()
+     blanks = df["blank_yaw"] + df["blank_femur"] + df["blank_knee"]
+     export(blanks, "dryfit_blanks_posed", multi=True)
+     export(df["femur_link"], "femur_link_posed")
+-    # sanity: blanks must not intersect the printed structure they sit in
+-    struct = (df["coxa_yaw_base"] + df["coxa_fork"] +
+-              df["tibia_knee_carrier"] + df["femur_link"])
++    export(df["coupler_hip"] + df["coupler_knee"], "dryfit_couplers_posed", multi=True)
++    export(df["coxa_crown_cap"] + df["coxa_fork_strap"] + df["tibia_knee_strap"],
++           "dryfit_cap_straps_posed", multi=True)
++    struct = None
++    for k, s in df.items():
++        if not k.startswith("blank_"):
++            struct = s if struct is None else struct + s
+     inter = blanks & struct
+     v = 0.0 if inter is None else inter.volume
+     print(f"dry-fit: blanks x printed structure = {v:.2f} mm^3 "
+diff --git a/rocky_v0.8.0_code/rocky/cad/make_viewer.py b/rocky_v0.8.0_code/rocky/cad/make_viewer.py
+index fe28df6..4e311ca 100644
+--- a/rocky_v0.8.0_code/rocky/cad/make_viewer.py
++++ b/rocky_v0.8.0_code/rocky/cad/make_viewer.py
+@@ -36,7 +36,10 @@ def parts_row(part_list, start_x=-170, gap=28):
+ PARTS_MECH = [
+     ("coxa_yaw_base", "Coxa yaw base", [0.49, 0.36, 0.75]),
+     ("coxa_fork", "Coxa fork", [0.61, 0.48, 0.83]),
+-    ("femur_link", "Femur link", [0.70, 0.62, 0.86]),
++    ("coxa_crown_cap", "Crown cap (D046)", [0.66, 0.52, 0.84]),
++    ("femur_link", "Femur link v0.2", [0.70, 0.62, 0.86]),
++    ("horn_coupler", "Horn coupler", [0.76, 0.68, 0.88]),
++    ("servo_blank", "Servo blank v0.2", [0.34, 0.33, 0.40]),
+     ("hand_hub", "Hand hub", [0.55, 0.44, 0.79]),
+     ("hand_finger", "Hand finger", [0.66, 0.52, 0.84]),
+     ("hand_cam", "Hand cam disc", [0.76, 0.68, 0.88]),
+@@ -100,11 +103,11 @@ MODES = [
+          ]),
+     dict(id="weekend", label="Print weekend", target=[70, 0, 15], radius=470,
+          grid_z=-8,
+-         hint="Session 6: what Sunday night looks like — the leg chain "
+-              "dry-fitted with printed SERVO BLANKS in all three cradles "
+-              "(boolean-verified 0.00 mm³), plus the fit ladder v2 and the "
+-              "closed hand. No servos were harmed (or owned) in this "
+-              "assembly.",
++         hint="D046 (2026-09-17): the leg chain dry-fit rebuilt around its "
++              "joints — bolt-on crown cap + M3 axle, horn couplers in the "
++              "femur hubs, lips + straps in every cradle, blanks v0.2 with "
++              "nut slots. check_assembly.py proves the assembly ORDER, not "
++              "just non-overlap. Print the J1/J2 coupons first.",
+          items=[
+             dict(label="Coxa base (I1 plate)", color=[0.49, 0.36, 0.75],
+                  data=b64("coxa_yaw_base"), offset=[0, 0, 0]),
+@@ -112,8 +115,12 @@ MODES = [
+                  data=b64("coxa_fork"), offset=[0, 0, 0]),
+             dict(label="Servo blanks ×3", color=[0.34, 0.33, 0.40],
+                  data=b64("dryfit_blanks_posed"), offset=[0, 0, 0]),
+-            dict(label="Femur link", color=[0.70, 0.62, 0.86],
++            dict(label="Femur link v0.2", color=[0.70, 0.62, 0.86],
+                  data=b64("femur_link_posed"), offset=[0, 0, 0]),
++            dict(label="Horn couplers ×2", color=[0.76, 0.68, 0.88],
++                 data=b64("dryfit_couplers_posed"), offset=[0, 0, 0]),
++            dict(label="Crown cap + straps", color=[0.66, 0.52, 0.84],
++                 data=b64("dryfit_cap_straps_posed"), offset=[0, 0, 0]),
+             dict(label="Knee carrier", color=[0.55, 0.44, 0.79],
+                  data=b64("tibia_knee_carrier"), offset=[0, 0, 0]),
+             dict(label="Hand (closed = foot)", color=[0.66, 0.52, 0.84],
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_coupler.py b/rocky_v0.8.0_code/rocky/cad/part_coupler.py
+index 45fead2..a0f8076 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_coupler.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_coupler.py
+@@ -5,12 +5,24 @@ replaceable coupler. Load path: horn --(4x M2)--> coupler --(castellation
+ shear lobes)--> driven part --(2x M3 clamp)--> retained. In a crash the
+ lobes shear; you print a new 1-gram coupler instead of buying a servo.
+ 
++D046 (laptop session 3, 2026-09-17): the coupler is now ADOPTED by the
++femur link (both hubs) — v0.8.0 had the female recess only in the demo
++coupon, and the link bolted straight to the horn with nothing locating it.
++Two fixes to the coupler itself found while adopting it:
++  * the lobes sat at 0/90/180/270 — directly OVER the four M2 horn screws
++    on the same angles, so an M2 head (Ø3.8) could not be dropped into its
++    counterbore (0.8 mm under the lobe). Lobes now sit at 45/135/225/315,
++    between the screws; the M2 driver columns are asserted clear below.
++  * lobe half-angle 28 -> 22 deg so a Ø4.4 driver fits the 46 deg gaps.
++    Shear area 161 mm² x 25 MPa ≈ 40 N·m at r 9.7 — still >> 2.94 N·m stall.
++The yaw joint (fork hub) does NOT use a coupler: its clamp-screw heads would
++sit under the crown cap and the yaw horn sees the smallest impact loads —
++documented deviation, see part_coxa.
++
+ Parts:
+   horn_coupler       : disc on the ST3215 horn, 4 shear lobes on top
+   coupler_recess_demo: test coupon with the female pocket — print BOTH,
+                        check the fit, file the result in NOTES_INBOX
+-The fork hub / femur plate adopt the female recess in v0.3 (post-caliper —
+-their horn faces get the recess + 2x M3 into the lobes' tap bores).
+ """
+ from build123d import *
+ from common import params, export
+@@ -22,11 +34,19 @@ S = P["servo_st3215"]
+ FIT = PR["clearance_fit"]
+ 
+ DISC_D = 26.0
+-DISC_T = 3.0
++DISC_T = 3.0                          # horn top -> driven-part face
+ LOBE_H = 2.6
+ LOBE_R0, LOBE_R1 = 7.0, 12.4          # radial extent of shear lobes
+-LOBE_HALF_ANG = 28                    # deg: lobe angular half-width
+-TAP_R_POS = (LOBE_R0 + LOBE_R1) / 2   # M3 tap bores in two opposite lobes
++LOBE_HALF_ANG = 22                    # deg: lobe angular half-width
++LOBE_ANGS = (45, 135, 225, 315)       # between the M2 horn screws (0/90/180/270)
++CLAMP_ANGS = (45, 225)                # M3 tap bores in two opposite lobes
++RECESS_CLAMP_ANGS = (-45, -225)       # the same bores as the RECESS sees them: the
++                                      # coupler is flipped (Rot 180 about X) onto the
++                                      # driven face, which mirrors the angles
++TAP_R_POS = (LOBE_R0 + LOBE_R1) / 2
++M2_HEAD_D = 3.8
++POCKET_DEPTH = LOBE_H + 0.4           # what coupler_recess removes below the face
++CLAMP_BORE_DEPTH = DISC_T + LOBE_H - 0.8   # blind M3 bore: 4.8 mm from the lobe tip
+ 
+ 
+ def _lobe(ang_deg):
+@@ -41,34 +61,23 @@ def _lobe(ang_deg):
+ 
+ def horn_coupler():
+     c = Pos(0, 0, DISC_T / 2) * Cylinder(DISC_D / 2, DISC_T)
+-    # M2 horn screws, countersunk-ish shallow cbore
++    for ang in LOBE_ANGS:
++        c += _lobe(ang)
++    # M2 horn screws from the lobe side: clearance + shallow head counterbore
+     for hx, hy in horn_screw_positions(P):
+         c -= Pos(hx, hy, DISC_T / 2) * Cylinder(PR["screw_m2_clear"] / 2, DISC_T + 2)
+-        c -= Pos(hx, hy, DISC_T - 0.6) * Cylinder(4.4 / 2, 1.4)
+-    # center pilot over the horn boss
++        c -= Pos(hx, hy, DISC_T - 0.6) * Cylinder((M2_HEAD_D + 0.6) / 2, 1.4)
++    # center pilot over the horn's centre screw head
+     c -= Pos(0, 0, DISC_T / 2) * Cylinder(6.4 / 2, DISC_T + 2)
+-    for ang in (0, 90, 180, 270):
+-        c += _lobe(ang)
+-    # M3 thread-forming bores down two opposite lobes (clamps the driven part)
+-    for ang in (0, 180):
+-        c -= Rot(0, 0, ang) * Pos(TAP_R_POS, 0, DISC_T + LOBE_H / 2) * \
+-            Cylinder(PR["screw_m3_tap"] / 2, LOBE_H + 2)
++    # M3 thread-forming bores down two opposite lobes (clamps the driven
++    # part): blind, from the lobe tip to 0.8 mm above the disc bottom =
++    # 4.8 mm of thread; M3 x 8 through the link's 3 mm web bottoms 0.2 short
++    for ang in CLAMP_ANGS:
++        c -= Rot(0, 0, ang) * Pos(TAP_R_POS, 0, (0.8 + DISC_T + LOBE_H + 1) / 2) * \
++            Cylinder(PR["screw_m3_tap"] / 2, DISC_T + LOBE_H + 1 - 0.8)
+     return c
+ 
+ 
+-def coupler_recess(solid, face_z, clamp_holes=True):
+-    """Cut the female castellation pocket into `solid` whose mating face is
+-    the horizontal plane z=face_z; the pocket descends LOBE_H (+0.4 slop)
+-    below that face. The coupler presents its lobes downward into it."""
+-    for ang in (0, 90, 180, 270):
+-        solid -= Pos(0, 0, face_z - (DISC_T + LOBE_H + 0.4)) * _lobe_inflated(ang)
+-    if clamp_holes:
+-        for ang in (0, 180):
+-            solid -= Rot(0, 0, ang) * Pos(TAP_R_POS, 0, face_z - 4) * \
+-                Cylinder(PR["screw_m3_clear"] / 2, 8)
+-    return solid
+-
+-
+ def _lobe_inflated(ang_deg):
+     seg = Pos(0, 0, DISC_T + LOBE_H / 2 + 0.2) * Cylinder(LOBE_R1 + FIT, LOBE_H + 0.4) \
+         - Pos(0, 0, DISC_T + LOBE_H / 2) * Cylinder(LOBE_R0 - FIT, LOBE_H + 3)
+@@ -80,6 +89,20 @@ def _lobe_inflated(ang_deg):
+     return seg & hs1 & hs2
+ 
+ 
++def coupler_recess(solid, face_z, clamp_holes=True, clamp_len=8.0):
++    """Cut the female castellation pocket into `solid` whose mating face is
++    the horizontal plane z=face_z; the pocket descends POCKET_DEPTH below
++    that face. The coupler presents its lobes downward into it. Clamp holes:
++    M3 clearance, `clamp_len` deep from the face (through a plate)."""
++    for ang in LOBE_ANGS:
++        solid -= Pos(0, 0, face_z - (DISC_T + LOBE_H + 0.4)) * _lobe_inflated(ang)
++    if clamp_holes:
++        for ang in RECESS_CLAMP_ANGS:
++            solid -= Rot(0, 0, ang) * Pos(TAP_R_POS, 0, face_z - clamp_len / 2 + 0.5) * \
++                Cylinder(PR["screw_m3_clear"] / 2, clamp_len + 1)
++    return solid
++
++
+ def coupler_recess_demo():
+     """Print-fit coupon: 34x34x8 pad, mating face on top (z=8)."""
+     pad = Pos(0, 0, 4) * Box(34, 34, 8)
+@@ -87,22 +110,56 @@ def coupler_recess_demo():
+     return pad
+ 
+ 
++def coupler_on_face(face_tf):
++    """The coupler posed lobes-DOWN into a recess whose face is at `face_tf`
++    (a transform whose local z=0 plane is the mating face, +z pointing
++    OUT of the driven part, i.e. toward the horn). Disc bottom then sits at
++    local z=DISC_T where the horn top is."""
++    return face_tf * Pos(0, 0, DISC_T) * Rot(180, 0, 0) * horn_coupler()
++
++
+ if __name__ == "__main__":
++    import math
+     c = horn_coupler()
+     d = coupler_recess_demo()
+     export(c, "horn_coupler")
+     export(d, "coupler_recess_demo")
+-    # verification: flip the coupler onto the coupon face (disc up, lobes
+-    # down into the pocket) and check clearance by boolean intersection
+-    posed = Pos(0, 0, 11.0) * Rot(180, 0, 0) * c   # lobe tips at z=5.4..8
+-    inter = posed & d
+-    v = 0.0 if inter is None else inter.volume
++    # fit: flip the coupler onto the coupon face (disc up, lobes down)
++    posed = coupler_on_face(Pos(0, 0, 8.0))
++    v = 0.0 if (posed & d) is None else (posed & d).volume
+     print(f"coupler x recess-coupon intersection: {v:.2f} mm^3 "
+           f"({'FITS' if v < 1 else 'INTERFERES'})")
+-    # shear-area sanity: 4 lobes x area; PLA shear ~25 MPa vs ST3215 2.94 Nm
+-    import math
++    # D046: every M2 head must be droppable from the lobe side — driver
++    # column Ø4.4 above the counterbore floor must be empty of lobe
++    worst = 0.0
++    for hx, hy in horn_screw_positions(P):
++        col = Pos(hx, hy, DISC_T - 0.6 + 10) * Cylinder(2.2, 20)
++        i = col & c
++        worst = max(worst, 0.0 if i is None else i.volume)
++    print(f"M2 driver access through the lobes: worst {worst:.2f} mm^3 "
++          f"({'CLEAR' if worst < 1 else 'BLOCKED'})")
++    # castellation must locate: nudge the posed coupler radially, expect contact
++    nudged = Pos(1.0, 0, 0) * posed
++    i = nudged & d
++    vn = 0.0 if i is None else i.volume
++    print(f"radial capture (1 mm nudge): {vn:.1f} mm^3 "
++          f"({'LOCATES' if vn > 1 else 'LOOSE'})")
+     area = math.pi * (LOBE_R1**2 - LOBE_R0**2) * (4 * 2 * LOBE_HALF_ANG / 360)
+-    t_shear = area * 1e-6 * 25e6 * TAP_R_POS * 1e-3     # very rough
+-    print(f"lobe shear capacity ~{t_shear:.1f} N*m vs servo stall 2.94 "
+-          f"(couplers should survive stall; they shear on IMPACT loads — "
+-          f"bench will tune lobe height/width)")
++    t_shear = area * 1e-6 * 25e6 * TAP_R_POS * 1e-3
++    print(f"lobe shear capacity ~{t_shear:.1f} N*m vs servo stall 2.94")
++    # clamp bores coaxial through coupon + posed coupler (the mirrored angles)
++    wc = 0.0
++    for ang in RECESS_CLAMP_ANGS:
++        # pin from 2 mm below the coupon (screw enters from its outer face,
++        # z=0) up to 0.3 short of the blind bore's end inside the disc
++        L = 2 + 8.0 + (CLAMP_BORE_DEPTH - (POCKET_DEPTH - 0.4)) - 0.3
++        pin = Rot(0, 0, ang) * Pos(TAP_R_POS, 0, -2 + L / 2) * Cylinder(PR["screw_m3_tap"]/2 - 0.05, L)
++        for part in (d, posed):
++            i = pin & part
++            wc = max(wc, 0.0 if i is None else i.volume)
++    print(f"clamp-bore coaxiality (coupon + coupler): worst {wc:.2f} mm^3 "
++          f"({'COAXIAL' if wc < 1 else 'MISALIGNED'})")
++    ok = v < 1 and worst < 1 and vn > 1 and wc < 1
++    print(f"part_coupler checks: {'ALL CLEAN' if ok else 'FAILED'}")
++    if not ok:
++        import sys; sys.exit(1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_coxa.py b/rocky_v0.8.0_code/rocky/cad/part_coxa.py
+index 76a981a..554c2bc 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_coxa.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_coxa.py
+@@ -1,25 +1,44 @@
+-"""Coxa yaw module, v0.1 — two printed parts.
++"""Coxa yaw module, v0.3 (D046, laptop session 3 2026-09-17) — THREE printed
++parts + a strap.
+ 
+ Frame: yaw axis = +Z at origin. Yaw servo sits shaft-up (as servo_st3215 frame).
+ Key planes (from params, servo h=32, boss 3, horn 3):
+   z=0        base plate top / servo base
+   z=38       horn top -> fork hub bottom
+   z=45.65    fork floor top (femur cradle floor)
++  z=47.15    axle boss top (683ZZ inner race seats here)
++  z=47.55    crown CAP underside (0.4 nominal gap over the boss)
+   z=58       femur joint axis height (horizontal, along Y, at x = L1 = 45)
+ 
+ Parts:
+   coxa_yaw_base : deck-mounted bracket = base plate + servo cradle walls
+-                  + crown post & arm with 683ZZ bearing pocket over the yaw axis
+-  coxa_fork     : rotates on the yaw servo horn = hub + floor plate + servo rails
+-                  + top stub axle that rides in the crown bearing
+-The femur servo drops between the fork rails (shaft along +Y, axis at x=45,z=58);
+-the +Y rail has a clearance hole so the horn pokes through to drive the femur link.
+-v0.1 retention is zip-ties through rail slots (real screw bosses come in v0.2 once
+-we've measured the servo's tapped holes on hardware).
++                  + crown POST (2x M3 thread-forming in its top)
++  coxa_crown_cap: the arm that used to be part of the base. Carries the
++                  683ZZ pocket; bolts onto the post AFTER the fork is on.
++  coxa_fork     : rotates on the yaw servo horn = hub + floor + servo rails
++                  + retention lips; an M3 AXLE screw threads down into the
++                  fork's boss through the cap's bearing (inner race clamped
++                  between screw head and boss — no printed stub any more).
++  coxa_fork_strap: bar over the rail tops holding the femur servo down.
++
++Why v0.3 (check_assembly.py on the v0.8.0 tree): the crown arm was one
++solid with the base, and all four yaw-horn screws sat under it — the fork
++could not be bolted on in place, and pre-bolted it could not slide in (the
++stub hit the arm). No assembly order existed. The vertical budget was 0.5 mm
++(floor vs arm) with a 0 mm horn/hub gap; the horn's CENTRE screw head was
++still covered by the floor (only the four M2 holes got counterbores in
++v0.2.2); the servo was retained by zip ties only.
++
++Assembly order (asserted below): yaw servo drops into the cradle from +Z ->
++fork drops onto the horn, 4x M2 x 6 through the Ø4.2 counterbores (driver
++columns asserted clear of base AND fork) -> cap onto the post, 2x M3 x 8 ->
++M3 x 10 axle down through the cap bearing into the fork boss -> femur servo
++drops into the rails from +Z (lips stop it toward the horn) -> strap, 2x M3.
+ """
+ from build123d import *
+ from common import params, export
+ from servo_st3215 import servo_body, horn_screw_positions
++from servo_mount import retention_lips, strap_tap_bores, servo_strap
+ 
+ P = params()
+ S = P["servo_st3215"]
+@@ -30,55 +49,73 @@ FIT = PR["clearance_fit"]
+ H_HORN_TOP = S["body_h"] + S["boss_h"] + S["horn_h"]        # 38.0
+ HUB_T = 3.0
+ FLOOR_T = 4.65
+-Z_FLOOR_TOP = H_HORN_TOP + HUB_T + FLOOR_T                   # 46.65 -> see below
+-# femur servo lies on its side on the fork floor; its case half-width sets axis height
+-Z_FEMUR_AXIS = Z_FLOOR_TOP + S["body_w"] / 2                 # floor top + 12.35
++Z_FLOOR_TOP = H_HORN_TOP + HUB_T + FLOOR_T                   # 45.65
++Z_FEMUR_AXIS = Z_FLOOR_TOP + S["body_w"] / 2                 # 58.0
++L1 = P["leg"]["l1_coxa"]                                     # 45
+ 
+-L1 = P["leg"]["l1_coxa"]                                     # 45: yaw axis -> femur axis
++# yaw axle (D046): boss on the fork, M3 thread-forming, cap bearing over it
++HEAD_POCKET_D, HEAD_POCKET_Z1 = 6.6, H_HORN_TOP + 3.5        # horn centre screw head
++AXLE_BOSS_D, AXLE_BOSS_H = 4.6, 1.5
++Z_BOSS_TOP = Z_FLOOR_TOP + AXLE_BOSS_H                       # 47.15
++CAP_GAP = 0.4
++CAP_Z0 = Z_BOSS_TOP + CAP_GAP                                # 47.55
++CAP_T = 5.0
++CAP_Z1 = CAP_Z0 + CAP_T                                      # 52.55
++Z_ARM_CLEAR = CAP_Z1 + 1.0                                   # -X collar starts here
++POST_X, POST_W, POST_D = -41.0, 10.0, 18.0
++ARM_X1 = 5.4                                                 # bearing pocket r3.43 + 2 mm wall
++POST_SCREW_XY = [(POST_X, 5.0), (POST_X, -5.0)]
+ 
+ def _case_xspan():
+     front = S["shaft_offset"]
+     return front - S["body_l"], front                        # (-33.95, +11.25)
+ 
+ def coxa_yaw_base():
+-    """v0.2: the base plate now carries leg port I1 (D020) — dowel bores,
+-    captive thumbscrews at the reachable inboard corners, inboard hook lip.
+-    v0.1's six M3 holes are gone (mid pair was unreachable under the servo
+-    AND off the deck pentagon — layout audit 07-30); the outer pair (x=15,
+-    off-deck, D012 cantilever) stays as spare holes for jigs/full-scale."""
++    """Base plate (leg port I1, D020) + cradle walls + crown POST."""
+     from iface import leg_port_plate_features
+     x0, x1 = _case_xspan()
+     wall_in = S["body_w"]/2 + FIT                            # 12.65
+     wall_t = 3.0
+-    # base plate
+     plate = Pos((-46+20)/2, 0, -2) * Box(66, 44, 4)
+     for hx, hy in [(15,17),(15,-17)]:                        # spare pair only
+         plate -= Pos(hx, hy, -2) * Cylinder(PR["screw_m3_clear"]/2, 6)
+-    # cable slot: yaw servo lead exits down through the plate behind the case
+-    plate -= Pos(-29, 0, -2) * Box(9, 9, 8)
+-    # leg port I1: dowel bores + captive thumbscrew bores + inboard hook lip
++    plate -= Pos(-29, 0, -2) * Box(9, 9, 8)                  # yaw servo lead
+     plate = leg_port_plate_features(plate, plate_top_z=0.0, plate_bot_z=-4.0)
+-    # cradle walls
+     wall_len = (x1 + FIT) - (x0 - FIT)
+     wall_cx = (x0 + x1) / 2
+     for sy in (1, -1):
+         plate += Pos(wall_cx, sy*(wall_in + wall_t/2), 13) * Box(wall_len, wall_t, 26)
+-    # crown: post behind servo + arm over the yaw axis
+-    arm_z0 = Z_FLOOR_TOP + 0.5                               # clear rotating floor
+-    arm_t = 4.0
+-    post = Pos(-41, 0, (arm_z0 + arm_t)/2) * Box(10, 12, arm_z0 + arm_t)
+-    arm = Pos((-46+8)/2, 0, arm_z0 + arm_t/2) * Box(54, 16, arm_t)
+-    crown = post + arm
+-    # bearing pocket, cut upward from arm underside at the yaw axis
+-    pocket_d = B["od"] - PR["clearance_press"]                # light press
+-    crown -= Pos(0, 0, arm_z0 + (B["w"]+0.2)/2) * Cylinder(pocket_d/2, B["w"]+0.2)
+-    return plate + crown
+-
+-# Femur servo pose (corrected v0.1b): shaft axis along Y at (L1, *, Z_FEMUR_AXIS),
+-# horn OUTBOARD toward -Y (link plate rides there), case body y in [-10, +22]:
++    # crown post behind the servo, top = cap underside; 2x M3 thread-forming
++    post = Pos(POST_X, 0, CAP_Z0/2) * Box(POST_W, POST_D, CAP_Z0)
++    for px, py in POST_SCREW_XY:
++        post -= Pos(px, py, CAP_Z0 - 4) * Cylinder(PR["screw_m3_tap"]/2, 8.2)
++    return plate + post
++
++def coxa_crown_cap():
++    """Arm over the yaw axis with the 683ZZ pocket (light press, from the
++    underside) + Ø3.4 axle pass + 2x M3 clearance onto the post."""
++    # arm ends at x=ARM_X1: the fork collar (x 7.45+, z 53.55+) overhangs the
++    # axis at every yaw, so the cap must clear it to DROP on (asserted below)
++    arm = Pos((-46+ARM_X1)/2, 0, CAP_Z0 + CAP_T/2) * Box(46+ARM_X1, 16, CAP_T)
++    arm += Pos(POST_X, 0, CAP_Z0 + CAP_T/2) * Box(12, POST_D, CAP_T)
++    pocket_d = B["od"] - PR["clearance_press"]
++    arm -= Pos(0, 0, CAP_Z0 + (B["w"]+0.2)/2) * Cylinder(pocket_d/2, B["w"]+0.2)
++    arm -= Pos(0, 0, CAP_Z0 + CAP_T/2) * Cylinder(PR["screw_m3_clear"]/2, CAP_T+2)
++    for px, py in POST_SCREW_XY:
++        arm -= Pos(px, py, CAP_Z0 + CAP_T/2) * Cylinder(PR["screw_m3_clear"]/2, CAP_T+2)
++    return arm
++
++# Femur servo pose: shaft axis along Y at (L1, *, Z_FEMUR_AXIS), horn OUTBOARD
++# toward -Y (coupler + link ride there), case body y in [-10, +22]:
+ #   world = Pos(L1, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90,0,0) * servo_local
+-CASE_BASE_Y = 22.0            # case base plane; case extends to y = CASE_BASE_Y - 32
+-HORN_TOP_Y = CASE_BASE_Y - H_HORN_TOP   # -16.0: femur-link plate mounts here
++CASE_BASE_Y = 22.0
++HORN_TOP_Y = CASE_BASE_Y - H_HORN_TOP   # -16.0: coupler disc sits on this plane
++FEMUR_CASE = dict(x0=L1 + _case_xspan()[0], x1=L1 + S["shaft_offset"],
++                  y0=CASE_BASE_Y - S["body_h"], y1=CASE_BASE_Y,
++                  z0=Z_FEMUR_AXIS - S["body_w"]/2, z1=Z_FEMUR_AXIS + S["body_w"]/2)
++WALL_T = 3.3
++WALL_TOP = FEMUR_CASE["z1"] + 5
++
+ 
+ def fork_screw_positions():
+     """Yaw-horn M2 pattern as the FORK uses it: the servo BCD rotated 45°."""
+@@ -87,71 +124,44 @@ def fork_screw_positions():
+     return [(hx*c - hy*s_, hx*s_ + hy*c) for hx, hy in horn_screw_positions(P)]
+ 
+ def coxa_fork():
++    c = FEMUR_CASE
+     hub = Pos(0, 0, H_HORN_TOP + HUB_T/2) * Cylinder(26/2, HUB_T)
+-    # horn screw holes + center pilot
+-    # v0.2.2: screw pattern rotated 45° on the horn BCD — the (7,0) hole sat
+-    # directly under the -X end wall (x 7.45+), so its driver column was
+-    # blocked; at 45° all four sit at x = ±4.95 with 0.4 mm to spare. The
+-    # horn's spline angle is free, so this costs nothing at assembly.
+-    for hx, hy in fork_screw_positions():
+-        hub -= Pos(hx, hy, H_HORN_TOP + HUB_T/2) * Cylinder(S["horn_screw_d"]/2, HUB_T+2)
+-    hub -= Pos(0, 0, H_HORN_TOP + HUB_T/2) * Cylinder(6.4/2, HUB_T+2)
+-    # floor plate spans x -13..60, y -13..25.6 (case footprint + wall margins + hub)
+-    # v0.2.2 (session 8, D038 printability audit): the floor used to start at
+-    # hub-top − 0.5 (z 40.5) — 2.5 mm ABOVE the hub bottom, so 'hub-down, no
+-    # support' printed a 73 x 39 plate in mid-air off a Ø26 hub. The floor
+-    # now starts at the horn-top plane (z 38): flat underside, zero support.
+-    # (The base x fork sweep check below proves nothing lives in that band.)
+     z_f0 = H_HORN_TOP
+     floor = Pos((-13+60)/2, (-13+25.6)/2, (z_f0 + Z_FLOOR_TOP)/2) * \
+             Box(73, 38.6, Z_FLOOR_TOP - z_f0)
+-    # Also v0.2.2: the floor COVERED the four horn-screw holes and the centre
+-    # pilot — as drawn since v0.1, the fork could not be bolted to its yaw
+-    # horn (boolean probe: 17.7 mm³ of plastic above each hole, 158 mm³ over
+-    # the pilot). Assembly order is now explicit: horn onto the spline with
+-    # its centre screw FIRST, then the fork drops on and four M2 x 5 go in
+-    # from above through Ø4.2 counterbores that open the floor down to the
+-    # hub top (heads seat on the 3 mm hub, under the crown-bearing stub's
+-    # plane; counterbores at r 7 clear the Ø2.9 stub and the femur case).
++    body = hub + floor
++    # 4x M2 into the yaw horn: Ø2.2 through hub, Ø4.2 counterbore down to the
++    # hub top so the heads seat on the 3 mm hub (driver from above)
+     for hx, hy in fork_screw_positions():
+-        floor -= Pos(hx, hy, (H_HORN_TOP + HUB_T + Z_FLOOR_TOP + 1) / 2) * \
++        body -= Pos(hx, hy, (H_HORN_TOP + HUB_T + Z_FLOOR_TOP + 1) / 2) * \
+             Cylinder(4.2/2, Z_FLOOR_TOP + 1 - (H_HORN_TOP + HUB_T))
+-        floor -= Pos(hx, hy, (z_f0 + Z_FLOOR_TOP) / 2) * \
++        body -= Pos(hx, hy, (z_f0 + Z_FLOOR_TOP) / 2) * \
+             Cylinder(S["horn_screw_d"]/2, Z_FLOOR_TOP - z_f0 + 2)
+-    x0, x1 = _case_xspan()
+-    case_x0 = L1 + x0                                         # 11.05
+-    case_x1 = L1 + S["shaft_offset"]                          # 56.25
+-    case_y0 = CASE_BASE_Y - S["body_h"]                       # -10.0
+-    case_y1 = CASE_BASE_Y                                     # +22.0
+-    wall_t = 3.3
+-    wall_top = Z_FEMUR_AXIS + S["body_w"]/2 + 5               # above case top
+-    # -X end wall must clear the fixed crown arm (z 46.15..50.15) through the full
+-    # +/-40 deg yaw sweep -> it starts above the arm as a "high collar".
+-    Z_ARM_CLEAR = 51.0
+-    walls = None
+-    # v0.2.1 (session 8): the end walls used to span exactly the case (y0..y1)
+-    # while the back wall sits FIT beyond it — a 0.3 mm gap at both corners.
+-    # The +X wall didn't care (it stands on the floor); the -X high collar
+-    # starts above the floor at Z_ARM_CLEAR and so was attached to NOTHING —
+-    # the fork exported as two bodies (D036 class). End walls now run through
+-    # the back wall (y to case_y1 + FIT + wall_t) so the collar hangs off it.
+-    y_wall_hi = case_y1 + FIT + wall_t
+-    for wx, z_lo in ((case_x0 - FIT - wall_t/2, Z_ARM_CLEAR),
+-                     (case_x1 + FIT + wall_t/2, Z_FLOOR_TOP)):
+-        w = Pos(wx, (case_y0 + y_wall_hi)/2, (z_lo + wall_top)/2) * \
+-            Box(wall_t, y_wall_hi - case_y0, wall_top - z_lo)
+-        walls = w if walls is None else walls + w
+-    # back wall on +Y (opposite the horn) ties the end walls together
+-    walls += Pos((case_x0 + case_x1)/2, case_y1 + FIT + wall_t/2,
+-                 (Z_FLOOR_TOP + wall_top)/2) * \
+-             Box(case_x1 - case_x0 + 2*(FIT + wall_t), wall_t, wall_top - Z_FLOOR_TOP)
+-    # zip-tie slots through the end walls, above the case top
+-    slot_z = Z_FEMUR_AXIS + S["body_w"]/2 + 2
+-    for wx in (case_x0 - FIT - wall_t/2, case_x1 + FIT + wall_t/2):
+-        walls -= Pos(wx, (case_y0 + case_y1)/2, slot_z) * Box(6, 4, 3.2)
+-    # top stub axle into the crown bearing
+-    stub = Pos(0, 0, Z_FLOOR_TOP + 3.2/2) * Cylinder((B["id"] - 0.1)/2, 3.2)
+-    return hub + floor + walls + stub
++    # horn centre-screw head pocket (was covered by the floor through v0.8.0)
++    body -= Pos(0, 0, (H_HORN_TOP - 1 + HEAD_POCKET_Z1)/2) * \
++        Cylinder(HEAD_POCKET_D/2, HEAD_POCKET_Z1 - H_HORN_TOP + 1)
++    # axle boss + M3 thread-forming bore (pocket top -> boss top = 5.65 mm)
++    body += Pos(0, 0, Z_FLOOR_TOP + AXLE_BOSS_H/2) * Cylinder(AXLE_BOSS_D/2, AXLE_BOSS_H)
++    body -= Pos(0, 0, (HEAD_POCKET_Z1 + Z_BOSS_TOP + 1)/2) * \
++        Cylinder(PR["screw_m3_tap"]/2, Z_BOSS_TOP + 1 - HEAD_POCKET_Z1)
++    # rails: end walls run through the back wall; -X wall is a high collar
++    # that clears the crown cap through the yaw sweep
++    y_wall_hi = c["y1"] + FIT + WALL_T
++    for wx, z_lo in ((c["x0"] - FIT - WALL_T/2, Z_ARM_CLEAR),
++                     (c["x1"] + FIT + WALL_T/2, Z_FLOOR_TOP)):
++        body += Pos(wx, (c["y0"] + y_wall_hi)/2, (z_lo + WALL_TOP)/2) * \
++            Box(WALL_T, y_wall_hi - c["y0"], WALL_TOP - z_lo)
++    body += Pos((c["x0"] + c["x1"])/2, c["y1"] + FIT + WALL_T/2,
++                (Z_FLOOR_TOP + WALL_TOP)/2) * \
++            Box(c["x1"] - c["x0"] + 2*(FIT + WALL_T), WALL_T, WALL_TOP - Z_FLOOR_TOP)
++    # D046 retention: lips over the horn-side top corners + strap tap bores
++    body += retention_lips(c["x0"], c["x1"], c["y0"], Z_ARM_CLEAR, Z_FLOOR_TOP, WALL_TOP, WALL_T)
++    body = strap_tap_bores(body, c["x0"], c["x1"], (c["y0"] + c["y1"])/2, WALL_TOP, WALL_T)
++    return body
++
++def coxa_fork_strap():
++    c = FEMUR_CASE
++    return servo_strap(c["x0"], c["x1"], (c["y0"] + c["y1"])/2, c["z1"], WALL_TOP, WALL_T)
+ 
+ def femur_servo_placed(clearance=0.0):
+     """Femur servo dummy in its fork pose: shaft axis along Y at (L1, *, Z_FEMUR_AXIS),
+@@ -159,52 +169,71 @@ def femur_servo_placed(clearance=0.0):
+     s = servo_body(P, clearance)
+     return Pos(L1, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90, 0, 0) * s
+ 
++def _v(x):
++    return 0.0 if x is None else x.volume
++
+ if __name__ == "__main__":
++    import sys
+     base = coxa_yaw_base()
+     fork = coxa_fork()
++    cap = coxa_crown_cap()
++    strap = coxa_fork_strap()
+     export(base, "coxa_yaw_base")
+     export(fork, "coxa_fork")
+-    print(f"Z_FLOOR_TOP={Z_FLOOR_TOP:.2f}  Z_FEMUR_AXIS={Z_FEMUR_AXIS:.2f}")
+-    # v0.2 checks: thumbscrew access columns must be CLEAR above the plate
+-    # (that's the whole point of moving them), dowel bores clear of walls
++    export(cap, "coxa_crown_cap")
++    export(strap, "coxa_fork_strap")
++    print(f"Z_FLOOR_TOP={Z_FLOOR_TOP:.2f}  Z_FEMUR_AXIS={Z_FEMUR_AXIS:.2f}  CAP_Z0={CAP_Z0:.2f}")
+     from iface import IF
+     lp = IF["leg_port"]
++    fails = []
++    def check(name, v, good, msg_ok, msg_bad):
++        ok = good(v)
++        print(f"{name}: {v:.2f} mm^3 ({msg_ok if ok else msg_bad})")
++        if not ok: fails.append(name)
++    # thumbscrew access columns stay clear (cap pad y ±9 vs column y ≥ 10)
+     worst = 0.0
+     for dx, dy in lp["thumbscrew_xy"]:
+         probe = Pos(dx, dy, 30) * Cylinder(lp["thumbscrew_head_d"]/2 + 1, 56)
+-        inter = probe & base
+-        v = 0.0 if inter is None else inter.volume
+-        worst = max(worst, v)
+-    print(f"thumbscrew access columns: worst obstruction {worst:.1f} mm^3 "
+-          f"({'CLEAR — screwdriver-free swap works' if worst < 1 else 'BLOCKED'})")
+-    fork_i = fork & base
+-    v = 0.0 if fork_i is None else fork_i.volume
+-    print(f"base x fork: {v:.2f} mm^3 ({'OK' if v < 1 else 'CLASH'})")
+-    # v0.2.2 (session 8): the yaw SWEEP is checked in-module now (v0.1 did it
+-    # once by hand) — the floor now reaches the horn-top plane, so the base
+-    # must be clear of it at every yaw angle, not just zero.
+-    worst_sweep = 0.0
++        worst = max(worst, _v(probe & base), _v(probe & cap))
++    check("thumbscrew access columns (base+cap)", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
++    # yaw sweep: fork vs base AND cap (cap is fixed with the base)
++    worst = 0.0
+     for yaw in range(-40, 41, 10):
+-        inter = (Rot(0, 0, yaw) * fork) & base
+-        worst_sweep = max(worst_sweep, 0.0 if inter is None else inter.volume)
+-    print(f"base x fork over yaw -40..40: worst {worst_sweep:.2f} mm^3 "
+-          f"({'OK' if worst_sweep < 1 else 'CLASH'})")
+-    # femur servo must drop into the fork cradle (tangent on the floor)
+-    fs = fork & femur_servo_placed()
+-    vfs = 0.0 if fs is None else fs.volume
+-    print(f"fork x femur servo: {vfs:.2f} mm^3 ({'OK' if vfs < 1 else 'CLASH'})")
+-    # horn-screw access: a driver column above every hole must be EMPTY
+-    # (the v0.1-v0.2.1 floor blocked all four — regression test)
+-    worst_access = 0.0
++        f = Rot(0, 0, yaw) * fork
++        worst = max(worst, _v(f & base), _v(f & cap))
++    check("base+cap x fork over yaw -40..40", worst, lambda v: v < 1, "OK", "CLASH")
++    check("cap x base (touching at the post top)", _v(cap & base), lambda v: v < 1, "OK", "CLASH")
++    check("fork x femur servo", _v(fork & femur_servo_placed()), lambda v: v < 1, "OK", "CLASH")
++    check("strap x femur servo", _v(strap & femur_servo_placed()), lambda v: v < 1, "OK", "CLASH")
++    check("strap x fork", _v(strap & fork), lambda v: v < 1, "OK", "CLASH")
++    # horn-screw driver access vs EVERYTHING present when they are driven
++    worst = 0.0
+     for hx, hy in fork_screw_positions():
+-        col = Pos(hx, hy, (H_HORN_TOP + HUB_T + 60) / 2) * \
+-            Cylinder(1.9, 60 - (H_HORN_TOP + HUB_T))
+-        inter = col & fork
+-        worst_access = max(worst_access, 0.0 if inter is None else inter.volume)
+-    print(f"horn-screw driver access: worst obstruction {worst_access:.2f} mm^3 "
+-          f"({'CLEAR' if worst_access < 1 else 'BLOCKED'})")
+-    ok = v < 1 and worst_sweep < 1 and vfs < 1 and worst_access < 1
+-    print(f"part_coxa checks: {'ALL CLEAN' if ok else 'FAILED'}")
+-    if not ok:
+-        import sys
++        col = Pos(hx, hy, (H_HORN_TOP + HUB_T + 60) / 2) * Cylinder(1.9, 60 - (H_HORN_TOP + HUB_T))
++        worst = max(worst, _v(col & fork), _v(col & base))
++    check("horn-screw driver access (fork+base)", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
++    # assembly order: each part arrives along +Z with nothing in the way
++    worst = 0.0
++    for dz in (40, 20, 10, 5, 1):
++        worst = max(worst, _v((Pos(0, 0, dz) * servo_body(P)) & base))
++    check("yaw servo drop-in path (+Z)", worst, lambda v: v < 1, "OPEN", "BLOCKED")
++    worst = 0.0
++    for dz in (20, 10, 5, 1):
++        worst = max(worst, _v((Pos(0, 0, dz) * fork) & (base + servo_body(P))))
++    check("fork drop-on path (+Z)", worst, lambda v: v < 1, "OPEN", "BLOCKED")
++    worst = 0.0
++    for dz in (20, 10, 5, 1):
++        worst = max(worst, _v((Pos(0, 0, dz) * cap) & (base + fork)))
++    check("cap drop-on path (+Z)", worst, lambda v: v < 1, "OPEN", "BLOCKED")
++    # retention: a 2 mm nudge of the femur servo must meet material
++    fs = femur_servo_placed()
++    check("femur servo nudged -Y (toward link) x fork", _v((Pos(0, -2, 0) * fs) & fork),
++          lambda v: v > 1, "RETAINED by lips", "FREE")
++    check("femur servo nudged +Z x strap", _v((Pos(0, 0, 2) * fs) & strap),
++          lambda v: v > 1, "RETAINED by strap", "FREE")
++    # axle: thread length in the boss + cap pocket over the boss
++    print(f"axle M3 thread-forming length: {Z_BOSS_TOP - HEAD_POCKET_Z1:.2f} mm; "
++          f"cap bearing pocket z {CAP_Z0:.2f}..{CAP_Z0 + B['w'] + 0.2:.2f}; boss top {Z_BOSS_TOP:.2f}")
++    print(f"part_coxa checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
++    if fails:
+         sys.exit(1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_femur.py b/rocky_v0.8.0_code/rocky/cad/part_femur.py
+index d376d0b..85c30c9 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_femur.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_femur.py
+@@ -1,16 +1,22 @@
+-"""Femur link, v0.1 — twin-hub plate.
++"""Femur link, v0.2 (D046) — twin-hub plate that mates the horn COUPLERS.
+ 
+-One hub bolts to the femur servo horn (at the coxa fork), the other bolts to the
+-tibia servo horn (the tibia servo body lives in the shin assembly). The link is a
+-flat plate printed on its side: layer lines run along the beam, perpendicular to
+-bending loads.
++v0.1 bolted each hub straight onto a servo horn with 4x M2 and nothing
++else: no locating feature, no clamp, and on the printed blanks 3 mm of PLA
++thread per screw. A 2 mm nudge in any direction met zero material. v0.2:
++each hub carries the female castellation recess (part_coupler) on its +Y
++face plus 2x M3 clearance for the clamp screws into the coupler's lobes.
++The lobes locate the link radially and in rotation; the clamps hold it on.
++The link never touches a horn.
+ 
+ Local frame: hub A center at origin, hub B at (+L2, 0). Plate normal = +Y,
+-thickness 6, plate spans y in [0, 6].
++thickness T, plate spans y in [0, T]; the +Y face (y = T) is the mating
++face — it sits on the coupler disc, DISC_T outboard of the horn top.
++Printed flat (recess face UP), layer lines along the beam.
+ """
+ from build123d import *
+ from common import params, export
+-from servo_st3215 import horn_screw_positions
++from part_coupler import (coupler_recess, coupler_on_face, DISC_T, RECESS_CLAMP_ANGS,
++                          TAP_R_POS, POCKET_DEPTH, CLAMP_BORE_DEPTH)
+ 
+ P = params()
+ S = P["servo_st3215"]
+@@ -20,23 +26,59 @@ T = 6.0
+ HUB_D = 30.0
+ BEAM_H = 24.0
+ 
+-def femur_link():
+-    beam = Pos(L2/2, T/2, 0) * Rot(90, 0, 0) * Box(L2, BEAM_H, T)
++
++def _flat():
++    """Plate in XY, thickness along +Z (z 0..T); mating face = z = T."""
++    beam = Pos(L2/2, 0, T/2) * Box(L2, BEAM_H, T)
+     hubs = None
+     for cx in (0.0, L2):
+-        h = Pos(cx, T/2, 0) * Rot(90, 0, 0) * Cylinder(HUB_D/2, T)
++        h = Pos(cx, 0, T/2) * Cylinder(HUB_D/2, T)
+         hubs = h if hubs is None else hubs + h
+     part = beam + hubs
+-    # hub holes: center pilot + 4x M2 on the horn BCD
+-    for cx in (0.0, L2):
+-        part -= Pos(cx, T/2, 0) * Rot(90, 0, 0) * Cylinder(6.4/2, T+2)
+-        for hx, hz in horn_screw_positions(P):
+-            part -= Pos(cx + hx, T/2, hz) * Rot(90, 0, 0) * \
+-                    Cylinder(PR["screw_m2_clear"]/2, T+2)
+-    # lightening slots
+-    for cx in (L2*0.32, L2*0.68):
+-        part -= Pos(cx, T/2, 0) * Rot(90, 0, 0) * Box(L2*0.2, BEAM_H*0.45, T+2)
++    for cx in (L2*0.32, L2*0.68):                      # lightening slots
++        part -= Pos(cx, 0, T/2) * Box(L2*0.2, BEAM_H*0.45, T+2)
++    for cx in (0.0, L2):                               # coupler recess per hub
++        part = Pos(cx, 0, 0) * coupler_recess(Pos(-cx, 0, 0) * part, face_z=T, clamp_len=T)
+     return part
+ 
++
++def femur_link():
++    return Rot(-90, 0, 0) * _flat()          # flat z -> world +y
++
++
++def hub_face_tf(which="A"):
++    """Transform whose z=0 plane is the hub's mating (+Y) face, +z toward the
++    horn — feed to part_coupler.coupler_on_face. Link-local coords."""
++    cx = 0.0 if which == "A" else L2
++    return Pos(cx, T, 0) * Rot(-90, 0, 0)
++
++
+ if __name__ == "__main__":
+-    export(femur_link(), "femur_link")
++    import sys
++    link = femur_link()
++    export(link, "femur_link")
++    fails = []
++    v = lambda x: 0.0 if x is None else x.volume
++    for which in ("A", "B"):
++        c = coupler_on_face(hub_face_tf(which))
++        fit = v(c & link)
++        cap_x = v((Pos(1.0, 0, 0) * c) & link)
++        cap_z = v((Pos(0, 0, 1.0) * c) & link)
++        # clamp bores coaxial: a Ø2.8 pin through both must touch neither
++        cx = 0.0 if which == "A" else L2
++        worst = 0.0
++        for ang in RECESS_CLAMP_ANGS:
++            # pin: 2 mm outside the outer face to 0.3 short of the bore end
++            L = 2 + T + (CLAMP_BORE_DEPTH - (POCKET_DEPTH - 0.4)) - 0.3
++            pin = Pos(cx, 0, 0) * Rot(-90, 0, 0) * Rot(0, 0, ang) * \
++                Pos(TAP_R_POS, 0, -2 + L / 2) * Cylinder(PR["screw_m3_tap"]/2 - 0.05, L)
++            worst = max(worst, v(pin & link), v(pin & c))
++        ok = fit < 1 and cap_x > 1 and cap_z > 1 and worst < 1
++        print(f"hub {which}: coupler fit {fit:.2f} mm^3, capture x {cap_x:.1f} / z {cap_z:.1f} mm^3, "
++              f"clamp-bore coaxiality worst {worst:.2f} mm^3 -> {'OK' if ok else 'FAIL'}")
++        if not ok: fails.append(which)
++    bb = link.bounding_box()
++    print(f"femur_link: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm, "
++          f"hub web under the recess {T - (DISC_T + 0.0):.1f} mm nominal")
++    print(f"part_femur checks: {'ALL CLEAN' if not fails else 'FAILED'}")
++    if fails: sys.exit(1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_leg_coupons.py b/rocky_v0.8.0_code/rocky/cad/part_leg_coupons.py
+new file mode 100644
+index 0000000..e79ba24
+--- /dev/null
++++ b/rocky_v0.8.0_code/rocky/cad/part_leg_coupons.py
+@@ -0,0 +1,40 @@
++"""D046 joint COUPONS — one-hour prints of the real joint geometry, both
++mating parts clipped to the joint itself. Assemble on the bench BEFORE any
++full leg part reprints. Because they are boolean clips of the production
++solids, a coupon that fits proves the production part fits.
++
++  J1 (yaw):  coupon_j1_hub  = fork hub + boss + floor stub (x -14..7)
++             coupon_j1_post = base plate stub + crown post (x -45..-33)
++             + coxa_crown_cap (full part) + 683ZZ + M3 x 10 axle + 2x M3 x 8
++             + a servo_blank (or its horn zone: coupon_j2_horn) under the hub
++  J2/J3:     coupon_j2_hub  = femur link hub A with recess + clamp holes
++             coupon_j2_horn = servo blank horn zone with nut slots (z 29..38)
++             + horn_coupler (full part) + 4x M2 x 8 + 4x M2 nuts + 2x M3 x 8
++"""
++from build123d import *
++from common import export
++from part_coxa import coxa_fork, coxa_yaw_base
++from part_femur import femur_link
++from part_servo_blank import servo_blank
++
++
++def coupon_j1_hub():
++    return coxa_fork() & Pos((-14 + 7) / 2, 0, 43) * Box(21, 30, 12)
++
++
++def coupon_j1_post():
++    return coxa_yaw_base() & Pos(-39, 0, 22) * Box(12, 24, 54)
++
++
++def coupon_j2_hub():
++    return femur_link() & Pos(0, 3, 0) * Box(32, 8, 32)
++
++
++def coupon_j2_horn():
++    return servo_blank() & Pos(0, 0, 33.5) * Box(22, 22, 9.2)
++
++
++if __name__ == "__main__":
++    for fn in (coupon_j1_hub, coupon_j1_post, coupon_j2_hub, coupon_j2_horn):
++        export(fn(), fn.__name__)
++    print("part_leg_coupons: 4 coupons exported (single-solid gate passed)")
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_servo_blank.py b/rocky_v0.8.0_code/rocky/cad/part_servo_blank.py
+index b9b66b8..1658ab7 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_servo_blank.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_servo_blank.py
+@@ -1,27 +1,23 @@
+-"""Printed ST3215 servo BLANK — session 6. Dry-fit stand-in for the real thing.
++"""Printed ST3215 servo BLANK v0.2 (D046) — dry-fit stand-in for the real thing.
+ 
+-Why: session 6's status was "nothing ordered yet" — servo lead time is 1–4
+-weeks, but the print weekend wants the body + one leg ASSEMBLED. The servos
+-are the joints; without them the chain can't hang together. This part is a
+-dimensionally exact PLA stand-in for the ST3215 envelope (case + output boss
+-+ horn disc), so every cradle, wall, zip slot and horn-coupler interface can
+-be exercised weeks before hardware lands:
++Why: servos are the joints; without them the chain can't hang together. This
++is a dimensionally exact PLA stand-in for the ST3215 envelope (case + output
++boss + horn disc) so every cradle, lip, strap and horn-coupler interface can
++be exercised before hardware lands.
+ 
+-  * drops into the coxa base cradle (yaw pose), the coxa fork rails (femur
+-    pose) and the tibia knee carrier (knee pose) — all three verified by
+-    boolean probe below, same FIT clearances as the real servo dummy;
+-  * the horn disc carries the true 4x M2 BCD (Ø1.7 self-tap) + center
+-    pilot, so femur_link hubs and sacrificial horn couplers BOLT ON and the
+-    whole leg chain assembles rigid (joints frozen at print angle — fine,
+-    dry fit is about interfaces, not motion);
+-  * 3-dot engraving on both case sides = instantly tells a blank from a
+-    real servo in a parts bin (font-free convention).
++v0.1 gave the horn disc Ø1.7 pilots for self-tapping M2s: 3 mm of PLA
++thread per screw, then 3 mm of AIR under the disc (the BCD sits outside
++the Ø6 boss), then un-piloted case — and a Ø20 disc on a Ø6 boss printed
++"horn up, no support" is 7 mm of 90° overhang. v0.2:
++  * the boss undercut is filled to Ø14 (r 7 = the BCD) from case top to
++    horn — no overhang, and a floor for the nuts. Ø14 not Ø20 so the
++    cradles' retention lips (4 mm reach) still clear it;
++  * 4x Ø2.4 THROUGH holes on the BCD with side-loaded M2 nut slots
++    (4.3 x 1.9, z 33.0..34.9): the coupler's M2 x 8 screws pull the nut up
++    against the 3.1 mm horn flange. Real servo: horn is tapped, M2 x 6;
++  * 3-dot engraving on both case sides = blank, not a servo.
+ 
+-Print: PLA, 0.2 mm, 2 walls, 10 % — ~25 g each, qty 4 (3 for one leg + 1
+-spare/hand-of-second-leg). NOT a structural part: it exists to be replaced.
+-When real servos arrive the blanks retire to the bench jig / mass-mockup
+-drawer. (If a CoM-realistic mockup is ever needed: the real servo is 60 g,
+-the blank ~25 — tape washers to the case, don't redesign.)
++Print: horn UP, 0.2 mm, 2 walls, 10 % — ~25 g, qty 4. NOT structural.
+ 
+ Frame: identical to servo_st3215.servo_body — shaft axis +Z at origin,
+ case hanging -X, base at z=0.
+@@ -33,20 +29,28 @@ from servo_st3215 import servo_body, horn_screw_positions
+ P = params()
+ S = P["servo_st3215"]
+ PR = P["print"]
++FILL_D = S["horn_bcd"]                     # 14: undercut fill diameter
++NUT_AF, NUT_T = 4.0, 1.6                   # M2 hex nut
++NUT_Z0 = S["body_h"] + 1.0                 # slot floor 1 mm above the case top
++
++
++def _undercut_fill(extra=0.0):
++    return Pos(0, 0, S["body_h"] + S["boss_h"]/2) * Cylinder(FILL_D/2 + extra, S["boss_h"])
+ 
+ 
+ def servo_blank():
+-    """Exact ST3215 envelope, printable: solid case + boss + drilled horn."""
+-    blank = servo_body(P, clearance=0.0)
+-    # horn screws: 4x M2 self-tap on the true BCD + center pilot, cut deep
+-    # enough to reach through horn + boss into the case top
++    blank = servo_body(P, clearance=0.0) + _undercut_fill()
+     horn_top = S["body_h"] + S["boss_h"] + S["horn_h"]
+-    for hx, hy in horn_screw_positions(P):
+-        blank -= Pos(hx, hy, horn_top - 5) * Cylinder(1.7 / 2, 10)
+-    blank -= Pos(0, 0, horn_top - 5) * Cylinder(2.1 / 2, 10)
+-    # 3-dot "blank" engraving on both case side faces (font-free)
++    r = S["horn_bcd"] / 2
++    for k, (hx, hy) in enumerate(horn_screw_positions(P)):
++        ang = k * 90.0
++        blank -= Pos(hx, hy, horn_top - 4) * Cylinder(PR["screw_m2_clear"]/2, 12)   # through
++        slot_r0, slot_r1 = r - (NUT_AF + 0.3)/2, S["horn_d"]/2 + 1.0            # side-loaded nut
++        blank -= Rot(0, 0, ang) * Pos((slot_r0 + slot_r1)/2, 0, NUT_Z0 + (NUT_T + 0.3)/2) * \
++            Box(slot_r1 - slot_r0, NUT_AF + 0.3, NUT_T + 0.3)
++    blank -= Pos(0, 0, horn_top - 5) * Cylinder(2.1 / 2, 10)                   # centre pilot
+     front = S["shaft_offset"]
+-    cx = front - S["body_l"] / 2                      # case x-center
++    cx = front - S["body_l"] / 2
+     for sy in (1, -1):
+         for d in range(3):
+             blank -= Pos(cx - 6 + 6 * d, sy * (S["body_w"] / 2 - 0.5),
+@@ -55,37 +59,46 @@ def servo_blank():
+ 
+ 
+ if __name__ == "__main__":
++    import sys
+     b = servo_blank()
+     export(b, "servo_blank")
+-
+-    # ---- check 1: envelope identity — the blank must not exceed the dummy
+-    # every pocket in the tree was subtracted with (blank material outside the
+-    # reference dummy = a blank that binds where a real servo would not)
+-    dummy = servo_body(P, clearance=0.001)
+-    excess = b - dummy
+-    v_ex = 0.0 if excess is None else excess.volume
+-    print(f"blank outside reference dummy envelope: {v_ex:.2f} mm^3 "
++    v = lambda x: 0.0 if x is None else x.volume
++    fails = []
++    # 1: envelope identity — nothing outside the reference dummy except the
++    # declared Ø14 undercut fill
++    ref = servo_body(P, clearance=0.001) + _undercut_fill(0.001)
++    v_ex = v(b - ref)
++    print(f"blank outside reference envelope (+Ø{FILL_D} fill): {v_ex:.2f} mm^3 "
+           f"({'OK' if v_ex < 1.0 else 'OVERSIZE — would bind'})")
+-
+-    # ---- check 2: the blank must drop into all three servo cradles exactly
+-    # like the real dummy (poses copied from the consuming modules)
+-    from part_coxa import coxa_yaw_base, coxa_fork, femur_servo_placed, \
+-        CASE_BASE_Y, Z_FEMUR_AXIS, L1
+-    from part_tibia import tibia_knee_carrier, KNEE_X, Z_AXIS
++    if v_ex >= 1: fails.append("envelope")
++    # 2: drops into all three cradles like the real dummy, and is RETAINED
++    from part_coxa import coxa_yaw_base, coxa_fork, coxa_fork_strap, CASE_BASE_Y, Z_FEMUR_AXIS, L1
++    from part_tibia import tibia_knee_carrier, tibia_knee_strap, KNEE_X, Z_AXIS
++    fork, carrier = coxa_fork(), tibia_knee_carrier()
+     poses = [
+-        ("coxa base cradle (yaw pose)", coxa_yaw_base(), b),
+-        ("coxa fork rails (femur pose)", coxa_fork(),
++        ("coxa base cradle (yaw pose)", coxa_yaw_base(), None, b),
++        ("coxa fork rails (femur pose)", fork, coxa_fork_strap(),
+          Pos(L1, CASE_BASE_Y, Z_FEMUR_AXIS) * Rot(90, 0, 0) * b),
+-        ("knee carrier (knee pose)", tibia_knee_carrier(),
++        ("knee carrier (knee pose)", carrier, tibia_knee_strap(),
+          Pos(KNEE_X, CASE_BASE_Y, Z_AXIS) * Rot(90, 0, 0) * b),
+     ]
+-    worst = 0.0
+-    for name, cradle, posed in poses:
+-        inter = cradle & posed
+-        v = 0.0 if inter is None else inter.volume
+-        worst = max(worst, v)
+-        print(f"blank x {name}: {v:.2f} mm^3 ({'OK' if v < 1.0 else 'BINDS'})")
+-    assert v_ex < 1.0 and worst < 1.0, "servo blank fails fit checks"
++    for name, cradle, strap, posed in poses:
++        fit = v(cradle & posed)
++        line = f"blank x {name}: {fit:.2f} mm^3 ({'OK' if fit < 1.0 else 'BINDS'})"
++        if fit >= 1: fails.append(name)
++        if strap is not None:
++            lips = v((Pos(0, -2, 0) * posed) & cradle)
++            held = v((Pos(0, 0, 2) * posed) & strap)
++            line += f"; nudge -Y {lips:.0f} mm^3 ({'lips hold' if lips > 1 else 'FREE'}), " \
++                    f"+Z {held:.0f} mm^3 ({'strap holds' if held > 1 else 'FREE'})"
++            if lips <= 1 or held <= 1: fails.append(name + " retention")
++        print(line)
++    # 3: nut slots empty, M2 passes coupler-side to nut
++    for k, (hx, hy) in enumerate(horn_screw_positions(P)):
++        pin = Pos(hx, hy, S["body_h"] + 3) * Cylinder(1.0, 8)
++        if v(pin & b) > 0.5: fails.append(f"M2 path {k}")
++    print(f"M2 through-paths clear: {'yes' if not any(f.startswith('M2') for f in fails) else 'NO'}")
+     bb = b.bounding_box()
+-    print(f"servo_blank: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm "
+-          f"— PLA, 0.2 mm, 2 walls, 10%, qty 4 (~25 g ea)")
++    print(f"servo_blank: {bb.size.X:.1f} x {bb.size.Y:.1f} x {bb.size.Z:.1f} mm — PLA, horn UP, 2 walls, 10%, qty 4")
++    print(f"part_servo_blank checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
++    if fails: sys.exit(1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_smallwins.py b/rocky_v0.8.0_code/rocky/cad/part_smallwins.py
+index a24ceae..6f27ac9 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_smallwins.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_smallwins.py
+@@ -70,6 +70,11 @@ def calib_gauge_hip():
+     guss = Pos(0, 14, JIG_BASE_TOP + 30) * Box(20, 8, 54)
+     guss += Pos(0, -14, JIG_BASE_TOP + 30) * Box(20, 8, 54)
+     top = Pos(0, 0, cradle_z - 2) * Box(34, 30, 4)        # cradle shelf
++    # D046 cantilever rule: the shelf overhung the 26 x 20 shaft by 4-5 mm at
++    # 90° with "no support" (a drooping REFERENCE surface). Lofted pedestal,
++    # 34-40° from vertical, carries the shelf edge support-free.
++    top += loft([Plane.XY.offset(cradle_z - 10) * Rectangle(26, 20),
++                 Plane.XY.offset(cradle_z - 4) * Rectangle(34, 30)])
+     for sy in (1, -1):                                    # side cheeks
+         top += Pos(0, sy * 14.2, cradle_z + 2) * Box(34, 2.4, 8)
+     t = base + shaft + guss + top
+diff --git a/rocky_v0.8.0_code/rocky/cad/part_tibia.py b/rocky_v0.8.0_code/rocky/cad/part_tibia.py
+index 3ebfa97..46cccfe 100644
+--- a/rocky_v0.8.0_code/rocky/cad/part_tibia.py
++++ b/rocky_v0.8.0_code/rocky/cad/part_tibia.py
+@@ -18,6 +18,7 @@ and get posed by the assembly/preview scripts.
+ from build123d import *
+ from common import params, export
+ from servo_st3215 import servo_body, horn_screw_positions
++from servo_mount import retention_lips, strap_tap_bores, servo_strap
+ 
+ P = params()
+ S = P["servo_st3215"]
+@@ -54,9 +55,11 @@ def tibia_knee_carrier():
+                Box(wall, y1-y0, wall_top - z_floor_top + 4)
+     car += Pos((x0+x1)/2, y1 + FIT + wall/2, (z_floor_top - 4 + wall_top)/2) * \
+            Box(x1-x0 + 2*(FIT+wall), wall, wall_top - z_floor_top + 4)
+-    # zip-tie slots in end walls above the case
+-    for wx in (x0 - FIT - wall/2, x1 + FIT + wall/2):
+-        car -= Pos(wx, (y0+y1)/2, Z_AXIS + S["body_w"]/2 + 2) * Box(6, 4, 3.2)
++    # D046 retention (was zip-tie slots): lips over the horn-side corners
++    # block the pull toward the femur link; a strap (tibia_knee_strap) holds
++    # the case down with 2x M3 thread-forming into the wall tops
++    car += retention_lips(x0, x1, y0, z_floor_top, z_floor_top, wall_top, wall)
++    car = strap_tap_bores(car, x0, x1, (y0+y1)/2, wall_top, wall)
+     # tube clamp boss under the knee, tube axis vertical at (KNEE_X, 0)
+     boss = Pos(KNEE_X, 0, z_floor_top - 4 - 11) * Cylinder(19/2, 22)
+     boss -= Pos(KNEE_X, 0, z_floor_top - 4 - 12) * Cylinder((TUBE_OD + FIT)/2, 26)
+@@ -79,6 +82,13 @@ def tibia_knee_carrier():
+     web = Pos(KNEE_X, (y0+y1)/2 - 6, z_floor_top - 3) * Box(24, 12, 6)
+     return car + boss + web
+ 
++def tibia_knee_strap():
++    x0 = KNEE_X + S["shaft_offset"] - S["body_l"]
++    x1 = KNEE_X + S["shaft_offset"]
++    y0, y1 = CASE_BASE_Y - S["body_h"], CASE_BASE_Y
++    return servo_strap(x0, x1, (y0+y1)/2, Z_AXIS + S["body_w"]/2,
++                       Z_AXIS + S["body_w"]/2 + 5, 3.3)
++
+ def tibia_sea_outer():
+     """Local frame: +Z down the shin; z=0 at tube end. Clamps tube, houses spring."""
+     body = Pos(0, 0, 14) * Cylinder(19/2, 28)               # z 0..28
+@@ -122,11 +132,24 @@ if __name__ == "__main__":
+     export(carrier, "tibia_knee_carrier")
+     export(outer, "tibia_sea_outer")
+     export(slider, "tibia_sea_slider")
++    strap = tibia_knee_strap()
++    export(strap, "tibia_knee_strap")
++    fails = []
+ 
+     # quick static interference: carrier vs knee servo, carrier vs femur link plane
+     servo = knee_servo_placed()
+     inter = carrier & servo
+     print("carrier x knee-servo intersection mm^3:", 0.0 if inter is None else round(inter.volume, 2))
++    if inter is not None and inter.volume > 1: fails.append("carrier x servo")
++    vv = lambda x: 0.0 if x is None else x.volume
++    for name, val, good in (
++            ("strap x knee servo", vv(strap & servo), lambda v: v < 1),
++            ("strap x carrier", vv(strap & carrier), lambda v: v < 1),
++            ("knee servo nudged -Y x carrier (lips)", vv((Pos(0, -2, 0) * servo) & carrier), lambda v: v > 1),
++            ("knee servo nudged +Z x strap", vv((Pos(0, 0, 2) * servo) & strap), lambda v: v > 1),
++            ("knee servo drop-in (+Z 10) x carrier", vv((Pos(0, 0, 10) * servo) & carrier), lambda v: v < 1)):
++        print(f"{name}: {val:.2f} mm^3 ({'OK' if good(val) else 'FAIL'})")
++        if not good(val): fails.append(name)
+ 
+     # ---- I2 bayonet engagement check (D020) ----
+     # pose the slider stub into the hand hub socket: slider z24 (tip) lands at
+@@ -148,3 +171,7 @@ if __name__ == "__main__":
+     v = 0.0 if inter is None else inter.volume
+     print(f"I2 locked + pulled 3 mm: intersection = {v:.2f} mm^3 "
+           f"({'RETAINS (good)' if v > 1.0 else 'FALLS OUT — slot geometry wrong'})")
++    if v <= 1.0: fails.append("I2 retention")
++    print(f"part_tibia checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
++    if fails:
++        import sys; sys.exit(1)
+diff --git a/rocky_v0.8.0_code/rocky/cad/print_estimate.py b/rocky_v0.8.0_code/rocky/cad/print_estimate.py
+index 63f5e93..1fca09e 100644
+--- a/rocky_v0.8.0_code/rocky/cad/print_estimate.py
++++ b/rocky_v0.8.0_code/rocky/cad/print_estimate.py
+@@ -74,6 +74,8 @@ PLATES = {
+     ],
+     "P4 one leg (+3 blanks)": [
+         ("coxa_yaw_base", 1, 0.55, 0.2), ("coxa_fork", 1, 0.55, 0.2),
++        ("coxa_crown_cap", 1, 0.6, 0.2), ("coxa_fork_strap", 1, 0.6, 0.2),
++        ("tibia_knee_strap", 1, 0.6, 0.2),
+         ("femur_link", 1, 0.6, 0.2), ("tibia_knee_carrier", 1, 0.5, 0.2),
+         ("tibia_sea_outer", 1, 0.7, 0.2), ("horn_coupler", 3, 0.7, 0.2),
+         ("servo_blank", 3, 0.35, 0.2),  # 2 walls / 10 % — deliberately airy
+diff --git a/rocky_v0.8.0_code/rocky/cad/run_all_checks.py b/rocky_v0.8.0_code/rocky/cad/run_all_checks.py
+index 1a2b12d..60f0cce 100644
+--- a/rocky_v0.8.0_code/rocky/cad/run_all_checks.py
++++ b/rocky_v0.8.0_code/rocky/cad/run_all_checks.py
+@@ -29,6 +29,7 @@ MODULES = [
+     "part_coupler", "part_footpad", "part_fit_ladder", "part_smallwins",
+     "part_shell", "part_busboard", "part_stand", "part_tools",
+     "part_clips", "part_dock", "part_servo_blank",
++    "part_leg_coupons", "check_assembly",        # D046: joint coupons + joint suite
+ ]
+ 
+ 
+diff --git a/rocky_v0.8.0_code/rocky/cad/servo_mount.py b/rocky_v0.8.0_code/rocky/cad/servo_mount.py
+new file mode 100644
+index 0000000..c80fe0d
+--- /dev/null
++++ b/rocky_v0.8.0_code/rocky/cad/servo_mount.py
+@@ -0,0 +1,66 @@
++"""Servo retention features shared by every ST3215 cradle (D046).
++
++v0.1 held each servo with zip ties through wall slots; a 2 mm nudge of any
++blank out of any cradle met zero material. Two features replace that,
++independent of the servo's (still unmeasured) case screw holes:
++
++  retention_lips : short lips in FRONT of the case's horn-side corners
++                   (the -Y face, y0) attached to the end walls — block the
++                   pull toward the link. The case still drops in from +Z.
++  servo_strap    : printed bar across the two end walls, 2x M3 thread-
++                   forming into the wall tops, with a downstand that presses
++                   the case top — blocks +Z. Prints flat (bar face down).
++
++Frames: the caller's leg-local frame; the servo case spans x [cx0, cx1],
++y [cy0, cy1] (cy0 = horn-side face), z [cz0, cz1]; walls are wall_t thick
++just outside cx0/cx1 (FIT gap), tops at z_wall_top.
++"""
++from build123d import *
++from common import params
++
++P = params()
++PR = P["print"]
++FIT = PR["clearance_fit"]
++LIP_T = 2.7          # lip thickness (y), stands 0.0..-2.7 off the case face
++LIP_W = 4.0          # lip reach along x from the wall inner face (clears a Ø14 blank horn zone)
++STRAP_T = 3.0
++STRAP_W = 10.0
++
++
++def retention_lips(cx0, cx1, cy0, z_lo_lo, z_lo_hi, z_hi, wall_t):
++    """Two lips (one per end wall). z_lo_lo/z_lo_hi = where each wall's
++    solid starts (-X wall may start high: the fork's collar)."""
++    lips = None
++    for x_in, z_lo in ((cx0 - FIT, z_lo_lo), (cx1 + FIT, z_lo_hi)):
++        # from the wall's outer face through the wall to LIP_W inside
++        if x_in < (cx0 + cx1) / 2:
++            x_a, x_b = x_in - wall_t, x_in + LIP_W
++        else:
++            x_a, x_b = x_in - LIP_W, x_in + wall_t
++        lip = Pos((x_a + x_b) / 2, cy0 - LIP_T / 2, (z_lo + z_hi) / 2) * \
++            Box(x_b - x_a, LIP_T, z_hi - z_lo)
++        lips = lip if lips is None else lips + lip
++    return lips
++
++
++def strap_tap_bores(solid, cx0, cx1, cy_c, z_wall_top, wall_t):
++    """Cut the two M3 thread-forming bores into the wall tops."""
++    for wx in (cx0 - FIT - wall_t / 2, cx1 + FIT + wall_t / 2):
++        solid -= Pos(wx, cy_c, z_wall_top - 4) * Cylinder(PR["screw_m3_tap"] / 2, 8.2)
++    return solid
++
++
++def servo_strap(cx0, cx1, cy_c, cz1, z_wall_top, wall_t):
++    """Bar over both wall tops + downstand onto the case top (FIT above it)."""
++    x_a = cx0 - FIT - wall_t
++    x_b = cx1 + FIT + wall_t
++    bar = Pos((x_a + x_b) / 2, cy_c, z_wall_top + STRAP_T / 2) * \
++        Box(x_b - x_a, STRAP_W, STRAP_T)
++    d_lo, d_hi = cz1 + FIT, z_wall_top
++    down = Pos((cx0 + cx1) / 2, cy_c, (d_lo + d_hi) / 2) * \
++        Box(cx1 - cx0 - 2 * FIT, STRAP_W, d_hi - d_lo)
++    strap = bar + down
++    for wx in (cx0 - FIT - wall_t / 2, cx1 + FIT + wall_t / 2):
++        strap -= Pos(wx, cy_c, z_wall_top + STRAP_T / 2) * \
++            Cylinder(PR["screw_m3_clear"] / 2, STRAP_T + 2)
++    return strap
+diff --git a/rocky_v0.8.0_code/rocky/docs/DESIGN_BACKLOG.md b/rocky_v0.8.0_code/rocky/docs/DESIGN_BACKLOG.md
+index 76d12c9..574d4c6 100644
+--- a/rocky_v0.8.0_code/rocky/docs/DESIGN_BACKLOG.md
++++ b/rocky_v0.8.0_code/rocky/docs/DESIGN_BACKLOG.md
+@@ -40,3 +40,6 @@ needed (B1 negative), piano wire 0.8 mm (B11, hardware-store), magnets
+ |---|---|---|---|
+ | B17 | Printed ST3215 servo blanks | **SHIPPED (s6)** | `part_servo_blank.py` — exact-envelope PLA stand-ins so the leg chain assembles WEEKS before the servo order lands (the servos are the joints). Boolean-proven in all three cradles (coxa base / fork rails / knee carrier, 0.00 mm³ each); horn disc carries the true M2 BCD so couplers and femur_link bolt on. Retire on servo-arrival day. |
+ | B18 | Beckon / "come-here" gesture | **SHIPPED (s6, same day)** | `pebble_gestures.beckon` + `sim/run_beckon.py` (narrated video): arm up-out, three 80°-knee curls with the claw opening on each pull-in, synced to a rising `curious_question`. Lesson en route: position-waypoint poses near joint limits SATURATE silently — expressive poses are authored in JOINT space now (D035). Name-motif greeting still rides chord-speak v0.3. |
++| B19 | Two-sided hip/knee brackets (rear idler) | **DEFERRED (hardware)** | D046 leaves hip and knee single-sided: all leg bending goes through the servo output shaft. VERIFY on servo arrival whether the ST3215 has a rear idler boss/hole; if yes, the femur link grows a second arm riding a bearing on it and the knee carrier likewise. |
++| B20 | Case-screw servo retention | **DEFERRED (hardware)** | D046 lips + straps are independent of the (unmeasured) case holes. Measure the ST3215 case screw pattern; replace strap tap bores with case screws through the rail walls. |
++| B21 | Printability: cantilever rule | **SHIPPED (2026-09-17)** | `check_printability.py`: an overhang blob whose boundary mostly does not touch the layer below is a CANTILEVER (vs a bridge over a bore); ≥ 3 mm with a 'no support' plan is a hard failure. Regression: the v0.1 servo blank's horn disc (7 mm) fails, v0.2 passes. |
+diff --git a/rocky_v0.8.0_code/rocky/docs/decisions.md b/rocky_v0.8.0_code/rocky/docs/decisions.md
+index f66b417..5de14d0 100644
+--- a/rocky_v0.8.0_code/rocky/docs/decisions.md
++++ b/rocky_v0.8.0_code/rocky/docs/decisions.md
+@@ -49,3 +49,4 @@
+ | D043 | 09-01 | **scan_summary is live in every sim world** (`SimBackend`: the sim_lidar ray fan, 8 map-frame sectors + nearest + frontiers) **and a new `ROCKY_WORLD=room` binds the sim_lidar room for patrols; the result carries its own honesty note: a 2D horizontal scan cannot see voids — cliff safety remains the foot-contact guard.** `sim/run_patrol.py`: first mission built purely on the tool surface (goto/scan/say), 5/5 waypoints, chord-speak report, JSON artifact. | Replaces the "no lidar in the cliff world" refusal with a sensor that exists AND tells you what it can't do — the absent-tool>lying-tool rule, third form: a present tool that documents its blind spot. Patrol scans cross-check geometry (north wall at 0.737 m from y=0.55 — exact). |
+ | D044 | 09-01 | **Torque re-audit on D039 masses (`sim/torque_audit.py`): the servo-sizing driver is now SELF-RIGHTING, not manipulation.** Robot 2840 g. Walking 12–16 % of ST3215 stall; untucked-carry hip 17 %; the one WARM number is the recovery knee push (W/2 through one crouched leg): 1.47 N·m = 50 % ST3215 / 30 % STS3250. Buy recommendation (order sheet v2, prices re-verified 09-01): 10× ST3215 (yaw/hip) + 5× STS3250 knees + spare, ≈ $585; all-ST3215 remains a legal $435 budget path. ST3215-HS rejected (20 kg·cm = torque downgrade). | D015's scary 43–65 % manipulation case evaporated with real masses (femur is 15.7 g, not 30 g with the old torso). Static holding torques only — dynamics ride on top, bench day re-baselines (D017). STS3250 caveats stand: 6–12 V spec vs 12.6 V full 3S, 4.2 A stall ×2 simultaneous knees for the fuse math. |
+ | D045 | 09-01 | **recover1 remains the shipped righter — the v2 retrain is a recorded NEGATIVE result with a diagnosed cause and a shipped fix.** Final numbers (same 20 seeds, deterministic): recover1 12/20 stood-after-handoff (re-verified today) vs recover2@3.67M 2/20 (barely above hold-pose's 2/20); in the FALLEN showcase recover2 stood 5/5 but every stand came from the 10 s deadline ramp, while recover1 handed off properly in 3/5 and walked ~0.55 m after vs ~0.2. `run_reflex_fallen.default_ckpt` prefers recover1. Cause: with clip(±1) + the 5 rad/s rate limit, WIDE actions are a strategy (saturated samples = bang-bang) — sigma inflated past 1.0 and kept rising even with ent_coef 0 (13.8 → 22.1 nats across the run), so the deterministic mean decayed while stochastic training returns climbed (~610). Fix shipped: `--log-std-max` cap in train_ppo (e.g. −0.5); the capped v2 retrain is the queued laptop experiment. | Three lessons at once: (1) training-time success rate ≠ deployable policy when sigma is a controller; (2) removing the entropy bonus does NOT stop sigma growth here — the policy gradient itself inflates it through the clip; (3) eval the MEAN early (the 2.58M interim eval caught this with 1.9M steps still to burn). The v2 reward idea (success = handoff criterion) is still right — it produced training-time terminations v1 never had — it just needs the cap under it. |
++| D046 | 09-17 | **The leg chain is rebuilt around its five JOINTS, and a joint suite (`cad/check_assembly.py`) is a CI module: for every joint it asserts the assembly ORDER (each part arrives along an open path; driver columns clear of everything present when the screw is driven), alignment across both mating parts (coaxial bores, castellation fit), the thread/nut path, and capture (a 2 mm nudge meets material or is a declared bolted direction). Concretely: the crown arm is a bolt-on cap over an M3 axle (printed stub gone); the femur link takes the horn coupler on both hubs (never touches a horn); coupler lobes moved off their own M2 heads and the recess clamp angles are mirrored; lips + straps replace zip ties in every cradle (`servo_mount.py`); blank v0.2 (Ø14 undercut fill, nut slots); four joint COUPONS that are boolean clips of the production solids, printed before any full part. Deck, shell and I1–I6 untouched. The yaw joint deliberately has no coupler (clamp heads would sit under the cap).** | Tyler's first bench dry-fit (laptop, 2026-09-17): the femur link attached to nothing, the blanks did not attach, the coxa stage "wasn't great" and nothing past it connected. Probes on the v0.8.0 tree: all four yaw-horn screws sat under the crown arm (45 mm³ of base in every driver column — the in-module check had only tested the fork), the pre-bolted fork could not slide in either (stub vs arm), so NO assembly order existed; the vertical budget was 0.5 mm; each femur hub was 4x M2 into a 3 mm PLA disc then 3 mm of air, no location; every blank was zip-tie-only; the coupler (§3.4) was an orphan. D036–D038 proved non-overlap, single-solid and print physics — none asked whether two parts could be brought together or what held them. Same failure class, fourth appearance; the fix is the missing check class, not another part fix. |
+diff --git a/rocky_v0.8.0_code/rocky/sim/mass_audit.py b/rocky_v0.8.0_code/rocky/sim/mass_audit.py
+index 51fa92f..1715aee 100644
+--- a/rocky_v0.8.0_code/rocky/sim/mass_audit.py
++++ b/rocky_v0.8.0_code/rocky/sim/mass_audit.py
+@@ -56,11 +56,13 @@ def main():
+         "electronics_pod": HW["electronics_pod"],
+         "yaw servos x5": 5 * HW["servo_st3215"],
+         "coxa_yaw_base x5": 5 * printed_g("coxa_yaw_base"),
++        "coxa_crown_cap x5": 5 * printed_g("coxa_crown_cap", PETG),   # D046
+         "bearings x5": 5 * HW["bearing_683zz"],
+     }
+     # ---- per leg links (the moving mass the gait carries)
+     coxa = {                     # rotates about yaw: fork + femur servo
+         "coxa_fork": printed_g("coxa_fork"),
++        "coxa_fork_strap": printed_g("coxa_fork_strap", PETG),        # D046
+         "femur servo": HW["servo_st3215"],
+         "horn_coupler": printed_g("horn_coupler"),
+         "fasteners": HW["fasteners_per_leg"] / 3,
+@@ -72,6 +74,7 @@ def main():
+     }
+     tibia = {                    # swings about the knee: knee servo + carrier + shin + hand
+         "tibia_knee_carrier": printed_g("tibia_knee_carrier"),
++        "tibia_knee_strap": printed_g("tibia_knee_strap", PETG),      # D046
+         "knee servo": HW["servo_st3215"],
+         "tibia_tube": HW["tibia_tube"],
+         "tibia_sea_outer": printed_g("tibia_sea_outer"),
+diff --git a/rocky_v0.8.0_code/rocky/sim/mass_budget.json b/rocky_v0.8.0_code/rocky/sim/mass_budget.json
+index e294111..5c1fc85 100644
+--- a/rocky_v0.8.0_code/rocky/sim/mass_budget.json
++++ b/rocky_v0.8.0_code/rocky/sim/mass_budget.json
+@@ -1,8 +1,8 @@
+ {
+- "torso": 1462.4,
+- "coxa": 86.2,
+- "femur": 15.7,
+- "tibia": 135.0,
++ "torso": 1477.3,
++ "coxa": 89.2,
++ "femur": 15.1,
++ "tibia": 138.5,
+  "hand": 38.6,
+  "_note": "derived from cad/out STL volumes x PLA/PETG x print_estimate fill factors + params.mass_hw (ALL VERIFY); grams"
+ }
+\ No newline at end of file

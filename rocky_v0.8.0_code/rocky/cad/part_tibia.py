@@ -18,6 +18,7 @@ and get posed by the assembly/preview scripts.
 from build123d import *
 from common import params, export
 from servo_st3215 import servo_body, horn_screw_positions
+from servo_mount import retention_lips, strap_tap_bores, servo_strap
 
 P = params()
 S = P["servo_st3215"]
@@ -54,9 +55,11 @@ def tibia_knee_carrier():
                Box(wall, y1-y0, wall_top - z_floor_top + 4)
     car += Pos((x0+x1)/2, y1 + FIT + wall/2, (z_floor_top - 4 + wall_top)/2) * \
            Box(x1-x0 + 2*(FIT+wall), wall, wall_top - z_floor_top + 4)
-    # zip-tie slots in end walls above the case
-    for wx in (x0 - FIT - wall/2, x1 + FIT + wall/2):
-        car -= Pos(wx, (y0+y1)/2, Z_AXIS + S["body_w"]/2 + 2) * Box(6, 4, 3.2)
+    # D046 retention (was zip-tie slots): lips over the horn-side corners
+    # block the pull toward the femur link; a strap (tibia_knee_strap) holds
+    # the case down with 2x M3 thread-forming into the wall tops
+    car += retention_lips(x0, x1, y0, z_floor_top, z_floor_top, wall_top, wall)
+    car = strap_tap_bores(car, x0, x1, (y0+y1)/2, wall_top, wall)
     # tube clamp boss under the knee, tube axis vertical at (KNEE_X, 0)
     boss = Pos(KNEE_X, 0, z_floor_top - 4 - 11) * Cylinder(19/2, 22)
     boss -= Pos(KNEE_X, 0, z_floor_top - 4 - 12) * Cylinder((TUBE_OD + FIT)/2, 26)
@@ -78,6 +81,13 @@ def tibia_knee_carrier():
     # bridge web joining boss to floor
     web = Pos(KNEE_X, (y0+y1)/2 - 6, z_floor_top - 3) * Box(24, 12, 6)
     return car + boss + web
+
+def tibia_knee_strap():
+    x0 = KNEE_X + S["shaft_offset"] - S["body_l"]
+    x1 = KNEE_X + S["shaft_offset"]
+    y0, y1 = CASE_BASE_Y - S["body_h"], CASE_BASE_Y
+    return servo_strap(x0, x1, (y0+y1)/2, Z_AXIS + S["body_w"]/2,
+                       Z_AXIS + S["body_w"]/2 + 5, 3.3)
 
 def tibia_sea_outer():
     """Local frame: +Z down the shin; z=0 at tube end. Clamps tube, houses spring."""
@@ -122,11 +132,24 @@ if __name__ == "__main__":
     export(carrier, "tibia_knee_carrier")
     export(outer, "tibia_sea_outer")
     export(slider, "tibia_sea_slider")
+    strap = tibia_knee_strap()
+    export(strap, "tibia_knee_strap")
+    fails = []
 
     # quick static interference: carrier vs knee servo, carrier vs femur link plane
     servo = knee_servo_placed()
     inter = carrier & servo
     print("carrier x knee-servo intersection mm^3:", 0.0 if inter is None else round(inter.volume, 2))
+    if inter is not None and inter.volume > 1: fails.append("carrier x servo")
+    vv = lambda x: 0.0 if x is None else x.volume
+    for name, val, good in (
+            ("strap x knee servo", vv(strap & servo), lambda v: v < 1),
+            ("strap x carrier", vv(strap & carrier), lambda v: v < 1),
+            ("knee servo nudged -Y x carrier (lips)", vv((Pos(0, -2, 0) * servo) & carrier), lambda v: v > 1),
+            ("knee servo nudged +Z x strap", vv((Pos(0, 0, 2) * servo) & strap), lambda v: v > 1),
+            ("knee servo drop-in (+Z 10) x carrier", vv((Pos(0, 0, 10) * servo) & carrier), lambda v: v < 1)):
+        print(f"{name}: {val:.2f} mm^3 ({'OK' if good(val) else 'FAIL'})")
+        if not good(val): fails.append(name)
 
     # ---- I2 bayonet engagement check (D020) ----
     # pose the slider stub into the hand hub socket: slider z24 (tip) lands at
@@ -148,3 +171,7 @@ if __name__ == "__main__":
     v = 0.0 if inter is None else inter.volume
     print(f"I2 locked + pulled 3 mm: intersection = {v:.2f} mm^3 "
           f"({'RETAINS (good)' if v > 1.0 else 'FALLS OUT — slot geometry wrong'})")
+    if v <= 1.0: fails.append("I2 retention")
+    print(f"part_tibia checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
+    if fails:
+        import sys; sys.exit(1)

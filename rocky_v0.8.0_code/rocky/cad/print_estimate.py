@@ -74,6 +74,8 @@ PLATES = {
     ],
     "P4 one leg (+3 blanks)": [
         ("coxa_yaw_base", 1, 0.55, 0.2), ("coxa_fork", 1, 0.55, 0.2),
+        ("coxa_crown_cap", 1, 0.6, 0.2), ("coxa_fork_strap", 1, 0.6, 0.2),
+        ("tibia_knee_strap", 1, 0.6, 0.2),
         ("femur_link", 1, 0.6, 0.2), ("tibia_knee_carrier", 1, 0.5, 0.2),
         ("tibia_sea_outer", 1, 0.7, 0.2), ("horn_coupler", 3, 0.7, 0.2),
         ("servo_blank", 3, 0.35, 0.2),  # 2 walls / 10 % — deliberately airy

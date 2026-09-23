@@ -42,6 +42,8 @@ OUT = os.path.join(HERE, "out")
 
 LAYER = 0.2
 OVERHANG_STEP = 0.30       # mm of outward step per layer before it's an overhang
+CANTILEVER_ADJ = 0.6      # boundary fraction touching the layer below: less = cantilever
+CANTILEVER_HARD = 3.0     # mm of unsupported cantilever that fails a 'no support' plan
 THIN_HARD = 0.8            # < 2 perimeters at 0.4 mm: unprintable
 THIN_SOFT = 1.6            # < 4 perimeters: weak, worth knowing
 THIN_MIN_AREA = 2.0        # mm² for a single thin blob before it's a wall (feather-edges are ~0.2)
@@ -71,9 +73,14 @@ ORIENT = {
     "tibia_sea_slider": None, "tool_hook": None, "tool_scoop": None,
     # leg
     "coxa_yaw_base": None, "coxa_fork": None,
-    "femur_link": rot([1, 0, 0], 90),            # flat on its side
+    "coxa_crown_cap": rot([1, 0, 0], 180),       # bearing pocket UP (D046)
+    "coxa_fork_strap": rot([1, 0, 0], 180),      # bar on the bed, downstand up
+    "tibia_knee_strap": rot([1, 0, 0], 180),
+    "femur_link": rot([1, 0, 0], 90),            # flat, recess face UP
     "tibia_knee_carrier": None, "tibia_sea_outer": None,
     "horn_coupler": None,
+    "coupon_j1_hub": None, "coupon_j1_post": None,          # D046 joint coupons
+    "coupon_j2_hub": rot([1, 0, 0], 90), "coupon_j2_horn": None,
     "servo_blank": None,                          # horn UP (audit: the side-down pose islands the horn disc)
     # body / stand / shell
     "body_deck": None, "stand_base": None, "stand_crown": None,
@@ -110,6 +117,9 @@ SUPPORT_POLICY = {
     "servo_blank": "none", "calib_gauge_hip": "none", "stand_crown": "yes",
     "coxa_fork": "yes",   # only a 3 x 22 mm strip under the -X collar
     "hand_cam": "none", "femur_link": "none",
+    "coxa_crown_cap": "none", "coxa_fork_strap": "none", "tibia_knee_strap": "none",
+    "coupon_j1_hub": "none", "coupon_j1_post": "none", "coupon_j2_hub": "none",
+    "coupon_j2_horn": "none",
     "tibia_sea_outer": "none", "horn_coupler": "none", "fit_ladder": "none",
     "body_deck": "none",
 }
@@ -182,6 +192,12 @@ def audit(name, verbose=False):
         hits = ray.intersects_any(origins, dirs)
         return bool(np.any(hits))
     overhang_area, widest_step, widest_z = 0.0, 0.0, None
+    # D046 (2026-09-17): a CANTILEVER is an overhang blob whose boundary
+    # mostly does NOT touch the layer below (a disc on a boss); a BRIDGE
+    # (roof over a bore) touches it all round. The v0.1 servo blank's Ø20
+    # horn disc on a Ø6 boss — 7 mm of 90° cantilever, "no support" — only
+    # ever produced a warning here.
+    widest_cant, widest_cant_z = 0.0, None
     thin_hard_max, thin_soft_max, thin_hard_z = 0.0, 0.0, None
     prev_thin = []
     max_layer_area = 0.0
@@ -211,6 +227,10 @@ def audit(name, verbose=False):
                         w = _width_of_blob(b)
                         if w > widest_step:
                             widest_step, widest_z = w, float(z)
+                        bl = b.boundary.length
+                        adj = b.boundary.intersection(prev.buffer(0.35)).length / bl if bl else 1.0
+                        if adj < CANTILEVER_ADJ and w > widest_cant:
+                            widest_cant, widest_cant_z = w, float(z)
         if k % THIN_EVERY == 0:
             # hard: the LARGEST single thin blob (a real wall segment); the
             # summed area is dominated by 0.2 mm² feather-edges where bores
@@ -239,6 +259,8 @@ def audit(name, verbose=False):
         "overhang_area": round(overhang_area, 1),
         "widest_overhang_step": round(widest_step, 1),
         "widest_overhang_z": None if widest_z is None else round(widest_z, 1),
+        "widest_cantilever": round(widest_cant, 1),
+        "widest_cantilever_z": None if widest_cant_z is None else round(widest_cant_z, 1),
         "thin_hard_area": round(thin_hard_max, 2),
         "thin_hard_z": None if thin_hard_z is None else round(thin_hard_z, 2),
         "thin_soft_area": round(thin_soft_max, 2),
@@ -259,6 +281,9 @@ def audit(name, verbose=False):
         hard.append(f"wall segment < {THIN_HARD} mm: {thin_hard_max:.1f} mm² at z={thin_hard_z:.1f}")
     if not res["bed_ok"]:
         hard.append(f"does not fit the bed: {res['size']}")
+    if policy == "none" and widest_cant >= CANTILEVER_HARD:
+        hard.append(f"{widest_cant:.1f} mm cantilevered overhang at z={widest_cant_z:.1f} "
+                    f"but the plan says NO support")
     res["hard"] = hard
     warn = []
     if islands and policy != "none":
@@ -273,7 +298,8 @@ def audit(name, verbose=False):
     if name in THIN_OK and thin_hard_max > THIN_MIN_AREA:
         warn.append(f"deliberate flexure walls < {THIN_HARD} mm ({thin_hard_max:.1f} mm²)")
     if widest_step >= 3.0:
-        warn.append(f"overhang step {widest_step:.1f} mm wide at z={widest_z:.1f}")
+        kind = "cantilever" if widest_cant >= 3.0 else "bridge/step"
+        warn.append(f"overhang step {widest_step:.1f} mm wide at z={widest_z:.1f} ({kind})")
     if thin_soft_max > 4.0:
         warn.append(f"walls < {THIN_SOFT} mm: {thin_soft_max:.1f} mm² in a layer")
     res["warn"] = warn

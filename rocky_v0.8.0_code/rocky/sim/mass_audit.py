@@ -56,11 +56,13 @@ def main():
         "electronics_pod": HW["electronics_pod"],
         "yaw servos x5": 5 * HW["servo_st3215"],
         "coxa_yaw_base x5": 5 * printed_g("coxa_yaw_base"),
+        "coxa_crown_cap x5": 5 * printed_g("coxa_crown_cap", PETG),   # D046
         "bearings x5": 5 * HW["bearing_683zz"],
     }
     # ---- per leg links (the moving mass the gait carries)
     coxa = {                     # rotates about yaw: fork + femur servo
         "coxa_fork": printed_g("coxa_fork"),
+        "coxa_fork_strap": printed_g("coxa_fork_strap", PETG),        # D046
         "femur servo": HW["servo_st3215"],
         "horn_coupler": printed_g("horn_coupler"),
         "fasteners": HW["fasteners_per_leg"] / 3,
@@ -72,6 +74,7 @@ def main():
     }
     tibia = {                    # swings about the knee: knee servo + carrier + shin + hand
         "tibia_knee_carrier": printed_g("tibia_knee_carrier"),
+        "tibia_knee_strap": printed_g("tibia_knee_strap", PETG),      # D046
         "knee servo": HW["servo_st3215"],
         "tibia_tube": HW["tibia_tube"],
         "tibia_sea_outer": printed_g("tibia_sea_outer"),
