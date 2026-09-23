@@ -22,7 +22,7 @@ Commands (REPL or --script, ';'-separated):
                         gait.hstep reflex.trip  (phase-continuous: changing
                         T rescales the clock so feet don't teleport)
     show                current params + robot state
-    push FX FY [DUR]    shove the torso (N, N, s) — test the reflex
+    push FX FY [DUR]    shove the shell rim: peak N, N, half-sine over DUR s (0.4)
     record on|off       capture an offscreen mp4 clip (playground_clip.mp4)
     wait S              (scripts) let S sim-seconds pass
     quit                exit
@@ -56,6 +56,7 @@ from pebble_reflex import ReflexSupervisor, body_gyro_xy             # noqa: E40
 from pebble_gestures import (jazz_hands, fist_bump, beckon,          # noqa: E402
                              JAZZ_TOTAL, BUMP_TOTAL, BECKON_TOTAL)
 from run_odom import foot_contacts                                    # noqa: E402
+from shove import Shove                                               # noqa: E402
 
 from pebble_gestures2 import GESTURES2                              # noqa: E402
 GESTURES = {"jazz_hands": (jazz_hands, JAZZ_TOTAL),
@@ -99,7 +100,8 @@ class Playground:
         self.lock = threading.Lock()
         self.cmd_v = np.zeros(3)              # vx, vy, wz
         self.gesture = None                   # (fn, total, t0)
-        self.push = None                      # (fx, fy, until_t)
+        self.push = None                      # shove.Shove or None
+        self.righter_note = self._install_righter()
         self.t = 0.0
         self.player = find_player()
         self.recording = False
@@ -108,6 +110,22 @@ class Playground:
         self._spf = int(round(1 / (30 * self.DT)))
         self._k = 0
         self.alive = True
+
+    def _install_righter(self):
+        """D048: the learned righter rides along when torch + a checkpoint
+        are available, so a tip-over in the playground ends in a recovery
+        instead of an upside-down standing pose. Optional: without torch the
+        supervisor still declares FALLEN and uses its deadline ramp."""
+        try:
+            from righter import PolicyRighter, default_ckpt
+            ckpt = default_ckpt()
+            if ckpt is None:
+                return "no righter (no checkpoint in sim/runs/)"
+            fids = [self.model.geom(f"foot{i}").id for i in range(N_LEGS)]
+            self.sup.set_righter(PolicyRighter(ckpt, self.model, self.data, self.torso, fids))
+            return f"righter: {os.path.relpath(ckpt, HERE)}"
+        except Exception as e:                       # torch missing, bad ckpt
+            return f"no righter ({type(e).__name__}: {e}) — deadline ramp only"
 
     # ------------------------------------------------------------ physics
     def step(self):
@@ -120,6 +138,8 @@ class Playground:
         w_body = R.T @ self.data.cvel[self.torso][0:3]
         gxy = body_gyro_xy(w_body)
         con = foot_contacts(self.model, self.data)
+        tilt_deg = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
+        height = float(self.data.xpos[self.torso][2])
         if ges is not None:
             fn, total, t0 = ges
             tg = self.t - t0
@@ -133,15 +153,12 @@ class Playground:
                     self.data.ctrl[15:20] = claw
         if self.gesture is None:
             q, state = self.sup.step(self.t, v[0], v[1], v[2], gxy,
-                                     contacts=con, gyro_vec=w_body[:2])
+                                     contacts=con, gyro_vec=w_body[:2],
+                                     tilt_deg=tilt_deg, height=height)
             self.data.ctrl[:15] = q.flatten()
         if push is not None:
-            fx, fy, until = push
-            if self.t < until:
-                self.data.xfrc_applied[self.torso, :3] = [fx, fy, 0.0]
-            else:
-                self.data.xfrc_applied[self.torso, :3] = 0.0
-                with self.lock:
+            if not push.apply(self.model, self.data, self.torso, self.t):
+                with self.lock:               # over: wrench already zeroed
                     self.push = None
         mujoco.mj_step(self.model, self.data)
         self.t += self.DT
@@ -276,10 +293,11 @@ class Playground:
                     f"{p[1]*1000:.0f}) mm  t={self.t:.1f} s")
         if c == "push":
             fx, fy = float(args[0]), float(args[1])
-            dur = float(args[2]) if len(args) > 2 else 0.15
+            dur = float(args[2]) if len(args) > 2 else 0.4
+            sh = Shove(fx, fy, dur=dur, t0=self.t)
             with self.lock:
-                self.push = (fx, fy, self.t + dur)
-            return f"shoving ({fx}, {fy}) N for {dur} s — watch the reflex"
+                self.push = sh
+            return f"shoving: {sh.describe(self.model)} — watch the reflex"
         if c == "record":
             if args and args[0] == "on":
                 self.recording = True
@@ -350,6 +368,11 @@ def run_interactive(pg, use_viewer):
         lag = t_wall - time.monotonic()
         if lag > 0:
             time.sleep(lag)
+        elif lag < -0.05:
+            # D048: fell >50 ms behind (a render stall, a print, a key
+            # burst): resync instead of fast-forwarding to catch up — the
+            # catch-up burst looked like the robot teleporting/jittering
+            t_wall = time.monotonic()
         try:
             r = pg.do(q.get_nowait())
             if r:
@@ -372,6 +395,7 @@ if __name__ == "__main__":
                          "the CPU allows")
     args = ap.parse_args()
     pg = Playground(cliff=args.cliff)
+    print(pg.righter_note)
     if args.script:
         run_headless(pg, args.script)
     else:

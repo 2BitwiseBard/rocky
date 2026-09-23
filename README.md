@@ -8,7 +8,7 @@ drive it by text, voice or MCP.
 
 <p align="center">
   <img src="media/pebble_fallen_recover.gif" width="480" alt="shove → tumble → self-right → walk away (MuJoCo)"><br>
-  <em>A 120 N shove, a tumble, the learned self-righting policy, and the analytic gait walks away.</em>
+  <em>A 40 N shove to the shell rim (1.5× bodyweight), a tumble onto its back, the righter and the planted ramp get it up, and the analytic gait walks away.</em>
 </p>
 <p align="center">
   <img src="gait/pebble_gait_demo.gif" width="480" alt="the wave gait"><br>
@@ -25,8 +25,8 @@ claim from "it works on hardware".
 |---|---|---|
 | **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215 servo** (D047); four joint coupons gate the next print run | `cad/run_all_checks.py` 23/23 (joint suite, printability, single-solid gate) |
 | **Physical build** | nothing assembled; the first prints (pre-D047) did not fit and are retired; servos not yet ordered | `media/2026-09-22_first_prints.jpg`, `docs/PRINT_PLAN_2026-09-22.md`, `bom/SHOPPING_LIST_2026-09-22.md` |
-| **Sim + control** | the analytic wave gait walks (264 mm in 8 s, 1° tilt); the reflex supervisor safe-stops, braces and hands off to a righter; self-righting is a **hybrid** (RL rights the body, an analytic ramp stands it: 10/20 on this machine, 12/20 in the cloud run, pure-RL 0/20); two retrains scored worse and are recorded as negatives | `docs/SIM_GUIDE.md`, `docs/RL_GUIDE.md`, `docs/RL_TOUR.md` |
-| **Tests** | driver 58, harness 22, gait 6, intent 14 → 85 fast tests in ~3 s; URDF ≡ MJCF ≡ analytic FK | GitHub Actions `ci.yml` |
+| **Sim + control** | the analytic wave gait walks (264 mm in 8 s, 1° tilt); the reflex supervisor safe-stops, braces and hands off to a righter; self-righting is a **hybrid** (RL rights the body from a side landing, an analytic ramp stands it, and from the back the ramp does the righting: 7/20 stood on this machine, 12/20 in the cloud run, pure-RL 0/20); four retrains scored worse and are recorded as negatives, the latest pair (D048) traded handoffs for a smoother policy | `docs/SIM_GUIDE.md`, `docs/RL_GUIDE.md`, `docs/RL_TOUR.md` |
+| **Tests** | driver 58, harness 22, gait 9, intent 14, sim 3 → 92 fast tests in ~3 s; URDF ≡ MJCF ≡ analytic FK | GitHub Actions `ci.yml` |
 | **Harness** | six-tool MCP server on a mock and on MuJoCo; a local LLM (llama-swap / Ollama) or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
 | **Review** | full project review with dispositions | `docs/REVIEW_2026-09-22.md` |
 
@@ -63,7 +63,7 @@ rocky/
 git clone https://github.com/2BitwiseBard/rocky && cd rocky
 python3 -m venv .venv && . .venv/bin/activate        # or: uv venv && . .venv/bin/activate
 pip install -e ".[sim,harness,dev]"                  # + ".[rl]" for torch, ".[cad]" for build123d
-python -m pytest driver/tests gait harness -m "not slow" -q     # 85 passed
+python -m pytest driver/tests gait harness -m "not slow" -q     # 89 passed (+3 in sim/tests after build_mjcf)
 MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, headless
 MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + WASD teleop
 ```
@@ -92,14 +92,16 @@ These are the ones that have actually cost something when broken.
 - **Checks green before anything ships.** `cad/run_all_checks.py` 23/23 and
   the fast test suites; CI runs them on every push.
 - **Sim honesty.** A negative result is a result and gets written down.
-  Three separate recovery retrains scored worse than the policy they were
-  meant to beat, and that is recorded rather than buried.
+  Four separate recovery retrains scored worse than the policy they were
+  meant to beat, and that is recorded rather than buried. Shoves are
+  quoted in N·s and bodyweights, and the demo shove is a shove, not a
+  strike (D048).
 - **The SCS0009 hand servo never sees 12 V.**
 
 ## Where the record lives
 
 - `BUILD_LOG.md` — engineering notebook, newest entry first.
-- `docs/decisions.md` — numbered decisions (D001–D047), cited everywhere.
+- `docs/decisions.md` — numbered decisions (D001–D048), cited everywhere.
 - `docs/DESIGN_BACKLOG.md` — ideas with verdicts (shipped / negative / deferred).
 - `NOTES_INBOX.md` — raw measurements and results, filed later.
 

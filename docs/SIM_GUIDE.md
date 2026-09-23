@@ -97,7 +97,7 @@ change it.
 | `say WORD` | play a chord-speak sample (`aplay`/`ffplay`) or print it |
 | `set PARAM VALUE` | live-tune `gait.T gait.h gait.R0 gait.duty gait.hstep reflex.trip`; phase-continuous, so feet don't teleport |
 | `show` | current gait params, reflex state, pose, sim time |
-| `push FX FY [DUR]` | shove the torso (N, N, s) and watch the reflex |
+| `push FX FY [DUR]` | shove the shell rim: peak N, N, half-sine over DUR s (default 0.4); it prints the impulse in N·s and bodyweights. `push 20 0` sways and braces; `push 40 0` tips it over and the righter takes it from there |
 | `record on` / `record off` | capture an offscreen clip to `sim/playground_clip.mp4` |
 | `wait S` | (scripts) let S sim-seconds pass |
 | `quit` | exit |
@@ -111,6 +111,24 @@ MUJOCO_GL=egl python sim/playground.py --script \
 
 It ends with `clean exit, no NaNs`; the playground asserts that nothing it
 did produced a NaN, which is the reflex stack's promise.
+
+**What a shove is (D048).** Every push used to be a rectangular force
+pulse at the centre of mass, which has no gentle regime: below the
+foot-friction limit (about 31 N) the robot is a rigid block, above it the
+feet let go and it cartwheels, and the old demo's 120 N × 0.25 s was a
+30 N·s strike that launched the robot 11–15 m at 10 m/s. `sim/shove.py`
+models a hand shove instead: a half-sine force at the carapace's top rim
+(60 mm above the torso frame), so the torque about the feet does the
+tipping. Under that model the standing robot survives a 25 N peak and
+tips at 30 N (about one bodyweight of peak force, 6–8 N·s); walking,
+20–30 N depending on direction (`sim/shove_envelope.py`,
+`sim/out/shove_envelope.json`). The push-envelope experiment scripts keep
+the old pulse because their JSONs are decision records (D017/D025).
+
+When a shove does tip it, the playground now feeds tilt and height to the
+supervisor and installs the learned righter (torch + a checkpoint in
+`sim/runs/`; it says so at start-up), so a fall ends in FALLEN → RIGHTED →
+NORMAL instead of an upside-down standing pose.
 
 **Keepers.** Anything you tune with `set` is sim-only until it goes into
 `params.yaml` and the tree is regenerated; write keepers in
@@ -129,7 +147,8 @@ with `MUJOCO_GL=egl`.
 | `run_terrain.py`, `run_stuck.py` | rubble crossing and the stuck watchdog's escalating retries (D017/D023) | minutes |
 | `run_cliff.py`, `run_cliff_safestop.py` | the VOID detector and the safe-stop path at a table edge (D034) | 1 min |
 | `run_gestures2.py` | every gesture in physics with its signature metric asserted (D040) | 1–2 min |
-| `run_reflex_fallen.py` | 120 N shove → tumble → the recovery policy rights it → walks away, 5 seeds (D042) | 2–3 min |
+| `run_reflex_fallen.py` | 40 N rim shove → tumble → the recovery policy rights it → walks away, 5 seeds (D042/D048) | 2–3 min |
+| `shove_envelope.py` | survivable shove per direction, standing and walking, under the D048 shove model | 3 min |
 | `run_odom.py`, `run_slam_lite.py` | legged odometry EKF and the ICP map on the room world (D026/D027) | minutes |
 | `run_patrol.py` | a waypoint patrol driven purely through the six harness tools (D043) | 1–2 min |
 | `torque_audit.py`, `mass_audit.py` | static servo margins on CAD masses; the mass budget itself | seconds |

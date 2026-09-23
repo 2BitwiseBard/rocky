@@ -63,6 +63,7 @@ def test_full_fall_recover_cycle():
     assert trace[0] == NORMAL
     assert FALLEN in trace and RIGHTED in trace
     assert trace[-1] == NORMAL
+    assert sup.right_reason == "handoff"
     i_f, i_r = trace.index(FALLEN), trace.index(RIGHTED)
     assert i_f < i_r < len(trace) - 1
     assert sup.fall_count == 1
@@ -106,9 +107,60 @@ def test_handoff_criterion_requires_hold():
     assert RIGHTED not in trace
 
 
+def test_stalled_righter_ramps_before_deadline():
+    """D048: no progress on the best tilt for stall_s -> ramp now (the
+    planted ramp rights the robot from its back; the policy does not)."""
+    sup = make_sup(righter=lambda t, dt: np.zeros((N_LEGS, 3)),
+                   fallen_max_s=10.0, stall_s=2.0)
+    trace = drive(sup, [(1.0, 170, 0.04),        # on its back: FALLEN at 1.0 s
+                        (1.9, 170, 0.04),        # righter flails, tilt never moves
+                        (0.4, 170, 0.04)])
+    n_before = int(round((1.0 + 1.9) / DT))
+    assert RIGHTED not in trace[:n_before]      # not before FALLEN + stall_s
+    assert RIGHTED in trace                     # and well before the 10 s deadline
+    assert sup.right_reason == "stall"
+
+
+def test_improving_righter_is_not_stalled():
+    sup = make_sup(righter=lambda t, dt: np.zeros((N_LEGS, 3)), stall_s=2.0)
+    seq = [(1.5, 170, 0.04)] + [(1.5, 170 - 15 * k, 0.05) for k in range(1, 6)]
+    trace = drive(sup, seq)                     # 15 deg better every 1.5 s
+    assert RIGHTED not in trace                 # progress -> keep the righter
+    assert sup.state == FALLEN
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:
         fn()
         print(f"  ok  {fn.__name__}")
     print(f"{len(fns)}/{len(fns)} FALLEN-branch tests green")
+
+
+def test_brace_holds_feet_when_airborne():
+    """D048: with no foot in contact the tilt-vector seek has nothing to
+    catch and its goal flips sign every step; BRACE must hold the foot
+    targets until a foot lands, then resume the crouch."""
+    sup = make_sup()
+    sup.request_stop()
+    t, st = 0.0, NORMAL
+    for _ in range(int(1.0 / DT)):                      # stop request -> BRACE
+        q, st = sup.step(t, 0.0, 0.0, 0.0, 0.2, contacts=[True] * 5,
+                         gyro_vec=np.array([0.0, 0.0]))
+        t += DT
+        if st == "BRACE":
+            break
+    assert st == "BRACE"
+    z0 = sup._last_feet[:, 2].copy()
+    for _ in range(10):                                  # airborne: gyro spinning, zero contacts
+        q, st = sup.step(t, 0.0, 0.0, 0.0, 6.0, contacts=[False] * 5,
+                         gyro_vec=np.array([4.0, -3.0]))
+        assert not np.isnan(q).any()
+        t += DT
+    assert st == "BRACE"
+    assert np.allclose(sup._last_feet[:, 2], z0), "targets moved while airborne"
+    for _ in range(10):                                  # feet back down: crouch resumes
+        q, st = sup.step(t, 0.0, 0.0, 0.0, 0.2, contacts=[True] * 5,
+                         gyro_vec=np.array([0.0, 0.0]))
+        t += DT
+    assert not np.allclose(sup._last_feet[:, 2], z0), "crouch did not resume"

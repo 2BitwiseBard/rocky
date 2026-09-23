@@ -31,6 +31,17 @@ pose can take over from — plus a +0.2·feet_down/5 term while upright, so
 "rights the body but props on 1.5 feet" (the v1 failure) stops paying.
 Standing bonus is +2.0 (was +3.0) to keep the return scale comparable.
 
+reward="v3" (session 9b, D048 — the anti-jitter recipe): v2's terms plus
+a SMOOTHNESS cost on the target the servos actually receive,
+  -0.3 * mean((Δtarget / rate_limit)²)
+i.e. pinning a joint at the rate limit costs 0.3/step across the board.
+The 2026-09-23 audit of recover1 measured 73 % of its per-tick joint moves
+pinned at the limit and 4–23 direction reversals per second per joint: a
+50 Hz staircase of 5.7° jumps, which is the "jitter" you see. v3 is meant
+to be trained with a lower rate limit too (`rate_limit_rad_s`, 3 rad/s
+recommended; the checkpoint records it and PolicyRighter/eval read it
+back, so the deployed adapter always matches the training dynamics).
+
 Honesty: the sim's torso is two stacked cylinders — flat-ish top and
 bottom. The real Pebble has a domed rock shell and a belly with skids and
 a battery door; the exact rolling behaviour WILL differ. What transfers
@@ -57,7 +68,9 @@ from pebble_gait import N_LEGS                                       # noqa: E40
 
 CTRL_DT = 0.02
 EP_SECONDS = 6.0
-RATE_LIMIT = 5.0 * CTRL_DT                 # rad per control step
+RATE_LIMIT_RAD_S = 5.0                     # default (v1/v2 checkpoints)
+RATE_LIMIT = RATE_LIMIT_RAD_S * CTRL_DT    # rad per control step (default)
+REWARDS = ("v1", "v2", "v3")
 Q_LO = np.tile(np.deg2rad([-40.0, -70.0, -150.0]), N_LEGS)
 Q_HI = np.tile(np.deg2rad([40.0, 90.0, -20.0]), N_LEGS)
 STAND_H = 0.10
@@ -79,9 +92,12 @@ def _quat_from_axis_angle(axis, ang):
 class RecoverEnv(gym.Env if gym else object):
     metadata = {"render_modes": ["rgb_array"]}
 
-    def __init__(self, randomize=False, seed=None, render_mode=None, reward="v1", **_):
-        assert reward in ("v1", "v2"), reward
+    def __init__(self, randomize=False, seed=None, render_mode=None, reward="v1",
+                 rate_limit_rad_s=RATE_LIMIT_RAD_S, **_):
+        assert reward in REWARDS, reward
         self.reward_version = reward
+        self.rate_limit_rad_s = float(rate_limit_rad_s)
+        self.rate_limit = self.rate_limit_rad_s * CTRL_DT      # rad per control step
         self.model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
         self.data = mujoco.MjData(self.model)
         self.randomize = randomize
@@ -177,7 +193,7 @@ class RecoverEnv(gym.Env if gym else object):
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
         want = Q_LO + (action + 1) / 2 * (Q_HI - Q_LO)
-        delta = np.clip(want - self._target, -RATE_LIMIT, RATE_LIMIT)
+        delta = np.clip(want - self._target, -self.rate_limit, self.rate_limit)
         self._target = self._target + delta
         self.data.ctrl[:15] = self._target
         for _ in range(self.substeps):
@@ -189,12 +205,16 @@ class RecoverEnv(gym.Env if gym else object):
         upright = (1.0 - grav_body[2]) / 2.0        # g_z_body = -1 when upright
         # NOTE grav_body = R^T [0,0,-1]; upright -> grav_body[2] = -1 -> 1.0
         r = 1.0 * upright + 0.5 * min(h, 0.13) / 0.13
-        if self.reward_version == "v2":
+        if self.reward_version in ("v2", "v3"):
             # success == the handoff criterion (what the supervisor waits for)
             standing = tilt < HANDOFF_TILT and h > HANDOFF_H
             hold_s = HANDOFF_HOLD_S
             if standing:
                 r += 2.0 + 0.2 * feet / N_LEGS          # feet down pays only when upright
+            if self.reward_version == "v3":
+                # smoothness: the servo target's per-tick move, in units of the
+                # rate limit (1.0 = pinned). Bang-bang righting is what this buys off.
+                r -= 0.3 * float(np.mean((delta / self.rate_limit) ** 2))
         else:
             standing = tilt < STAND_TILT and h > STAND_H and feet >= 4
             hold_s = HOLD_S

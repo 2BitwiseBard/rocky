@@ -1,0 +1,287 @@
+{
+ "model": "half-sine at the shell rim (shove.py), 0.4 s",
+ "dur_s": 0.4,
+ "mass_kg": 2.706,
+ "rows": [
+  {
+   "walk": false,
+   "dir_deg": 0,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 55,
+    "vmax": 0.5
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 69.5,
+    "disp_mm": 274,
+    "vmax": 0.98
+   }
+  },
+  {
+   "walk": false,
+   "dir_deg": 60,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 49,
+    "vmax": 0.52
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 69.6,
+    "disp_mm": 217,
+    "vmax": 0.81
+   }
+  },
+  {
+   "walk": false,
+   "dir_deg": 120,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 26,
+    "vmax": 0.51
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 180.0,
+    "disp_mm": 553,
+    "vmax": 0.9
+   }
+  },
+  {
+   "walk": false,
+   "dir_deg": 180,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 34,
+    "vmax": 0.52
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 180.0,
+    "disp_mm": 551,
+    "vmax": 0.87
+   }
+  },
+  {
+   "walk": false,
+   "dir_deg": 240,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 58,
+    "vmax": 0.51
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 69.5,
+    "disp_mm": 263,
+    "vmax": 0.95
+   }
+  },
+  {
+   "walk": false,
+   "dir_deg": 300,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.0,
+    "disp_mm": 58,
+    "vmax": 0.54
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 0.0,
+    "disp_mm": 45,
+    "vmax": 1.04
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 0,
+   "survive_peak_n": 30,
+   "survive_bw": 1.13,
+   "survive_impulse_ns": 7.6,
+   "last_ok": {
+    "peak_n": 30,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.4,
+    "disp_mm": 164,
+    "vmax": 1.02
+   },
+   "first_fail": {
+    "peak_n": 35,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 180.0,
+    "disp_mm": 623,
+    "vmax": 1.39
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 60,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.3,
+    "disp_mm": 121,
+    "vmax": 0.49
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 0.6,
+    "disp_mm": 102,
+    "vmax": 0.87
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 120,
+   "survive_peak_n": 20,
+   "survive_bw": 0.75,
+   "survive_impulse_ns": 5.1,
+   "last_ok": {
+    "peak_n": 20,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.6,
+    "disp_mm": 41,
+    "vmax": 0.64
+   },
+   "first_fail": {
+    "peak_n": 25,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 180.0,
+    "disp_mm": 529,
+    "vmax": 1.12
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 180,
+   "survive_peak_n": 20,
+   "survive_bw": 0.75,
+   "survive_impulse_ns": 5.1,
+   "last_ok": {
+    "peak_n": 20,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.5,
+    "disp_mm": 79,
+    "vmax": 0.54
+   },
+   "first_fail": {
+    "peak_n": 25,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 180.0,
+    "disp_mm": 524,
+    "vmax": 1.03
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 240,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.6,
+    "disp_mm": 121,
+    "vmax": 0.37
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 0.4,
+    "disp_mm": 104,
+    "vmax": 0.66
+   }
+  },
+  {
+   "walk": true,
+   "dir_deg": 300,
+   "survive_peak_n": 25,
+   "survive_bw": 0.94,
+   "survive_impulse_ns": 6.4,
+   "last_ok": {
+    "peak_n": 25,
+    "ok": true,
+    "fallen": false,
+    "end_tilt": 0.6,
+    "disp_mm": 169,
+    "vmax": 0.67
+   },
+   "first_fail": {
+    "peak_n": 30,
+    "ok": false,
+    "fallen": true,
+    "end_tilt": 66.3,
+    "disp_mm": 243,
+    "vmax": 1.15
+   }
+  }
+ ],
+ "stand_min_bw": 0.94,
+ "stand_mean_bw": 0.94,
+ "walk_min_bw": 0.75,
+ "walk_mean_bw": 0.91
+}

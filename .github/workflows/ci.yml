@@ -27,6 +27,8 @@ jobs:
           set -o pipefail
           python sim/build_mjcf.py
           python sim/run_sim.py | tail -3
+      - name: sim unit tests (shove model)
+        run: python -m pytest sim/tests -q
       - name: URDF == MJCF == analytic FK
         run: |
           python ros2/rocky_description/generate_urdf.py

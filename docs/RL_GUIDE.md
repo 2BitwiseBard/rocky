@@ -16,7 +16,7 @@ It trains either:
 | `--env` | class | what the policy controls | starting point |
 |---|---|---|---|
 | `gait` | `sim/rocky_env.py` `PebbleEnv` | a **residual**: 15 joint-target offsets (±0.25 rad) added to the analytic wave gait's targets | policy zero already walks; PPO learns trims |
-| `recover` | `sim/rocky_recover_env.py` `RecoverEnv` | **absolute** joint targets, rate-limited to 5 rad/s, from a fallen pose | nothing; there is no analytic righter |
+| `recover` | `sim/rocky_recover_env.py` `RecoverEnv` | **absolute** joint targets, rate-limited (`--rate-limit`, 5 rad/s for the v1/v2 runs, 3 rad/s recommended for v3), from a fallen pose | nothing; there is no analytic righter |
 
 Observations (41 or 39 values): gravity in the body frame, gyro, joint
 positions and velocities, plus gait phase and command (gait) or torso
@@ -28,6 +28,18 @@ tilt and height error. Recover `v1`: uprightness + height + a standing
 bonus, success when standing is held 1 s. Recover `v2` (D041): success is
 literally the handoff criterion the reflex supervisor uses (tilt < 25°,
 height > 0.09 m, held 0.5 s) plus a feet-down term while upright.
+Recover `v3` (D048): v2 plus a smoothness cost on the servo target,
+`-0.3 · mean((Δtarget / rate_limit)²)`, so pinning joints at the rate
+limit is paid for. The checkpoint records `reward` and `rate_limit`;
+`eval_recover.py` and the `PolicyRighter` adapter read them back, so a
+policy is always replayed with the dynamics it trained on.
+
+**Why v3 exists: the jitter.** `sim/audit_righter.py` measures how
+staircase-y a righter is. `recover1` (v1, 5 rad/s) has 73 % of its
+per-tick joint moves pinned at the rate limit and reverses direction 4–23
+times per second per joint: a 50 Hz staircase of 5.7° jumps, which is
+what "the recovery looks jittery" is. That is the D045 bang-bang failure
+in the deployed policy, not a sim artefact.
 
 **Domain randomisation** (on by default, `--no-randomize` to disable):
 per-episode draws of friction ×[0.7, 1.4], masses ×[0.85, 1.15], actuator
@@ -61,7 +73,8 @@ into bang-bang control) — cap it with `--log-std-max -0.5`.
 Install torch first: `pip install -e ".[sim,rl]"`. CPU works for
 everything below; a GPU only speeds up the long runs.
 
-**Smoke test (about a minute each)** — proves the pipeline end to end:
+**Smoke test (about a minute each)** — proves the pipeline end to end
+(`MUJOCO_GL` is only needed when something renders; the trainer does not):
 
 ```bash
 cd sim
@@ -113,22 +126,34 @@ the trainer says so and exits instead of crashing (fixed 2026-09-22).
 Checkpoints ship in `sim/runs/` (git-lfs). "Stood" = stood-after-handoff
 over 20 random falls on the same seeds, deterministic policy; the cloud
 column is the number the 2026-09-01 session measured, the laptop column is
-this machine (mujoco 3.12) and is the baseline for any comparison here.
+this machine (mujoco 3.12) on the **current** model and is the baseline
+for any comparison here (re-measured 2026-09-23: `recover1` scores 7/20
+with both the old and the new evaluator; the 10/20 quoted before predates
+the D047 regeneration of `pebble.xml`).
 
 | run | env | steps | training return | stood (cloud / laptop) | pure-RL | note |
 |---|---|---|---|---|---|---|
 | `robust_fwd2` | gait | 3 M | 228.6 | — | — | loses to the bare gait on the clean task (298 vs 365 mm); D031: the wave gait is a strong controller |
 | `cmd_sample3` | gait, `--cmd-sample` | 7 M | 224 | — | — | same conclusion under full DR |
-| **`recover1`** | recover v1 | 2 M | — | **12/20 / 10/20** | 0/20 | **the shipped righter** (hold-pose 2/20, random 1/20) |
+| **`recover1`** | recover v1, 5 rad/s | 2 M | — | **12/20 / 7/20** | 0/20 | **the shipped righter** (hold-pose 2/20, random 2/20); back 0/6, side 3/7, tumble 4/7; jitter audit: 75 % of tick moves pinned, 10 reversals/s, 4.5°/tick |
 | `recover2` | recover v2, uncapped | 3.67 M | ~610 (stochastic) | 2/20 | 0/20 | sigma inflated to 22 nats; mean policy decayed (D045) |
 | `recover3_capped` | recover1 → v2 capped | 4 M | 543 | — / 7/20 | 0/20 | every dimension pinned at the cap; success carried by noise |
 | `recover3_scratch` | recover v2 capped, scratch | 3 M | — | — / 3/20 | 0/20 | never rights from the back |
+| `recover5_v3` | recover v3 capped, 3 rad/s, scratch | 3 M | 215 | — / 2/20 | 2/20 | D048 negative: smoothness cost, lower rate limit; back 0/6, side 0/7 |
+| `recover5_v3_warm` | recover1 → v3 capped, 3 rad/s | 5 M | 483 | — / 4/20 | 4/20 | D048 negative on the handoff (4 < 7) but the smoothest righter so far: 58 % pinned, 7 reversals/s, 2.1°/tick (recover1: 75 %, 10/s, 4.5°); the only checkpoint whose pure-RL success is non-zero |
 
 What this says: the PPO infrastructure works and reproduces; the learned
 policies are marginal; the self-righting result is a hybrid in which the
-policy does the hard part (getting tilt down from a side or back landing)
-and the hand-written ramp does the standing. `recover1` beats the
-baselines and is what `run_reflex_fallen.py` and the harness use.
+policy does the hard part from a SIDE landing (getting tilt down) and the
+hand-written ramp does the standing. From the BACK no checkpoint rights
+the robot, and the planted-stance ramp does (5/5 in the demo), which is
+why the supervisor now ramps after 3 s without progress instead of
+letting the policy flail to the 10 s deadline (D048 stall rule).
+`recover1` beats the baselines and is what `run_reflex_fallen.py`, the
+playground and the harness use. The v3 runs show the trade: the
+smoothness cost halves the staircase but costs handoffs at this budget;
+a smooth AND better righter needs either more steps or a different
+action parameterisation (see the ladder).
 
 ## 5. The experiment ladder
 
@@ -149,6 +174,11 @@ From `docs/RL_TOUR.md` §8, in order, each teaching one thing:
 7. Rung 6 from the tour: anneal sigma to the floor over the last third of
    a capped-v2 run so the mean has to do the work.
 8. A new env: rubble recovery, or the room world with a goal.
+9. The righter's jitter (D048): `audit_righter.py` before and after any
+   change. Candidates: a first-order action filter INSIDE the env (so the
+   policy trains on it), a curriculum from side landings to back landings,
+   or the v3 cost with a 10 M budget. The bar is recover1's 7/20 with the
+   warm run's smoothness numbers.
 
 ## 6. Gotchas
 

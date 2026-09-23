@@ -97,7 +97,8 @@ class ReflexSupervisor:
                  plant_max_s=0.45, seek_rate=180.0,
                  righter=None, fall_tilt_deg=60.0, fall_confirm_s=1.0,
                  handoff_tilt_deg=25.0, handoff_h=0.09, handoff_hold_s=0.5,
-                 right_ramp_s=0.6, right_hold_s=0.5, fallen_max_s=10.0):
+                 right_ramp_s=0.6, right_hold_s=0.5, fallen_max_s=10.0,
+                 stall_s=3.0, stall_tilt_deg=10.0):
         self.g = gait
         self.gyro_trip = gyro_trip
         self.gyro_calm = gyro_calm
@@ -140,6 +141,14 @@ class ReflexSupervisor:
         self.right_ramp_s = right_ramp_s
         self.right_hold_s = right_hold_s
         self.fallen_max_s = fallen_max_s         # righter deadline -> retry ramp anyway
+        # D048: stall rule. If the righter has not improved the best tilt by
+        # stall_tilt_deg for stall_s, ramp now instead of flailing to the
+        # deadline: the planted ramp rights the robot from its BACK (the
+        # mode no checkpoint solves) 5/5 in the demo, the policy never does.
+        self.stall_s = stall_s
+        self.stall_tilt = stall_tilt_deg
+        self._fallen_best = None
+        self._fallen_best_t = None
         self.fall_count = 0
         self._fall_since = None
         self._fallen_t0 = None
@@ -163,7 +172,11 @@ class ReflexSupervisor:
     def _enter_fallen(self, t):
         self.fall_count += 1
         self.state = FALLEN
+        if hasattr(self.righter, "reset"):       # D048: a fresh plan per fall
+            self.righter.reset()
         self._fallen_t0 = t
+        self._fallen_best = None
+        self._fallen_best_t = None
         self._handoff_since = None
         self._fall_since = None
         self._stop_req = False
@@ -185,9 +198,16 @@ class ReflexSupervisor:
             self._handoff_since = t if self._handoff_since is None else self._handoff_since
         else:
             self._handoff_since = None
-        deadline = (t - self._fallen_t0) > self.fallen_max_s
-        if (self._handoff_since is not None and
-                (t - self._handoff_since) >= self.handoff_hold_s) or deadline:
+        if tilt_deg is not None and (self._fallen_best is None or
+                                     tilt_deg < self._fallen_best - self.stall_tilt):
+            self._fallen_best, self._fallen_best_t = tilt_deg, t
+        stalled = (self.stall_s is not None and self._fallen_best_t is not None and
+                   (t - self._fallen_best_t) > self.stall_s)
+        deadline = (t - self._fallen_t0) > self.fallen_max_s or stalled
+        handed = (self._handoff_since is not None and
+                  (t - self._handoff_since) >= self.handoff_hold_s)
+        if handed or deadline:
+            self.right_reason = "handoff" if handed else ("stall" if stalled else "deadline")
             self.state = RIGHTED
             self._right_t0 = t
             self._right_from = q.copy()
@@ -268,6 +288,13 @@ class ReflexSupervisor:
         con = np.ones(N_LEGS, dtype=bool) if contacts is None \
             else np.asarray(contacts, dtype=bool)
         n_con = int(con.sum())
+        if contacts is not None and n_con == 0:
+            # D048: no foot on anything = airborne or on the back. The
+            # tilt-vector seek below chatters (its goal flips with the
+            # sign of omega x p every step) and there is nothing to
+            # catch, so HOLD the last targets until a foot lands.
+            feet[:, 2] = self._z_now
+            return feet
         w = np.zeros(3) if gyro_vec is None else \
             np.array([gyro_vec[0], gyro_vec[1], 0.0])
         ramp_rate = self.crouch / max(self.crouch_ramp_s, 1e-3)

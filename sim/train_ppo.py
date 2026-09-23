@@ -127,12 +127,14 @@ class Agent(nn.Module):
         return action, logp, ent, self.value(x)
 
 
-def make_env(seed, cmd, randomize, push_prob, cmd_sample=False, env_name="gait", reward="v1"):
+def make_env(seed, cmd, randomize, push_prob, cmd_sample=False, env_name="gait", reward="v1",
+             rate_limit=5.0):
     def thunk():
         import gymnasium as gym
         if env_name == "recover":                       # session 8: self-righting
             from rocky_recover_env import RecoverEnv
-            env = RecoverEnv(randomize=randomize, seed=seed, reward=reward)
+            env = RecoverEnv(randomize=randomize, seed=seed, reward=reward,
+                             rate_limit_rad_s=rate_limit)
         else:
             from rocky_env import PebbleEnv
             env = PebbleEnv(cmd=cmd, randomize=randomize, push_prob=push_prob,
@@ -174,8 +176,12 @@ def parse_args(argv=None):
                    help="per-policy-step random torso push probability")
     p.add_argument("--env", type=str, default="gait", choices=["gait", "recover"],
                    help="gait = residual walking (PebbleEnv); recover = self-righting")
-    p.add_argument("--reward", type=str, default="v1", choices=["v1", "v2"],
-                   help="recover env only: v2 = handoff-criterion success + feet term (D041)")
+    p.add_argument("--reward", type=str, default="v1", choices=["v1", "v2", "v3"],
+                   help="recover env only: v2 = handoff-criterion success + feet term (D041); "
+                        "v3 = v2 + smoothness cost on the servo target (D048)")
+    p.add_argument("--rate-limit", type=float, default=5.0,
+                   help="recover env only: servo target slew limit, rad/s (recorded in the "
+                        "checkpoint; the righter adapter replays it)")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--torch-threads", type=int, default=0,
@@ -202,7 +208,8 @@ def main(argv=None):
 
     import gymnasium as gym
     env_fns = [make_env(args.seed + i, cmd, not args.no_randomize,
-                        args.push_prob, args.cmd_sample, args.env, args.reward)
+                        args.push_prob, args.cmd_sample, args.env, args.reward,
+                        args.rate_limit)
                for i in range(args.num_envs)]
     envs = gym.vector.SyncVectorEnv(env_fns) if args.sync \
         else gym.vector.AsyncVectorEnv(env_fns, daemon=True)

@@ -21,6 +21,12 @@ from rocky_recover_env import RecoverEnv                   # noqa: E402
 from train_ppo import Agent, RunningMeanStd                # noqa: E402
 
 
+def ckpt_args(ckpt):
+    """The trainer's argument dict as saved in the checkpoint ({} if absent)."""
+    ck = torch.load(ckpt, map_location="cpu", weights_only=False)
+    return dict(ck.get("args") or {})
+
+
 def load(ckpt):
     ck = torch.load(ckpt, map_location="cpu", weights_only=False)
     obs_dim, act_dim = ck.get("obs_dim", 39), ck.get("act_dim", 15)
@@ -96,13 +102,16 @@ def main():
     p.add_argument("ckpt")
     p.add_argument("--episodes", type=int, default=20)
     p.add_argument("--video", type=str, default="")
-    p.add_argument("--reward", type=str, default="v1", choices=["v1", "v2"],
+    p.add_argument("--reward", type=str, default=None, choices=["v1", "v2", "v3"],
                    help="env success criterion for the pure-RL column "
                         "(stood-after-handoff is criterion-agnostic)")
     args = p.parse_args()
     policy, step = load(args.ckpt)
-    env = RecoverEnv(seed=0, reward=args.reward)
-    print(f"checkpoint {args.ckpt} @ {step:,} steps")
+    meta = ckpt_args(args.ckpt)
+    reward = args.reward or meta.get("reward", "v1")
+    rate_limit = float(meta.get("rate_limit", 5.0))
+    env = RecoverEnv(seed=0, reward=reward, rate_limit_rad_s=rate_limit)
+    print(f"checkpoint {args.ckpt} @ {step:,} steps | reward {reward} | rate limit {rate_limit} rad/s")
     results = {}
     for name, pol in (("policy", policy),
                       ("hold-pose", lambda o: env._prev_action),

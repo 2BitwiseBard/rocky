@@ -8,6 +8,52 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-23 · Session 9b (laptop) — "the push flies and jitters": the shove model, two jitter sources, a righter retrain (D048)
+
+**Report:** the push and the reflex correction in the playground / README
+GIF "fly and jitter". Both true, neither a physics bug.
+
+- **Flying = the push model.** Every push was a rectangular force pulse at
+  the centre of mass. The demo's 120 N × 0.25 s was a 30 N·s strike
+  (4.6 bodyweight-seconds): measured 9–11 m/s peak, 11–15 m of travel, with
+  the camera tracking the torso. The model also has no gentle regime:
+  below the ~31 N foot-friction limit the standing robot is a rigid block,
+  above it the feet let go and it cartwheels (60 N: 2 m/s, 0.6 m, lands on
+  its back). New `sim/shove.py`: half-sine over 0.4 s at the carapace's
+  top rim (force + torque about the CoM), reported in N·s and BW.
+  `shove_envelope.py`: standing survives 25 N peak, tips at 30 N (~1 BW,
+  6–8 N·s); walking 20–30 N by direction. Demo shove 40 N (1.5 BW,
+  10 N·s): fells 5/5 seeds, ends ~1 m away. 45 N felled only 3/5 — two
+  rolled through and landed upright.
+- **Jitter 1 = the righter.** `audit_righter.py` on `recover1`: 73–75 % of
+  per-tick joint moves pinned at the 5 rad/s limit, ~10 direction
+  reversals/s per joint, 4.5°/tick, 6.7° tracking error. A 50 Hz staircase
+  of 5.7° jumps — the D045 bang-bang failure, deployed. And under the rim
+  shove it never righted by policy (0/5): every stand in the demo came from
+  the 10 s deadline ramp, which the old strike's random landings had hidden.
+- **Jitter 2 = BRACE while airborne.** The tilt-vector seek flips its goal
+  with the sign of ω×p every physics step; with zero contacts that is 58
+  reversals in 0.4 s and legs thrashing mid-cartwheel. Now: no contacts →
+  hold the foot targets (test added). The playground also never passed tilt
+  to the supervisor, so after a flip it lay on its back cycling
+  BRACE→RECOVER→NORMAL in a standing pose; it now feeds tilt/height and
+  installs the righter (torch + checkpoint, optional), and the supervisor
+  resets the righter on every FALLEN entry.
+- **Ruled out:** servo stiffness (0.3° tracking standing, <7° walking),
+  target smoothness on the ground (0 reversals in BRACE), loop pacing
+  (5–9× real time headless). The viewer loop now resyncs instead of
+  fast-forwarding after a >50 ms stall (unverified as a cause — the viewer
+  probe hangs under Wayland from a script).
+- **Righter retrain.** `RecoverEnv` reward `v3` = v2 + `-0.3·mean((Δtarget
+  /rate_limit)²)`; `--rate-limit` per checkpoint (3 rad/s for v3), read back
+  by `PolicyRighter`/`eval_recover` so a policy always replays its training
+  dynamics. Two runs: `recover5_v3` (scratch, 3 M, 8 envs) and
+  `recover5_v3_warm` (from recover1, +3 M, 4 envs), both `--log-std-max
+  -0.5`, CPU, ~3.1k and ~1.7k sps. **Both negative on the handoff**: scratch 2/20, warm 4/20 vs recover1's 7/20 (re-measured today on the current model with the old and the new evaluator — the 10/20 in yesterday's table predates the D047 `pebble.xml` regen). Warm is the smoothest righter yet (58 % pinned, 6.5 reversals/s, 2.1°/tick vs 73 %, 9.8/s, 4.4°) — the trade exists, not yet won at this budget; recover1 stays shipped (B30 lists the next moves). What actually rights the robot from its BACK — where the rim shove lands it every time — is the planted-stance ramp, 5/5, not any policy (0/5 by handoff); so the supervisor now ramps after 3 s without a 10° improvement in tilt (stall rule, `right_reason` = handoff/stall/deadline, 2 tests) and the demo's righting takes ~5–6 s instead of the 10 s deadline. README GIF regenerated from `run_reflex_fallen.py --video` (seed 0: shove at 3.0 s, FALLEN 4.4, RIGHTED 9.2 by stall, walks 0.54 m).
+- Tests: 89 fast + 3 sim (`sim/tests/test_shove.py`, in CI after the MJCF
+  build) + the airborne-hold reflex test. Docs: SIM_GUIDE (what a shove is,
+  push command), RL_GUIDE (v3, the audit), D048, B29/B30.
+
 ## 2026-09-22 · Session 9 (laptop) — full review, then the leg is rebuilt around the real servo (D047); reprint plan + shopping list; repo goes public-ready
 
 **Done**

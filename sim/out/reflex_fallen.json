@@ -9,29 +9,30 @@
     "NORMAL"
    ],
    [
-    3.04,
+    3.19,
     "PLANT"
    ],
    [
-    3.49,
+    3.27,
     "BRACE"
    ],
    [
-    5.0,
+    4.23,
     "RECOVER"
    ],
    [
-    5.74,
+    4.38,
     "FALLEN"
    ],
    [
-    15.74,
+    9.15,
     "RIGHTED"
    ]
   ],
-  "t_fallen": 5.74,
-  "t_righted": 15.742,
-  "walked_after_m": 0.231,
+  "t_fallen": 4.384,
+  "t_righted": 9.146,
+  "walked_after_m": 0.541,
+  "thrown_m": 1.07,
   "end_tilt": 0.5,
   "end_h": 0.129
  },
@@ -45,29 +46,26 @@
     "NORMAL"
    ],
    [
-    3.02,
+    3.12,
     "PLANT"
    ],
    [
-    3.47,
+    3.57,
     "BRACE"
    ],
    [
-    4.97,
-    "RECOVER"
-   ],
-   [
-    6.21,
+    4.31,
     "FALLEN"
    ],
    [
-    16.21,
+    10.4,
     "RIGHTED"
    ]
   ],
-  "t_fallen": 6.206,
-  "t_righted": 16.208000000000002,
-  "walked_after_m": 0.211,
+  "t_fallen": 4.306,
+  "t_righted": 10.402000000000001,
+  "walked_after_m": 0.48,
+  "thrown_m": 1.26,
   "end_tilt": 0.4,
   "end_h": 0.129
  },
@@ -81,30 +79,27 @@
     "NORMAL"
    ],
    [
-    3.02,
+    3.15,
     "PLANT"
    ],
    [
-    3.47,
+    3.6,
     "BRACE"
    ],
    [
-    4.98,
-    "RECOVER"
-   ],
-   [
-    7.26,
+    4.32,
     "FALLEN"
    ],
    [
-    8.05,
+    10.79,
     "RIGHTED"
    ]
   ],
-  "t_fallen": 7.26,
-  "t_righted": 8.048,
-  "walked_after_m": 0.588,
-  "end_tilt": 0.5,
+  "t_fallen": 4.322,
+  "t_righted": 10.790000000000001,
+  "walked_after_m": 0.461,
+  "thrown_m": 0.23,
+  "end_tilt": 0.4,
   "end_h": 0.129
  },
  {
@@ -117,31 +112,32 @@
     "NORMAL"
    ],
    [
-    3.04,
+    3.18,
     "PLANT"
    ],
    [
-    3.49,
+    3.64,
     "BRACE"
    ],
    [
-    4.99,
+    4.12,
     "RECOVER"
    ],
    [
-    5.75,
+    4.35,
     "FALLEN"
    ],
    [
-    8.7,
+    9.44,
     "RIGHTED"
    ]
   ],
-  "t_fallen": 5.75,
-  "t_righted": 8.700000000000001,
-  "walked_after_m": 0.558,
-  "end_tilt": 0.7,
-  "end_h": 0.128
+  "t_fallen": 4.3500000000000005,
+  "t_righted": 9.444,
+  "walked_after_m": 0.527,
+  "thrown_m": 0.98,
+  "end_tilt": 0.4,
+  "end_h": 0.129
  },
  {
   "seed": 4,
@@ -153,30 +149,31 @@
     "NORMAL"
    ],
    [
-    3.03,
+    3.17,
     "PLANT"
    ],
    [
-    3.48,
+    3.62,
     "BRACE"
    ],
    [
-    4.98,
+    4.26,
     "RECOVER"
    ],
    [
-    5.69,
+    4.33,
     "FALLEN"
    ],
    [
-    9.02,
+    10.16,
     "RIGHTED"
    ]
   ],
-  "t_fallen": 5.69,
-  "t_righted": 9.018,
-  "walked_after_m": 0.543,
-  "end_tilt": 0.7,
-  "end_h": 0.128
+  "t_fallen": 4.33,
+  "t_righted": 10.162,
+  "walked_after_m": 0.49,
+  "thrown_m": 1.43,
+  "end_tilt": 0.4,
+  "end_h": 0.129
  }
 ]
