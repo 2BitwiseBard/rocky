@@ -8,16 +8,21 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 
-# --- bench outputs (per the code drop's own .gitignore) ---
+# --- bench outputs (calibration is per-robot, written on bench day) ---
 bench/out/
-rocky_v0.8.0_code/rocky/bench/out/
 bench/calibration.yaml
-rocky_v0.8.0_code/rocky/bench/calibration.yaml
+
+# --- local machine config (the .example is the portable one) ---
+.mcp.json
 
 # --- OS noise ---
 .DS_Store
 *.swp
 
-# --- local machine config (the .example is the portable one) ---
-.mcp.json
-rocky_v0.8.0_code/rocky/.mcp.json
+# --- RL smoke / scratch runs (real runs are committed on purpose, git-lfs) ---
+sim/runs/_*/
+sim/runs/smoke_*/
+# --- regenerated experiment clips (run_gestures2.py) ---
+sim/pebble_gesture_*.mp4
+sim/pebble_gestures2.mp4
+sim/playground_clip.mp4

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pebble-core"
+version = "0.7.0"
+description = "Project ROCKY / Pebble: parametric CAD, MuJoCo sim, gait + reflex control, Feetech bus driver and an MCP tool harness for a 1:3 pentapod robot"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = ["numpy", "pyyaml"]
+
+[project.optional-dependencies]
+# MuJoCo sim, worlds, videos, the analytic gait tests
+sim = ["mujoco>=3.1", "gymnasium", "imageio", "imageio-ffmpeg", "matplotlib", "scipy", "numpy-stl"]
+# PPO training + evaluation (torch is CPU-fine for eval; GPU for training)
+rl = ["torch"]
+# the six-tool MCP server, local-LLM and text brains
+harness = ["mcp<2", "pytest-asyncio", "openai", "httpx"]
+# real servo bus
+hw = ["pyserial"]
+# parametric CAD + the check suite + print pack
+cad = ["build123d>=0.9", "trimesh", "shapely", "rtree", "numpy-stl", "matplotlib", "reportlab"]
+dev = ["pytest", "pytest-asyncio", "ruff"]
+
+[tool.setuptools]
+# the importable core (D009 layering: no ROS needed): the gait modules and the
+# bus driver. sim/, harness/, bench/ run from the repo root.
+py-modules = ["pebble_gait", "pebble_manip_adjacent", "pebble_reflex", "pebble_watchdog",
+              "pebble_gestures", "pebble_gestures2"]
+packages = ["rocky_driver"]
+
+[tool.setuptools.package-dir]
+"" = "gait"
+rocky_driver = "driver/rocky_driver"
+
+[tool.pytest.ini_options]
+markers = ["slow: physics-backed tests (seconds to minutes)"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"

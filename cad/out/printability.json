@@ -1,0 +1,1539 @@
+[
+ {
+  "part": "hand_hub",
+  "size": [
+   44.0,
+   44.0,
+   43.3
+  ],
+  "bed_ok": true,
+  "layers": 216,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 996.0,
+  "widest_overhang_step": 12.4,
+  "widest_overhang_z": 11.3,
+  "widest_cantilever": 12.4,
+  "widest_cantilever_z": 11.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 15.18,
+  "hard": [],
+  "warn": [
+   "overhang step 12.4 mm wide at z=11.3 (cantilever)",
+   "walls < 1.6 mm: 15.2 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "hand_cam",
+  "size": [
+   38.0,
+   38.0,
+   3.0
+  ],
+  "bed_ok": true,
+  "layers": 15,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 4.33,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 4.3 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "hand_finger",
+  "size": [
+   69.2,
+   24.5,
+   17.8
+  ],
+  "bed_ok": true,
+  "layers": 89,
+  "bed_support_islands": [
+   {
+    "z": 6.3,
+    "area": 14.3,
+    "xy": [
+     60.9,
+     12.2
+    ]
+   },
+   {
+    "z": 6.5,
+    "area": 1.3,
+    "xy": [
+     53.6,
+     13.3
+    ]
+   },
+   {
+    "z": 7.7,
+    "area": 0.9,
+    "xy": [
+     54.1,
+     16.0
+    ]
+   }
+  ],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 161.8,
+  "widest_overhang_step": 0.8,
+  "widest_overhang_z": 6.3,
+  "widest_cantilever": 0.8,
+  "widest_cantilever_z": 6.3,
+  "thin_hard_area": 1.24,
+  "thin_hard_z": 12.1,
+  "thin_soft_area": 9.46,
+  "hard": [],
+  "warn": [
+   "islands need support: 3 from the BED (first z=6.3, 14.3 mm\u00b2) (expected)",
+   "walls < 1.6 mm: 9.5 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "tibia_sea_slider",
+  "size": [
+   16.3,
+   16.6,
+   24.0
+  ],
+  "bed_ok": true,
+  "layers": 120,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 31.8,
+  "widest_overhang_step": 2.3,
+  "widest_overhang_z": 2.5,
+  "widest_cantilever": 2.3,
+  "widest_cantilever_z": 2.5,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 4.99,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 5.0 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "tool_hook",
+  "size": [
+   32.0,
+   16.0,
+   59.0
+  ],
+  "bed_ok": true,
+  "layers": 295,
+  "bed_support_islands": [],
+  "part_support_islands": 2,
+  "supported_island_area": 8.1,
+  "first_supported_island": {
+   "z": 29.7,
+   "area": 4.2,
+   "xy": [
+    12.7,
+    8.0
+   ]
+  },
+  "overhang_area": 235.5,
+  "widest_overhang_step": 9.6,
+  "widest_overhang_z": 14.7,
+  "widest_cantilever": 2.8,
+  "widest_cantilever_z": 7.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.27,
+  "hard": [],
+  "warn": [
+   "islands need support: 2 from the part (expected)",
+   "overhang step 9.6 mm wide at z=14.7 (bridge/step)"
+  ]
+ },
+ {
+  "part": "tool_scoop",
+  "size": [
+   44.9,
+   36.0,
+   48.4
+  ],
+  "bed_ok": true,
+  "layers": 242,
+  "bed_support_islands": [
+   {
+    "z": 25.7,
+    "area": 5.5,
+    "xy": [
+     37.2,
+     18.0
+    ]
+   },
+   {
+    "z": 25.7,
+    "area": 121.0,
+    "xy": [
+     40.2,
+     18.0
+    ]
+   }
+  ],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 788.7,
+  "widest_overhang_step": 9.6,
+  "widest_overhang_z": 14.7,
+  "widest_cantilever": 3.3,
+  "widest_cantilever_z": 25.7,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 36.69,
+  "hard": [],
+  "warn": [
+   "islands need support: 2 from the BED (first z=25.7, 5.5 mm\u00b2) (expected)",
+   "overhang step 9.6 mm wide at z=14.7 (cantilever)",
+   "walls < 1.6 mm: 36.7 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "coxa_yaw_base",
+  "size": [
+   72.5,
+   44.0,
+   58.5
+  ],
+  "bed_ok": true,
+  "layers": 293,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 3007.5,
+  "widest_overhang_step": 43.9,
+  "widest_overhang_z": 9.5,
+  "widest_cantilever": 43.9,
+  "widest_cantilever_z": 9.5,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 6.22,
+  "hard": [],
+  "warn": [
+   "overhang step 43.9 mm wide at z=9.5 (cantilever)",
+   "walls < 1.6 mm: 6.2 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "coxa_fork",
+  "size": [
+   44.0,
+   39.8,
+   75.4
+  ],
+  "bed_ok": true,
+  "layers": 377,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 2057.4,
+  "widest_overhang_step": 21.1,
+  "widest_overhang_z": 72.5,
+  "widest_cantilever": 13.7,
+  "widest_cantilever_z": 44.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 6.11,
+  "hard": [],
+  "warn": [
+   "overhang step 21.1 mm wide at z=72.5 (cantilever)",
+   "walls < 1.6 mm: 6.1 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "femur_link",
+  "size": [
+   31.0,
+   125.0,
+   47.7
+  ],
+  "bed_ok": true,
+  "layers": 239,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 133.2,
+  "widest_overhang_step": 2.1,
+  "widest_overhang_z": 39.9,
+  "widest_cantilever": 2.1,
+  "widest_cantilever_z": 39.9,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.11,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "femur_plate_b",
+  "size": [
+   38.0,
+   121.0,
+   9.8
+  ],
+  "bed_ok": true,
+  "layers": 49,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 5.64,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 5.6 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "tibia_knee_carrier",
+  "size": [
+   48.0,
+   38.4,
+   50.4
+  ],
+  "bed_ok": true,
+  "layers": 252,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1959.7,
+  "widest_overhang_step": 26.8,
+  "widest_overhang_z": 19.1,
+  "widest_cantilever": 26.8,
+  "widest_cantilever_z": 19.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 6.11,
+  "hard": [],
+  "warn": [
+   "overhang step 26.8 mm wide at z=19.1 (cantilever)",
+   "walls < 1.6 mm: 6.1 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "tibia_sea_outer",
+  "size": [
+   19.0,
+   21.8,
+   28.0
+  ],
+  "bed_ok": true,
+  "layers": 140,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 126.4,
+  "widest_overhang_step": 9.6,
+  "widest_overhang_z": 11.1,
+  "widest_cantilever": 2.8,
+  "widest_cantilever_z": 27.3,
+  "thin_hard_area": 0.83,
+  "thin_hard_z": 13.1,
+  "thin_soft_area": 4.12,
+  "hard": [],
+  "warn": [
+   "overhang step 9.6 mm wide at z=11.1 (bridge/step)",
+   "walls < 1.6 mm: 4.1 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "horn_coupler",
+  "size": [
+   26.0,
+   26.0,
+   5.6
+  ],
+  "bed_ok": true,
+  "layers": 28,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 11.74,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 11.7 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "coupon_cup",
+  "size": [
+   38.4,
+   31.4,
+   24.5
+  ],
+  "bed_ok": true,
+  "layers": 122,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 7.7,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 8.62,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 8.6 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "coupon_yaw_hub",
+  "size": [
+   28.0,
+   26.0,
+   6.0
+  ],
+  "bed_ok": true,
+  "layers": 30,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 60.1,
+  "widest_overhang_step": 0.8,
+  "widest_overhang_z": 3.1,
+  "widest_cantilever": 0.8,
+  "widest_cantilever_z": 3.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.61,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "coupon_hip_hub",
+  "size": [
+   30.0,
+   32.0,
+   6.0
+  ],
+  "bed_ok": true,
+  "layers": 30,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.28,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "coupon_idler",
+  "size": [
+   38.0,
+   28.0,
+   9.8
+  ],
+  "bed_ok": true,
+  "layers": 49,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.82,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "servo_cup",
+  "size": [
+   38.4,
+   31.4,
+   24.5
+  ],
+  "bed_ok": true,
+  "layers": 122,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 7.7,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 8.62,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 8.6 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "servo_blank",
+  "size": [
+   45.4,
+   24.8,
+   35.6
+  ],
+  "bed_ok": true,
+  "layers": 178,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 27.5,
+  "widest_overhang_step": 5.5,
+  "widest_overhang_z": 4.1,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.21,
+  "hard": [],
+  "warn": [
+   "overhang step 5.5 mm wide at z=4.1 (bridge/step)"
+  ]
+ },
+ {
+  "part": "blank_idler",
+  "size": [
+   19.9,
+   19.9,
+   5.8
+  ],
+  "bed_ok": true,
+  "layers": 29,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.0,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "body_deck",
+  "size": [
+   190.2,
+   180.9,
+   14.6
+  ],
+  "bed_ok": true,
+  "layers": 73,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 4.86,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 4.9 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "stand_base",
+  "size": [
+   161.7,
+   153.8,
+   35.0
+  ],
+  "bed_ok": true,
+  "layers": 175,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 115.6,
+  "widest_overhang_step": 2.5,
+  "widest_overhang_z": 19.1,
+  "widest_cantilever": 2.5,
+  "widest_cantilever_z": 19.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.74,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "stand_crown",
+  "size": [
+   114.8,
+   163.3,
+   44.0
+  ],
+  "bed_ok": true,
+  "layers": 220,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 7268.6,
+  "widest_overhang_step": 59.9,
+  "widest_overhang_z": 21.1,
+  "widest_cantilever": 13.9,
+  "widest_cantilever_z": 22.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.66,
+  "hard": [],
+  "warn": [
+   "overhang step 59.9 mm wide at z=21.1 (cantilever)"
+  ]
+ },
+ {
+  "part": "stand_section",
+  "size": [
+   111.0,
+   105.5,
+   98.0
+  ],
+  "bed_ok": true,
+  "layers": 490,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1086.8,
+  "widest_overhang_step": 5.7,
+  "widest_overhang_z": 18.1,
+  "widest_cantilever": 5.7,
+  "widest_cantilever_z": 18.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.8,
+  "hard": [],
+  "warn": [
+   "overhang step 5.7 mm wide at z=18.1 (cantilever)"
+  ]
+ },
+ {
+  "part": "shell_sector",
+  "size": [
+   61.5,
+   116.5,
+   61.0
+  ],
+  "bed_ok": true,
+  "layers": 305,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 3740.6,
+  "widest_overhang_step": 27.7,
+  "widest_overhang_z": 58.5,
+  "widest_cantilever": 27.7,
+  "widest_cantilever_z": 58.5,
+  "thin_hard_area": 1.23,
+  "thin_hard_z": 6.1,
+  "thin_soft_area": 14.32,
+  "hard": [],
+  "warn": [
+   "overhang step 27.7 mm wide at z=58.5 (cantilever)",
+   "walls < 1.6 mm: 14.3 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "shell_cap",
+  "size": [
+   99.9,
+   102.2,
+   13.3
+  ],
+  "bed_ok": true,
+  "layers": 66,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 741.1,
+  "widest_overhang_step": 5.6,
+  "widest_overhang_z": 3.3,
+  "widest_cantilever": 3.9,
+  "widest_cantilever_z": 2.5,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.98,
+  "hard": [],
+  "warn": [
+   "overhang step 5.6 mm wide at z=3.3 (cantilever)"
+  ]
+ },
+ {
+  "part": "fit_ladder",
+  "size": [
+   118.0,
+   90.0,
+   13.2
+  ],
+  "bed_ok": true,
+  "layers": 66,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 19.55,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 19.5 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "latch_housing",
+  "size": [
+   14.0,
+   14.0,
+   6.0
+  ],
+  "bed_ok": true,
+  "layers": 30,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 49.5,
+  "widest_overhang_step": 2.2,
+  "widest_overhang_z": 3.3,
+  "widest_cantilever": 2.2,
+  "widest_cantilever_z": 3.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.4,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "latch_rotor",
+  "size": [
+   13.8,
+   13.0,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 76.0,
+  "widest_overhang_step": 2.1,
+  "widest_overhang_z": 0.9,
+  "widest_cantilever": 2.1,
+  "widest_cantilever_z": 0.9,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.55,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "thumb_knob_m3",
+  "size": [
+   11.8,
+   11.8,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.95,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "dovetail_male_coupon",
+  "size": [
+   34.0,
+   24.0,
+   7.0
+  ],
+  "bed_ok": true,
+  "layers": 35,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 16.7,
+  "widest_overhang_step": 0.6,
+  "widest_overhang_z": 3.1,
+  "widest_cantilever": 0.6,
+  "widest_cantilever_z": 3.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.55,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "dovetail_shoe",
+  "size": [
+   26.0,
+   20.6,
+   10.0
+  ],
+  "bed_ok": true,
+  "layers": 50,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 218.9,
+  "widest_overhang_step": 8.0,
+  "widest_overhang_z": 4.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.11,
+  "hard": [],
+  "warn": [
+   "overhang step 8.0 mm wide at z=4.5 (bridge/step)"
+  ]
+ },
+ {
+  "part": "coupler_recess_demo",
+  "size": [
+   34.0,
+   34.0,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.55,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "port_coupon_deck",
+  "size": [
+   46.0,
+   54.0,
+   14.6
+  ],
+  "bed_ok": true,
+  "layers": 73,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.55,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "port_coupon_plate",
+  "size": [
+   46.0,
+   44.0,
+   13.3
+  ],
+  "bed_ok": true,
+  "layers": 67,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1890.6,
+  "widest_overhang_step": 32.7,
+  "widest_overhang_z": 9.5,
+  "widest_cantilever": 32.7,
+  "widest_cantilever_z": 9.5,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 5.86,
+  "hard": [],
+  "warn": [
+   "overhang step 32.7 mm wide at z=9.5 (cantilever)",
+   "walls < 1.6 mm: 5.9 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "frame_coupon",
+  "size": [
+   60.0,
+   30.0,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 4.35,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 4.4 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "jig_base",
+  "size": [
+   220.0,
+   140.0,
+   6.0
+  ],
+  "bed_ok": true,
+  "layers": 30,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 5.82,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 5.8 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "jig_column",
+  "size": [
+   132.6,
+   84.0,
+   128.0
+  ],
+  "bed_ok": true,
+  "layers": 640,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 9411.4,
+  "widest_overhang_step": 21.3,
+  "widest_overhang_z": 40.1,
+  "widest_cantilever": 6.0,
+  "widest_cantilever_z": 58.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 17.98,
+  "hard": [],
+  "warn": [
+   "overhang step 21.3 mm wide at z=40.1 (cantilever)",
+   "walls < 1.6 mm: 18.0 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "calib_gauge_knee",
+  "size": [
+   36.0,
+   44.0,
+   47.0
+  ],
+  "bed_ok": true,
+  "layers": 235,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1464.0,
+  "widest_overhang_step": 15.8,
+  "widest_overhang_z": 1.1,
+  "widest_cantilever": 15.8,
+  "widest_cantilever_z": 1.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.58,
+  "hard": [],
+  "warn": [
+   "overhang step 15.8 mm wide at z=1.1 (cantilever)"
+  ]
+ },
+ {
+  "part": "calib_gauge_hip",
+  "size": [
+   60.0,
+   44.0,
+   185.0
+  ],
+  "bed_ok": true,
+  "layers": 925,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 6.8,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.16,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "trim_cup",
+  "size": [
+   15.0,
+   15.0,
+   10.0
+  ],
+  "bed_ok": true,
+  "layers": 50,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.0,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "trim_cup_lid",
+  "size": [
+   15.0,
+   15.0,
+   5.3
+  ],
+  "bed_ok": true,
+  "layers": 26,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 88.4,
+  "widest_overhang_step": 2.1,
+  "widest_overhang_z": 3.1,
+  "widest_cantilever": 2.1,
+  "widest_cantilever_z": 3.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.0,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "belly_skid",
+  "size": [
+   120.0,
+   9.0,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 134.7,
+  "widest_overhang_step": 1.2,
+  "widest_overhang_z": 3.3,
+  "widest_cantilever": 0.4,
+  "widest_cantilever_z": 0.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 19.68,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 19.7 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "imu_grommet",
+  "size": [
+   8.0,
+   8.0,
+   6.2
+  ],
+  "bed_ok": true,
+  "layers": 31,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 29.4,
+  "widest_overhang_step": 1.4,
+  "widest_overhang_z": 4.3,
+  "widest_cantilever": 1.4,
+  "widest_cantilever_z": 4.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 10.53,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 10.5 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "busboard_bracket",
+  "size": [
+   46.0,
+   54.0,
+   11.0
+  ],
+  "bed_ok": true,
+  "layers": 55,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 73.86,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 73.9 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "battery_sled",
+  "size": [
+   168.0,
+   50.8,
+   14.6
+  ],
+  "bed_ok": true,
+  "layers": 73,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1305.2,
+  "widest_overhang_step": 10.0,
+  "widest_overhang_z": 11.9,
+  "widest_cantilever": 10.0,
+  "widest_cantilever_z": 11.9,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 397.41,
+  "hard": [],
+  "warn": [
+   "overhang step 10.0 mm wide at z=11.9 (cantilever)",
+   "walls < 1.6 mm: 397.4 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "sled_rail",
+  "size": [
+   162.0,
+   11.0,
+   4.0
+  ],
+  "bed_ok": true,
+  "layers": 20,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.84,
+  "thin_hard_z": 1.1,
+  "thin_soft_area": 10.56,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 10.6 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "avionics_tray",
+  "size": [
+   90.0,
+   86.0,
+   29.0
+  ],
+  "bed_ok": true,
+  "layers": 145,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 457.5,
+  "widest_overhang_step": 2.7,
+  "widest_overhang_z": 1.1,
+  "widest_cantilever": 2.7,
+  "widest_cantilever_z": 1.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 6.93,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 6.9 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "tray_rail",
+  "size": [
+   56.0,
+   16.0,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 184.8,
+  "widest_overhang_step": 3.3,
+  "widest_overhang_z": 6.7,
+  "widest_cantilever": 3.3,
+  "widest_cantilever_z": 6.7,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 5.54,
+  "hard": [],
+  "warn": [
+   "overhang step 3.3 mm wide at z=6.7 (cantilever)",
+   "walls < 1.6 mm: 5.5 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "belly_door",
+  "size": [
+   120.0,
+   70.0,
+   5.4
+  ],
+  "bed_ok": true,
+  "layers": 27,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 589.4,
+  "widest_overhang_step": 27.3,
+  "widest_overhang_z": 0.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.55,
+  "hard": [],
+  "warn": [
+   "overhang step 27.3 mm wide at z=0.5 (bridge/step)"
+  ]
+ },
+ {
+  "part": "shell_sector_demo",
+  "size": [
+   116.0,
+   64.0,
+   8.8
+  ],
+  "bed_ok": true,
+  "layers": 44,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 6395.3,
+  "widest_overhang_step": 35.9,
+  "widest_overhang_z": 4.1,
+  "widest_cantilever": 35.9,
+  "widest_cantilever_z": 4.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.11,
+  "hard": [],
+  "warn": [
+   "overhang step 35.9 mm wide at z=4.1 (cantilever)"
+  ]
+ },
+ {
+  "part": "tube_clip",
+  "size": [
+   23.2,
+   15.4,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.88,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "link_clip",
+  "size": [
+   24.9,
+   11.4,
+   8.0
+  ],
+  "bed_ok": true,
+  "layers": 40,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 0.0,
+  "widest_overhang_step": 0.0,
+  "widest_overhang_z": null,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 2.86,
+  "hard": [],
+  "warn": []
+ },
+ {
+  "part": "dock_base",
+  "size": [
+   189.2,
+   96.0,
+   36.0
+  ],
+  "bed_ok": true,
+  "layers": 180,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 482.1,
+  "widest_overhang_step": 0.5,
+  "widest_overhang_z": 0.3,
+  "widest_cantilever": 0.5,
+  "widest_cantilever_z": 0.3,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 108.13,
+  "hard": [],
+  "warn": [
+   "walls < 1.6 mm: 108.1 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "dock_block",
+  "size": [
+   26.0,
+   32.4,
+   20.0
+  ],
+  "bed_ok": true,
+  "layers": 100,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1445.8,
+  "widest_overhang_step": 23.8,
+  "widest_overhang_z": 18.9,
+  "widest_cantilever": 23.8,
+  "widest_cantilever_z": 18.9,
+  "thin_hard_area": 2.21,
+  "thin_hard_z": 16.1,
+  "thin_soft_area": 6.6,
+  "hard": [],
+  "warn": [
+   "deliberate flexure walls < 0.8 mm (2.2 mm\u00b2)",
+   "overhang step 23.8 mm wide at z=18.9 (cantilever)",
+   "walls < 1.6 mm: 6.6 mm\u00b2 in a layer"
+  ]
+ },
+ {
+  "part": "dock_tower",
+  "size": [
+   26.0,
+   50.0,
+   50.0
+  ],
+  "bed_ok": true,
+  "layers": 250,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 680.1,
+  "widest_overhang_step": 8.9,
+  "widest_overhang_z": 2.1,
+  "widest_cantilever": 8.9,
+  "widest_cantilever_z": 2.1,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 3.15,
+  "hard": [],
+  "warn": [
+   "overhang step 8.9 mm wide at z=2.1 (cantilever)"
+  ]
+ },
+ {
+  "part": "whisker_shoe",
+  "size": [
+   26.0,
+   20.6,
+   12.0
+  ],
+  "bed_ok": true,
+  "layers": 60,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 219.1,
+  "widest_overhang_step": 8.0,
+  "widest_overhang_z": 4.5,
+  "widest_cantilever": 0.0,
+  "widest_cantilever_z": null,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 1.68,
+  "hard": [],
+  "warn": [
+   "overhang step 8.0 mm wide at z=4.5 (bridge/step)"
+  ]
+ },
+ {
+  "part": "foot_pad_tpu",
+  "size": [
+   16.9,
+   16.9,
+   18.5
+  ],
+  "bed_ok": true,
+  "layers": 92,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 63.8,
+  "widest_overhang_step": 0.4,
+  "widest_overhang_z": 4.9,
+  "widest_cantilever": 0.4,
+  "widest_cantilever_z": 4.9,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.0,
+  "hard": [],
+  "warn": []
+ }
+]

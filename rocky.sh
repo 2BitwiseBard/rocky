@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# rocky.sh — Pebble sim launcher for this laptop.
-#
-# Lives OUTSIDE the repo on purpose: the delivered drop is the project's source
-# of truth, and this file carries only the machine-specific glue (venv path,
-# llama-swap as the local brain, whisper-server as the ear, viewer + speakers on).
+# rocky.sh — Pebble launcher (repo root). Machine-specific glue only: the venv
+# path, llama-swap as the local brain, whisper-server as the ear, viewer +
+# speakers on. Everything it calls is documented in docs/SIM_GUIDE.md and
+# docs/RL_GUIDE.md.
 #
 #   rocky.sh play [--cliff]        live MuJoCo window + REPL + WASD/QE/SPACE teleop
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
@@ -15,14 +14,16 @@
 #   rocky.sh jobs                  training runs in flight + last log line of each
 #   rocky.sh train-recover NAME [args]   capped v2 self-righting retrain (D045 recipe)
 #   rocky.sh eval-recover NAME [args]    20-episode righting eval of runs/NAME
-#   rocky.sh cad-check             whole-tree CAD CI (build123d) — 21/21 or it didn't happen
+#   rocky.sh cad-check             whole-tree CAD CI (build123d) — 23/23 or it didn't happen
+#   rocky.sh train-walk NAME [args]  residual-gait PPO run (see docs/RL_GUIDE.md)
+#   rocky.sh eval-walk NAME [args]   deterministic eval of runs/NAME vs the bare gait
 #
 # Env overrides: ROCKY_REPO, ROCKY_WORLD (flat|room|cliff), ROCKY_VIEWER (1|0),
 # ROCKY_AUDIO (1|0), ROCKY_LLM_MODEL, ROCKY_VOICE_SECS, ROCKY_VOICE_WAV (test file
 # instead of the mic).
 set -euo pipefail
 
-ROCKY_REPO="${ROCKY_REPO:-$HOME/Development/rocky/rocky_v0.8.0_code/rocky}"
+ROCKY_REPO="${ROCKY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PY="$ROCKY_REPO/.venv/bin/python"
 export MUJOCO_GL="${MUJOCO_GL:-glfw}"
 export ROCKY_WORLD="${ROCKY_WORLD:-flat}"
@@ -94,6 +95,15 @@ case "$cmd" in
     cd "$ROCKY_REPO/sim" && mkdir -p "runs/$name"
     exec nice -n 10 "$PY" train_ppo.py --env recover --reward v2 --log-std-max -0.5 \
       --num-envs 8 --run-dir "runs/$name" "$@" ;;
+
+  train-walk)
+    name="${1:?run name}"; shift
+    cd "$ROCKY_REPO/sim" && mkdir -p "runs/$name"
+    exec nice -n 10 "$PY" train_ppo.py --env walk --num-envs 8 --run-dir "runs/$name" "$@" ;;
+
+  eval-walk)
+    name="${1:?run name}"; shift
+    cd "$ROCKY_REPO/sim" && MUJOCO_GL=egl exec "$PY" eval_ppo.py "runs/$name/latest.pt" --compare-zero "$@" ;;
 
   eval-recover)
     name="${1:?run name}"; shift

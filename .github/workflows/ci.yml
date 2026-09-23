@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  fast:
+    # driver + gait + harness suites, the sim smoke test and the URDF parity
+    # check: CPU only, under two minutes after the pip cache is warm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false          # nothing in the fast suites reads an LFS file
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[sim,harness,dev]"
+      - name: unit suites (driver, gait, harness fast)
+        run: python -m pytest driver/tests gait harness -m "not slow" -q
+      - name: sim smoke — the bare wave gait walks
+        env: { MUJOCO_GL: egl }
+        run: |
+          python sim/build_mjcf.py
+          python sim/run_sim.py | tail -3
+      - name: URDF == MJCF == analytic FK
+        env: { MUJOCO_GL: egl }
+        run: |
+          python ros2/rocky_description/generate_urdf.py
+          python sim/check_urdf_parity.py
+      - name: harness slow test (physics-backed goto)
+        env: { MUJOCO_GL: egl }
+        run: python -m pytest harness -m slow -q
+
+  cad:
+    # the parametric CAD check tree (build123d): ~2 min, runs on pushes to main
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true           # cad/ref/STS3215_03a.step is the servo reference solid
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[cad]"
+      - name: run_all_checks (23 modules incl. joint suite + printability)
+        working-directory: cad
+        run: python run_all_checks.py
