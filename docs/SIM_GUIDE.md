@@ -9,40 +9,95 @@ ones that produced the outputs quoted.
 
 **One model, generated.** `sim/build_mjcf.py` writes `sim/pebble.xml`
 from two inputs: `cad/params.yaml` (leg lengths L1/L2/L3 = 45/95/135 mm,
-body circumradius 110, joint ranges, hip axis height) and
-`sim/mass_budget.json` (link masses summed from the CAD tree's STL volumes
-by `sim/mass_audit.py`, D039). Five identical legs at 72° stations, three
-hinge joints each (yaw, hip, knee), position actuators clamped at the
-ST3215's stall torque, a foot sphere per leg, and a torso made of two
-stacked cylinders. The URDF in `ros2/` is generated from the same params
-and `sim/check_urdf_parity.py` proves the two agree (FK within 0.05 mm,
-identical mass).
+body circumradius 110, hip axis height, and since D052 the servo and joint
+identity) and `sim/mass_budget.json` (link masses summed from the CAD
+tree's STL volumes by `sim/mass_audit.py`, D039). Five identical legs at
+72° stations, three hinge joints each (yaw, hip, knee), a foot sphere per
+leg, and a torso made of two stacked cylinders; 2.670 kg compiled, equal
+to the budget. The URDF in `ros2/` is generated from the same inputs, and
+`sim/check_urdf_parity.py` proves the two agree (20 joints, FK within
+0.05 mm, identical mass, identical foot sphere). CI regenerates both and
+fails on any diff.
+
+**The servo, as the datasheet and one rule of thumb say (D052).** Every
+number that describes a servo or a joint lives in `params.yaml`
+(`actuators`, `joints`, `gait`, `reflex`, `sensing`) and is read through
+one loader, `gait/rocky_model.py`; the MJCF, the URDF, `servo_model`,
+`shove`, the driver's soft-limit clamp and the cockpit all use it. From
+the ST3215's 2.94 N·m stall and 4.7 rad/s no-load:
+
+| quantity | value | where it comes from |
+|---|---|---|
+| joint damping | 0.626 N·m·s/rad | stall / no-load: the servo's torque-speed line |
+| leg actuator forcerange | ±1.911 N·m | 0.65 × stall, the continuous (thermal) budget — a guess, VERIFY |
+| loaded / free / hard speed | 3.0 / 4.0 / 4.7 rad/s | 3.0 ≈ continuous / damping (3.05); 4.7 = no-load |
+| joint soft limits | yaw ±40°, hip −70…90°, knee −150…−20°, claw 0…55° | the CAD-validated sweeps (D008) |
+| foot | 6.5 mm sphere whose surface is the gait's IK foot point (site `foot_tip{i}`); μ 0.8, torsional 0.005 m | μ is a TPU-on-tile guess, VERIFY |
+
+With that, no MJCF joint can move faster than about 3.05 rad/s even
+unloaded; that is below the 4.0 rad/s "free" budget the authoring tools
+allow, and it is an open owner decision (§7). Before D052 the actuators
+were clamped at stall (2.94 N·m) with joint damping 0.05, which let the gait ask for
+7.4 rad/s and turn 50 % further than the servo could. `sim/model_fingerprint.py`
+hashes the robot (not the world) — `5a32f772ca99` — and every RL
+checkpoint records it.
 
 **The control stack is the real one.** The sim does not have its own
 controller. It imports `gait/pebble_gait.py` (closed-form IK, the five-
 phase `WaveGait` that turns a body-frame velocity command into joint
-targets), `gait/pebble_reflex.py` (the `ReflexSupervisor` state machine:
-NORMAL → PLANT → BRACE → RECOVER for safe-stops and shoves, FALLEN →
-RIGHTED for tumbles, D034/D042) and `gait/pebble_watchdog.py` (progress
-watchdog with escalating step-height retries, D023). The same modules are
-what the bench scripts and the ROS bridge feed to real servos.
+targets; T 2.0 s, step 24 mm, duty 0.8 since D052), `gait/pebble_reflex.py`
+(the `ReflexSupervisor` state machine: NORMAL → PLANT → BRACE → RECOVER
+for safe-stops and shoves, FALLEN → RIGHTED for tumbles, D034/D042) and
+`gait/pebble_watchdog.py` (progress watchdog with escalating step-height
+retries, D023). The same modules are what the bench scripts and the ROS
+bridge feed to real servos. Two D052 pieces sit in front of them:
+- **`WaveGait.budget()`** fits every velocity command into the gait's
+  envelope (45.5 mm/s at any heading, 0.246 rad/s turning in place) by
+  uniform scaling, so heading and curvature survive; walk, teleop, goto,
+  the residual walker and the ROS `gait_node` all go through it.
+- **`gait/pebble_feasibility.py`** checks a motion before it runs:
+  guarded joint limits, peak speed per class (loaded / free / hard), steps
+  at entry, exit and phase boundaries, ≥ 3 feet down, the CoM margin
+  (computed from the MJCF's own segment masses; it matches MuJoCo to
+  0.0002 mm), slip, and self-contact. Code gestures, keyframe files, the
+  studio, gait presets and the brain's `compose_gesture` are all checked
+  by it; `sim/audit_gestures.py` runs it plus a physics pass over
+  everything (20 rows, 0 FAIL on 2026-09-24).
 
-**Sensing in the sim.** `perception/` supplies a legged-odometry EKF (IMU
-+ leg kinematics, with a stillness gate for yaw), an ICP scan matcher, and
-the contact-timing cliff detector; `sim/sim_lidar.py` casts a 2D ray fan
-that `harness/sim_backend.py` exposes as `scan_summary`.
+**Sensing in the sim.** `sim/sim_imu.py` gives gravity (from
+`model.opt.gravity`, so a slope reads as a slope) and gyro with optional
+noise and latency; `perception/contacts.py` is the one foot-switch
+function: contacts against the world only (a foot pressed into its own
+body does not count), 2.0 / 1.0 N close / open hysteresis.
+`perception/` also supplies a legged-odometry EKF, an ICP scan matcher
+and the cliff detector; `sim/sim_lidar.py` casts a 2D ray fan (a plane
+~0.18 m above the floor) that `harness/sim_backend.py` exposes as
+`scan_summary`.
 
-**Worlds.** Three: `flat` (an open floor, the default for driving),
+**Worlds.** The scripts use three: `flat` (the default for driving),
 `cliff` (a table-edge island for the VOID reflex) and `room` (walls,
-pillars, a crate, for lidar and patrols). Selected by script flag or the
-`ROCKY_WORLD` environment variable.
+pillars, a crate, for lidar and patrols), by flag or `ROCKY_WORLD`. The
+cockpit builds more from a spec (`sim/world_builder.py`: flat, room,
+cliff, obstacle course, rubble field, rough terrain, stairs, slope 8°,
+icy floor, saved and random courses). Since D052 every world geom has
+`priority="1"`, so the world's friction is what a foot contact gets (the
+icy floor really is 0.35 now; before, the feet's own μ won and the preset
+did nothing); ramps and stairs have a far side unless `"far": "drop"`;
+random courses keep every object ≥ 0.3 m from the spawn.
 
-**What the numbers are worth (the honesty box).** Masses are from CAD, but
-servo gains, friction, backlash and bus latency are guesses until a real
-servo answers on the bench (D017 re-baseline). The sim is excellent for
-logic (does the reflex trip, does the gesture reach, does a gait tweak
-break a joint limit) and directional for dynamics (push envelopes,
-stability trends). Absolute numbers are "±real-robot-TBD".
+**What the numbers are worth (the honesty box).** Masses are from CAD;
+the servo identity is datasheet stall and no-load plus a guessed thermal
+fraction; friction, the foot-switch forces and every observation-noise
+level are guesses; link CoMs and inertias are primitive shapes, the SEA
+spring is rigid, and there is no gear backlash (B33). The servo realism
+layer (50 Hz hold, 20 ms latency, 4096-count goals) is on by default in
+the playground and cockpit. The sim is excellent for logic (does the
+reflex trip, does the gesture reach, does a gait tweak break a joint
+limit or a speed budget) and directional for dynamics (push envelopes,
+stability trends). Absolute numbers are "±real-robot-TBD" until a real
+servo answers on the bench (D017 re-baseline, B32). D052 made the sim
+harsher, not calibrated: the shove envelope actually got *better* under
+it (standing 25 → 30–35 N), which may be flattery in the other direction.
 
 ## 2. Step by step: first run
 
@@ -78,15 +133,17 @@ accepts keys.
 **Keyboard teleop (in the terminal, at an empty prompt).** Taps nudge the
 velocity command; there are no key-release events, so the command
 persists until you change it. Type commands as usual; the single keys
-only fire when the line is empty.
+only fire when the line is empty. The caps are the gait's envelope
+(`WaveGait.max_command()`: 45.5 mm/s and 0.246 rad/s at the default gait),
+and every nudge goes through the same guards as `walk`.
 
 | key | effect |
 |---|---|
-| `↑` / `↓` (or `Shift+W` / `Shift+S`) | forward / backward velocity ±15 mm/s per tap (max 60) |
+| `↑` / `↓` (or `Shift+W` / `Shift+S`) | forward / backward ±15 mm/s per tap (capped at the envelope, 45.5) |
 | `←` / `→` (or `Shift+A` / `Shift+D`) | strafe left / right ±15 mm/s per tap |
-| `Shift+Q` / `Shift+E` | turn left / right ±0.12 rad/s per tap (max 0.5) |
-| `SPACE` | safe-stop: zero the command and run PLANT → BRACE → planted idle (D034) |
-| `Shift+G` | wave hello (from a standstill) |
+| `Shift+Q` / `Shift+E` | turn left / right ±0.12 rad/s per tap (capped at 0.246) |
+| `SPACE` | safe-stop: zero the command and run PLANT → BRACE → planted idle (D034); also ends a gesture |
+| `Shift+G` | wave hello (from a planted standstill) |
 
 In the viewer window only the **arrow keys** drive. Every letter there is
 one of MuJoCo's own render toggles (W wireframe, S shadows, A auto-connect,
@@ -99,21 +156,42 @@ zooms the camera; Backspace there resets the physics state, so avoid it.
 
 | command | what it does |
 |---|---|
-| `walk VX [VY] [WZ]` | set the body-frame velocity command (mm/s, mm/s, rad/s); change it any time |
-| `stop` | the D034 safe-stop |
-| `gesture NAME` | `wave bow look_around shake sit turn_in_place sidestep jazz_hands fist_bump beckon` (from planted idle) |
+| `walk VX [VY] [WZ]` | set the body-frame velocity command (mm/s, mm/s, rad/s); change it any time. Fitted into the envelope by `WaveGait.budget`: `walk 60 0 0.5` runs as (18.8, 0, 0.16), "scaled to 0.31x by the lift-speed budget", and `show` prints `cmd asked -> cmd run` |
+| `stop` | the D034 safe-stop; also blends a running gesture out |
+| `gesture NAME` | `wave bow look_around shake sit turn_in_place sidestep jazz_hands fist_bump beckon`, or any saved keyframe gesture (`gait/gestures/*.json`). Only from a planted standstill (NORMAL, no walk, no goto); blended in and out at ≤ 3 rad/s, and the reflex keeps watching, so a fall drops the gesture and the righter takes over |
+| `gait NAME` · `gait save NAME` · `gait list` | load a gait preset (`gait/gaits/NAME.json`; `default` = params.yaml, `legacy_d050` = the old T 1.6 s / 32 mm gait, which has no envelope under the D052 budget) · save the current gait · list them with their parameters |
+| `check [NAME]` | the feasibility report: with no NAME, the gait at the current command and at the envelope corners (PASS/FAIL, peak rad/s and which joint against loaded 3.0 / free 4.0 / hard 4.7, support, CoM margin); with a NAME, that gesture |
+| `clear` | release a latched void (the cliff guard's bearing) and a latched safe-stop (3 gyro trips in 5 s); prints `nothing latched` when there is none. Does not resume the old walk |
+| `probe on` / `probe off` | the stance contact probe (feet feel for the floor, D050) |
 | `say WORD` | play a chord-speak sample (`aplay`/`ffplay`) or print it |
-| `set PARAM VALUE` | live-tune `gait.T gait.h gait.R0 gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s`; phase-continuous, so feet don't teleport |
-| `show` | current gait params, reflex state, pose, sim time |
-| `push FX FY [DUR]` | shove the shell rim: peak N, N, half-sine over DUR s (default 0.4); it prints the impulse in N·s and bodyweights. `push 20 0` sways and braces; `push 40 0` tips it over and the righter takes it from there |
+| `set PARAM VALUE` | live-tune `gait.T gait.h gait.R0 gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s servo.on servo.hold_hz servo.latency_s servo.rate_rad_s servo.quant` (`servo.load_derate 1` for the A/B in §3c); phase-continuous, so feet don't teleport. Gait values are validated (T 0.4–10 s, duty 0.5–0.95, step 0–80 mm, stance reachable) |
+| `show` | current gait params, reflex state and trip count, pose, asked → run command, probe state per leg, the servo model, sim time |
+| `push FX FY [DUR]` | shove the shell rim: peak N, N, half-sine over DUR s (default 0.4); it prints the impulse in N·s and bodyweights. `push 20 0` sways and braces; `push 40 0` tips it over on most seeds (4/5 in the audit) and the righter takes it from there |
 | `record on` / `record off` | capture an offscreen clip to `sim/playground_clip.mp4` |
-| `help` / `help rl` | the command list and teleop keys / the RL hooks below |
-| `rl` | every checkpoint in `sim/runs/`: env, reward version, rate limit, steps, last return, length, entropy, recorded eval |
+| `help` / `help rl` | the command list, teleop keys and the always-on guards / the RL hooks below |
+| `rl` | every checkpoint in `sim/runs/`: env, reward version, rate limit, obs version, servo, steps, last return, flags, recorded eval |
 | `righter NAME` / `righter off` | hot-swap the self-righting policy (`runs/NAME/latest.pt`) or run with the analytic stall/deadline ramp only |
 | `wait S` | (scripts) let S sim-seconds pass |
 | `quit` | exit |
 
-Headless example, as run for this guide:
+**Always-on guards (D052).** Every command source — `walk`, the keys, the
+cockpit's goto, the residual walker, the hardware mirror — goes through
+the same checks, in the Playground itself:
+- **Void guard**: a stance foot that probes 30 mm and finds nothing while
+  walking is a void. The robot backs off for 0.6 of a gait cycle,
+  safe-stops, and latches the world bearing; any command with a component
+  toward it is refused (`blocked: void at N deg — clear to release`), and
+  a goto has that component projected out, until `clear`.
+- **Trip escalation**: 3 gyro trips within 5 s latch a safe-stop;
+  velocity is ignored until `clear`.
+- **Target stream**: every joint target is rate-clamped at 4.7 rad/s
+  (claws 9.5), a non-finite target is dropped with the last good one
+  held, and the result goes both to the sim's servo model and to the
+  real bus.
+- **Kinematic height** from the IMU and the joint angles (what the robot
+  can compute) is what the supervisor gets; world z is for the HUD.
+
+Headless example, as run for this guide (2026-09-24, D052 tree):
 
 ```bash
 MUJOCO_GL=egl python sim/playground.py --script \
@@ -121,25 +199,36 @@ MUJOCO_GL=egl python sim/playground.py --script \
 ```
 
 It ends with `clean exit, no NaNs`; the playground asserts that nothing it
-did produced a NaN, which is the reflex stack's promise.
+did produced a NaN, which is the reflex stack's promise. The legacy
+righter prints a `legacy obs, exceeds servo` warning at start-up; that is
+the checkpoint contract doing its job (RL_GUIDE §2).
 
 **What a shove is (D048).** Every push used to be a rectangular force
 pulse at the centre of mass, which has no gentle regime: below the
-foot-friction limit (about 31 N) the robot is a rigid block, above it the
-feet let go and it cartwheels, and the old demo's 120 N × 0.25 s was a
-30 N·s strike that launched the robot 11–15 m at 10 m/s. `sim/shove.py`
-models a hand shove instead: a half-sine force at the carapace's top rim
-(60 mm above the torso frame), so the torque about the feet does the
-tipping. Under that model the standing robot survives a 25 N peak and
-tips at 30 N (about one bodyweight of peak force, 6–8 N·s); walking,
-20–30 N depending on direction (`sim/shove_envelope.py`,
-`sim/out/shove_envelope.json`). The push-envelope experiment scripts keep
-the old pulse because their JSONs are decision records (D017/D025).
+foot-friction limit the robot is a rigid block, above it the feet let go
+and it cartwheels, and the old demo's 120 N × 0.25 s was a 30 N·s strike
+that launched the robot 11–15 m at 10 m/s. `sim/shove.py` models a hand
+shove instead: a half-sine force at the carapace's top rim (60 mm above
+the torso frame, from params), so the torque about the feet does the
+tipping; bodyweights use the torso subtree mass only (a free ball in the
+world no longer inflates them). On the D052 model the standing robot
+survives a 30 N peak at 0/180/240/300° and 35 N at 60/120° (1.15–1.34 BW,
+7.6–8.9 N·s) and tips at 35–40 N; walking, 20–35 N by direction (weakest
+20 N at 60°, 0.76 BW). Pre-D052 (μ 1.2, no damping) it was 25 N standing
+in every direction and walking 20–30 N; the robot got harder to tip under
+the harsher model, which is flagged as possibly flattering rather than
+celebrated (`sim/shove_envelope.py`). The sliding limit for a CoM push is
+now about 21 N (0.8 × 2.67 kg × g; was ~31 N at μ 1.2). The push-envelope
+experiment scripts keep the old pulse because their JSONs are decision
+records (D017/D025).
 
-When a shove does tip it, the playground now feeds tilt and height to the
-supervisor and installs the learned righter (torch + a checkpoint in
-`sim/runs/`; it says so at start-up), so a fall ends in FALLEN → RIGHTED →
-NORMAL instead of an upside-down standing pose.
+When a shove does tip it, the playground feeds the supervisor tilt, the
+kinematic height, the measured joint angles and the foot switches, and
+installs the learned righter (torch + a checkpoint in `sim/runs/`; it
+says so at start-up), so a fall ends in FALLEN → RIGHTED → NORMAL. The
+handoff from righter to ramp uses `handoff_ok` (tilt + ≥ 3 switches +
+joint-angle height); on the D052 model the policy never meets it by
+itself and the 3 s stall ramp does the standing (RL_GUIDE §4).
 
 **HUD (viewer window).** A marker above the torso shows the reflex state
 (green NORMAL, yellow PLANT, orange BRACE, blue RECOVER, red FALLEN,
@@ -155,8 +244,8 @@ analytic ramp takes over. `python sim/rl_dashboard.py` draws the training
 curves of every run into `sim/out/rl_curves.png`.
 
 **Keepers.** Anything you tune with `set` is sim-only until it goes into
-`params.yaml` and the tree is regenerated; write keepers in
-`NOTES_INBOX.md`.
+`params.yaml` and the tree is regenerated (a gait can also be kept as a
+preset with `gait save NAME`); write keepers in `NOTES_INBOX.md`.
 
 ## 3b. The cockpit: the playground in a browser
 
@@ -169,136 +258,183 @@ One continuously running sim, rendered offscreen to two camera streams
 (a chase camera you can orbit, and the robot's **eye** on the torso), with
 everything the terminal playground has and the parts that need a screen:
 
+- **Header**: reflex state, mode, pose, tilt, world, the brain, and since
+  D052 the **sim heartbeat** (`live` / `paused` / `stalled` / `DEAD`), the
+  **robot fingerprint** (amber `?` when a loaded checkpoint carries no
+  fingerprint, red `≠ ckpt` when it was trained on another robot; hover
+  for details) and the guard chips: **VOID N°** (the always-on void guard
+  latched a bearing), **LATCHED** (3 gyro trips in 5 s), both with a
+  `clear` button, and **locomotion held** while the sim streams to real
+  legs.
+- **Overlay** on the chase camera: the command asked and the command the
+  gait actually got after the guards and `WaveGait.budget` (with the
+  budget note when it was scaled), feet, the stance probe per leg
+  (S/P/H/— + mm), the kinematic height, and for six seconds the last
+  command a guard refused (`blocked: void at 24 deg — clear to release`).
 - **Console** at the bottom: every playground command (`walk`, `stop`,
-  `gesture`, `push`, `set`, `rl`, `righter`, `help`).
-- **Brain & chat** (sidebar): a mode switch — *Talk* (the regex intent
-  parser, no model), *Local model* (any llama-swap model, tool-calling
-  over the six harness tools plus `look`), *Claude* (the Anthropic API if
-  `anthropic` is installed and `ANTHROPIC_API_KEY` is set; otherwise run
-  `./rocky.sh chat` in a terminal, and Claude Code drives this same sim
-  over MCP while you watch — the MCP server picks a running cockpit
-  automatically with `ROCKY_BACKEND=auto`). Tool calls and results are
-  shown under each reply.
-- **Vision**: `look` sends the eye camera's frame to a local vision model
-  (`vision-model` alias, `lfm2.5-vl`, or a gemma) and returns its
-  description; the brains get it as a tool, so "what do you see?" works.
+  `gesture`, `push`, `set`, `gait`, `check`, `clear`, `probe`, `show`,
+  `rl`, `righter`, `help`).
+- **Brain & chat**: modes *Talk* (regex intent, no model), *Local model*,
+  *Multimodal* (one vision model sees and acts) and *Claude* (the API, or
+  `./rocky.sh chat` driving this sim over MCP). Role selectors for brain,
+  vision, multimodal and the whisper model, each marked warm (● loaded) or
+  cold; quarantined models never appear. The fallback chain per role is
+  shown, a note warns when brain + vision are not the
+  qwen3.6-35b-a3b + lfm2.5-vl pair that shares the GPU, and `/api/brain`
+  refusals (text-only model as vision, quarantined model) are printed.
+  Replies show fallback notes and the tool trace; a `compose_gesture`
+  result has **save gesture** / **open in studio** buttons.
+- **Voice**: hold 🎤. The transcript always lands in the input box; with
+  the wake word ("pebble, …") or no motion in it, it is sent at once;
+  otherwise the page says "needs the wake word — press Enter" and only
+  your Enter sends it as a (trusted) command.
 - **Teleop**: arrow buttons or the keyboard (page focused, no text box
-  active), gestures and chord-speak from dropdowns, shove buttons.
-- **World**: presets (flat, room, cliff, obstacle course, rubble field,
-  rough terrain, stairs, slope, icy floor), add boxes / walls / ramps /
-  stairs / rubble / a pushable ball at (x, y), floor friction, a gravity
-  tilt (a slope without rebuilding the floor), a rough-terrain heightfield.
-  The world rebuilds in place; the robot respawns upright where it stood.
-  Added objects are lidar-visible (group 3), so `scan_summary` reports
-  them; the eye sees everything.
-- **RL**: the checkpoint table, righter hot-swap, stall and deadline
-  sliders, the training curves.
-- **Gait tuning** sliders, an **Events** feed and a **Help** panel; every
+  active), gestures and chord-speak from dropdowns, shove buttons. The
+  movement buttons are disabled, with the reason, while locomotion is held.
+- **World & map**: presets, objects, friction (default 0.8, the foot pad's
+  μ), gravity tilt, rough terrain, saved/random worlds; the top-down map
+  shows lidar hits, the goto target and a latched void as a red wedge.
+  Click the map to goto.
+- **RL**: the checkpoint table (obs version, robot fingerprint per run),
+  righter hot-swap, stall and deadline sliders, the training curves, and
+  the **walking policy**: a gait checkpoint's PPO residual rides on the
+  analytic gait while NORMAL, fed exactly the observation it was trained
+  on (`rl_common.checkpoint_contract`: obs version, EMA, and its training
+  gait, which is applied while it runs and restored on "analytic").
+  Measured 2026-09-24: every walker on disk is pre-D052 (obs v1, T 1.6 s,
+  32 mm step) and that gait has **no** speed envelope under the D052 servo
+  budget — its swing lifts faster than the servo — so the budget zeroes
+  every command and the panel says so. They need retraining on the D052 env.
+- **Model & fingerprint**: what the sim believes the robot is
+  (`gait/rocky_model.py`): servo stall / continuous torque / no-load speed
+  / damping, the loaded / free / hard speed budgets, soft limits, gait and
+  its envelope, the studio's ranges, and each loaded checkpoint's
+  fingerprint status.
+- **Recordings**, **Events** (guard notes, `hw:` events), **Help**; every
   section collapses, the sidebar toggles, speed 0.25–4× and pause.
+- **Stop it**: Ctrl-C, the ⏻ quit button (the real legs are limped first)
+  or `./rocky.sh cockpit-stop`. For the phone: `./rocky.sh tailnet`
+  publishes it on the tailnet over HTTPS (`tailscale serve`, port 9445);
+  the server itself stays on 127.0.0.1.
 
-- **Recordings**: ⏺ in the header records the chase camera and every
-  command (console, teleop, tool calls from any brain); stop writes
-  `clip.mp4`, `clip.gif` and `run.json` (world spec + timed commands) under
-  `sim/out/recordings/NAME/`; ▶ replay reloads that world and re-runs the
-  commands on the live sim.
-- **Worlds on disk**: save the current spec as `sim/worlds/NAME.json`,
-  load it back, or generate a seeded **random course** (obstacles in an
-  annulus around a clear spawn) for curriculum runs.
-- **Walking policy**: pick a gait checkpoint (`robust_fwd2`,
-  `cmd_sample3`) in the RL panel and the PPO residual (±0.25 rad at 50 Hz,
-  `rocky_env.PebbleEnv`'s contract) rides on the analytic gait while the
-  reflex state is NORMAL; "analytic wave gait" switches it off.
-- **Voice**: hold 🎤 in the chat to record; the clip goes through ffmpeg to
-  `whisper-server` (:8082) and the text is sent to the current brain.
-- **Stop it**: Ctrl-C in its terminal, the page's ⏻ quit button, or
-  `./rocky.sh cockpit-stop`; `./rocky.sh cockpit` restarts a running one.
-  For the phone: `./rocky.sh tailnet` publishes it on the tailnet over
-  HTTPS (`tailscale serve`, port 9445 by default; `tailnet off` removes
-  it). HTTPS is what makes the mic button work there, since browsers
-  only allow the microphone on a secure origin; chord-speak plays in the
-  phone's browser too. The server itself stays bound to 127.0.0.1. It
-  needs `sudo tailscale up` once on the laptop (the layout stacks under
-  900 px).
+**Goto (D052).** `goto(x, y)` walks toward the target at the gait's
+envelope speed and ends as one of: `arrived`; `cliff` — the Playground's
+always-on void guard (one detector for every command source; the goto no
+longer runs its own) found a planted foot with no floor under 30 mm of
+probe, backed off and safe-stopped; `blocked` — a reactive layer reads the
+lidar at 8 Hz, and a return within ±30° of the travel heading closer than
+0.35 m (from the torso centre) triggers a detour: first 45° off the target
+heading toward the clearer side, then a 90° sidestep to the same side,
+each until the robot-wide corridor toward the target has been clear for
+0.8 s (8 s at most); blocked a third time, the goto stops with the
+obstacle's bearing and range. A goto refused at the start (void in that
+direction, latched safe-stop, locomotion held) is also `blocked`, with a
+detail. `stuck` — 3 s without 2 cm of progress (was 6 s): something the
+puck cannot see, because the lidar plane is ~0.18 m above the floor
+(torso + 60 mm) and anything lower — boxes, curbs, rubble, steps — is
+invisible to it (`scan_summary` says so). Measured 2026-09-24 (flat
+floor, from the origin, servo realism on): target 0.45 m away → arrived
+in 12.2 s; a 0.8 m wall at x = 0.6 → blocked at 0.27 m after both detours
+(16 s); a 0.25 m-wide wall → also blocked (the sidestep made only ~25 mm/s,
+0.2 m in its 8 s: the reactive layer is not a planner); an 8 cm box →
+stuck after 3 s; the cliff world → cliff at x = 0.19.
 
-**Obstacles, rough ground and voids (D050).** The cliff detector works
-on contact timing, so on an obstacle course or rubble every bridged foot,
-bump and blocked swing read as a missed footfall and a goto came back
-`stopped: cliff`. The fix is what a robot with a foot switch and no depth
-sensor actually does: **feel for the floor**. In the playground and the
-cockpit a foot the gait believes is planted but that reports no contact
-is lowered at 120 mm/s, up to 30 mm, until it finds ground, and relaxes
-as soon as contact is back (`Playground._probe`). A void is a foot that
-ran out of probe and still touched nothing (`CliffDetector.update(...,
-probed_out=)`); everything else is terrain. Measured on 2026-09-23 from
-the origin: cliff world → `cliff` at x = 0.15 (edge at 0.35); rough
-terrain, rubble field and the 4 × 15 mm stairs → `arrived`; the 6 cm box
-→ `stuck` (no 2 cm of progress for 6 s ends a goto as `stuck`; 40 s as
-`timeout`). The open-loop gait still cannot climb a 6 cm box. The
-harness's in-process sim backend and the `run_cliff` experiments keep the
-timing-only detector, so their recorded numbers stand.
+**Hardening (D052).** The sim thread no longer dies silently: an exception
+out of a physics step limps the real legs, fails every waiting HTTP
+request with 503 (before, one exception froze every request forever) and
+ends the process with exit code 1; `/api/state` carries a `heartbeat`
+(`step_age_s`, `loop_age_s`, `alive`, `fatal`). Nothing in the cockpit is
+authenticated, so: it refuses a non-loopback `--host` unless
+`--unsafe-lan` (which prints that warning); every POST must be
+same-origin (an `Origin` whose host:port differs from `Host` is 403 — the
+tailnet's `https://x.ts.net:9445` passes, since tailscale serve keeps the
+Host) and `Content-Type: application/json` (`/api/voice`: multipart), so a
+cross-site form cannot drive the robot; and the `Host` header must be
+loopback, `*.ts.net`, a tailnet 100.64/10 address, this machine's name or
+`ROCKY_COCKPIT_HOSTS` — a DNS-rebinding page would otherwise pass the
+Origin check.
 
 The state feed is server-sent events at 10 Hz; the cameras are MJPEG
-streams, so nothing to install beyond the `sim` extra (`starlette` and
-`uvicorn` come with `mcp`). The HTTP API under `/api/` is what the MCP
-proxy (`harness/cockpit_backend.py`) and any script can use:
+streams. The HTTP API under `/api/` is what the MCP proxy
+(`harness/cockpit_backend.py`) and any script can use (send JSON):
 `POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/cmd {"line": "walk 45"}`,
-`/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`.
+`/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`,
+`GET /api/model`, `GET /api/gait`, `POST /api/gesture/check|solve|teach`.
+`sim/tests/test_cockpit_api.py` drives all of it headless.
 
-## 3c. Toward the real robot: gesture studio, voice, realism, hardware (D051)
+## 3c. Toward the real robot: gesture studio, voice, realism, hardware (D051, D052)
 
-Four panels added on 2026-09-24 so the cockpit is the place where gaits,
-gestures and sounds are made, and where the real servos plug in one leg
-at a time.
+The cockpit is where gaits, gestures and sounds are made, and where the
+real servos plug in one leg at a time. D052: "the studio cannot author what
+the robot cannot do; the bus gets a safe first move".
 
-- **Gesture studio.** Gestures as data: `gait/gestures/NAME.json` is a
-  list of keyframes (time, body offset, yaw, per-corner crouch, a raised
-  leg as an "arm" with explicit joint angles, claw opening, a chord cue,
-  an easing). Pose the robot with the sliders and it holds the pose live
-  in physics; **snap** a frame, move the time, pose the next one; scrub
-  the timeline; ▶ plays it once (cues fire their chords); save. A saved
-  gesture appears in every gesture list: the teleop dropdown, the
-  console's `gesture NAME`, the brains' `gesture` tool and the MCP tool
-  through the cockpit backend. The player (`gait/pebble_keyframes.py`)
-  returns the same `(q[5,3], claw[5])` stream as the code gestures, so
-  the same file drives the servo bus later. The code gestures (wave, bow,
-  jazz hands…) play from the same list but are edited in Python.
-- **Voice & sounds.** Chord-speak now plays in the browser (a phone on
-  the tailnet hears the robot; untick to use the server's speakers). The
-  **chord designer** exposes the v0.2 voice model (`audio/chordspeak2.py`):
-  a word is one to four syllables, each a stack of just-intonation ratios
-  on a low root through one fixed throat, with amplitude, growl, breath,
-  pitch bend, detune and wobble per syllable. Load a canon word to see how
-  it is built, change it, ▶ hear it, save it under a new name: the spec
-  goes to `audio/custom/NAME.json`, the render to
-  `audio/samples_custom/NAME.wav`, and the lexicon (`say`, the brains, the
-  MCP tool) picks it up at once. Canon words are read-only.
-- **Gait lab & realism.** A scrolling **footfall diagram** (one row per
-  leg, filled while in contact, a tick per gait cycle) under the gait
-  sliders, which now include duty and stance radius. Below it the **servo
-  model** (`sim/servo_model.py`): what the bus does to a target that the
-  ideal sim actuator does not — a zero-order hold at the bus rate (50 Hz),
-  a latency (20 ms), a slew limit (4.7 rad/s, the ST3215's no-load speed
-  at 12 V) and 4096-count quantisation. Off by default so every recorded
-  number stands; on, a gesture that depends on the sim servo teleporting
-  shows it here rather than on the bench. Console: `set servo.on 1`,
-  `set servo.rate_rad_s 3`.
-- **Hardware.** The Feetech bus beside the sim (`sim/hw_bridge.py` over
-  `driver/rocky_driver`). Pick the adapter port (or `mock`, the byte-level
-  servo simulator the bench scripts rehearse on), **scan**, and every leg
-  whose three servos answered is a real leg. **sim → robot** streams the
-  sim's joint targets to those legs at 25 Hz — gait, gestures, reflexes,
-  whatever the sim is doing — with a counts-per-second cap for gentle
-  first moves; **robot → sim** makes the sim leg follow the real one
-  (hold it in your hand and check the IK frame, the calibration and the
-  limits on screen). Legs not on the bus stay simulated, so one built leg
-  is a robot with one real leg and four simulated ones. The panel also
-  has the telemetry table (position, load, volts, temperature, faults,
-  torque) with a per-servo jog, torque on / **LIMP**, the SafetyMonitor
-  (temperature and fault torque-cut at 2 Hz, events in the feed), center
-  calibration and direction per joint (writes `bench/calibration.yaml`
-  exactly as `bench/calibrate_centers.py` does) and ID assignment. The
-  cockpit's stop also stops the stream to the real legs. Everything in
-  this panel was verified on the mock only: no servo has been on this
+- **Gesture studio.** Gestures as data: `gait/gestures/NAME.json`, a list
+  of keyframes (time, body offset, yaw, per-corner crouch, a raised leg as
+  an "arm", reach targets, claw, a chord cue, an easing). Pose with the
+  sliders — the sim blends to the pose at the loaded speed budget (no
+  snap) and holds it; **snap** a frame, move the time, repeat; scrub; ▶
+  plays it once; save. Slider ranges come from `/api/model` (body ±40 mm,
+  z −45..+25, yaw ±18°, the params joint limits). Every change is
+  **checked** (`pebble_feasibility.check_spec` with the sim's gait and
+  MuJoCo model): the verdict line shows PASS / PASS with warnings / FAIL,
+  the peak joint speed and which joint against loaded 3.0 / free 4.0 /
+  hard 4.7 rad/s, the CoM margin, jumps, self-contacts and a thermal
+  warning. A FAIL is neither played nor saved unless **force** is ticked
+  (a forced save records `"checked": {"ok": false}`); built-in gesture
+  names cannot be overwritten. **Reach**: set the arm leg's hand target
+  (x/y/z mm in the ground frame, floor at −h) and **solve** — the
+  whole-body solver (`gait/pebble_pose_solver.py`, 1–3 s) finds the body
+  lean, height, yaw and arm joints that reach it with the CoM ≥ 25 mm
+  inside the planted feet, fills the sliders and previews it; snap to
+  keep it. **Teach**: ● record pose stream samples the sim's joint targets
+  at 20 Hz (the real legs' measured pose for legs mirrored robot → sim)
+  while you pose, play or back-drive; stop turns it into keyframes
+  (Ramer-Douglas-Peucker, 2° tolerance, body pose fitted from the planted
+  feet — above ~5 mm fit residual, do not trust the body pose) loaded
+  into the studio with its verdict. **load draft** opens the brain's last
+  `compose_gesture`.
+- **Voice & sounds.** Chord-speak plays in the browser; the **chord
+  designer** edits the v0.2 voice model (`audio/chordspeak2.py`) and saves
+  new words into the lexicon. Unchanged in D052.
+- **Gait lab & realism.** The footfall diagram, gait sliders initialised
+  from the running gait (params default T 2.0 s, step 24 mm), gait
+  **presets** (`gait/gaits/NAME.json`: select + load = `gait NAME`, save =
+  `gait save NAME`), the current envelope, and **check** (`check` in the
+  console: feasibility of the gait at the current command and at the
+  envelope corners). The budget note appears when a command was scaled.
+  The **servo model** is ON by default since D052 (50 Hz hold, 20 ms
+  latency, slew 4.7 rad/s, 4096-count goals); untick it for ideal
+  actuators. The load derate of the slew (rate × max(0.2, 1 − |τ|/stall))
+  is OFF since D052 V2 — it counted the torque-speed line twice (the MJCF
+  damping + forcerange already carry it); `set servo.load_derate 1` for an A/B.
+- **Hardware.** The Feetech bus beside the sim (`sim/hw_bridge.py`). Pick
+  the port (or `mock`), **scan**; the leg strip shows present, mirrored
+  and **degraded** legs (a leg silent for 10 ticks leaves the mirror,
+  greyed) and, while a leg enters, a **soft-entry** progress bar.
+  **sim → robot** is refused (with the reason) unless the sim is at a
+  planted standstill (NORMAL, no velocity, no gesture or studio pose, no
+  goto); entering parks each leg where it is, at 40 % torque and 200 c/s,
+  and blends to the sim pose before releasing. While streaming,
+  **locomotion is held** (walk, teleop, goto and map clicks are refused and
+  the buttons disabled) until real foot contacts exist; gestures are
+  allowed after the entry — except the ones that walk (turn_in_place,
+  sidestep and their right-hand variants), which are held like a walk
+  (D052 V2). Also V2: sim → robot needs the sim at 1× speed (and the
+  speed stays locked there), shoves and gait changes are refused, and the
+  mirror is **dropped** (the real legs hold their last goal) the moment the
+  sim's reflex leaves NORMAL or the sim is reset / its world changes — a
+  reaction to something only the sim lived through never reaches the real
+  legs. The stream runs at the 50 Hz bus rate (telemetry at 25 Hz); a
+  re-armed leg always comes back through a soft entry. The stream-speed slider starts at 200 c/s
+  (0 = servo max). A red banner shows a lost port; `hw:` events
+  (degraded, lost, stale, cut, nan, rate, entry, limits) appear in the
+  panel. The telemetry table adds missed ticks, age and trip reason per
+  servo; a tripped row is red with a **re-arm** button (torque on for that
+  whole leg — the only re-arm). **apply limits…** previews the EEPROM
+  angle limits from the params soft limits + calibration (2° margin) and
+  writes them after a confirm (mirror must be off). Center calibration,
+  direction, ID assignment, jog and LIMP are unchanged. Everything in this
+  panel was verified on the mock only: no servo has been on this
   laptop's bus yet.
 
 ## 4. The experiment scripts
@@ -367,10 +503,59 @@ The hip axis height, leg lengths and joint limits all come from
 
 ## 7. Known gaps
 
-- No hardware backend for the harness yet (`harness/hw_backend.py` is the
-  next piece: the same six tools on `rocky_driver.PebbleRobot`).
-- No real IMU, contact-switch or lidar drivers; the sim provides those
-  signals directly.
+Hardware and the onboard loop (B32, B35):
+- **No real servo has been on the bus.** The hardware bridge's soft
+  entry, fault cuts, re-arm rules and EEPROM limits are tested on the
+  byte-faithful mock only; GOAL_SPEED 0, torque-enable heading to the last
+  goal, behaviour at an angle limit and the POSITION_OFFSET sign are
+  VERIFY-ON-BENCH.
+- **The tailnet path is unexercised** (`rocky.sh tailnet`: tailscale was
+  logged out; the request guard passes a `*.ts.net` host only in tests).
+- No hardware backend for the harness yet (`harness/hw_backend.py`: the
+  same six tools on `rocky_driver.PebbleRobot`), no IMU, foot-switch or
+  lidar drivers, no 50 Hz loop on the Pi and no host watchdog; the sim
+  provides the signals (`sim_imu`, `perception/contacts`).
 - The recovery policy needs torch; a numpy/ONNX inference path is wanted
   for the Pi.
-- The ROS 2 packages are a scaffold that has never been `colcon build`-ed.
+- The ROS 2 packages are a scaffold that has never been `colcon build`-ed
+  (`gait_node` now budgets its commands and `hw_bridge_node` uses
+  `SoftStream`, both untested under ROS).
+- The harness's in-process `SimBackend` is not the D052 loop: it has the
+  NaN guard, the 4.7 rad/s clamp and a 3.0 rad/s ramp back after a stop
+  or gesture, but no servo model, no `WaveGait.budget`, no probe and its
+  own timing-only cliff detector instead of the void guard. The cockpit
+  backend (`ROCKY_BACKEND=auto` with a cockpit running) is the D052 loop.
+
+The model (B33, D052 open items):
+- **The free speed budget (4.0 rad/s) exceeds what any MJCF joint can
+  reach** (forcerange / damping = 3.05 rad/s). Arm moves and swing yaw
+  authored to the free budget lag 13–19° at p95 in physics. Kept visible
+  as a strict xfail (`test_model_consistency`) until the owner chooses:
+  peak torque plus a thermal model in the sim, or free ≤ 3.0.
+- Tracking lag p95 is 16.6–18.7° on every gait row of `audit_gestures`
+  (warn at 10, fail at 20): the sim is close to saying the gait asks more
+  than the servo follows.
+- Link CoMs and inertias are primitive shapes, the SEA spring is rigid,
+  no backlash; μ 0.8, the thermal fraction 0.65, every SCS0009 number and
+  the switch forces are guesses.
+- The shove envelope got better under D052 (standing 25 → 30–35 N); the
+  cause (slower, lower gait vs joint damping) is not isolated.
+
+Behaviour:
+- **The void guard misses cliffs approached at 10–20°** (D052 V2 review
+  finding, not yet fixed); a plain head-on walk stops short (x 0.19–0.20 m
+  on the 0.35 m platform).
+- The void retreat barely retreats (~20 mm *forward* during a 1.2 s
+  retreat in one run): `WaveGait.foot_targets` is position-from-phase, so
+  reversing v mid-stance moves the stance feet by Δv·s·T. The safe-stop is
+  what saves it.
+- Goto's reactive layer is not a planner: a 0.25 m-wide wall ends it
+  `blocked` (the sidestep makes ~25 mm/s), and anything below the lidar
+  plane ends it `stuck`.
+- On its back with **no** righter, the supervisor loops FALLEN → RIGHTED →
+  FALLEN every stall period (3 s) and never stands.
+- The probe constants (settle 0.12 of the stance, 3.5 mm lead) are tuned
+  to this sim's slow actuator and need bench values.
+- Every RL checkpoint on disk is pre-D052 (`legacy obs`); the walkers have
+  no speed envelope on the D052 servo and are zeroed; no righter earns a
+  handoff by itself on the D052 model (RL_GUIDE §4).

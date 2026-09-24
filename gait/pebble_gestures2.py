@@ -10,9 +10,18 @@ canon gestures use (feet stay where they are; the BODY moves).
 
 New here: `posed()` accepts a BODY YAW with planted feet (look-around —
 lidar is the eyes, the whole rock turns to look) and PER-LEG height
-offsets (bow — the north side dips, the body pitches). The self-test
-asserts joint ranges, no NaN, claw range AND a static-stability margin:
-the body origin's projection must stay inside the planted-foot polygon.
+offsets (bow — the north side dips, the body pitches). The self-test runs
+every entry through pebble_feasibility.check (D052): guarded joint ranges,
+loaded 3.0 / free 4.0 / hard 4.7 rad/s, no steps, >= 3 feet, CoM margin,
+slip. stability_margin() is CoM-aware now (it projected the body ORIGIN,
+which ignores the raised arm's own mass — two adjacent arms in a JSON
+gesture scored positive while the CoM sat 57 mm outside).
+
+D052 changes, measured by the checker: wave wag 1.5 -> 1.25 Hz (3.95 ->
+3.29 rad/s on the yaw, free limit 4.0); shake 5.5 Hz x 6 mm -> 4 Hz x 4 mm
+(0.51 g of CoM acceleration over mu 0.8 pads -> 0.18); turn_in_place and
+sidestep go through WaveGait.budget() (the old wz 0.35 swung the coxa at
+5.17 rad/s, past the servo's no-load 4.7) and end on a planted stance.
 
 Registry: GESTURES2 = {name: (fn, total_s, narration)} — playground.py,
 harness/backend.py and run_gestures2.py all read it.
@@ -21,10 +30,12 @@ from __future__ import annotations
 import numpy as np
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS, STATION_DEG
 from pebble_gestures import _smooth, _planted_q, _lean_dir, CLAW_MAX
+import rocky_model as _rm
 
-YAW_LIM = np.deg2rad(40.0)
-HIP_LIM = (np.deg2rad(-70.0), np.deg2rad(90.0))
-KNEE_LIM = (np.deg2rad(-150.0), np.deg2rad(-20.0))
+_LO, _HI = _rm.joint_limits_rad()               # D052: from params, not literals
+YAW_LIM = _HI[0]
+HIP_LIM = (_LO[1], _HI[1])
+KNEE_LIM = (_LO[2], _HI[2])
 
 
 def _rotz(p, yaw):
@@ -60,11 +71,12 @@ def _blend(a, qa, qb):
 WAVE_T = dict(lean=0.9, raise_=0.8, wave=2.4, lower=0.8, recenter=0.5)
 WAVE_TOTAL = sum(WAVE_T.values())
 WAVE_ARM = 0                                     # north — faces the friend
+WAVE_HZ = 1.25                                   # D052: 1.5 Hz x 24 deg = 3.95 rad/s (free 4.0)
 _Q_WAVE_HI = np.array([0.0, np.deg2rad(72), np.deg2rad(-48)])   # hand high
 
 
 def wave(g: WaveGait, t: float):
-    """Hello: north arm high, open hand, yaw wagging at 1.5 Hz."""
+    """Hello: north arm high, open hand, yaw wagging at 1.25 Hz."""
     t1 = WAVE_T["lean"]; t2 = t1 + WAVE_T["raise_"]
     t3 = t2 + WAVE_T["wave"]; t4 = t3 + WAVE_T["lower"]
     lean = _lean_dir((WAVE_ARM,)) * 13.0
@@ -82,8 +94,8 @@ def wave(g: WaveGait, t: float):
         env = min(1.0, tw / 0.3, (t3 - t) / 0.3)          # ease in/out
         q, c = posed(g, lean)
         qa = _Q_WAVE_HI.copy()
-        qa[0] = np.deg2rad(24) * env * np.sin(2 * np.pi * 1.5 * tw)
-        qa[2] += np.deg2rad(6) * env * np.sin(2 * np.pi * 3.0 * tw)
+        qa[0] = np.deg2rad(24) * env * np.sin(2 * np.pi * WAVE_HZ * tw)
+        qa[2] += np.deg2rad(6) * env * np.sin(2 * np.pi * 2 * WAVE_HZ * tw)
         q[WAVE_ARM] = qa
         c[WAVE_ARM] = 0.7 * CLAW_MAX
         return q, c
@@ -150,12 +162,15 @@ SHAKE_T = dict(shake=1.6, settle=0.5)
 SHAKE_TOTAL = sum(SHAKE_T.values())
 
 
+SHAKE_HZ, SHAKE_MM = 4.0, 4.0                    # D052: was 5.5 Hz x 6 mm (0.51 g on mu 0.8 pads)
+
+
 def shake(g: WaveGait, t: float):
-    """Wet-dog shake: 5.5 Hz lateral shimmy with a bob, feet planted."""
+    """Wet-dog shake: 4 Hz lateral shimmy with a bob, feet planted."""
     if t < SHAKE_T["shake"]:
-        env = min(1.0, t / 0.25, (SHAKE_T["shake"] - t) / 0.35)
-        x = 6.0 * env * np.sin(2 * np.pi * 5.5 * t)
-        z = -4.0 * env * (1 - np.cos(2 * np.pi * 2.75 * t)) / 2
+        env = max(0.0, min(1.0, t / 0.25, (SHAKE_T["shake"] - t) / 0.35))
+        x = SHAKE_MM * env * np.sin(2 * np.pi * SHAKE_HZ * t)
+        z = -4.0 * env * (1 - np.cos(2 * np.pi * SHAKE_HZ / 2 * t)) / 2
         return posed(g, (x, 0, z))
     return posed(g, (0, 0, 0))
 
@@ -180,22 +195,45 @@ def sit(g: WaveGait, t: float):
 
 # ------------------------------------------------- turn-in-place, sidestep
 TURN_TOTAL, SIDE_TOTAL = 4.8, 4.8
+TURN_WZ, SIDE_VY = 0.35, 40.0                    # ASKED; WaveGait.budget() decides what runs
+_PLANT_S = 0.5                                   # last 0.5 s: blend to the planted stance
+
+
+def _gaited(g, t, total, cmd):
+    """The wave gait at budget(cmd), ramped in/out over 0.6 s, and blended
+    onto the all-planted stance over the last _PLANT_S so the gesture ENDS
+    standing (zero command still steps in place — the old exit was a step
+    from a lifted foot to the floor)."""
+    if t >= total:
+        return _planted_q(g, np.zeros(3)), np.zeros(N_LEGS)
+    env = max(0.0, min(1.0, t / 0.6, (total - _PLANT_S - t) / 0.6))
+    vx, vy, wz = g.budget(*cmd)
+    q, _stance, _feet = g.joint_targets(t, vx * env, vy * env, wz * env)
+    a = _smooth((t - (total - _PLANT_S)) / _PLANT_S)
+    if a > 0:
+        q = (1 - a) * q + a * _planted_q(g, np.zeros(3))
+    return q, np.zeros(N_LEGS)
 
 
 def turn_in_place(g: WaveGait, t: float):
-    env = min(1.0, t / 0.6, (TURN_TOTAL - t) / 0.6) if t < TURN_TOTAL else 0.0
-    q, _stance, _feet = g.joint_targets(t, 0.0, 0.0, 0.35 * env)
-    return q, np.zeros(N_LEGS)
+    """Turn on the spot at min(0.35 rad/s, the budget) — 0.246 at the D052
+    gait (the servo cannot swing the coxa any faster; the owner's derated
+    physics reached ~0.3 of a commanded 0.5 anyway)."""
+    return _gaited(g, t, TURN_TOTAL, (0.0, 0.0, TURN_WZ))
 
 
 def sidestep(g: WaveGait, t: float):
-    env = min(1.0, t / 0.6, (SIDE_TOTAL - t) / 0.6) if t < SIDE_TOTAL else 0.0
-    q, _stance, _feet = g.joint_targets(t, 0.0, 40.0 * env, 0.0)
-    return q, np.zeros(N_LEGS)
+    return _gaited(g, t, SIDE_TOTAL, (0.0, SIDE_VY, 0.0))
+
+
+# D052 V2: tagged so a caller can tell a gesture that WALKS from one that stands
+# (the sim2real locomotion hold covers these; a wrapper sets the same flag)
+turn_in_place.gaited = sidestep.gaited = True
 
 
 # ---------------------------------------------------------------- registry
 # name: (fn, total_s, [(t_offset, narrator_event), ...])
+GAITED = ("turn_in_place", "sidestep")           # pebble_feasibility kind="gait"
 GESTURES2 = {
     "wave":          (wave, WAVE_TOTAL, [(0.9, "greet")]),
     "bow":           (bow, BOW_TOTAL, [(1.0, "resume")]),
@@ -209,62 +247,41 @@ GESTURES2 = {
 
 # ---------------------------------------------------------------- checks
 def stability_margin(g, q, arm_legs=()):
-    """Static margin (mm): distance from the body origin's ground
+    """Static margin (mm): distance from the whole-robot CoM's ground
     projection to the nearest edge of the support polygon of the planted
     feet (all legs not in arm_legs). Negative = outside the polygon.
-    Body-frame XY is used: for a level body that is the ground projection;
-    for the bow's few degrees of pitch the error is < 1 mm."""
-    from pebble_gait import leg_fk, leg_to_body
-    feet = []
-    for i in range(N_LEGS):
-        if i in arm_legs:
-            continue
-        p = leg_to_body(i, leg_fk(q[i]))
-        feet.append(p[:2])
-    if len(feet) < 3:
-        return -1e9
-    pts = np.array(feet)
-    c = pts.mean(axis=0)
-    order = np.argsort(np.arctan2(pts[:, 1] - c[1], pts[:, 0] - c[0]))
-    pts = pts[order]
-    # body origin projects to (0,0) in the body frame; edges of the polygon
-    margin = 1e9
-    n = len(pts)
-    for k in range(n):
-        a, b = pts[k], pts[(k + 1) % n]
-        e = b - a
-        nrm = np.array([e[1], -e[0]]) / (np.linalg.norm(e) + 1e-9)
-        d = np.dot(-a, nrm)                      # signed distance of (0,0)
-        # orient inward: centroid must be positive
-        if np.dot(c - a, nrm) < 0:
-            d = -d
-        margin = min(margin, d)
-    return margin
+    D052: delegates to pebble_feasibility.com_margin — torso + every leg
+    segment through the FK chain (masses = sim/mass_budget.json, the same
+    layout as the MJCF). It used to project the body ORIGIN, which is blind
+    to the raised arm's own 244 g; `g` is kept for the old signature."""
+    import pebble_feasibility as pf
+    support = [i for i in range(N_LEGS) if i not in arm_legs]
+    return pf.com_margin(q, support)
+
+
+def kind_of(name):
+    """pebble_feasibility kind for a registry entry."""
+    return "gait" if name in GAITED else "static"
 
 
 if __name__ == "__main__":
+    import pebble_feasibility as pf
     g = WaveGait()
-    worst = {}
     fail = 0
+    V = pf.speed_limits()
     for name, (fn, total, _ev) in GESTURES2.items():
-        m_min, nan = 1e9, 0
-        for t in np.linspace(0, total, 200):
-            q, claw = fn(g, t)
-            if np.isnan(q).any():
-                nan += 1
-                continue
-            assert np.all(np.abs(q[:, 0]) <= YAW_LIM + 1e-6), (name, t, "yaw")
-            assert np.all((q[:, 1] >= HIP_LIM[0] - 1e-6) & (q[:, 1] <= HIP_LIM[1] + 1e-6)), (name, t, "hip")
-            assert np.all((q[:, 2] >= KNEE_LIM[0] - 1e-6) & (q[:, 2] <= KNEE_LIM[1] + 1e-6)), (name, t, "knee")
-            assert claw.min() >= -1e-9 and claw.max() <= CLAW_MAX + 1e-9, (name, t, "claw")
-            if name not in ("turn_in_place", "sidestep"):
-                arms = (WAVE_ARM,) if name == "wave" else ()
-                m_min = min(m_min, stability_margin(g, q, arms))
-        worst[name] = (nan, m_min)
-        ok = nan == 0 and (m_min > 15.0 or name in ("turn_in_place", "sidestep"))
-        fail += not ok
-        print(f"{name:14s} {total:4.1f} s  unreachable {nan:3d}/200  "
-              f"static margin {m_min if m_min < 1e8 else float('nan'):6.1f} mm  "
-              f"{'OK' if ok else 'FAIL'}")
+        r = pf.check(fn, total, g=g, name=name, kind=kind_of(name))
+        print("\n".join(r.lines))
+        # D052 asserts (the old ones checked the raw ranges only; these are the guarded
+        # ranges, the speed classes and the CoM margin — whatever the checker says)
+        assert r.nan_count == 0, (name, "unreachable")
+        assert not any(c.startswith("LIMIT") for c in r.fails), (name, "limit")
+        assert np.all(r.vmax <= V["free"] + 1e-6), (name, "speed", r.peak())
+        assert "SPEED_LOADED" not in r.fails and "JUMP" not in r.fails, (name, r.fails)
+        if kind_of(name) == "static":
+            arms = (WAVE_ARM,) if name == "wave" else ()
+            m = min(stability_margin(g, fn(g, t)[0], arms) for t in np.linspace(0, total, 60))
+            assert m > pf.MARGIN_FAIL_MM, (name, "margin", m)
+        fail += not r.ok
     print(f"gesture library v2: {len(GESTURES2)} gestures, {fail} failing")
     assert fail == 0

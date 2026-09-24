@@ -24,9 +24,15 @@ those JSONs are decision records (D017/D022/D025) and are compared in
 bodyweights; `shove_envelope.py` is the new-model counterpart.
 """
 from __future__ import annotations
+import os
+import sys
+
 import numpy as np
 
-LEVER_Z = 0.060        # m above the torso frame origin: the carapace's top rim
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gait"))
+import rocky_model as _rm                                              # noqa: E402
+
+LEVER_Z = _rm.shell_rim_z_m()   # m above the torso frame origin: the carapace's top rim (params body.shell_rim_z, D052)
 G = 9.81
 
 
@@ -45,7 +51,15 @@ def impulse_ns(peak_n: float, dur: float, kind: str = "halfsine") -> float:
 
 
 def total_mass(model) -> float:
-    return float(model.body_subtreemass[0]) if model.nbody else 0.0
+    """The ROBOT's mass: the torso subtree. D052: not body 0 (the world), whose
+    subtree also holds every free world object — the cockpit's pushable ball
+    alone shifted a bodyweight quote by 3.7 %."""
+    if not model.nbody:
+        return 0.0
+    try:
+        return float(model.body_subtreemass[model.body("torso").id])
+    except KeyError:                               # a model without a torso: the old behaviour
+        return float(model.body_subtreemass[0])
 
 
 def bodyweights(force_n: float, model) -> float:

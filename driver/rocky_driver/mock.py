@@ -4,19 +4,24 @@ Faithful enough that every bench script runs unmodified with --mock:
   * full instruction parsing (PING/READ/WRITE/REG_WRITE/ACTION/SYNC_*)
   * per-family endianness + register maps, EEPROM LOCK semantics
   * response_level, broadcast silence, SYNC_READ replies in listed order
-  * first-order motion model (position chases goal at goal speed)
+  * first-order motion model (position chases goal at goal speed, never
+    faster than the datasheet no-load speed — D052: the mock cannot teleport)
+  * MIN/MAX_ANGLE_LIMIT clamp the goal (D052 bench/apply_limits.py; the real
+    STS behaviour at a limit is VERIFY-ON-BENCH — clamp is our assumption)
   * thermal model (heats with load^2 when torque on, cools toward ambient)
   * fault injection: corrupt_next_checksum, drop_next_response, extra noise
-    bytes, baud mismatch (servo silent unless bauds agree)
+    bytes, baud mismatch (servo silent unless bauds agree), and per-servo
+    `silent` (a brown-out / broken return wire: writes land, nothing answers)
 
 The clock is manual (`advance(dt)`) plus an automatic per-transaction tick,
 so tests are deterministic while long soaks can be fast-forwarded.
 """
 from __future__ import annotations
+import time
 from dataclasses import dataclass, field
 from .protocol import (HEADER, BROADCAST_ID, Instr, Family, checksum,
                        build_status, encode_u16, decode_u16)
-from .registers import (MAPS, COUNTS, CENTER, BAUD_CODES, Reg)
+from .registers import (MAPS, COUNTS, CENTER, BAUD_CODES, Reg, max_speed_cps)
 from .transport import Transport
 
 MEM_SIZE = 96
@@ -67,6 +72,7 @@ class MockServo:
     cool_k: float = 0.010      # 1/s
     external_load_pct: float = 0.0    # test hook: simulated mechanical load, %
     stalled: bool = False             # test hook: motion blocked
+    silent: bool = False              # test hook: applies writes, never replies
     mem: bytearray = field(default_factory=bytearray)
     _temp_f: float = 26.0
     _pos_f: float = 0.0
@@ -99,8 +105,12 @@ class MockServo:
     def advance(self, dt: float) -> None:
         """Integrate motion + thermals by dt seconds."""
         goal = self.get("GOAL_POSITION")
+        lo, hi = self.get("MIN_ANGLE_LIMIT"), self.get("MAX_ANGLE_LIMIT")
+        if hi > lo:                          # 0/0 would be wheel mode; 0/4095 is a no-op
+            goal = min(max(goal, lo), hi)
         speed = self.get("GOAL_SPEED") & 0x7FFF if "GOAL_SPEED" in MAPS[self.family] else 0
-        max_step_s = speed if speed > 0 else COUNTS[self.family] * 1.5  # "fast"
+        vmax = max_speed_cps(self.family)    # D052: 0 = "servo max" = the no-load speed
+        max_step_s = min(speed, vmax) if speed > 0 else vmax
         torque_on = self.get("TORQUE_ENABLE") == 1
         # torque-limit vs load: if the allowed torque can't hold the external
         # load, the servo can't chase its goal — position sags away instead
@@ -148,6 +158,10 @@ class MockServo:
 
     def handle(self, instr: int, params: bytes, broadcast: bool) -> bytes | None:
         """Return status packet bytes, or None for silence."""
+        if self.silent:
+            if instr in (Instr.WRITE,):
+                self._apply_write(params[0], params[1:])
+            return None
         level = self.get("RESPONSE_LEVEL")
         err = self.error_byte()
 
@@ -247,6 +261,11 @@ class MockTransport(Transport):
         del self._tx[:max_bytes]
         if out:
             self.log.append(("rx", out))
+        elif timeout_s > 0:
+            # nothing queued: yield like a real port would instead of letting the
+            # bus spin its deadline loop hot (the bridge thread shares the GIL
+            # with the sim thread)
+            time.sleep(min(timeout_s, 0.0005))
         return out
 
     def flush_input(self) -> None:
@@ -274,7 +293,7 @@ class MockTransport(Transport):
                 addr, dlen = params[0], params[1]
                 for sid in params[2:]:
                     s = self.servos.get(sid)
-                    if s and s.family is Family.STS:   # protocol 1 only
+                    if s and s.family is Family.STS and not s.silent:   # protocol 1 only
                         responses.append(build_status(
                             sid, s.error_byte(), bytes(s.mem[addr:addr + dlen])))
             elif servo_id == BROADCAST_ID:

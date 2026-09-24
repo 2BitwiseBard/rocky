@@ -57,6 +57,7 @@ def episode(model, ckpt, seed=0, record=False, shove_n=SHOVE_N, shove_s=SHOVE_S)
     data, q0 = make_data(model, gait)
     torso = model.body("torso").id
     fids = [model.geom(f"foot{i}").id for i in range(N_LEGS)]
+    jadr = [model.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS) for n in ("yaw", "hip", "knee")]
     DT = model.opt.timestep
     righter = PolicyRighter(ckpt, model, data, torso, fids)
     sup = ReflexSupervisor(gait, gyro_trip=TRIP, gyro_calm=TRIP / 2,
@@ -82,7 +83,8 @@ def episode(model, ckpt, seed=0, record=False, shove_n=SHOVE_N, shove_s=SHOVE_S)
         w_body = R.T @ data.cvel[torso][0:3]
         vx = V_X * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
         q, state = sup.step(t, vx, 0.0, 0.0, gyro, contacts=con,
-                            gyro_vec=w_body[:2], tilt_deg=tilt, height=h)
+                            gyro_vec=w_body[:2], tilt_deg=tilt, height=h,
+                            q_meas=data.qpos[jadr].reshape(5, 3))   # V2: the handoff_ok criterion
         if state == FALLEN and prev_state != FALLEN:
             t_fallen = t                      # (the supervisor resets the righter)
         if t >= T_SHOVE and pos_shove is None:

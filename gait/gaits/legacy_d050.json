@@ -1,0 +1,8 @@
+{
+  "T": 1.6,
+  "h": 118.0,
+  "R0": 185.0,
+  "duty": 0.8,
+  "hstep": 32.0,
+  "note": "The pre-D052 wave gait (T 1.6 s, 32 mm step) that the D050 residual walk policies and the D048 push/cliff experiments ran on (= sim/rl_common.LEGACY_GAIT). Kept as data so `check` can show why it was retired: its step lift alone is past the D052 loaded-speed budget, so WaveGait.budget() zeroes every command on it - it stands, it does not walk."
+}

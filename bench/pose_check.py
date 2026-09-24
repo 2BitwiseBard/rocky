@@ -32,12 +32,22 @@ def main():
     print("SAFETY: legs clear of the bench? torque comes on at low speed.")
     if not confirm("command neutral stance?", args):
         return 1
-    robot.enable(True)
-    for sid in robot.all_ids():
-        bus.write_reg(sid, "TORQUE_LIMIT", 400) if sid <= 15 else None
+    # D052 V2: park each goal where the servo IS, at 40 % torque, THEN enable
+    # (enable-first let 15 servos drive toward stale goals at full torque)
+    legs = [i for row in robot.leg_ids for i in row]
+    here = robot.soft_enable(legs, torque_limit=400, speed_cps=args.speed)
+    missing = sorted(set(legs) - set(here))
+    if missing:
+        print(f"no answer from {missing} — they stay limp; the rest continue")
+    robot.soft_enable(robot.hand_ids, torque_limit=1000, speed_cps=args.speed)
     robot.send_leg_targets([NEUTRAL] * 5, speed_cps=args.speed)
     robot.send_claws([0.0] * 5)
-    for _ in range(30):
+    # wait for the slowest joint at this speed (+1 s): a fixed 3 s left a 90 deg knee
+    # move from a limp 0 deg a third short at 200 cps and reported it as a bad offset
+    gap = max([abs(robot.q_to_deg(leg, j, NEUTRAL[j]) - here[sid])
+               for leg, row in enumerate(robot.leg_ids) for j, sid in enumerate(row) if sid in here] or [0.0])
+    dps = max(args.speed, 1) * 360.0 / 4096.0
+    for _ in range(int(10 * (gap / dps + 1.0)) + 1):
         clock.sleep(0.1)
 
     q, tels = robot.read_joint_state()
@@ -48,9 +58,7 @@ def main():
         worst = max(worst, max(abs(e) for e in errs))
         print(f"leg{leg}: err yaw {errs[0]:+6.2f}  hip {errs[1]:+6.2f}  "
               f"knee {errs[2]:+6.2f} deg")
-    for sid in robot.all_ids():
-        if sid <= 15:
-            bus.write_reg(sid, "TORQUE_LIMIT", 1000)
+    robot.release_limits(legs)
     print(f"worst joint error {worst:.2f} deg -> "
           f"{'PASS (<2 deg)' if worst < 2 else 'CHECK offsets/dir signs'}")
     if confirm("torque off (limp)?", args):

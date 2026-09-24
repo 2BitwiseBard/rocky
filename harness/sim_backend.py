@@ -27,6 +27,15 @@ Laptop additions (2026-09-08, Tyler's machine — declared in NOTES_INBOX):
     way goto reports it.
   * ROCKY_AUDIO=1 plays the chord-speak sample for say() through
     aplay/ffplay when audio/samples_v2/<word>.wav exists.
+
+D052 V2 (review) — HONESTY NOTE: this backend is NOT the D052 control loop
+(no ServoModel, no WaveGait.budget, no void-probe, its own CliffDetector
+loop); the cockpit (sim/cockpit.py, on sim.playground.Playground) is. What
+it now shares: every joint target is NaN-guarded and rate-clamped (4.7 rad/s,
+params 'hard'), and a stop / the end of a gesture ramps back to the stance at
+the LOADED 3.0 rad/s instead of snapping in one physics step (119 deg for
+fist_bump). AutoBackend tags every result with the backend it ran on.
+Rebuilding this on Playground is the real fix (left for the owner).
 """
 from __future__ import annotations
 
@@ -108,13 +117,24 @@ class SimBackend:
                        for i in range(g["N_LEGS"])]).flatten()
         jadr = [self.model.joint(f"{n}{i}").qposadr[0]
                 for i in range(5) for n in ("yaw", "hip", "knee")]
-        self.data.qpos[0:3] = [0, 0, (self.gait.h + 14) / 1000.0 + self.plat_h]
+        import rocky_model as rm                     # D052: spawn from the loader, not +14 mm
+        self.data.qpos[0:3] = [0, 0, rm.spawn_z_m(self.gait.h, platform_z_m=self.plat_h)]
         self.data.qpos[3:7] = [1, 0, 0, 0]
         self.data.qpos[jadr] = q0
         self.data.ctrl[:15] = q0
         mujoco.mj_forward(self.model, self.data)
         self._q0 = q0
+        self._q_cmd = q0.copy()                      # last guarded target (V2)
         self.torso = self.model.body("torso").id
+
+    def _guard(self, q, speed="hard"):
+        """V2: NaN hold + rate clamp on the 15 leg targets (per physics step)."""
+        import rocky_model as rm
+        q = np.asarray(q, float).ravel()
+        q = np.where(np.isfinite(q), q, self._q_cmd)
+        step = rm.servo_speed(speed) * self.model.opt.timestep
+        self._q_cmd = np.clip(q, self._q_cmd - step, self._q_cmd + step)
+        return self._q_cmd
 
     # ------------------------------------------------------------- tools
     async def say(self, word: str) -> dict:
@@ -178,7 +198,7 @@ class SimBackend:
             t = k * DT
             p = data.xpos[self.torso]
             if t < t_settle:
-                data.ctrl[:15] = self._q0
+                data.ctrl[:15] = self._guard(self._q0, "loaded")
                 mujoco.mj_step(model, data)
                 self._sync_viewer(k)
                 continue
@@ -217,7 +237,7 @@ class SimBackend:
             con = foot_contacts(model, data)
             q, state = sup.step(tw, vx, vy, wz, gxy, contacts=con,
                                 gyro_vec=w_body[:2])
-            data.ctrl[:15] = q.flatten()
+            data.ctrl[:15] = self._guard(q)
             if k % 10 == 0 and state == "NORMAL" and outcome is None:
                 ph = [(sup.t_gait / gait.T + gait.phase_off[i]) % 1.0
                       for i in range(5)]
@@ -358,12 +378,12 @@ class SimBackend:
             if self._stop_req and not cut:
                 cut = True
             if cut or t < t_settle or t >= t_settle + total:
-                data.ctrl[:15] = self._q0
+                data.ctrl[:15] = self._guard(self._q0, "loaded")      # V2: ramps back, no snap
                 if has_claw:
                     data.ctrl[15:20] = 0.0
             else:
                 q, claw = fn(self.gait, t - t_settle)
-                data.ctrl[:15] = q.flatten()
+                data.ctrl[:15] = self._guard(q)
                 if has_claw:
                     data.ctrl[15:20] = claw
             mujoco.mj_step(model, data)

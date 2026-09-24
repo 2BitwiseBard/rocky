@@ -1,10 +1,20 @@
 {
+  "_comment": [
+    "Copy to .mcp.json (gitignored). Claude Code started from the repo root (./rocky.sh chat) uses it as is:",
+    "the command is the repo venv's python, relative to the repo root, and `-m harness.server` needs that cwd too.",
+    "Clients that start elsewhere (Claude Desktop, other MCP hosts): make command the ABSOLUTE path to",
+    ".venv/bin/python and add \"cwd\": \"/absolute/path/to/rocky\".",
+    "ROCKY_BACKEND: auto = the running cockpit (./rocky.sh cockpit, 127.0.0.1:8765) if one answers, else the",
+    "in-process MuJoCo sim | cockpit = the cockpit or refuse to start | sim = in-process MuJoCo | mock =",
+    "millisecond-fast contract, no physics (the default when unset).",
+    "With the in-process sim: ROCKY_WORLD flat|room|cliff; ROCKY_VIEWER=1 ROCKY_AUDIO=1 MUJOCO_GL=glfw add the",
+    "live window and the speakers. With the cockpit these belong to the cockpit, not to this server."
+  ],
   "mcpServers": {
     "rocky": {
-      "command": "python3",
+      "command": ".venv/bin/python",
       "args": ["-m", "harness.server"],
-      "env": {"ROCKY_BACKEND": "auto"},
-      "cwd": "REPLACE_WITH_ABSOLUTE_PATH_TO/rocky"
+      "env": {"ROCKY_BACKEND": "auto", "ROCKY_WORLD": "flat"}
     }
   }
 }

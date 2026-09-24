@@ -61,18 +61,73 @@ FALLEN   — session 8d (D042): braces don't save everything. When tilt
            height > handoff_h, held handoff_hold_s (keep in sync with
            RecoverEnv v2 / eval_recover) -> RIGHTED.
 RIGHTED  — joint-space smoothstep ramp from wherever the righter left the
-           legs to the analytic planted stance (right_ramp_s), hold
+           legs to the analytic planted stance (right_ramp_s = 1.0 s from
+           params, stretched to 1.5 max|dq| / 3.0 rad/s when the legs are
+           far away — D052), hold
            right_hold_s, then NORMAL with the gait clock intact. This is
            exactly eval_recover.py's hybrid handoff, made a state.
 Arming   — reflex ignores the first arm_after seconds (startup transients).
+
+D052 additions (all optional; a caller that passes none of them gets the
+old supervisor exactly):
+  monitor=True   — a GESTURE owns the joints. The supervisor still watches:
+                   fall detection runs and FALLEN/RIGHTED take over as usual
+                   (the caller must drop the gesture and use the returned q),
+                   but in the other states the gait clock is frozen, gyro
+                   trips are only counted (monitor_trips) and the q it returns
+                   (the planted stance) is not meant to drive anything. Before
+                   this, a playground gesture skipped sup.step entirely: no
+                   fall detection for its whole length.
+  probe_dz (mm)  — the caller's contact-probe offsets (playground stance
+                   probe). Added below every foot target in NORMAL/PLANT/
+                   RECOVER and captured into the brace, so a BRACE/PLANT
+                   freezes from the probed z instead of snapping the probed
+                   feet back up to the nominal plane mid-shove.
+  q_meas + contacts — the handoff becomes rocky_recover_env.handoff_ok
+                   (tilt, >= 3 switches, kinematic deck height from the joint
+                   angles): the criterion the righter was trained to satisfy
+                   and one the Pi can compute. Without q_meas the old
+                   tilt + height rule stands.
+  trip escalation — >= trip_escalate_n gyro trips within trip_escalate_s
+                   (3 in 5 s) means the robot is teetering, not being
+                   shoved: request_stop() and LATCH. While `latched` the
+                   velocity command is ignored (treated as zero) until
+                   clear_latch(). Measured motivation: at a cliff edge the
+                   playground cycled NORMAL/PLANT/BRACE/RECOVER for 25 s.
+                   ON by default (the Pi runs this class); an A/B harness that
+                   must reproduce pre-D052 numbers passes trip_escalate_n=None.
 
 Tuning: clean walking peaks |gyro_xy| ~1 rad/s in sim; trip defaults 1.8.
 contact_aware=False reproduces v1 exactly (for A/B harnesses). Without a
 contacts feed, PLANT falls back to the commanded swing state alone.
 """
 from __future__ import annotations
+import os
+import sys
+
 import numpy as np
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS, L1, L2, L3, Z_HIP
+import rocky_model as _rm
+
+_HANDOFF = None
+
+
+def _handoff_fn():
+    """rocky_recover_env.handoff_ok, imported on first use (D052): ONE criterion
+    for the RL env, eval_recover and this supervisor. Lazy because it lives in
+    sim/ (numpy-only at import on the Pi; mujoco and gymnasium are optional
+    there). None when it cannot be imported -> the old tilt + height rule."""
+    global _HANDOFF
+    if _HANDOFF is None:
+        try:
+            sim = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sim")
+            if sim not in sys.path:
+                sys.path.insert(0, sim)
+            from rocky_recover_env import handoff_ok, HANDOFF_HOLD_S   # noqa: F401
+            _HANDOFF = handoff_ok
+        except Exception:                                   # noqa: BLE001 — robot without sim/
+            _HANDOFF = False
+    return _HANDOFF or None
 
 NORMAL, PLANT, BRACE, RECOVER = "NORMAL", "PLANT", "BRACE", "RECOVER"
 FALLEN, RIGHTED = "FALLEN", "RIGHTED"
@@ -90,15 +145,27 @@ def _z_reach_floor(i, p_body, margin=8.0):
 
 
 class ReflexSupervisor:
-    def __init__(self, gait: WaveGait, gyro_trip=1.8, gyro_calm=0.9,
+    def __init__(self, gait: WaveGait, gyro_trip=None, gyro_calm=None,
                  crouch_mm=25.0, crouch_ramp_s=0.12, calm_time=0.30,
                  blend_time=0.35, max_brace_s=1.5, arm_after=0.8,
                  idle_eps=1.0, contact_aware=True, plant_z_low=22.0,
                  plant_max_s=0.45, seek_rate=180.0,
                  righter=None, fall_tilt_deg=60.0, fall_confirm_s=1.0,
                  handoff_tilt_deg=25.0, handoff_h=0.09, handoff_hold_s=0.5,
-                 right_ramp_s=0.6, right_hold_s=0.5, fallen_max_s=10.0,
-                 stall_s=3.0, stall_tilt_deg=10.0):
+                 right_ramp_s=None, right_hold_s=0.5, fallen_max_s=None,
+                 stall_s=None, stall_tilt_deg=None,
+                 trip_escalate_n=3, trip_escalate_s=5.0):
+        # D052: a None kwarg comes from params.yaml `reflex:` (rocky_model.
+        # reflex_defaults()); anything passed wins, so every existing caller
+        # (gait only, or gait + gyro_trip/stall_s/...) behaves as before —
+        # except right_ramp_s, whose default moved 0.6 -> 1.0 on purpose.
+        d = _rm.reflex_defaults()
+        gyro_trip = d["gyro_trip"] if gyro_trip is None else gyro_trip
+        gyro_calm = d["gyro_calm"] if gyro_calm is None else gyro_calm
+        right_ramp_s = d["right_ramp_s"] if right_ramp_s is None else right_ramp_s
+        fallen_max_s = d["fallen_max_s"] if fallen_max_s is None else fallen_max_s
+        stall_s = d["stall_s"] if stall_s is None else stall_s
+        stall_tilt_deg = d["stall_tilt_deg"] if stall_tilt_deg is None else stall_tilt_deg
         self.g = gait
         self.gyro_trip = gyro_trip
         self.gyro_calm = gyro_calm
@@ -155,7 +222,20 @@ class ReflexSupervisor:
         self._handoff_since = None
         self._right_t0 = None
         self._right_from = None
+        self._right_dur = None                   # D052: set per ramp by ramp_time()
         self._q_planted = None                   # lazy: IK of p_nom
+        # D052: trip escalation -> latched safe stop
+        self.trip_escalate_n = trip_escalate_n
+        self.trip_escalate_s = trip_escalate_s
+        self._trip_times = []                    # t of recent GYRO trips (not stop requests)
+        self.latched = False
+        self.latch_reason = None
+        self.monitor_trips = 0                   # gyro trips seen while a gesture owned the joints
+        self._probe = None                       # (5,) mm, set per step by the caller
+        self._brace_probe = np.zeros(N_LEGS)
+        self.last_stance = None                  # commanded stance mask of the last step (probe uses it)
+        self.last_feet_raw = None                # the gait's feet BEFORE the probe offset
+        self.right_reason = None
 
     # ------------------------------------------------------------------
     def set_righter(self, fn):
@@ -183,8 +263,9 @@ class ReflexSupervisor:
         self._stopping = False
         self._calm_since = None
 
-    def _fallen_step(self, t, dt, tilt_deg, height):
-        """FALLEN: righter drives; watch for the handoff criterion."""
+    def _fallen_step(self, t, dt, tilt_deg, height, contacts=None, q_meas=None):
+        """FALLEN: righter drives; watch for the handoff criterion (handoff_ok
+        from the joint state when q_meas + contacts are fed, D052)."""
         q = None
         if self.righter is not None:
             q = self.righter(t, dt)
@@ -192,8 +273,12 @@ class ReflexSupervisor:
             q = self._last_q if self._last_q is not None else self._planted_q()
         else:
             q = np.asarray(q, float).reshape(N_LEGS, 3)
-        upright = (tilt_deg is not None and tilt_deg < self.handoff_tilt and
-                   (height is None or height > self.handoff_h))
+        hok = _handoff_fn() if (q_meas is not None and contacts is not None) else None
+        if hok is not None and tilt_deg is not None:
+            upright = bool(hok(tilt_deg, contacts, q_meas))
+        else:
+            upright = (tilt_deg is not None and tilt_deg < self.handoff_tilt and
+                       (height is None or height > self.handoff_h))
         if upright:
             self._handoff_since = t if self._handoff_since is None else self._handoff_since
         else:
@@ -211,14 +296,26 @@ class ReflexSupervisor:
             self.state = RIGHTED
             self._right_t0 = t
             self._right_from = q.copy()
+            self._right_dur = self.ramp_time(self._right_from)
         return q
+
+    def ramp_time(self, q_from):
+        """RIGHTED ramp duration (s): right_ramp_s, stretched so the smoothstep's
+        peak (1.5 x mean speed) stays under the LOADED speed budget — the ramp
+        lifts the body. D052: at 0.6 s a righter that left a hip at +90 asked
+        for 5.4 rad/s, past the servo's no-load 4.7."""
+        dq = np.nanmax(np.abs(np.asarray(q_from, float).reshape(N_LEGS, 3) - self._planted_q()))
+        if not np.isfinite(dq):
+            dq = 0.0
+        return max(self.right_ramp_s, 1.5 * dq / _rm.servo_speed("loaded"))
 
     def _righted_step(self, t):
         """RIGHTED: smoothstep joint-space ramp to the planted stance."""
-        a = min(1.0, (t - self._right_t0) / max(self.right_ramp_s, 1e-3))
+        dur = getattr(self, "_right_dur", None) or self.right_ramp_s
+        a = min(1.0, (t - self._right_t0) / max(dur, 1e-3))
         a = a * a * (3 - 2 * a)
         q = (1 - a) * self._right_from + a * self._planted_q()
-        if (t - self._right_t0) >= self.right_ramp_s + self.right_hold_s:
+        if (t - self._right_t0) >= dur + self.right_hold_s:
             self.state = NORMAL
             self._calm_since = None
             self._handoff_since = None
@@ -236,12 +333,39 @@ class ReflexSupervisor:
         if self.state in (NORMAL, RECOVER):
             self._stop_req = True
 
+    def clear_latch(self):
+        """Operator acknowledgement of a latched safe stop (trip escalation):
+        velocity commands are obeyed again and the trip window restarts."""
+        was = self.latched
+        self.latched = False
+        self.latch_reason = None
+        self._trip_times = []
+        return was
+
+    def _note_gyro_trip(self, t):
+        """Count a GYRO trip (not a stop request); escalate on a cluster."""
+        self._trip_times = [x for x in self._trip_times if t - x <= self.trip_escalate_s] + [t]
+        if (self.trip_escalate_n and not self.latched
+                and len(self._trip_times) >= self.trip_escalate_n):
+            self.latched = True
+            self.latch_reason = (f"{len(self._trip_times)} gyro trips in "
+                                 f"{self.trip_escalate_s:.0f} s — teetering, not a shove")
+            self._stopping = True                # PLANT must not calm-exit back into motion
+
     # ------------------------------------------------------------------
     def _gait_feet(self, vx, vy, wz):
-        """(feet, commanded_stance_mask) — idle = five planted feet."""
+        """(feet, commanded_stance_mask) — idle = five planted feet. The caller's
+        probe offsets (D052) are applied here, so every state built on the gait
+        (NORMAL, PLANT, RECOVER, the brace capture) sees the probed feet."""
         if abs(vx) + abs(vy) + abs(wz) * 100 < self.idle_eps:
-            return self.g.p_nom.copy(), np.ones(N_LEGS, dtype=bool)
-        feet, stance = self.g.foot_targets(self.t_gait, vx, vy, wz)
+            feet, stance = self.g.p_nom.copy(), np.ones(N_LEGS, dtype=bool)
+        else:
+            feet, stance = self.g.foot_targets(self.t_gait, vx, vy, wz)
+        self.last_feet_raw = feet.copy()
+        self.last_stance = stance.copy()
+        if self._probe is not None:
+            feet = feet.copy()
+            feet[:, 2] -= self._probe
         return feet, stance
 
     def _swing_low(self, feet, stance):
@@ -265,7 +389,11 @@ class ReflexSupervisor:
         self._calm_since = None
         bf = feet_now.copy()
         self._brace_z0 = bf[:, 2].copy()
-        bf[:, 2] = -(self.g.h + self.crouch)     # full-crouch reference
+        # D052: feet_now already carries the probe offsets; the crouch plane
+        # is per leg so a probed foot crouches from ITS ground, not the nominal one
+        self._brace_probe = (np.zeros(N_LEGS) if self._probe is None
+                             else np.asarray(self._probe, float).copy())
+        bf[:, 2] = -(self.g.h + self.crouch) - self._brace_probe   # full-crouch reference
         self._brace_feet = bf
         self._z_now = self._brace_z0.copy()
         self.swing_at_brace = self._swing_legs()
@@ -278,7 +406,7 @@ class ReflexSupervisor:
         return [i for i in range(N_LEGS) if ph[i] >= self.g.duty]
 
     def _brace_targets(self, t, dt, contacts, gyro_vec):
-        crouch_plane = -(self.g.h + self.crouch)
+        crouch_plane = -(self.g.h + self.crouch) - self._brace_probe    # per leg (D052 probe)
         feet = self._brace_feet.copy()
         if not self.contact_aware:
             # v1: one global crouch ramp from captured z
@@ -302,13 +430,13 @@ class ReflexSupervisor:
             p = self._brace_feet[i]
             rising = (w[0] * p[1] - w[1] * p[0])          # (omega x p)_z
             if con[i]:
-                goal = crouch_plane if n_con >= 4 else self._z_now[i]
+                goal = crouch_plane[i] if n_con >= 4 else self._z_now[i]
                 rate = ramp_rate
             elif rising > 0.15:
                 goal = _z_reach_floor(i, p)               # catch the fall
                 rate = self.seek_rate
             else:
-                goal = crouch_plane
+                goal = crouch_plane[i]
                 rate = self.seek_rate
             dz = np.clip(goal - self._z_now[i], -rate * dt, rate * dt)
             self._z_now[i] += dz
@@ -327,7 +455,8 @@ class ReflexSupervisor:
             self._enter_brace(t, feet, contacts)
 
     def step(self, t, vx, vy, wz, gyro_xy: float, contacts=None,
-             gyro_vec=None, tilt_deg=None, height=None):
+             gyro_vec=None, tilt_deg=None, height=None, monitor=False,
+             probe_dz=None, q_meas=None):
         """Advance the supervisor; returns (q[5,3], state).
 
         t: monotonic time (s). gyro_xy: |body roll/pitch rate| rad/s (IMU).
@@ -336,9 +465,18 @@ class ReflexSupervisor:
         tilt_deg: body tilt from vertical (deg) — IMU gravity vector; enables
         the FALLEN branch (without it the supervisor never declares a fall).
         height: torso height (m), sim truth or kinematic estimate; tightens
-        the handoff criterion when available."""
+        the handoff criterion when available.
+        D052 (all optional): monitor=True — a gesture owns the joints, only
+        fall detection acts (see the module docstring); probe_dz (5,) mm —
+        the caller's stance-probe offsets, added below the foot targets;
+        q_meas (5,3) rad — measured joints, which (with contacts) switch the
+        handoff to rocky_recover_env.handoff_ok. While `latched` the velocity
+        command is ignored."""
         if self._t0 is None:
             self._t0 = t
+        if self.latched:
+            vx = vy = wz = 0.0
+        self._probe = None if probe_dz is None else np.asarray(probe_dz, float)
         armed = (t - self._t0) >= self.arm_after
         dt = 0.0 if self._last_t is None else max(0.0, t - self._last_t)
         self._last_t = t
@@ -357,7 +495,7 @@ class ReflexSupervisor:
             self._enter_fallen(t)                # ramp knocked it back over
 
         if self.state == FALLEN:
-            q = self._fallen_step(t, dt, tilt_deg, height)
+            q = self._fallen_step(t, dt, tilt_deg, height, contacts, q_meas)
             self._last_q = q.copy()
             self._last_feet = None
             return q, FALLEN if self.state == FALLEN else self.state
@@ -366,6 +504,23 @@ class ReflexSupervisor:
             self._last_q = q.copy()
             self._last_feet = None
             return q, RIGHTED if self.state == RIGHTED else self.state
+
+        if monitor:
+            # D052: a gesture owns the joints. Fall detection above already
+            # ran; here only bookkeeping. The gait clock stays frozen, a gyro
+            # trip is counted but not acted on (a gesture that swings an arm
+            # fast is not a shove), and a pending stop request is dropped
+            # (the caller ends the gesture instead). The measured pose is
+            # what FALLEN holds if it has no righter.
+            if armed and gyro_xy > self.gyro_trip:
+                self.monitor_trips += 1
+            self._stop_req = False
+            self._calm_since = None
+            self.last_stance = None
+            self._last_feet = None
+            if q_meas is not None:
+                self._last_q = np.asarray(q_meas, float).reshape(N_LEGS, 3).copy()
+            return self._planted_q().copy(), self.state
 
         # the wave clock runs only while MOVING: idling must not advance the
         # phase, or the reflex's gait is phase-shifted vs a plain WaveGait
@@ -381,6 +536,8 @@ class ReflexSupervisor:
             if (armed and gyro_xy > self.gyro_trip) or self._stop_req:
                 self._stopping = self._stop_req
                 self._stop_req = False
+                if armed and gyro_xy > self.gyro_trip:
+                    self._note_gyro_trip(t)
                 self._trip_entry(t, feet, stance, contacts)
                 if self.state == BRACE:
                     feet = self._brace_targets(t, dt, contacts, gyro_vec)
@@ -434,6 +591,8 @@ class ReflexSupervisor:
             if (armed and gyro_xy > self.gyro_trip) or self._stop_req:
                 self._stopping = self._stop_req      # re-shoved / stop request
                 self._stop_req = False
+                if armed and gyro_xy > self.gyro_trip:
+                    self._note_gyro_trip(t)
                 self._trip_entry(t, feet, stance, contacts)
                 if self.state == BRACE:
                     feet = self._brace_targets(t, dt, contacts, gyro_vec)

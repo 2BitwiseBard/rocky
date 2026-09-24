@@ -8,6 +8,77 @@
 meta:
   version: 0.1
   robot: pebble
+  params_rev: D052       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
+
+# ------------------------------------------------------------
+# D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
+# may DO. Before this the servo identity was copied into 5+ files and they
+# disagreed (stall 2.94 in build_mjcf, velocity 5.2 in the URDF, 4.7 in
+# servo_model, 5.0 in the recover env, 55 vs 60 g). Every consumer now goes
+# through gait/rocky_model.py. The YAML anchors (&name / *name) are the
+# aliases: old keys (bus.soft_limits_deg, mass_hw.servo_st3215,
+# servo_st3215.mass_g) point HERE, they are not second copies.
+# ------------------------------------------------------------
+actuators:
+  st3215:                # Feetech STS3215 / Waveshare ST3215 — the 15 leg joints
+    stall_nm_12v: 2.94   # 30 kg.cm at 12 V (datasheet, D002). VERIFY on bench/torque_step
+    no_load_rad_s: &st3215_no_load 4.7   # 0.222 s / 60 deg no-load at 12 V (datasheet)
+    continuous_frac: 0.65  # thermal budget x stall: what it can HOLD for minutes.
+                           # A guess from hobby-servo practice, not a datasheet
+                           # number — VERIFY with a 10-min hold + temp log
+    counts_per_rev: 4096   # 12-bit magnetic encoder over 360 deg
+    latency_s: 0.02        # sync-write -> servo acts: ~one bus tick (VERIFY with an echo test)
+    bus_hz: 50             # sync-write rate the driver runs
+    mass_g: &st3215_mass_g 60.0   # incl. horn + screws (spec 55 bare) — VERIFY on a kitchen scale
+  scs0009:               # Feetech SCS0009 — the 5 claws (protocol 0, 5-6 V domain, D016)
+    stall_nm_6v: 0.23    # VERIFY: ~2.3 kg.cm at 6 V (datasheet-ish; nothing measured)
+    no_load_rad_s: 9.5   # VERIFY: ~0.11 s / 60 deg at 6 V
+    continuous_frac: 0.65  # same guess as the ST3215 — VERIFY
+    counts: 1024         # 10-bit pot over the 300 deg sweep (NOT a full turn)
+    sweep_deg: 300
+    latency_s: 0.02
+    bus_hz: 50
+    mass_g: &scs0009_mass_g 13.0  # spec ~12-14 g — VERIFY
+
+joints:                  # soft limits: CAD-validated sweeps (D008) — the MJCF
+                         # ranges, the URDF limits and the driver clamp ALL read this
+  pos_deg: &joint_pos_deg
+    yaw: [-40, 40]
+    hip: [-70, 90]
+    knee: [-150, -20]
+    claw: [0, 55]        # capped until hand v0.3 (see BUILD_LOG 07-28)
+  vel_rad_s:             # speed budgets for anything that plans or authors motion
+    loaded: 3.0          # a stance joint carrying body weight. = continuous torque /
+                         # the motor's damping line (1.9 N.m / 0.62 = 3.06 rad/s): past
+                         # this the servo cannot also hold the load (D052)
+    free: 4.0            # a swinging (unloaded) leg: ~85 % of no-load, margin for the ramp
+    hard: *st3215_no_load  # never command faster than the motor can turn at all
+
+gait:                    # WaveGait(**rocky_model.gait_defaults()) — keys = its kwargs
+  body_height: 118.0     # mm, deck plane above the ground (the IK foot point)
+  stance_radius: 185.0   # mm, nominal foot circle (BODY frame)
+  cycle_time: 2.0        # s. D052: was 1.6 — the 32 mm lift in a 0.32 s swing asked the knee
+                         # for 4.62 rad/s at 45 mm/s (free-leg budget 4.0). Now 2.95; stride 72 mm
+  duty: 0.8              # 4 of 5 feet always down. 0.75 REJECTED (D052): adjacent legs overlap in
+                         # swing and the CoM leaves the stance triangle by 59 mm, 25 % of the cycle
+  step_height: 24.0      # mm swing lift (was 32). The lift's first 15 mm counts as a LOADED leg
+                         # (3.0 rad/s); pi*h/T_swing sets the knee. More clearance: T 2.2/h 26 or
+                         # T 2.4/h 28 also pass check_gait (slower cadence, longer stride)
+
+reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults()) — keys = its kwargs
+  gyro_trip: 1.8         # rad/s |gyro_xy| that trips a brace (push_reflex_results.json calibration)
+  gyro_calm: 0.9
+  stall_s: 3.0           # D048 stall rule
+  stall_tilt_deg: 10.0
+  fallen_max_s: 10.0
+  right_ramp_s: 1.0      # D052: was 0.6 (5.4 rad/s hip from a righter that left it at +90);
+                         # the RIGHTED ramp also stretches to 1.5*max|dq|/loaded speed
+
+sensing:
+  foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold
+    close_n: 2.0         # VERIFY: KW10 operating force is ~1-2 N at the lever; the spring
+                         # preload in the cartridge adds to it. Guess until benched
+    open_n: 1.0          # VERIFY: release force (hysteresis) — a real switch lets go lower than it closes
 
 servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm (STS3250 = same case)
   # v2 (D047, 2026-09-22): every number below was MEASURED on the real servo's
@@ -66,7 +137,7 @@ servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm (STS3
     pins_h: 5.0
     plug_h: 12.0         # VERIFY: how far a mated plug + wire bend stands off the pin tips
     plug_pad: 1.0        # keep-out margin around the pin rows
-  mass_g: 55             # spec (STS3250: 74.5)
+  mass_g: *st3215_mass_g # D052 alias of actuators.st3215.mass_g (spec 55 bare; STS3250: 74.5)
 
 servo_scs0009:           # hand/claw drive (modeled later)
   body_l: 23.6           # VERIFY
@@ -83,6 +154,18 @@ leg:
   hip_axis_z: 61.0       # femur pivot height above the deck plane (D047; was a hard-coded 58 in gait/sim/urdf)
   l2_femur: 95.0         # femur pivot -> knee axis (center to center)
   l3_tibia: 135.0        # knee axis -> foot contact point
+  servo: st3215          # D052: actuators.<servo> drives yaw/hip/knee
+  claw_servo: scs0009
+  foot:                  # D052: the contact geometry at the end of l3 (part_hand + part_footpad)
+    tip_radius: 3.5      # closed-hand cone tip sphere (part_hand.CONE_TIP_R)
+    pad_crown: 3.0       # TPU sole under the tip (part_footpad.CROWN)
+                         # contact radius r_c = tip_radius + pad_crown = 6.5 mm; the sim's
+                         # foot sphere sits r_c BEHIND the l3 point so its surface IS the
+                         # IK foot point (it used to be a 13 mm ball centred ON it)
+    mu_slide: 0.8        # TPU sole on tile / laminate is ~0.5-0.8; the sim ran 1.2 until D052
+                         # (that flattered every turn and push). VERIFY with a tilt-board test
+    mu_torsion_m: 0.005  # torsional friction (m, MuJoCo condim 4): a pad twisting on the
+                         # floor costs torque, so yaw-in-place is no longer free. A guess
   tibia_tube_od: 10.0    # carbon tube OD (VERIFY purchased tube)
   tibia_tube_id: 8.0
   sea_travel: 7.0        # spring travel in foot cartridge
@@ -90,6 +173,9 @@ leg:
 body:
   circumradius: 110.0    # pentagon center -> leg station
   deck_t: 4.0            # printed deck thickness
+  shell_rim_z: 60.0      # mm above the deck plane: carapace top rim, where a hand shoves
+                         # (sim/shove.py lever; part_shell tier 4 tops at 52 + the hatch cap).
+                         # D048's number, kept — VERIFY against the printed shell
 
 bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
   port_hint: /dev/ttyACM0      # Waveshare Bus Servo Adapter (A) — VERIFY on host
@@ -101,11 +187,7 @@ bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
     - [10, 11, 12]             # leg 3
     - [13, 14, 15]             # leg 4
   hand_ids: [16, 17, 18, 19, 20]   # SCS0009, protocol 0, 5-6 V domain (D016!)
-  soft_limits_deg:             # mirror of CAD-validated sweeps (D008) + MJCF
-    yaw: [-40, 40]
-    hip: [-70, 90]
-    knee: [-150, -20]
-    claw: [0, 55]              # capped until hand v0.3 (see BUILD_LOG 07-28)
+  soft_limits_deg: *joint_pos_deg   # D052 alias of joints.pos_deg (kept: older readers)
   safety:                      # SafetyMonitor limits (master plan §7)
     temp_warn_c: 60
     temp_cut_c: 65
@@ -184,8 +266,8 @@ print:                   # old-Prusa-friendly design rules
   heatset_m3_h: 5.7
 
 mass_hw:                 # non-printed masses (g) for the sim mass audit — ALL VERIFY on a kitchen scale
-  servo_st3215: 60.0     # = servo_st3215.mass_g
-  servo_scs0009: 13.0    # hand claw servo (spec ~12-14 g)
+  servo_st3215: *st3215_mass_g    # D052 alias of actuators.st3215.mass_g
+  servo_scs0009: *scs0009_mass_g  # D052 alias of actuators.scs0009.mass_g
   battery_3s_5200: 380.0 # typical 3S 5200 mAh LiPo, VERIFY on purchase
   electronics_pod: 400.0 # sensors + compute + bus adapter + wiring (status log 07-30 audit, lidar-pull variant)
   tibia_tube: 5.0        # Ø10 carbon, ~120 mm

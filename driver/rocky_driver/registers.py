@@ -15,6 +15,7 @@ EEPROM registers (addr < 40) persist and need LOCK released before writing
 on STS (LOCK addr 55) and SCS (LOCK addr 48).
 """
 from __future__ import annotations
+import math
 from dataclasses import dataclass
 from .protocol import Family
 
@@ -126,6 +127,23 @@ CENTER = {Family.STS: 2048, Family.SCS: 512}
 CURRENT_LSB_A = 0.0065        # STS present-current: 6.5 mA / count
 VOLTAGE_LSB_V = 0.1
 LOAD_LSB_PCT = 0.1            # present-load: 0.1 % of stall / count
+
+
+# D052: datasheet no-load speed at the rated voltage (ST3215 0.222 s/60 deg at 12 V;
+# SCS0009 per params actuators.scs0009). The mock's motion model caps at this so
+# a rehearsal cannot teleport a joint the real servo would take 0.3 s to move.
+# params.yaml `actuators` carries the same numbers; the driver keeps no params
+# dependency, so they are mirrored here — change both together.
+NO_LOAD_RAD_S = {Family.STS: 4.7, Family.SCS: 9.5}
+
+
+def counts_per_rad(family: Family) -> float:
+    return COUNTS[family] / math.radians(SWEEP_DEG[family])
+
+
+def max_speed_cps(family: Family) -> float:
+    """No-load speed in counts/s (STS ~3064, SCS ~1858)."""
+    return NO_LOAD_RAD_S[family] * counts_per_rad(family)
 
 
 def deg_to_counts(deg: float, family: Family) -> int:

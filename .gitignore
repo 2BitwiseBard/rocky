@@ -29,3 +29,4 @@ sim/playground_clip.mp4
 
 # playwright MCP scratch (screenshots, snapshots)
 .playwright-mcp/
+MUJOCO_LOG.TXT

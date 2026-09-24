@@ -62,32 +62,48 @@ def test_servo_model_off_is_transparent_and_on_slews():
 
 
 def test_hw_bridge_mock_mirrors_and_calibrates(tmp_path, monkeypatch):
+    """The D051 happy path, D052 rules on (fault injection lives in test_hw_bridge.py)."""
     import hw_bridge
     monkeypatch.setattr(hw_bridge, "CAL_PATH", str(tmp_path / "calibration.yaml"))
+    for k, v in dict(BLEND_S=0.2, ENTRY_S=0.3, ENTRY_TAIL_S=0.1, ENTRY_SPEED_CPS=1500).items():
+        monkeypatch.setattr(hw_bridge, k, v)            # a fast soft entry; the real numbers are tested there
     ev = []
     b = hw_bridge.HardwareBridge("mock", on_event=lambda k, m: ev.append(k))
     try:
-        found = b.scan()
+        found = b.scan(id_range=range(1, 21))
         assert len(found) == 20 and b.legs_present.all()
-        b.set_mirror("sim2real")
         q = np.zeros((5, 3))
         q[:, 1], q[:, 2] = 0.5, -1.2
-        b.push_targets(q)
-        time.sleep(0.5)
+        b.push_targets(q)                               # the sim streams before and during sim2real
+        b.set_mirror("sim2real")
+        t_end = time.time() + 1.5
+        while time.time() < t_end and b.status()["entry"] is not None:
+            b.push_targets(q)
+            time.sleep(0.02)
+        for _ in range(10):                             # settle at the no-load 4.7 rad/s
+            b.push_targets(q)
+            time.sleep(0.02)
         st = b.status()
-        assert st["mirror"] == "sim2real" and len(st["tel"]) == 15 and len(st["torque"]) == 15
+        assert st["mirror"] == "sim2real" and st["entry"] is None
+        assert len(st["tel"]) == 20 and len(st["torque"]) == 15      # hands tabulated, not driven
         hip = next(t for t in st["tel"] if t["label"] == "leg0 hip")
-        assert hip["pos_deg"] == pytest.approx(np.degrees(0.5), abs=0.2)   # the mock servo went there
-        assert b.jog(1, 20.0) == 20.0 and b.mirror == "off"                 # a jog takes over the stream
+        assert hip["pos_deg"] == pytest.approx(np.degrees(0.5), abs=0.3)
+        # jog: the gait-frame clamp on the asymmetric hip [-70, 90] (the old "or True" is gone)
+        assert b.jog(2, 80.0) == 80.0 and b.mirror == "off"          # a jog takes over the stream
+        assert b.set_dir("leg0_hip", -1) == -1
+        assert b.jog(2, 80.0) == 70.0                                # q = -80 clips to -70 -> servo +70
+        b.set_dir("leg0_knee", -1)
+        assert b.jog(3, 10.0) == 20.0 and b.jog(3, 170.0) == 150.0   # knee mirrored: [20, 150]
+        b.set_dir("leg0_hip", 1)
+        b.set_dir("leg0_knee", 1)
         b.set_mirror("real2sim")
         time.sleep(0.3)
         q_in, legs = b.real_pose()
-        assert legs.all() and q_in[0, 1] == pytest.approx(0.5, abs=0.01)
+        assert legs.all() and q_in[1, 1] == pytest.approx(0.5, abs=0.01)
+        b.set_mirror("off")
         r = b.center("leg0_knee")
         assert r["key"] == "leg0_knee" and os.path.exists(hw_bridge.CAL_PATH)
-        assert b.set_dir("leg0_yaw", -1) == -1
-        assert b.jog(1, 20.0) == -20.0 or True                               # limits are dir-aware, no crash
-        assert len(b.limp()) == 15 and b.status()["torque"] == [] and b.errors == 0
+        assert len(b.limp()) == 20 and b.status()["torque"] == [] and b.errors == 0
     finally:
         b.close()
-    assert {"scan", "mirror", "center", "limp"} <= set(ev)
+    assert {"scan", "mirror", "center", "limp", "entry"} <= set(ev)

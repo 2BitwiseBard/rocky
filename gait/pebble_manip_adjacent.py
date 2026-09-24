@@ -10,10 +10,10 @@ Geometry (worked out 2026-07-29, respects the CAD-validated coxa +/-40 deg):
 - Crouch FIRST (h 118 -> 98 mm). Crouching extends radial reach
   (leg-frame max 148 -> ~214 mm), which is what makes the wide stance
   reachable at all.
-- Step the two flanking stance legs out and around: body-angle +/-23 deg
-  from station at R = 265 mm (coxa ~38 deg static, ~39.6 deg worst-case
-  with lean + sway -- inside the limit; a straight swing at nominal radius
-  would need ~44+ deg and is impossible).
+- Step the two flanking stance legs out and around: body-angle +/-21 deg
+  from station at R = 300 mm (D052 retune, see the constants; was 22 deg /
+  280 mm with the coxa 1.1 deg from its stop; a straight swing at nominal
+  radius would need ~44+ deg and is impossible).
 - Support triangle after repositioning: flanking feet 170 deg apart around
   the "back" -- chord clears the CoM by ~23 mm on the critical edge, plus a
   small 5 mm lean => ~28 mm static margin (vs -57 mm without repositioning).
@@ -29,10 +29,19 @@ from pebble_gait import (WaveGait, leg_ik, leg_to_body, body_to_leg,
 
 ARM_LEGS = (0, 1)                 # adjacent pair; any pair works by symmetry
 CROUCH_MM = 30.0
-LEAN_MM = 12.0
+LEAN_MM = 18.0                    # D052: 12 -> 18
 SWAY_MM = 2.2
-SWING_DEG = 22.0                  # flank feet move this far in body angle
-R_WIDE = 280.0                    # ...at this body radius
+SWING_DEG = 21.0                  # flank feet move this far in body angle (D052: 22 -> 21)
+R_WIDE = 300.0                    # ...at this body radius (D052: 280 -> 300)
+# D052, measured by pebble_feasibility.check (CoM through the FK chain, not
+# the body-origin proxy the numbers above were designed with): 22/280/12 put
+# the flank coxas at 38.9 deg (inside the 2 deg guard of the 40 stop) with a
+# 15.6 mm CoM margin at arms_down. A 48-point sweep of swing/radius/lean:
+# 21/300/18 -> coxa <= 37.4 deg, CoM margin 17.5 mm (under the 25 mm comfort
+# line — a WARNING, honestly: adjacent-arm work is the tightest thing Pebble
+# does). The flank feet also used to hang 30 mm in the air at t=0 (the
+# crouched home was used in every phase) and the work sway switched off
+# with a step; both fixed in targets().
 STEP_LIFT = 35.0                  # mm foot lift during repositioning steps
 
 
@@ -140,10 +149,13 @@ class AdjacentManip:
         offset = self.lean_vec * lean_b
         offset = offset + np.array([0.0, 0.0, 0.0])       # crouch handled via foot z
         if name == "work":
+            # D052: the sway is enveloped to 0 at both ends of `work` (it used to
+            # switch off with a step when arms_down began: 6.5 rad/s on a knee)
             tw = s * PHASES[6][1]
-            offset = offset + arm_b * np.array([
-                SWAY_MM * np.cos(2 * np.pi * 0.18 * tw),
+            env = min(1.0, tw / 0.8, (PHASES[6][1] - tw) / 0.8)
+            offset = offset + arm_b * env * np.array([
                 SWAY_MM * np.sin(2 * np.pi * 0.18 * tw),
+                SWAY_MM * (1 - np.cos(2 * np.pi * 0.18 * tw)),
                 3.0 * np.sin(2 * np.pi * 0.30 * tw)])
 
         q = np.zeros((N_LEGS, 3))
@@ -153,8 +165,15 @@ class AdjacentManip:
             # where is this foot "home" right now?
             if i in self.flank:
                 wb = wide_a if i == self.flank_a else wide_b
-                p_from = self.foot_home(i, crouched=True)
-                p_to = self.p_wide[i]
+                # D052: the flank's home follows the crouch like every other
+                # foot. It was foot_home(i, crouched=True) in EVERY phase, so at
+                # t=0 both flank feet hung 30 mm in the air (a 22 deg knee step
+                # at entry and exit). The wide foothold is only reached while
+                # fully crouched, where the two agree.
+                p_from = self.foot_home(i, crouched=False)
+                p_from[2] = -(self.g.h - CROUCH_MM * crouch_b)
+                p_to = self.p_wide[i].copy()
+                p_to[2] = p_from[2]
                 p = p_from + (p_to - p_from) * smooth(wb)
                 stepping = (name in ("step_a", "unstep_a") and i == self.flank_a) or \
                            (name in ("step_b", "unstep_b") and i == self.flank_b)
@@ -205,3 +224,9 @@ if __name__ == "__main__":
         worst_q1 = max(worst_q1, max(np.rad2deg(np.array(stance_q1))))
     print(f"timeline {T_TOTAL:.1f} s: NaN targets = {bad}, "
           f"max planted coxa |q1| = {worst_q1:.1f} deg (limit 40)")
+    import pebble_feasibility as pf                       # D052: the full verdict
+    from pebble_gestures import CLAW_MAX
+    r = pf.check(lambda g, t: (m.targets(t)[0], m.targets(t)[1] * CLAW_MAX), T_TOTAL,
+                 g=m.g, name="manip_adjacent")
+    print("\n".join(r.lines))
+    assert r.ok

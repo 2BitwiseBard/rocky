@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
 from rocky_driver.registers import COUNTS, SWEEP_DEG                # noqa: E402
 from rocky_driver.protocol import Family                            # noqa: E402
+from rocky_driver import soft_enable                                # noqa: E402
 
 STALL_NM = 2.94          # ST3215 @ 12 V (D002); STS3250: 4.90 — use --stall-nm
 G = 9.81
@@ -60,10 +61,12 @@ def main():
         mt.servo(sid).external_load_pct = pred_pct   # mock: lever = predicted
 
     cpd = COUNTS[fam] / SWEEP_DEG[fam]
-    bus.torque(sid, True)
-    bus.write_reg(sid, "TORQUE_LIMIT", 1000)
-    bus.set_position(sid, args.hold_deg)
-    clock.sleep(1.5)
+    # D052 V2: goal parked where the servo IS before torque comes on, then a slow move
+    here = soft_enable(bus, [sid], torque_limit=1000, acc=10, speed_cps=200)
+    if sid not in here:
+        sys.exit(f"id {sid}: no answer")
+    bus.set_position(sid, args.hold_deg, 200)
+    clock.sleep(abs(args.hold_deg - here[sid]) / (200 * 360 / 4096) + 1.5)
     ref = bus.read_reg(sid, "PRESENT_POSITION")
     print(f"reference position {ref} counts; stepping torque limit...")
 

@@ -24,7 +24,7 @@ from _common import base_parser, make_bus, hline, OUT_DIR
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
-from rocky_driver import SafetyMonitor, SafetyLimits                # noqa: E402
+from rocky_driver import SafetyMonitor, SafetyLimits, soft_enable   # noqa: E402
 
 
 def main():
@@ -46,9 +46,14 @@ def main():
                         on_event=lambda kind, tel: events.append(
                             (clock.now(), kind, tel.servo_id, tel.temp_c)))
 
+    # D052 V2: park the goal where each servo IS, then enable (enable-first drove
+    # toward a stale goal at full torque), then go to the hold pose at a slow speed
+    here = soft_enable(bus, ids, torque_limit=1000, acc=10, speed_cps=200)
+    if set(here) != set(ids):
+        sys.exit(f"no answer from {sorted(set(ids) - set(here))} — not soaking a servo that is not there")
     for sid in ids:
-        bus.torque(sid, True)
-        bus.set_position(sid, args.pose_deg)
+        bus.set_position(sid, args.pose_deg, 200)
+    clock.sleep(max(abs(args.pose_deg - d) for d in here.values()) / (200 * 360 / 4096) + 0.5)
     print(f"holding {args.pose_deg:+.1f} deg on ids {ids} for "
           f"{args.minutes:.0f} min (cut at {args.cut_c} C) ...")
 

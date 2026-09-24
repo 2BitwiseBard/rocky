@@ -2,17 +2,33 @@
 generated robot from a small JSON spec, at runtime.
 
     spec = {"base": "flat" | "room" | "cliff",
-            "friction": 1.2,              # floor + obstacle sliding friction
+            "friction": 0.8,              # world sliding friction (default = params leg.foot.mu_slide)
             "gravity_tilt_deg": 0.0,      # tilt the gravity vector (a slope, cheaply)
             "gravity_tilt_dir_deg": 0.0,  # ... toward this map bearing
             "terrain": None | {"kind": "rough", "amp_m": 0.02, "size_m": 1.6,
                                "pos": [1.3, 0], "seed": 1, "cell_m": 0.05},
             "objects": [ {"kind": "box",    "pos": [x, y], "size": [sx, sy, sz], "yaw_deg": 0},
                          {"kind": "wall",   "pos": [x, y], "len_m": 1.0, "yaw_deg": 90},
-                         {"kind": "ramp",   "pos": [x, y], "len_m": 0.6, "rise_m": 0.06, "yaw_deg": 0},
-                         {"kind": "stairs", "pos": [x, y], "steps": 3, "rise_m": 0.02, "yaw_deg": 0},
+                         {"kind": "ramp",   "pos": [x, y], "len_m": 0.6, "rise_m": 0.06, "yaw_deg": 0,
+                                            "width_m": 0.6, "landing_m": 0.2, "far": "down"},
+                         {"kind": "stairs", "pos": [x, y], "steps": 3, "rise_m": 0.02, "run_m": 0.15,
+                                            "yaw_deg": 0, "landing_m": 0.2, "far": "down"},
                          {"kind": "rubble", "pos": [x, y], "radius_m": 0.5, "n": 25, "size_m": 0.03, "seed": 2},
                          {"kind": "ball",   "pos": [x, y], "radius_m": 0.05, "mass_kg": 0.1} ]}
+
+Ramps and stairs start at `pos` and climb along `yaw_deg`. D052: by default
+they have a far side (`"far": "down"`: a landing, then the mirror image back
+to the floor), because a walker that tops a ramp and meets a 6 cm cliff is
+testing the cliff reflex, not the ramp. `"far": "drop"` keeps a deliberate
+ledge at the top (the pre-D052 shape, minus the float).
+
+Friction (D052): every WORLD geom is emitted with priority="1", so for any
+robot/world contact MuJoCo takes the world geom's friction/condim/solref
+instead of the element-wise max of the pair. Before that, the feet (0.8,
+1.2 before D052) always won over an "icy" 0.35 floor and the friction
+setting did nothing. World geoms are condim 4 so the feet keep the
+torsional friction build_mjcf gave them (the higher-priority geom's condim
+is the one used). Robot geoms stay priority 0; pebble.xml is untouched.
 
 Everything the lidar should see is geom group 3 (sim_lidar's convention),
 so scan_summary works in every world. The robot gets an "eye" camera on
@@ -22,6 +38,7 @@ cliff platform's top).
 """
 from __future__ import annotations
 import os
+import re
 import sys
 
 import numpy as np
@@ -29,8 +46,16 @@ import mujoco
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "..", "gait"))
+import rocky_model as rm    # noqa: E402
 
-DEFAULT = {"base": "flat", "friction": 1.2, "gravity_tilt_deg": 0.0,
+_FOOT = rm.params()["leg"]["foot"]
+MU_BASE = float(_FOOT["mu_slide"])        # 0.8: the floor the robot was built for (D052)
+MU_TORSION = float(_FOOT["mu_torsion_m"])  # 0.005 m, same as the feet (build_mjcf.FRICTION)
+MU_ROLL = 0.0001                           # m, same as build_mjcf.FRICTION
+CLEAR_M = 0.30      # random_course: no object footprint this close to the spawn point
+
+DEFAULT = {"base": "flat", "friction": MU_BASE, "gravity_tilt_deg": 0.0,
            "gravity_tilt_dir_deg": 0.0, "terrain": None, "objects": []}
 KINDS = ("box", "wall", "ramp", "stairs", "rubble", "ball")
 OBST_RGBA = "0.55 0.5 0.62 1"
@@ -39,51 +64,98 @@ EYE_CAM = ('<camera name="eye" pos="0.10 0 0.095" mode="fixed" '
 
 
 def _fric(spec):
-    return f'{float(spec.get("friction", 1.2)):.3f} 0.01 0.001'
+    return f'{float(spec.get("friction", MU_BASE)):.3f} {MU_TORSION:g} {MU_ROLL:g}'
+
+
+def _wattr(spec):
+    """Contact attributes of every world geom (D052): the world's friction
+    wins the pair (priority 1), condim 4 keeps the feet's torsional term."""
+    return f'friction="{_fric(spec)}" condim="4" priority="1"'
+
+
+def _quat(yaw_deg, pitch_rad=0.0):
+    """qz(yaw) * qy(pitch): yaw the object first, then pitch it about its OWN
+    y axis. (MJCF euler="0 -ang yaw" is the other order: the slope ended up
+    canted sideways on any yawed ramp — found in the D052 review.)"""
+    a = np.radians(float(yaw_deg)) / 2
+    qz = np.array([np.cos(a), 0.0, 0.0, np.sin(a)])
+    qy = np.array([np.cos(pitch_rad / 2), 0.0, np.sin(pitch_rad / 2), 0.0])
+    q = np.zeros(4)
+    mujoco.mju_mulQuat(q, qz, qy)
+    return " ".join(f"{v:.7f}" for v in q)
+
+
+def _run_pieces(o):
+    """Ramp / stairs as boxes in the object's own frame: x runs from `pos`
+    along yaw, z up from the floor. Each piece is (cx, cz, hx, hy, hz, pitch)
+    with pitch about local y (MuJoCo sign: negative pitch climbs toward +x).
+    Pure geometry — the XML and the footprint check both read it."""
+    k = o.get("kind")
+    far = o.get("far", "down")
+    if far not in ("down", "drop"):
+        raise ValueError(f"far must be 'down' or 'drop', not {far!r}")
+    land = float(o.get("landing_m", 0.2))
+    w = float(o.get("width_m", 0.6))
+    out = []
+    if k == "ramp":
+        L = float(o.get("len_m", 0.6))
+        rise = float(o.get("rise_m", 0.06))
+        a = float(np.arctan2(rise, L))
+        # a THICK slab sunk into the floor: its top face runs from (0, 0) to
+        # (L, rise), and it is thick enough (2T cos a >= 2 rise) that the high
+        # end reaches below the floor. The old 1 cm slab floated at the top
+        # with a gap under it; the buried part is harmless.
+        T = max(0.01, rise / np.cos(a))
+        hl = np.hypot(L, rise) / 2
+        out.append((L / 2 + T * np.sin(a), rise / 2 - T * np.cos(a), hl, w / 2, T, -a))
+        if far == "down":
+            if land > 0:
+                out.append((L + land / 2, rise / 2, land / 2, w / 2, rise / 2, 0.0))
+            x0 = L + max(land, 0.0)
+            out.append((x0 + L / 2 - T * np.sin(a), rise / 2 - T * np.cos(a), hl, w / 2, T, a))
+        return out
+    if k == "stairs":
+        n = int(o.get("steps", 3))
+        rise = float(o.get("rise_m", 0.02))
+        run = float(o.get("run_m", 0.15))
+        heights = [(run * (s + 0.5), run / 2, rise * (s + 1)) for s in range(n)]
+        if far == "down":
+            x0 = n * run
+            if land > 0:
+                heights.append((x0 + land / 2, land / 2, rise * n))
+            x0 += max(land, 0.0)
+            # mirror image: every drop on the way down is one rise, never more
+            heights += [(x0 + run * (j + 0.5), run / 2, rise * (n - 1 - j)) for j in range(n - 1)]
+        return [(cx, hz / 2, hx, w / 2, hz / 2, 0.0) for cx, hx, hz in heights]
+    raise ValueError(f"{k!r} is not a ramp or stairs")
 
 
 def _obj_xml(o, i, spec):
     k = o.get("kind", "box")
     x, y = (float(v) for v in o.get("pos", [0.6, 0.0]))
     yaw = float(o.get("yaw_deg", 0.0))
-    fr = _fric(spec)
+    fr = _wattr(spec)
     if k == "box":
         sx, sy, sz = (float(v) for v in o.get("size", [0.1, 0.1, 0.05]))
         return (f'<geom name="obj{i}" type="box" size="{sx/2:.4f} {sy/2:.4f} {sz/2:.4f}" '
                 f'pos="{x:.3f} {y:.3f} {sz/2:.4f}" euler="0 0 {yaw}" group="3" '
-                f'friction="{fr}" rgba="{OBST_RGBA}"/>')
+                f'{fr} rgba="{OBST_RGBA}"/>')
     if k == "wall":
         L = float(o.get("len_m", 1.0))
         h = float(o.get("height_m", 0.25))
         return (f'<geom name="obj{i}" type="box" size="{L/2:.4f} 0.02 {h/2:.4f}" '
                 f'pos="{x:.3f} {y:.3f} {h/2:.4f}" euler="0 0 {yaw}" group="3" '
-                f'friction="{fr}" rgba="0.5 0.47 0.58 1"/>')
-    if k == "ramp":
-        L = float(o.get("len_m", 0.6))
-        rise = float(o.get("rise_m", 0.06))
-        w = float(o.get("width_m", 0.6))
-        ang = np.degrees(np.arctan2(rise, L))
-        # a thin slab tilted about its own y, resting on its low edge
-        t = 0.01
-        cx = x + np.cos(np.radians(yaw)) * L / 2
-        cy = y + np.sin(np.radians(yaw)) * L / 2
-        return (f'<geom name="obj{i}" type="box" size="{np.hypot(L, rise)/2:.4f} {w/2:.4f} {t:.4f}" '
-                f'pos="{cx:.3f} {cy:.3f} {rise/2 + t:.4f}" euler="0 {-ang:.2f} {yaw}" group="3" '
-                f'friction="{fr}" rgba="0.5 0.55 0.5 1"/>')
-    if k == "stairs":
-        n = int(o.get("steps", 3))
-        rise = float(o.get("rise_m", 0.02))
-        run = float(o.get("run_m", 0.15))
-        w = float(o.get("width_m", 0.6))
+                f'{fr} rgba="0.5 0.47 0.58 1"/>')
+    if k in ("ramp", "stairs"):
+        c, s = np.cos(np.radians(yaw)), np.sin(np.radians(yaw))
+        rgba = "0.5 0.55 0.5 1" if k == "ramp" else "0.5 0.5 0.6 1"
         out = []
-        for s in range(n):
-            d = run * (s + 0.5)
-            cx = x + np.cos(np.radians(yaw)) * d
-            cy = y + np.sin(np.radians(yaw)) * d
-            hz = rise * (s + 1)
-            out.append(f'<geom name="obj{i}_{s}" type="box" size="{run/2:.4f} {w/2:.4f} {hz/2:.4f}" '
-                       f'pos="{cx:.3f} {cy:.3f} {hz/2:.4f}" euler="0 0 {yaw}" group="3" '
-                       f'friction="{fr}" rgba="0.5 0.5 0.6 1"/>')
+        for j, (cx, cz, hx, hy, hz, pitch) in enumerate(_run_pieces(o)):
+            # the ramp's climbing slab keeps the plain name obj{i} (it always did)
+            nm = f"obj{i}" if (k == "ramp" and j == 0) else f"obj{i}_{j}"
+            out.append(f'<geom name="{nm}" type="box" size="{hx:.4f} {hy:.4f} {hz:.4f}" '
+                       f'pos="{x + c * cx:.4f} {y + s * cx:.4f} {cz:.4f}" quat="{_quat(yaw, pitch)}" '
+                       f'group="3" {fr} rgba="{rgba}"/>')
         return "\n".join(out)
     if k == "rubble":
         rng = np.random.default_rng(int(o.get("seed", 2)))
@@ -99,30 +171,74 @@ def _obj_xml(o, i, spec):
             if rng.uniform() < 0.5:
                 out.append(f'<geom name="obj{i}_{s}" type="box" size="{e[0]/2:.4f} {e[1]/2:.4f} {e[2]/2:.4f}" '
                            f'pos="{px:.3f} {py:.3f} {e[2]/2:.4f}" euler="0 0 {rng.uniform(0, 90):.1f}" '
-                           f'group="3" friction="{fr}" rgba="0.45 0.42 0.5 1"/>')
+                           f'group="3" {fr} rgba="0.45 0.42 0.5 1"/>')
             else:
                 out.append(f'<geom name="obj{i}_{s}" type="sphere" size="{e[0]/2:.4f}" '
-                           f'pos="{px:.3f} {py:.3f} {e[0]/2:.4f}" group="3" friction="{fr}" '
+                           f'pos="{px:.3f} {py:.3f} {e[0]/2:.4f}" group="3" {fr} '
                            f'rgba="0.45 0.42 0.5 1"/>')
         return "\n".join(out)
     if k == "ball":
         r = float(o.get("radius_m", 0.05))
         m = float(o.get("mass_kg", 0.1))
         return (f'<body name="obj{i}" pos="{x:.3f} {y:.3f} {r + 0.001:.4f}"><freejoint/>'
-                f'<geom type="sphere" size="{r:.4f}" mass="{m:.3f}" group="3" friction="{fr}" '
+                f'<geom type="sphere" size="{r:.4f}" mass="{m:.3f}" group="3" {fr} '
                 f'rgba="0.85 0.6 0.3 1"/></body>')
     raise ValueError(f"unknown object kind {k!r} (have {KINDS})")
 
 
-def _terrain_xml(t):
+# ------------------------------------------------------------ footprints
+def footprint(o):
+    """The object's plan-view footprint as shapes: ("rect", cx, cy, hx, hy,
+    yaw_rad) or ("disk", cx, cy, r). Conservative (buried ramp slab ends and
+    the rubble's largest possible stone are included)."""
+    k = o.get("kind", "box")
+    x, y = (float(v) for v in o.get("pos", [0.6, 0.0]))
+    yaw = np.radians(float(o.get("yaw_deg", 0.0)))
+    if k == "box":
+        sx, sy, _ = (float(v) for v in o.get("size", [0.1, 0.1, 0.05]))
+        return [("rect", x, y, sx / 2, sy / 2, yaw)]
+    if k == "wall":
+        return [("rect", x, y, float(o.get("len_m", 1.0)) / 2, 0.02, yaw)]
+    if k in ("ramp", "stairs"):
+        c, s = np.cos(yaw), np.sin(yaw)
+        out = []
+        for cx, _cz, hx, hy, hz, p in _run_pieces(o):
+            ex = hx * abs(np.cos(p)) + hz * abs(np.sin(p))
+            out.append(("rect", x + c * cx, y + s * cx, ex, hy, yaw))
+        return out
+    if k == "rubble":
+        return [("disk", x, y, float(o.get("radius_m", 0.5)) + float(o.get("size_m", 0.03)))]
+    if k == "ball":
+        return [("disk", x, y, float(o.get("radius_m", 0.05)))]
+    raise ValueError(f"unknown object kind {k!r} (have {KINDS})")
+
+
+def footprint_dist(o, p=(0.0, 0.0)):
+    """Plan-view distance from point p to the object's footprint (0 = inside)."""
+    best = np.inf
+    for sh in footprint(o):
+        dx, dy = float(p[0]) - sh[1], float(p[1]) - sh[2]
+        if sh[0] == "disk":
+            d = max(np.hypot(dx, dy) - sh[3], 0.0)
+        else:
+            _, _, _, hx, hy, yaw = sh
+            c, s = np.cos(yaw), np.sin(yaw)
+            u, v = c * dx + s * dy, -s * dx + c * dy
+            d = np.hypot(max(abs(u) - hx, 0.0), max(abs(v) - hy, 0.0))
+        best = min(best, d)
+    return best
+
+
+def _terrain_xml(t, spec):
     n = int(round(float(t.get("size_m", 1.6)) / float(t.get("cell_m", 0.05))))
     n = max(8, min(n, 128))
     half = float(t.get("size_m", 1.6)) / 2
     amp = float(t.get("amp_m", 0.02))
     px, py = (float(v) for v in t.get("pos", [1.3, 0.0]))
     asset = f'<hfield name="rough" nrow="{n}" ncol="{n}" size="{half:.3f} {half:.3f} {amp:.4f} 0.01"/>'
+    # (before D052 the terrain carried no friction at all: MuJoCo's default 1.0)
     geom = (f'<geom name="terrain" type="hfield" hfield="rough" pos="{px:.3f} {py:.3f} 0" '
-            f'group="3" rgba="0.38 0.36 0.42 1"/>')
+            f'group="3" {_wattr(spec)} rgba="0.38 0.36 0.42 1"/>')
     return asset, geom, n
 
 
@@ -140,16 +256,24 @@ def _terrain_data(n, seed):
     return z.astype(np.float64).ravel()
 
 
+_ATTR_RE = r'\s(?:friction|condim|priority)="[^"]*"'
+
+
+def _world_geom(tag, spec):
+    """Rewrite one existing <geom .../> tag as a world geom (priority 1)."""
+    tag = re.sub(_ATTR_RE, "", tag)
+    return re.sub(r"\s*/>$", f" {_wattr(spec)}/>", tag)
+
+
 def world_xml(spec):
     spec = {**DEFAULT, **(spec or {})}
     with open(os.path.join(HERE, "pebble.xml")) as f:
         xml = f.read()
-    fr = _fric(spec)
-    # floor friction + lidar-visible floor (walls/obstacles are what the scan reports)
-    xml = xml.replace('friction="1.2 0.01 0.001"/>\n    <body name="torso"',
-                      f'friction="{fr}"/>\n    <body name="torso"')
-    xml = xml.replace('<geom name="floor" type="plane" size="6 6 0.1" material="grid" friction="1.2 0.01 0.001"/>',
-                      f'<geom name="floor" type="plane" size="6 6 0.1" material="grid" friction="{fr}"/>')
+    # the floor: matched by name, not by its exact text (build_mjcf owns that
+    # line and changed it in D052, which silently broke the old str.replace)
+    xml, nfloor = re.subn(r'<geom name="floor"[^>]*/>', lambda m: _world_geom(m.group(0), spec), xml, count=1)
+    if nfloor != 1:
+        raise RuntimeError("pebble.xml has no <geom name=\"floor\" .../> line to rewrite")
     # the robot's eye
     xml = xml.replace("<freejoint/>", "<freejoint/>\n      " + EYE_CAM, 1)
     body, assets = [], []
@@ -157,18 +281,18 @@ def world_xml(spec):
     base = spec.get("base", "flat")
     if base == "room":
         from sim_lidar import ROOM
-        body.append(ROOM)
+        body.append(re.sub(r"<geom [^>]*/>", lambda m: _world_geom(m.group(0), spec), ROOM))
     elif base == "cliff":
         from run_cliff import EDGE_X, PLAT_H
         body.append(f'<geom name="platform" type="box" size="{(EDGE_X + 0.45) / 2:.3f} 0.5 {PLAT_H / 2:.3f}" '
-                    f'pos="{(EDGE_X - 0.45) / 2:.3f} 0 {PLAT_H / 2:.3f}" friction="{fr}" '
+                    f'pos="{(EDGE_X - 0.45) / 2:.3f} 0 {PLAT_H / 2:.3f}" {_wattr(spec)} '
                     f'rgba="0.45 0.4 0.55 1"/>')
         spawn_z = PLAT_H
     for i, o in enumerate(spec.get("objects") or []):
         body.append(_obj_xml(o, i, spec))
     n_hf = 0
     if spec.get("terrain"):
-        asset, geom, n_hf = _terrain_xml(spec["terrain"])
+        asset, geom, n_hf = _terrain_xml(spec["terrain"], spec)
         assets.append(asset)
         body.append(geom)
     if assets:
@@ -200,10 +324,13 @@ PRESETS = {
     "flat": {"base": "flat"},
     "room": {"base": "room"},
     "cliff": {"base": "cliff"},
+    # D052: the ramp now has a far side (1.1 m long in all), so the wall moved
+    # from y -0.3 to +0.1 to stay off its landing; width 0.5 leaves a 5 cm gap
     "obstacle course": {"base": "flat", "objects": [
         {"kind": "box", "pos": [0.7, 0.15], "size": [0.15, 0.15, 0.06]},
-        {"kind": "wall", "pos": [1.2, -0.3], "len_m": 0.8, "yaw_deg": 90},
-        {"kind": "ramp", "pos": [0.4, -0.6], "len_m": 0.6, "rise_m": 0.05, "yaw_deg": 0},
+        {"kind": "wall", "pos": [1.2, 0.1], "len_m": 0.8, "yaw_deg": 90},
+        {"kind": "ramp", "pos": [0.4, -0.6], "len_m": 0.45, "rise_m": 0.05, "width_m": 0.5,
+         "landing_m": 0.2, "yaw_deg": 0},
         {"kind": "ball", "pos": [0.5, 0.5], "radius_m": 0.05}]},
     "rubble field": {"base": "flat", "objects": [
         {"kind": "rubble", "pos": [0.9, 0.0], "radius_m": 0.5, "n": 30, "size_m": 0.03}]},
@@ -219,29 +346,38 @@ PRESETS = {
 WORLDS_DIR = os.path.join(HERE, "worlds")
 
 
-def random_course(seed=0, n=8, base="flat", r_min=0.45, r_max=1.6):
-    """A seeded scatter of obstacles in an annulus around the origin (the
-    robot spawns at the centre on clear floor): the RL-curriculum world."""
+def random_course(seed=0, n=8, base="flat", r_min=0.45, r_max=1.6, clear_m=CLEAR_M, tries=50):
+    """A seeded scatter of obstacles in an annulus around the origin: the
+    RL-curriculum world. D052: `pos` in the annulus did not keep the spawn
+    clear (a yawed box corner, or stairs pointing inward, reached the robot
+    in 40 of 200 seeds), so each object's rotated footprint must stay
+    `clear_m` from the origin; a placement that fails is resampled (same
+    kind, same rng stream, so the course is still a pure function of seed).
+    Friction is drawn around the D052 base (0.5-1.0; it used to be 0.6-1.4,
+    which the feet then overrode anyway)."""
     rng = np.random.default_rng(int(seed))
     kinds = ["box", "box", "wall", "ramp", "stairs", "ball", "rubble"]
     objs = []
     for _ in range(int(n)):
         k = kinds[rng.integers(len(kinds))]
-        r = rng.uniform(r_min, r_max)
-        a = rng.uniform(0, 2 * np.pi)
-        o = {"kind": k, "pos": [round(float(r * np.cos(a)), 2), round(float(r * np.sin(a)), 2)],
-             "yaw_deg": round(float(rng.uniform(0, 180)), 0)}
-        if k == "box":
-            o["size"] = [round(float(rng.uniform(0.08, 0.25)), 2), round(float(rng.uniform(0.08, 0.25)), 2),
-                         round(float(rng.uniform(0.02, 0.08)), 3)]
-        elif k == "wall":
-            o["len_m"] = round(float(rng.uniform(0.4, 1.0)), 2)
-        elif k == "rubble":
-            o.update(radius_m=0.3, n=12, size_m=0.03, seed=int(rng.integers(1000)))
-        elif k == "stairs":
-            o.update(steps=3, rise_m=0.015)
-        objs.append(o)
-    return {"base": base, "objects": objs, "friction": round(float(rng.uniform(0.6, 1.4)), 2)}
+        for _try in range(int(tries)):
+            r = rng.uniform(r_min, r_max)
+            a = rng.uniform(0, 2 * np.pi)
+            o = {"kind": k, "pos": [round(float(r * np.cos(a)), 2), round(float(r * np.sin(a)), 2)],
+                 "yaw_deg": round(float(rng.uniform(0, 180)), 0)}
+            if k == "box":
+                o["size"] = [round(float(rng.uniform(0.08, 0.25)), 2), round(float(rng.uniform(0.08, 0.25)), 2),
+                             round(float(rng.uniform(0.02, 0.08)), 3)]
+            elif k == "wall":
+                o["len_m"] = round(float(rng.uniform(0.4, 1.0)), 2)
+            elif k == "rubble":
+                o.update(radius_m=0.3, n=12, size_m=0.03, seed=int(rng.integers(1000)))
+            elif k == "stairs":
+                o.update(steps=3, rise_m=0.015)
+            if footprint_dist(o) >= clear_m:
+                objs.append(o)
+                break
+    return {"base": base, "objects": objs, "friction": round(float(rng.uniform(0.5, 1.0)), 2)}
 
 
 def saved_worlds():
@@ -252,7 +388,6 @@ def saved_worlds():
 
 def save_world(name, spec):
     import json
-    import re
     os.makedirs(WORLDS_DIR, exist_ok=True)
     name = re.sub(r"[^A-Za-z0-9_. -]", "", name).strip() or "world"
     with open(os.path.join(WORLDS_DIR, name + ".json"), "w") as f:

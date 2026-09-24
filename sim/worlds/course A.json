@@ -47,7 +47,8 @@
    ],
    "yaw_deg": 175.0,
    "steps": 3,
-   "rise_m": 0.015
+   "rise_m": 0.015,
+   "far": "drop"
   },
   {
    "kind": "stairs",

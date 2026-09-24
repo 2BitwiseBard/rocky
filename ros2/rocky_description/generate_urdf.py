@@ -12,6 +12,12 @@ Joint conventions MATCH the gait engine + MJCF exactly:
 
 Masses/geometry mirror sim/build_mjcf.py's budget model; URDF inertials are
 computed analytically for each primitive so MuJoCo/Gazebo/RViz all agree.
+D052: limits, effort, velocity and damping come from gait/rocky_model.py
+(params `actuators:` / `joints:`), the same loader the MJCF uses. effort =
+the CONTINUOUS torque (the MJCF forcerange), velocity = the no-load speed
+(the hard ceiling); the foot is the 6.5 mm contact sphere whose surface is
+the foot_fix frame (the IK foot point), and the claw prongs are carved out
+of the tibia budget instead of added on top.
 
 Run:  python3 generate_urdf.py        (writes urdf/pebble.urdf.xacro + .urdf)
 Verify parity against the MJCF:  python3 ../../sim/check_urdf_parity.py
@@ -21,12 +27,13 @@ import subprocess
 import sys
 
 import numpy as np
-import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
-with open(os.path.join(REPO, "cad", "params.yaml")) as f:
-    P = yaml.safe_load(f)
+sys.path.insert(0, os.path.join(REPO, "gait"))
+import rocky_model as rm                                               # noqa: E402
+
+P = rm.params()
 
 MM = 1e-3
 L1 = P["leg"]["l1_coxa"] * MM
@@ -34,9 +41,14 @@ L2 = P["leg"]["l2_femur"] * MM
 L3 = P["leg"]["l3_tibia"] * MM
 RB = P["body"]["circumradius"] * MM
 Z_HIP = P["leg"]["hip_axis_z"] * MM     # femur pivot height (params SSOT, D047)
-LIM = P["bus"]["soft_limits_deg"]
-STALL = 2.94                            # N*m (D002)
-VEL = 5.2                               # rad/s (~0.2 s/60 deg @ 12 V)
+LIM = rm.joint_limits_deg()             # joints.pos_deg (D052; bus.soft_limits_deg aliases it)
+EFFORT = rm.continuous_nm()             # N*m: continuous budget = the MJCF forcerange (D052)
+VEL = rm.servo_speed("hard")            # rad/s: no-load, 0.222 s/60 deg @ 12 V (was a stray 5.2)
+DAMP = rm.damping_nms()                 # N*m*s/rad: stall / no-load, = the MJCF joint damping
+CLAW_EFFORT = rm.continuous_nm("claw")  # SCS0009, all VERIFY
+CLAW_VEL = rm.no_load_rad_s("claw")
+R_FOOT = rm.foot_contact_radius_mm() * MM   # contact sphere, centred R_FOOT behind the foot point
+M_PRONG = 0.004                         # each visual claw prong (MJCF parity)
 
 # mass budget: the CAD-derived sim/mass_budget.json (D039) — the same file
 # sim/build_mjcf.py reads, so URDF and MJCF cannot drift apart again (they did:
@@ -86,9 +98,10 @@ PURPLE = '<material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>'
 def leg_macro() -> str:
     coxa_i = inertia_box(M_COXA, 0.060, 0.032, 0.060)
     femur_i = inertia_capsule_x(M_FEMUR, 0.012, L2)
-    tib_m_link, tib_m_foot = M_TIBIA * 0.7, M_TIBIA * 0.3
+    # D052: the tibia budget already holds the hand — prongs come OUT of the shin
+    tib_m_link, tib_m_foot = M_TIBIA * 0.7 - 2 * M_PRONG, M_TIBIA * 0.3
     tibia_i = inertia_capsule_x(tib_m_link, 0.010, L3 * 0.92)
-    foot_i = tuple([2 / 5 * tib_m_foot * 0.013 ** 2] * 3)
+    foot_i = tuple([2 / 5 * tib_m_foot * R_FOOT ** 2] * 3)
     return f"""
   <xacro:macro name="pebble_leg" params="i angle">
     <link name="coxa${{i}}">
@@ -105,8 +118,8 @@ def leg_macro() -> str:
               rpy="0 0 ${{angle}}"/>
       <axis xyz="0 0 1"/>
       <limit lower="{deg(LIM['yaw'][0])}" upper="{deg(LIM['yaw'][1])}"
-             effort="{STALL}" velocity="{VEL}"/>
-      <dynamics damping="0.05"/>
+             effort="{EFFORT:.4f}" velocity="{VEL}"/>
+      <dynamics damping="{DAMP:.4f}"/>
     </joint>
 
     <link name="femur${{i}}">
@@ -122,8 +135,8 @@ def leg_macro() -> str:
       <origin xyz="{L1:.4f} 0 {Z_HIP:.4f}"/>
       <axis xyz="0 -1 0"/>
       <limit lower="{deg(LIM['hip'][0])}" upper="{deg(LIM['hip'][1])}"
-             effort="{STALL}" velocity="{VEL}"/>
-      <dynamics damping="0.05"/>
+             effort="{EFFORT:.4f}" velocity="{VEL}"/>
+      <dynamics damping="{DAMP:.4f}"/>
     </joint>
 
     <link name="tibia${{i}}">
@@ -139,18 +152,18 @@ def leg_macro() -> str:
       <origin xyz="{L2:.4f} 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="{deg(LIM['knee'][0])}" upper="{deg(LIM['knee'][1])}"
-             effort="{STALL}" velocity="{VEL}"/>
-      <dynamics damping="0.05"/>
+             effort="{EFFORT:.4f}" velocity="{VEL}"/>
+      <dynamics damping="{DAMP:.4f}"/>
     </joint>
 
     <link name="foot${{i}}">
-      {inertial(tib_m_foot + 0.004, foot_i)}  <!-- +0.004: fixed claw prong (MJCF parity) -->
-      <visual><geometry><sphere radius="0.013"/></geometry>
+      {inertial(tib_m_foot + M_PRONG, foot_i, (-R_FOOT, 0, 0))}  <!-- + fixed claw prong (MJCF parity) -->
+      <visual><origin xyz="{-R_FOOT:.4f} 0 0"/><geometry><sphere radius="{R_FOOT:.4f}"/></geometry>
         <material name="pebble"/></visual>
       <visual><origin xyz="0.012 0.0075 0" rpy="0 0 0.28"/>
         <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
         <material name="pebble"/></visual>
-      <collision><geometry><sphere radius="0.013"/></geometry></collision>
+      <collision><origin xyz="{-R_FOOT:.4f} 0 0"/><geometry><sphere radius="{R_FOOT:.4f}"/></geometry></collision>
     </link>
     <joint name="foot_fix${{i}}" type="fixed">
       <parent link="tibia${{i}}"/><child link="foot${{i}}"/>
@@ -158,7 +171,7 @@ def leg_macro() -> str:
     </joint>
 
     <link name="claw${{i}}_link">
-      {inertial(0.004, (1e-7, 1e-7, 1e-7))}
+      {inertial(M_PRONG, (1e-7, 1e-7, 1e-7))}
       <visual><origin xyz="0.012 -0.0075 0" rpy="0 0 -0.28"/>
         <geometry><cylinder radius="0.0035" length="0.028"/></geometry>
         <material name="pebble"/></visual>
@@ -168,7 +181,7 @@ def leg_macro() -> str:
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="{deg(LIM['claw'][0])}" upper="{deg(LIM['claw'][1])}"
-             effort="0.23" velocity="6.0"/>
+             effort="{CLAW_EFFORT:.4f}" velocity="{CLAW_VEL}"/>
       <dynamics damping="0.01"/>
     </joint>
   </xacro:macro>

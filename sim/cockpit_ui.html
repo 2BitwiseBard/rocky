@@ -9,18 +9,23 @@
           --accent:#a78bfa; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --blue:#60a5fa; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font: 14px/1.4 system-ui, sans-serif; height:100vh; display:flex; flex-direction:column; }
-  header { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header { display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0 8px 0 0; letter-spacing:.04em; }
   .chip { padding:2px 8px; border-radius:999px; background:var(--panel2); font-size:12px; color:var(--muted); }
   .chip b { color:var(--ink); }
+  .chip.alarm { background:#3b1d24; color:var(--bad); } .chip.alarm b { color:var(--bad); }
+  .chip.caution { background:#3a2f16; color:var(--warn); } .chip.caution b { color:var(--warn); }
+  .chip button { padding:0 6px; font-size:11px; margin-left:4px; }
   .state-NORMAL{color:var(--ok)} .state-PLANT{color:var(--warn)} .state-BRACE{color:#fb923c} .state-RECOVER{color:var(--blue)} .state-FALLEN{color:var(--bad)} .state-RIGHTED{color:var(--accent)}
-  main { flex:1; display:grid; grid-template-columns: 1fr 380px; min-height:0; }
+  #dead { display:none; background:#5b1620; color:#fff; padding:8px 14px; font-weight:600; }
+  main { flex:1; display:grid; grid-template-columns: 1fr 400px; min-height:0; }
   main.nosidebar { grid-template-columns: 1fr 0; }
   #view { display:flex; flex-direction:column; min-width:0; }
   #stage { position:relative; background:#000; flex:1; min-height:240px; display:flex; align-items:center; justify-content:center; }
   #chase { width:100%; height:100%; object-fit:contain; }
   #eye { position:absolute; right:10px; bottom:10px; width:240px; border:1px solid var(--line); background:#000; }
-  #overlay { position:absolute; left:10px; top:10px; font: 12px/1.5 ui-monospace, monospace; background:rgba(0,0,0,.55); padding:6px 8px; border-radius:6px; }
+  #overlay { position:absolute; left:10px; top:10px; font: 12px/1.5 ui-monospace, monospace; background:rgba(0,0,0,.55); padding:6px 8px; border-radius:6px; white-space:pre; max-width:calc(100% - 20px); overflow:hidden; }
+  #overlay .refuse { color:var(--bad); font-weight:600; } #overlay .budget { color:var(--warn); }
   #console { height:160px; background:var(--panel); border-top:1px solid var(--line); display:flex; flex-direction:column; }
   #log { flex:1; overflow:auto; padding:6px 10px; font: 12px/1.45 ui-monospace, monospace; white-space:pre-wrap; color:var(--muted); }
   #log .cmd { color:var(--ink); }
@@ -28,7 +33,9 @@
   input, select, button, textarea { font: inherit; color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
   input[type=range] { padding:0; }
   button { cursor:pointer; } button:hover { border-color:var(--accent); } button.primary { background:var(--accent); color:#1a1030; border-color:var(--accent); }
-  #side { overflow:auto; background:var(--panel); border-left:1px solid var(--line); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #side { overflow-y:auto; overflow-x:hidden; background:var(--panel); border-left:1px solid var(--line); }
+  #hw-tel, #hw-limits-plan, #rl-runs { overflow-x:auto; }
   details { border-bottom:1px solid var(--line); }
   summary { cursor:pointer; padding:8px 12px; font-weight:600; background:var(--panel2); list-style:none; display:flex; justify-content:space-between; }
   summary::after { content:"▾"; color:var(--muted); } details:not([open]) summary::after { content:"▸"; }
@@ -39,9 +46,21 @@
   .grid3 button { padding:8px 0; }
   #chat { height:220px; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:13px; }
   #chat .u { color:var(--ink); margin-top:6px; } #chat .b { color:var(--accent); } #chat .t { color:var(--muted); font: 11px/1.4 ui-monospace, monospace; white-space:pre-wrap; }
+  #chat .n { color:var(--warn); font-size:12px; } #chat button { font-size:11px; padding:1px 8px; margin-left:6px; }
   table { border-collapse:collapse; width:100%; font-size:12px; } td, th { padding:3px 4px; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; }
+  tr.tripped td { background:#3b1d24; color:var(--bad); }
   .small { font-size:12px; color:var(--muted); }
+  .mono { font-family:ui-monospace, monospace; }
+  .verdict { font: 12px/1.45 ui-monospace, monospace; padding:6px 8px; border-radius:6px; background:var(--bg); border:1px solid var(--line); white-space:pre-wrap; }
+  .v-pass { border-color:var(--ok); color:var(--ok); } .v-warn { border-color:var(--warn); color:var(--warn); } .v-fail { border-color:var(--bad); color:var(--bad); }
+  .note-warn { color:var(--warn); font-size:12px; } .note-bad { color:var(--bad); font-size:12px; }
+  .banner { background:#3b1d24; color:var(--bad); padding:6px 8px; border-radius:6px; font-weight:600; }
+  .legstrip { display:flex; gap:4px; flex-wrap:wrap; }
+  .leg { padding:3px 7px; border-radius:6px; background:var(--panel2); font-size:12px; min-width:62px; }
+  .leg.on { color:var(--ok); } .leg.mir { color:var(--accent); border:1px solid var(--accent); } .leg.deg { color:var(--muted); text-decoration:line-through; opacity:.6; }
+  .leg progress { width:54px; height:6px; display:block; }
   #curves { width:100%; border:1px solid var(--line); border-radius:6px; }
+  pre.report { font-size:11px; max-height:180px; overflow:auto; margin:0; white-space:pre-wrap; }
   @media (max-width: 900px) {
     main { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow:auto; }
     main.nosidebar { grid-template-columns: 1fr; }
@@ -58,6 +77,7 @@
 <body>
 <header>
   <h1>PEBBLE COCKPIT</h1>
+  <span class="chip" id="h-hb-chip" title="the sim thread's heartbeat">sim <b id="h-hb">—</b></span>
   <span class="chip">state <b id="h-state">—</b></span>
   <span class="chip">mode <b id="h-mode">—</b></span>
   <span class="chip">pose <b id="h-pose">—</b></span>
@@ -65,15 +85,20 @@
   <span class="chip">world <b id="h-world">—</b></span>
   <span class="chip">t <b id="h-t">—</b></span>
   <span class="chip">brain <b id="h-brain">—</b></span>
-  <span class="chip" id="h-hw-chip" style="display:none">robot <b id="h-hw">—</b></span>
+  <span class="chip" id="h-fp-chip" title="">robot <b id="h-fp">—</b></span>
+  <span class="chip alarm" id="h-void-chip" style="display:none" title="the always-on void guard: a planted foot probed 30 mm and found no floor">VOID <b id="h-void">—</b><button class="g-clear">clear</button></span>
+  <span class="chip alarm" id="h-latch-chip" style="display:none" title="3 gyro trips in 5 s latch a safe-stop; velocity is ignored until clear">LATCHED <b id="h-latch">—</b><button class="g-clear">clear</button></span>
+  <span class="chip caution" id="h-loco-chip" style="display:none" title="mirroring sim → robot: no walking until the real feet report contacts">locomotion held</span>
+  <span class="chip" id="h-hw-chip" style="display:none">robot bus <b id="h-hw">—</b></span>
   <span style="flex:1"></span>
   <button id="pause">⏸ pause</button>
   <label class="small">speed <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" style="width:90px"> <span id="speedv">1×</span></label>
   <button id="reset">reset</button>
   <button id="record">⏺ record</button>
   <button id="toggle-side">☰ panels</button>
-  <button id="quit" title="stop the cockpit server">⏻ quit</button>
+  <button id="quit" title="stop the cockpit server (real legs limp first)">⏻ quit</button>
 </header>
+<div id="dead"></div>
 <main>
   <section id="view">
     <div id="stage">
@@ -84,7 +109,7 @@
     <div id="console">
       <div id="log"></div>
       <div id="cmdrow">
-        <input id="cmd" placeholder="console: walk 45 · stop · gesture wave · push 40 0 · set gait.T 1.2 · help" style="flex:1">
+        <input id="cmd" placeholder="console: walk 45 · stop · gesture wave · check · gait list · clear · show · help" style="flex:1">
         <button id="send" class="primary">run</button>
       </div>
     </div>
@@ -96,23 +121,31 @@
         <select id="mode">
           <option value="talk">Talk (regex intent, no model)</option>
           <option value="local">Local model (llama-swap)</option>
+          <option value="multimodal">Multimodal (one vision model sees + acts)</option>
           <option value="claude">Claude (API key)</option>
         </select>
       </div>
-      <div class="row"><label>model</label><select id="model" style="flex:1"></select></div>
+      <div class="row"><label>brain</label><select id="model" style="flex:1"></select></div>
       <div class="row"><label>vision</label><select id="vmodel" style="flex:1"></select><button id="look">👁 look</button></div>
+      <div class="row"><label>multimodal</label><select id="mmodel" style="flex:1"></select></div>
+      <div class="row"><label>stt</label><input id="stt" style="flex:1" title="whisper model name (whisper-server :8082)"><button id="stt-set">set</button></div>
+      <div class="small" id="brain-fallbacks"></div>
+      <div class="note-warn" id="brain-pair"></div>
+      <div class="note-bad" id="brain-err"></div>
       <div id="chat"></div>
       <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk (whisper-server)">🎤</button><button id="chat-clear" title="forget the conversation">clear</button></div>
+      <div class="note-warn" id="voice-note"></div>
       <div class="small" id="claude-note"></div>
     </div></details>
     <details open><summary>Teleop</summary><div class="body">
+      <div class="note-warn" id="teleop-held" style="display:none"></div>
       <div class="row">
         <div class="grid3">
-          <button data-k="Q">↺ Q</button><button data-k="up">▲</button><button data-k="E">↻ E</button>
-          <button data-k="left">◀</button><button data-k=" " style="color:var(--bad)">STOP</button><button data-k="right">▶</button>
-          <span></span><button data-k="down">▼</button><span></span>
+          <button data-k="Q" class="mv">↺ Q</button><button data-k="up" class="mv">▲</button><button data-k="E" class="mv">↻ E</button>
+          <button data-k="left" class="mv">◀</button><button data-k=" " style="color:var(--bad)">STOP</button><button data-k="right" class="mv">▶</button>
+          <span></span><button data-k="down" class="mv">▼</button><span></span>
         </div>
-        <div class="small" style="flex:1">Keys work on the page too when no text box has focus: arrows, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Q</kbd><kbd>E</kbd> turn, <kbd>space</kbd> stop, <kbd>G</kbd> wave. Taps add 15 mm/s.</div>
+        <div class="small" style="flex:1">Keys work on the page too when no text box has focus: arrows, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Q</kbd><kbd>E</kbd> turn, <kbd>space</kbd> stop, <kbd>G</kbd> wave. Taps add 15 mm/s; every command is fitted into the gait's envelope (the overlay says when it was scaled).</div>
       </div>
       <div class="row"><label>gesture</label><select id="gesture"></select><button id="gesture-go">do</button><label>say</label><select id="word"></select><button id="say-go">say</button></div>
       <div class="row"><label>shove</label>
@@ -123,14 +156,14 @@
     </div></details>
     <details><summary>World &amp; map</summary><div class="body">
       <canvas id="map" width="356" height="260" style="width:100%; background:#0d0c12; border:1px solid var(--line); border-radius:6px"></canvas>
-      <div class="small">Top-down map: robot (purple, heading tick), objects from the world spec (grey), lidar hits (blue dots), goto target (cyan). Click the map to send a goto there.</div>
+      <div class="small">Top-down map: robot (purple, heading tick), objects from the world spec (grey), lidar hits (blue dots), goto target (cyan), a latched void (red wedge). Click the map to send a goto there. The lidar puck sees only what stands above its plane (~0.18 m): low boxes and rubble end a goto as 'stuck', tall ones as 'blocked'.</div>
       <div class="row"><label>preset</label><select id="preset" style="flex:1"></select><button id="preset-go">load</button><span id="world-msg" class="small"></span></div>
       <div class="row"><label>add</label>
         <select id="obj-kind"></select>
         <input id="obj-x" type="number" step="0.1" value="0.6" style="width:64px" title="x (m)">
         <input id="obj-y" type="number" step="0.1" value="0" style="width:64px" title="y (m)">
         <button id="obj-add">add</button><button id="obj-clear">clear all</button></div>
-      <div class="row"><label>friction</label><input id="fric" type="range" min="0.2" max="2" step="0.05" value="1.2" style="width:120px"><span id="fricv">1.20</span></div>
+      <div class="row"><label>friction</label><input id="fric" type="range" min="0.2" max="2" step="0.05" value="0.8" style="width:120px"><span id="fricv">0.80</span></div>
       <div class="row"><label>slope</label><input id="slope" type="range" min="0" max="15" step="1" value="0" style="width:120px"><span id="slopev">0°</span><button id="cond-apply">apply</button></div>
       <div class="row"><label>terrain</label><button id="terrain-add">rough patch ahead</button><span class="small">objects are lidar-visible; the eye sees everything</span></div>
       <div class="row"><label>random</label><input id="rseed" type="number" value="1" style="width:64px" title="seed"><input id="rn" type="number" value="8" style="width:56px" title="objects"><button id="random-go">random course</button></div>
@@ -140,8 +173,10 @@
     <details><summary>RL</summary><div class="body">
       <div class="small">Righter = the policy that runs while FALLEN. Pick one, then shove 40 N to compare on the same fall. Red marker = FALLEN, purple = the ramp.</div>
       <div class="row"><label>righter</label><select id="righter" style="flex:1"></select><button id="righter-go">load</button><button id="righter-off">off</button></div>
-      <div class="row"><label>walking</label><select id="walk" style="flex:1"><option value="off">analytic wave gait</option></select><button id="walk-go">use</button><span id="walk-note" class="small"></span></div>
-      <div class="small">Walking = the PPO residual gait policy (±0.25 rad on the analytic targets, 50 Hz) while NORMAL. Compare with `walk 45` on the same world; the analytic gait wins on clean floor (D031).</div>
+      <div class="row"><label>walking</label><select id="walk" style="flex:1"><option value="off">analytic wave gait</option></select><button id="walk-go">use</button></div>
+      <div class="small" id="walk-note"></div>
+      <div class="note-warn" id="ckpt-warn"></div>
+      <div class="small">Walking = the PPO residual gait policy (±0.25 rad on the analytic targets, 50 Hz) while NORMAL, fed the observation its checkpoint was trained on (obs version, EMA, gait — D052). Compare with `walk 45` on the same world; the analytic gait wins on clean floor (D031).</div>
       <div class="row"><label>stall s</label><input id="stall" type="range" min="1" max="10" step="0.5" value="3" style="width:100px"><span id="stallv">3</span>
         <label>deadline</label><input id="deadline" type="range" min="3" max="20" step="1" value="10" style="width:80px"><span id="deadlinev">10</span></div>
       <div id="rl-runs"></div>
@@ -151,35 +186,44 @@
     <details><summary>Gait lab &amp; realism</summary><div class="body">
       <canvas id="footfall" width="356" height="70" style="width:100%; background:#0d0c12; border:1px solid var(--line); border-radius:6px"></canvas>
       <div class="small">Footfall diagram: one row per leg (0 north, then counter-clockwise), filled while the foot touches the ground; the white tick is the gait phase. A wave gait at duty 0.8 keeps four rows filled at any time.</div>
-      <div class="row"><label>period T</label><input id="gT" type="range" min="0.8" max="3" step="0.1" value="1.6" style="width:120px"><span id="gTv">1.6</span></div>
+      <div class="row"><label>preset</label><select id="gp-list" style="flex:1"></select><button id="gp-load">load</button><input id="gp-name" placeholder="name" style="width:90px"><button id="gp-save">save</button></div>
+      <div class="small" id="gp-env"></div>
+      <div class="row"><label>period T</label><input id="gT" type="range" min="0.8" max="3" step="0.1" value="2" style="width:120px"><span id="gTv">2</span></div>
       <div class="row"><label>duty</label><input id="gduty" type="range" min="0.5" max="0.9" step="0.05" value="0.8" style="width:120px"><span id="gdutyv">0.8</span></div>
       <div class="row"><label>height h</label><input id="gh" type="range" min="80" max="150" step="2" value="118" style="width:120px"><span id="ghv">118</span></div>
       <div class="row"><label>stance R0</label><input id="gR0" type="range" min="150" max="220" step="5" value="185" style="width:120px"><span id="gR0v">185</span></div>
-      <div class="row"><label>step h</label><input id="ghs" type="range" min="10" max="60" step="2" value="32" style="width:120px"><span id="ghsv">32</span></div>
+      <div class="row"><label>step h</label><input id="ghs" type="range" min="10" max="60" step="2" value="24" style="width:120px"><span id="ghsv">24</span></div>
       <div class="row"><label>trip</label><input id="trip" type="range" min="0.8" max="4" step="0.1" value="1.8" style="width:120px"><span id="tripv">1.8</span></div>
-      <div class="small">Sim-only until it goes into params.yaml (write keepers in NOTES_INBOX.md).</div>
-      <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label>servo model</label><input id="sv-on" type="checkbox"> <span class="small">bus-rate hold, latency, slew limit, 4096-count quantisation — what an ST3215 on the bus does to a target that the ideal sim actuator does not</span></div>
+      <div class="row"><button id="gait-check">check</button><span class="small">feasibility of the gait at the current command and at the envelope corners</span></div>
+      <div class="note-warn" id="gait-budget"></div>
+      <pre id="gait-report" class="report"></pre>
+      <div class="small">Sim-only until it goes into params.yaml; `save` keeps a preset in gait/gaits/.</div>
+      <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label>servo model</label><input id="sv-on" type="checkbox"> <span class="small">ON by default (D052): bus-rate hold, latency, load-derated slew (rate × max(0.2, 1 − |τ|/stall)), 4096-count quantisation — what an ST3215 on the bus does to a target that the ideal sim actuator does not</span></div>
       <div class="row"><label>bus rate</label><input id="sv-hold" type="range" min="10" max="100" step="5" value="50" style="width:100px"><span id="sv-holdv">50 Hz</span>
         <label>latency</label><input id="sv-lat" type="range" min="0" max="120" step="5" value="20" style="width:80px"><span id="sv-latv">20 ms</span></div>
       <div class="row"><label>max speed</label><input id="sv-rate" type="range" min="1" max="8" step="0.1" value="4.7" style="width:100px"><span id="sv-ratev">4.7 rad/s</span>
         <label>quantise</label><input id="sv-quant" type="checkbox" checked></div>
-      <div class="small" id="sv-note">off</div>
+      <div class="small" id="sv-note">—</div>
     </div></details>
     <details><summary>Gesture studio</summary><div class="body">
-      <div class="row"><label>gesture</label><select id="gs-list" style="flex:1"></select><button id="gs-play-saved">▶</button><button id="gs-edit">edit</button><button id="gs-del">delete</button></div>
-      <div class="small">Keyframe gestures are JSON in <code>gait/gestures/</code>: pose the robot with the sliders (it holds the pose live), set a time, <b>snap</b> a frame, repeat, ▶ to play, save. Code gestures (wave, bow…) can be played but not edited here.</div>
+      <div class="row"><label>gesture</label><select id="gs-list" style="flex:1"></select><button id="gs-play-saved">▶</button><button id="gs-edit">edit</button><button id="gs-del">delete</button><button id="gs-draft" title="load the brain's last composed gesture">load draft</button></div>
+      <div class="small">Keyframe gestures are JSON in <code>gait/gestures/</code>: pose the robot with the sliders (it blends to and holds the pose live), set a time, <b>snap</b> a frame, repeat, ▶ to play, save. Every change is checked (pebble_feasibility): speeds against the servo, limits, balance, jumps, self-contact. A FAIL is not played or saved unless <b>force</b> is ticked.</div>
+      <div id="gs-verdict" class="verdict">no frames yet</div>
       <div class="row"><label>name</label><input id="gs-name" placeholder="peek" style="width:110px"><label>loop</label><input id="gs-loop" type="checkbox"><label>frame t</label><input id="gs-t" type="number" step="0.1" min="0" value="0.8" style="width:64px"> s</div>
       <div class="row"><label>body x/y/z</label><input id="gs-bx" type="range" min="-40" max="40" value="0" style="width:70px"><input id="gs-by" type="range" min="-40" max="40" value="0" style="width:70px"><input id="gs-bz" type="range" min="-45" max="25" value="0" style="width:70px"><span id="gs-bv" class="small">0 0 0 mm</span></div>
-      <div class="row"><label>yaw</label><input id="gs-yaw" type="range" min="-25" max="25" value="0" style="width:120px"><span id="gs-yawv" class="small">0°</span></div>
+      <div class="row"><label>yaw</label><input id="gs-yaw" type="range" min="-18" max="18" value="0" style="width:120px"><span id="gs-yawv" class="small">0°</span></div>
       <div class="row"><label>corner dz</label><input id="gs-dz0" type="number" value="0" style="width:46px" title="leg 0 lower by (mm)"><input id="gs-dz1" type="number" value="0" style="width:46px"><input id="gs-dz2" type="number" value="0" style="width:46px"><input id="gs-dz3" type="number" value="0" style="width:46px"><input id="gs-dz4" type="number" value="0" style="width:46px"><span class="small">mm</span></div>
       <div class="row"><label>arm</label><select id="gs-arm"><option value="0">leg 0</option><option value="1">leg 1</option><option value="2">leg 2</option><option value="3">leg 3</option><option value="4">leg 4</option></select><input id="gs-arm-on" type="checkbox" title="raise this leg as an arm">
         <input id="gs-a0" type="range" min="-40" max="40" value="0" style="width:60px" title="yaw"><input id="gs-a1" type="range" min="-70" max="90" value="60" style="width:60px" title="hip"><input id="gs-a2" type="range" min="-150" max="-20" value="-50" style="width:60px" title="knee"><span id="gs-av" class="small">0 60 -50°</span></div>
+      <div class="row" style="border-top:1px dashed var(--line); padding-top:6px"><label>reach</label><input id="gs-rx" type="range" min="-325" max="325" value="0" style="width:66px" title="hand target x (mm, ground frame)"><input id="gs-ry" type="range" min="-325" max="325" value="250" style="width:66px" title="hand target y (mm)"><input id="gs-rz" type="range" min="-118" max="160" value="60" style="width:66px" title="hand target z (mm; the floor is -h)"><span id="gs-rv" class="small">0 250 60 mm</span><button id="gs-solve">solve</button></div>
+      <div class="small" id="gs-solve-msg">Reach: put the ARM leg's hand at x/y/z (mm, ground frame: the unposed stance's body frame, the floor at z = −h); <b>solve</b> searches body lean/height/yaw + the arm joints that get it there with the CoM kept inside the planted feet, and fills the sliders.</div>
       <div class="row"><label>claw</label><select id="gs-claw"><option value="0">hand 0</option><option value="1">hand 1</option><option value="2">hand 2</option><option value="3">hand 3</option><option value="4">hand 4</option></select><input id="gs-claw-v" type="range" min="0" max="1" step="0.05" value="0" style="width:90px"><span id="gs-clawv" class="small">closed</span>
         <label>say</label><select id="gs-say"><option value="">—</option></select><label>ease</label><select id="gs-ease"><option>smooth</option><option>linear</option><option>hold</option></select></div>
       <div class="row"><button id="gs-snap" class="primary">snap frame</button><button id="gs-frame-del">remove frame</button><button id="gs-clear">new</button><button id="gs-hold-off">release pose</button></div>
       <div id="gs-frames" class="small" style="font-family:ui-monospace,monospace"></div>
       <div class="row"><label>scrub</label><input id="gs-scrub" type="range" min="0" max="1" step="0.01" value="0" style="flex:1"><span id="gs-scrubv" class="small">0.0 s</span></div>
-      <div class="row"><button id="gs-play" class="primary">▶ play</button><button id="gs-save">save</button><span id="gs-msg" class="small"></span></div>
+      <div class="row"><button id="gs-play" class="primary">▶ play</button><button id="gs-save">save</button><label title="play / save even when the check FAILs">force</label><input id="gs-force" type="checkbox"><span id="gs-msg" class="small"></span></div>
+      <div class="row" style="border-top:1px dashed var(--line); padding-top:6px"><button id="gs-teach">● record pose stream</button><span id="gs-teach-msg" class="small">Teach: records the sim's joint targets at 20 Hz (the real legs' measured pose in robot → sim mirror) while you pose, play or back-drive; stop turns it into keyframes here.</span></div>
     </div></details>
     <details><summary>Voice &amp; sounds</summary><div class="body">
       <div class="row"><label>audio</label><input id="au-browser" type="checkbox" checked> <span class="small">play chord-speak in this browser (works over the tailnet on a phone); unchecked = the server's speakers</span></div>
@@ -191,17 +235,27 @@
       <div class="row"><button id="cd-add">+ syllable</button><button id="cd-play" class="primary">▶ hear</button><button id="cd-save">save word</button><button id="cd-del">delete custom</button><span id="cd-msg" class="small"></span></div>
     </div></details>
     <details><summary>Hardware (real servos)</summary><div class="body">
-      <div class="small">The Feetech bus beside the sim. Connect the adapter, <b>scan</b>, and every leg whose three servos answered becomes a real leg: <b>sim → robot</b> streams the sim's joint targets to it (gait, gestures, reflexes), <b>robot → sim</b> makes the sim leg follow the real one (hold it in your hand; the sim shows what the software thinks the pose is). Legs not on the bus stay simulated. <code>mock</code> is the byte-level servo simulator the bench scripts rehearse on.</div>
+      <div class="small">The Feetech bus beside the sim. Connect the adapter, <b>scan</b>, and every leg whose three servos answered becomes a real leg: <b>sim → robot</b> streams the sim's joint targets to it (gestures, reflexes; soft entry: parked where it is, 40 % torque, 200 c/s, then released), <b>robot → sim</b> makes the sim leg follow the real one. sim → robot needs the sim at a planted standstill, and holds locomotion until the real feet report contacts. <code>mock</code> is the byte-level servo simulator the bench scripts rehearse on.</div>
+      <div id="hw-banner" class="banner" style="display:none"></div>
       <div class="row"><label>port</label><select id="hw-port" style="flex:1"></select><button id="hw-connect" class="primary">connect</button><button id="hw-disconnect">disconnect</button></div>
-      <div class="row"><button id="hw-scan">scan bus</button><span id="hw-legs" class="small">—</span></div>
+      <div class="row"><button id="hw-scan">scan bus</button><span id="hw-count" class="small">—</span></div>
+      <div id="hw-legs" class="legstrip"></div>
       <div class="row"><label>mirror</label><select id="hw-mirror"><option value="off">off (telemetry only)</option><option value="sim2real">sim → robot</option><option value="real2sim">robot → sim</option></select>
-        <button id="hw-torque-on">torque on</button><button id="hw-limp" style="color:var(--bad)">LIMP</button></div>
-      <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="0" style="width:120px"><span id="hw-speedv" class="small">servo max</span><span class="small">(counts/s cap on every goal; 200 = gentle first moves)</span></div>
+        <button id="hw-torque-on">torque on</button><button id="hw-limp" style="color:var(--bad)">LIMP</button><span id="hw-loco" class="chip caution" style="display:none">locomotion held</span></div>
+      <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="200" style="width:120px"><span id="hw-speedv" class="small">200 c/s</span><span class="small">(counts/s cap on every goal; 0 = servo max)</span></div>
+      <div class="row"><button id="hw-limits">apply limits…</button><span class="small">burn the params soft limits (+ calibration, 2° margin) into each servo's EEPROM angle limits — dry-run preview first</span></div>
+      <div id="hw-limits-plan" class="small"></div>
       <div id="hw-tel" class="small">not connected</div>
+      <div id="hw-events" class="small mono"></div>
       <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label>calibrate</label><select id="hw-key"></select><input id="hw-jig" type="number" value="0" style="width:60px" title="jig angle (deg) the joint is held at; knee comb = -90"><button id="hw-center">center here</button><button id="hw-dir-p">dir +</button><button id="hw-dir-m">dir −</button></div>
       <div class="small">Center: torque off on that joint, hold it at the jig pose (bench/BENCH_RUNBOOK.md §5), click — writes bench/calibration.yaml like calibrate_centers.py does. Dir flips the joint's sign if it moves the wrong way.</div>
       <div class="row"><label>set id</label><input id="hw-old" type="number" value="1" style="width:56px"><span>→</span><input id="hw-new" type="number" value="1" style="width:56px"><button id="hw-setid">write</button><span class="small">one servo on the bus at a time</span></div>
       <div id="hw-msg" class="small"></div>
+    </div></details>
+    <details><summary>Model &amp; fingerprint</summary><div class="body">
+      <div class="small">What the sim believes the robot is (cad/params.yaml via gait/rocky_model.py) and the robot fingerprint every checkpoint is stamped with. A checkpoint trained on another fingerprint (or none: pre-D052) is replayed, but its numbers are not this robot's.</div>
+      <div id="model-warn" class="note-warn"></div>
+      <pre id="model-info" class="report"></pre>
     </div></details>
     <details><summary>Recordings</summary><div class="body">
       <div class="small">⏺ in the header records the chase camera plus every command; stop writes clip.mp4, clip.gif and run.json (world + commands). Replay reloads that world and re-runs the commands.</div>
@@ -214,63 +268,129 @@
 <script>
 const $ = s => document.querySelector(s);
 const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b||{})}).then(r => r.json());
+const getj = u => fetch(u).then(r => r.json());
 let GESTURES = ['wave','bow','look_around','shake','sit','turn_in_place','sidestep','jazz_hands','fist_bump','beckon'];
 let WORDS = ['greeting','acknowledge','yes','no','curious_question','amaze','found_it','discovery','thinking','confused','determined','error','alarm_help','sleepy','low_battery','startup'];
-let lastLogLen = 0;
+let lastLogLen = 0, LOCO_HELD = null, MODEL = null, lastState = null;
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const f1 = x => (x === null || x === undefined || !isFinite(x)) ? '—' : (+x).toFixed(1);
 
 // ---- state feed (+ camera stream watchdog: an <img> MJPEG stream never reconnects by itself,
 // so after a server restart or a dropped connection the page would sit on its last frame)
 const es = new EventSource('/api/events');
-let lastFrame = -1, lastFrameAt = Date.now();
+let lastFrame = -1, lastFrameAt = Date.now(), lastMsgAt = Date.now();
 function reconnectStreams() { for (const id of ['chase', 'eye']) $('#' + id).src = '/video/' + id + '.mjpg?t=' + Date.now(); lastFrameAt = Date.now(); }
 es.onopen = () => reconnectStreams();
 setInterval(() => { if (Date.now() - lastFrameAt > 3000) reconnectStreams(); }, 1500);
+setInterval(() => {                    // the feed itself went quiet: server gone or sim thread wedged
+  if (Date.now() - lastMsgAt > 3000) { $('#h-hb').textContent = 'no feed'; $('#h-hb-chip').className = 'chip alarm'; }
+}, 1000);
 es.onmessage = e => {
+  lastMsgAt = Date.now();
   const s = JSON.parse(e.data);
+  if (s.alive === false) {             // D052: the sim thread died — say so, loudly
+    $('#dead').style.display = 'block';
+    $('#dead').textContent = `SIM THREAD STOPPED: ${s.fatal || 'quit'} — real legs were limped; restart the cockpit (./rocky.sh cockpit)`;
+    $('#h-hb').textContent = 'DEAD'; $('#h-hb-chip').className = 'chip alarm';
+    return;
+  }
+  $('#dead').style.display = 'none';
+  lastState = s;
   if (s.frame !== lastFrame) { lastFrame = s.frame; lastFrameAt = Date.now(); }
+  const hb = s.heartbeat || {};
+  $('#h-hb').textContent = s.paused ? 'paused' : (hb.loop_age_s > (hb.stale_after_s || 2) ? `stalled ${hb.loop_age_s}s` : 'live');
+  $('#h-hb-chip').className = 'chip' + (s.paused ? ' caution' : (hb.loop_age_s > (hb.stale_after_s || 2) ? ' alarm' : ''));
   $('#h-state').textContent = s.state; $('#h-state').className = 'state-' + s.state;
-  $('#h-mode').textContent = s.mode + (s.gesture ? ' (gesture)' : '');
+  $('#h-mode').textContent = s.mode + (s.gesture_phase ? ` (gesture ${s.gesture_phase})` : '');
   $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
   $('#h-tilt').textContent = s.tilt + '°'; $('#h-world').textContent = s.world; $('#h-t').textContent = s.t.toFixed(1) + ' s';
   $('#h-brain').textContent = s.brain.mode + (s.brain.model ? ' · ' + s.brain.model : '');
-  $('#overlay').textContent = `cmd v=(${s.cmd[0]}, ${s.cmd[1]}) mm/s  wz=${s.cmd[2]}\nfeet ${s.contacts.map(c => c ? '●' : '○').join('')}  h ${s.height} mm  gyro ${s.gyro}\n${s.goto ? 'goto → (' + s.goto[0].toFixed(2) + ', ' + s.goto[1].toFixed(2) + ')' : ''}${s.paused ? '  PAUSED' : ''}  trips ${s.trips} falls ${s.falls}\n${s.righter}`;
+  renderGuards(s); renderFingerprint(s);
+  const g = s.guards || {};
+  const probe = (g.probe_state || []).map((p, i) => p[0] + (g.probe_dz && g.probe_dz[i] > 0.5 ? Math.round(g.probe_dz[i]) : '')).join(' ');
+  let ov = `cmd (${s.cmd[0]}, ${s.cmd[1]}) mm/s wz ${s.cmd[2]}  →  gait (${s.cmd_eff[0]}, ${s.cmd_eff[1]}) wz ${s.cmd_eff[2]}\n` +
+    `feet ${s.contacts.map(c => c ? '●' : '○').join('')}  probe ${probe || '—'}  h ${s.kin_h} mm (kin)  gyro ${s.gyro}\n` +
+    `${s.goto ? 'goto → (' + s.goto[0].toFixed(2) + ', ' + s.goto[1].toFixed(2) + ')  ' : ''}${s.paused ? 'PAUSED  ' : ''}trips ${s.trips} falls ${s.falls}  servo ${g.servo_on ? 'real' : 'IDEAL'}\n${s.righter}`;
+  let extra = '';
+  if (g.budget_note) extra += `\n<span class="budget">${esc(g.budget_note)}</span>`;
+  if (s.refusal) extra += `\n<span class="refuse">${esc(s.refusal)}</span>`;
+  $('#overlay').innerHTML = esc(ov) + extra;
+  $('#gait-budget').textContent = g.budget_note || '';
   if (s.console.length !== lastLogLen || (s.console.length && s.console[s.console.length-1][1] !== window._lastLine)) {
     lastLogLen = s.console.length; window._lastLine = s.console.length ? s.console[s.console.length-1][1] : '';
     $('#log').innerHTML = s.console.map(([t, l]) => `<div class="${l.startsWith('>') ? 'cmd' : ''}">[${t.toFixed(1)}] ${esc(l)}</div>`).join('');
     $('#log').scrollTop = $('#log').scrollHeight;
   }
   $('#events').textContent = s.events.map(e => JSON.stringify(e)).join('\n');
+  $('#hw-events').innerHTML = s.events.filter(e => String(e[0]).startsWith('hw:')).slice(-6).map(e => {
+    const bad = ['hw:degraded','hw:lost','hw:stale','hw:cut','hw:nan','hw:rate'].includes(e[0]);
+    return `<div style="color:${bad ? 'var(--bad)' : 'var(--muted)'}">${esc(e[0])}: ${esc(e[1])}</div>`; }).join('');
   $('#pause').textContent = s.paused ? '▶ resume' : '⏸ pause';
   $('#record').textContent = s.recording ? '■ stop rec' : '⏺ record'; $('#record').style.color = s.recording ? 'var(--bad)' : '';
   $('#walk-note').textContent = s.walk;
+  $('#sv-note').textContent = s.servo_note || '';
+  if (!svInit) { svInit = true; servoLoad(s.servo); }
+  if (!gaitInit) { gaitInit = true; gaitSliders(s.gait, s.reflex); }
   if (s.said && s.said[0] !== lastSaid) { lastSaid = s.said[0]; if (s.browser_audio && s.said[1]) playWord(s.said[1]); }
-  if (s.hw) { $('#h-hw-chip').style.display = ''; $('#h-hw').textContent = `${s.hw.port} · ${s.hw.mirror} · legs ${s.hw.legs.map((l, i) => l ? i : '').join('')}${s.hw.errors ? ' · ' + s.hw.errors + ' err' : ''}`; }
+  if (s.hw) { $('#h-hw-chip').style.display = ''; $('#h-hw').textContent = `${s.hw.port} · ${s.hw.mirror} · legs ${s.hw.legs.map((l, i) => l ? i : '').join('')}${s.hw.errors ? ' · ' + s.hw.errors + ' err' : ''}${s.hw.port_ok === false ? ' · PORT LOST' : ''}`;
+              $('#h-hw-chip').className = 'chip' + (s.hw.port_ok === false ? ' alarm' : ''); }
   else $('#h-hw-chip').style.display = 'none';
+  teachRender(s.teach);
   pushFootfall(s.contacts, s.gait.phase);
 };
-let lastSaid = 0;
+function renderGuards(s) {
+  const g = s.guards || {};
+  $('#h-void-chip').style.display = g.void ? '' : 'none';
+  if (g.void) $('#h-void').textContent = `${Math.round(g.void.bearing_deg)}° (leg ${g.void.leg}${g.void_phase ? ', ' + g.void_phase : ''})`;
+  $('#h-latch-chip').style.display = g.latched ? '' : 'none';
+  if (g.latched) $('#h-latch').textContent = g.latch_reason || '';
+  const held = !!(s.hw && s.hw.mirror === 'sim2real' && !s.hw.allow_locomotion);
+  $('#h-loco-chip').style.display = held ? '' : 'none';
+  LOCO_HELD = held ? 'locomotion held: the sim is streaming to the real legs (sim → robot) and they have no foot contacts yet' +
+    (s.hw.entry ? ' — soft entry in progress' : '') + '. Walk/teleop are disabled; gestures are allowed after the entry.' : null;
+  document.querySelectorAll('.mv').forEach(b => b.disabled = !!LOCO_HELD);
+  $('#teleop-held').style.display = LOCO_HELD ? '' : 'none'; $('#teleop-held').textContent = LOCO_HELD || '';
+}
+function renderFingerprint(s) {
+  const ck = s.ckpt_fp || {}; let worst = '', tips = [];
+  for (const [who, c] of Object.entries(ck)) {
+    tips.push(`${who}: ${c.status}${c.trained ? ' (trained on ' + c.trained + ')' : ' (no fingerprint: pre-D052)'}${c.flags && c.flags.length ? ' [' + c.flags.join(', ') + ']' : ''}`);
+    if (c.status === 'mismatch') worst = 'mismatch'; else if (c.status === 'unknown' && !worst) worst = 'unknown';
+  }
+  $('#h-fp').textContent = s.fingerprint + (worst === 'mismatch' ? ' ≠ ckpt' : worst === 'unknown' ? ' ?' : '');
+  $('#h-fp-chip').className = 'chip' + (worst === 'mismatch' ? ' alarm' : worst === 'unknown' ? ' caution' : '');
+  $('#h-fp-chip').title = `robot fingerprint ${s.fingerprint}` + (MODEL ? ` | ${MODEL.fingerprint_note}` : '') + (tips.length ? '\n' + tips.join('\n') : '\nno checkpoint loaded');
+  $('#ckpt-warn').textContent = tips.filter(t => !t.includes(': match')).map(t => '⚠ ' + t).join('\n');
+}
+document.querySelectorAll('.g-clear').forEach(b => b.onclick = async e => { e.stopPropagation(); const r = await post('/api/cmd', {line: 'clear'}); addLog(r.reply); });
+function addLog(t) { if (t) { const d = document.createElement('div'); d.className = 'cmd'; d.textContent = t; $('#log').appendChild(d); $('#log').scrollTop = $('#log').scrollHeight; } }
+let lastSaid = 0, svInit = false, gaitInit = false;
 function playWord(w) { try { const a = new Audio('/audio/' + w + '.wav'); a.play().catch(() => {}); } catch (e) {} }
-function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 // ---- console + teleop
 $('#send').onclick = () => { const l = $('#cmd').value.trim(); if (!l) return; post('/api/cmd', {line: l}); $('#cmd').value = ''; };
 $('#cmd').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
-document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => post('/api/teleop', {key: b.dataset.k}));
+function teleop(k) {
+  if (LOCO_HELD && k !== ' ' && k !== 'G') { addLog('[teleop] ' + LOCO_HELD); return; }
+  post('/api/teleop', {key: k});
+}
+document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => teleop(b.dataset.k));
 const KEYMAP = {ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', w:'W', s:'S', a:'A', d:'D', q:'Q', e:'E', g:'G', ' ':' '};
 document.addEventListener('keydown', e => {
   if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
   const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key];
-  if (k) { e.preventDefault(); post('/api/teleop', {key: k}); }
+  if (k) { e.preventDefault(); teleop(k); }
 });
 $('#gesture').innerHTML = GESTURES.map(g => `<option>${g}</option>`).join('');
 $('#word').innerHTML = WORDS.map(w => `<option>${w}</option>`).join('');
 $('#gesture-go').onclick = () => post('/api/cmd', {line: 'gesture ' + $('#gesture').value});
 $('#say-go').onclick = () => post('/api/cmd', {line: 'say ' + $('#word').value});
-document.querySelectorAll('[data-shove]').forEach(b => b.onclick = () => { const [fx, fy] = b.dataset.shove.split(',').map(Number); post('/api/shove', {fx, fy}); });
+document.querySelectorAll('[data-shove]').forEach(b => b.onclick = async () => { const [fx, fy] = b.dataset.shove.split(',').map(Number); const r = await post('/api/shove', {fx, fy}); if (r.ok === false) addChat('n', r.error); });
 $('#pause').onclick = () => post('/api/speed', {paused: $('#pause').textContent.includes('pause')});
-$('#speed').oninput = () => { $('#speedv').textContent = $('#speed').value + '×'; post('/api/speed', {speed: +$('#speed').value}); };
+$('#speed').oninput = async () => { $('#speedv').textContent = $('#speed').value + '×'; const r = await post('/api/speed', {speed: +$('#speed').value});
+  if (r.ok === false) { addChat('n', r.error); $('#speed').value = r.speed; $('#speedv').textContent = r.speed + '×'; } };   // V2: locked at 1x in sim2real
 $('#reset').onclick = () => post('/api/reset');
-$('#quit').onclick = () => { if (confirm('Stop the cockpit server?')) post('/api/quit'); };
+$('#quit').onclick = () => { if (confirm('Stop the cockpit server? (real legs limp first)')) post('/api/quit'); };
 $('#record').onclick = async () => {
   const on = $('#record').textContent.includes('stop');
   if (!on) { post('/api/record', {action: 'start'}); return; }
@@ -278,13 +398,83 @@ $('#record').onclick = async () => {
   await post('/api/record', {action: 'stop', name}); loadRecs();
 };
 async function loadRecs() {
-  const r = await fetch('/api/recordings').then(x => x.json());
-  $('#recs').innerHTML = r.recordings.length ? r.recordings.map(m => `<div class="row" style="margin:4px 0"><b>${m.name}</b> <span class="small">${m.world} · ${m.duration_s}s · ${m.cmds.length} cmds</span>
-    <button data-replay="${m.name}">▶ replay</button> ${m.files.map(f => `<a href="/recordings/${m.name}/${f}" target="_blank" class="small">${f}</a>`).join(' ')}</div>`).join('') : '<span class="small">none yet</span>';
+  const r = await getj('/api/recordings');
+  $('#recs').innerHTML = r.recordings.length ? r.recordings.map(m => `<div class="row" style="margin:4px 0"><b>${esc(m.name)}</b> <span class="small">${esc(m.world)} · ${m.duration_s}s · ${m.cmds.length} cmds</span>
+    <button data-replay="${esc(m.name)}">▶ replay</button> ${m.files.map(f => `<a href="/recordings/${encodeURIComponent(m.name)}/${encodeURIComponent(f)}" target="_blank" class="small">${esc(f)}</a>`).join(' ')}</div>`).join('') : '<span class="small">none yet</span>';
   document.querySelectorAll('[data-replay]').forEach(b => b.onclick = () => post('/api/replay', {name: b.dataset.replay}));
 }
 loadRecs();
-// ---- voice (hold to talk)
+$('#toggle-side').onclick = () => document.querySelector('main').classList.toggle('nosidebar');
+$('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === '0.15' ? '1' : '0.15';
+for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
+
+// ---- brain & chat (D052 roles: brain / vision / multimodal / stt, warm-cold, fallbacks)
+let pendingVoice = null;
+function roleOptions(list, cur) {
+  const ids = list.map(e => e.id); if (cur && !ids.includes(cur)) list = [{id: cur, loaded: false, missing: true}, ...list];
+  return list.map(e => `<option value="${esc(e.id)}"${e.id === cur ? ' selected' : ''}>${esc(e.id)} ${e.missing ? '(not in llama-swap)' : e.loaded ? '● warm' : '○ cold'}${e.selector ? ' · selector' : ''}</option>`).join('');
+}
+async function loadModels() {
+  const m = await getj('/api/models');
+  const cat = (m.catalog || []).filter(e => !e.quarantined), b = m.brain || {};
+  $('#model').innerHTML = roleOptions(cat, b.model) || '<option>(llama-swap not reachable)</option>';
+  $('#vmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.vision_model);
+  $('#mmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.multimodal_model);
+  $('#stt').value = b.stt_model || (m.stt && m.stt.model) || '';
+  $('#mode').value = b.mode;
+  const fb = m.fallbacks || {};
+  $('#brain-fallbacks').textContent = (m.reachable ? '' : 'llama-swap NOT reachable — talk mode only. ') +
+    Object.entries(fb).map(([r, c]) => `${r}: ${c.join(' → ')}`).join(' · ') + (m.quarantined && m.quarantined.length ? ` · quarantined (never used): ${m.quarantined.join(', ')}` : '');
+  const byId = Object.fromEntries((m.catalog || []).map(e => [e.id, e]));
+  const weights = id => { const e = byId[id]; return e && e.selector && e.targets && e.targets.length ? e.targets : [id]; };   // a selector resolves to its targets
+  const paired = weights(b.model).includes('qwen3.6-35b-a3b') && weights(b.vision_model).includes('lfm2.5-vl');
+  $('#brain-pair').textContent = paired ? '' :
+    `brain ${b.model} + vision ${b.vision_model} are not the qwen3.6-35b-a3b + lfm2.5-vl pair that shares the GPU: every look may swap models (seconds to minutes).`;
+  $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
+  return m;
+}
+loadModels();
+async function setRole(body) {
+  const r = await post('/api/brain', body);
+  $('#brain-err').textContent = (r.errors || []).join('; ');
+  loadModels();
+}
+$('#mode').onchange = () => setRole({mode: $('#mode').value});
+$('#model').onchange = () => setRole({brain: $('#model').value});
+$('#vmodel').onchange = () => setRole({vision: $('#vmodel').value});
+$('#mmodel').onchange = () => setRole({multimodal: $('#mmodel').value});
+$('#stt-set').onclick = () => setRole({stt: $('#stt').value.trim()});
+function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight; return d; }
+async function sendChat(t, source, trusted) {
+  addChat('u', (source === 'voice' ? '🎤 you: ' : 'you: ') + t); const wait = addChat('t', '…');
+  $('#voice-note').textContent = ''; pendingVoice = null;
+  const r = await post('/api/chat', {text: t, mode: $('#mode').value, source, trusted: !!trusted});
+  wait.remove();
+  if (r.error && !r.trace) { addChat('n', 'chat failed: ' + r.error); return; }
+  for (const n of (r.fallback || [])) addChat('n', '↪ ' + n);
+  if (r.gave_up) addChat('n', 'the brain gave up (hop limit) — answer below is partial');
+  for (const c of (r.trace || [])) {
+    const d = addChat('t', `${c.tool}(${JSON.stringify(c.args || {})}) → ${JSON.stringify(c.result).slice(0, 300)}`);
+    if (c.tool === 'compose_gesture' && c.result && c.result.feasible) {
+      const b = document.createElement('button'); b.textContent = 'save gesture'; b.title = 'save the previewed draft to gait/gestures/';
+      b.onclick = async () => { const m = await getj('/api/models'); if (!m.draft || !m.draft.spec) { addChat('n', 'no draft to save'); return; }
+        const s = await post('/api/gesture/save', m.draft.spec); addChat('n', s.ok ? `saved ${s.name}` : 'save refused: ' + s.error); if (s.ok) loadGestures(); };
+      const l = document.createElement('button'); l.textContent = 'open in studio'; l.onclick = () => loadDraft();
+      d.appendChild(b); d.appendChild(l);
+    }
+  }
+  if (r.motion_blocked) addChat('n', '⚠ motion was blocked: a spoken motion command needs the wake word ("pebble, …") or your Enter');
+  addChat('b', `pebble-brain [${r.mode}${r.model ? ' · ' + r.model : ''}]: ${r.reply || '(no text)'}`);
+}
+$('#chat-send').onclick = () => {
+  const t = $('#chat-in').value.trim(); if (!t) return; $('#chat-in').value = '';
+  if (pendingVoice !== null && t === pendingVoice) sendChat(t, 'voice', true);   // the operator confirmed the transcript
+  else sendChat(t, 'typed', false);
+};
+$('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
+$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; };
+$('#look').onclick = async () => { const w = addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); w.remove(); addChat('b', r.ok ? `eye (${r.model}${r.fallback ? ', fallback' : ''}): ${r.description}` : 'look failed: ' + r.error); };
+// voice: hold to talk -> transcript in the box; auto-send only when no motion gate applies
 let mediaRec = null, chunks = [];
 $('#mic').onmousedown = $('#mic').ontouchstart = async e => {
   e.preventDefault();
@@ -293,59 +483,31 @@ $('#mic').onmousedown = $('#mic').ontouchstart = async e => {
     chunks = []; mediaRec = new MediaRecorder(stream); mediaRec.ondataavailable = ev => chunks.push(ev.data);
     mediaRec.onstop = async () => {
       stream.getTracks().forEach(t => t.stop());
-      const fd = new FormData(); fd.append('audio', new Blob(chunks, {type: mediaRec.mimeType}), 'in.webm');
-      addChat('t', 'transcribing…');
+      const fd = new FormData(); fd.append('audio', new Blob(chunks, {type: mediaRec.mimeType}), 'in.webm'); fd.append('mode', $('#mode').value);
+      const w = addChat('t', 'transcribing…');
       const r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json());
-      $('#chat').lastChild.remove();
-      if (r.ok && r.text) { $('#chat-in').value = r.text; $('#chat-send').click(); } else addChat('t', 'voice: ' + (r.error || 'nothing heard'));
+      w.remove();
+      if (!r.ok) { addChat('n', 'voice: ' + (r.error || 'failed')); return; }
+      $('#chat-in').value = r.text || '';
+      if (!r.text) { addChat('n', 'nothing heard' + (r.dropped && r.dropped.length ? ' (dropped: ' + r.dropped.join('; ') + ')' : '')); return; }
+      if (!r.motion_blocked) { $('#chat-in').value = ''; sendChat(r.text, 'voice', false); }
+      else { pendingVoice = r.text; $('#voice-note').textContent = "needs the wake word 'pebble, …' — press Enter to send it as a command"; $('#chat-in').focus(); }
     };
     mediaRec.start(); $('#mic').style.color = 'var(--bad)';
-  } catch (err) { addChat('t', 'mic: ' + err.message); }
+  } catch (err) { addChat('n', 'mic: ' + err.message); }
 };
 $('#mic').onmouseup = $('#mic').onmouseleave = $('#mic').ontouchend = () => { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); $('#mic').style.color = ''; };
-$('#toggle-side').onclick = () => document.querySelector('main').classList.toggle('nosidebar');
-$('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === '0.15' ? '1' : '0.15';
-for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
-
-// ---- brain & chat
-async function loadModels() {
-  const m = await fetch('/api/models').then(r => r.json());
-  $('#model').innerHTML = m.models.map(x => `<option>${x}</option>`).join('') || '<option>(llama-swap not reachable)</option>';
-  const pick = m.models.includes('qwen3.6-35b-a3b') ? 'qwen3.6-35b-a3b' : m.models[0]; if (pick) $('#model').value = m.brain.model || pick;
-  const vis = m.vision_models.length ? m.vision_models : m.models;
-  $('#vmodel').innerHTML = vis.map(x => `<option>${x}</option>`).join('');
-  if (m.models.includes('vision-model')) $('#vmodel').value = 'vision-model'; else if (vis.includes('lfm2.5-vl')) $('#vmodel').value = 'lfm2.5-vl';
-  $('#mode').value = m.brain.mode;
-  $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
-  post('/api/brain', {model: $('#model').value, vision_model: $('#vmodel').value});
-}
-loadModels();
-$('#mode').onchange = () => post('/api/brain', {mode: $('#mode').value});
-$('#model').onchange = () => post('/api/brain', {model: $('#model').value});
-$('#vmodel').onchange = () => post('/api/brain', {vision_model: $('#vmodel').value});
-function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight; }
-$('#chat-send').onclick = async () => {
-  const t = $('#chat-in').value.trim(); if (!t) return; $('#chat-in').value = '';
-  addChat('u', 'you: ' + t); addChat('t', '…');
-  const r = await post('/api/chat', {text: t, mode: $('#mode').value, model: $('#model').value});
-  $('#chat').lastChild.remove();
-  for (const c of r.trace) addChat('t', `${c.tool}(${JSON.stringify(c.args || {})}) → ${JSON.stringify(c.result).slice(0, 300)}`);
-  addChat('b', `pebble-brain [${r.mode}${r.model ? ' · ' + r.model : ''}]: ${r.reply || '(no text)'}`);
-};
-$('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
-$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; };
-$('#look').onclick = async () => { addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); $('#chat').lastChild.remove(); addChat('b', r.ok ? `eye (${r.model}): ${r.description}` : 'look failed: ' + r.error); };
 
 // ---- world
 async function loadWorld() {
-  const w = await fetch('/api/world').then(r => r.json());
-  $('#preset').innerHTML = w.presets.map(p => `<option>${p}</option>`).join(''); $('#preset').value = w.presets.includes(w.name) ? w.name : w.presets[0];
+  const w = await getj('/api/world');
+  $('#preset').innerHTML = w.presets.map(p => `<option>${esc(p)}</option>`).join(''); $('#preset').value = w.presets.includes(w.name) ? w.name : w.presets[0];
   $('#obj-kind').innerHTML = w.kinds.map(k => `<option>${k}</option>`).join('');
   $('#spec').textContent = JSON.stringify(w.spec, null, 1);
-  $('#fric').value = w.spec.friction || 1.2; $('#fricv').textContent = (+$('#fric').value).toFixed(2);
+  $('#fric').value = w.spec.friction || 0.8; $('#fricv').textContent = (+$('#fric').value).toFixed(2);
   $('#slope').value = w.spec.gravity_tilt_deg || 0; $('#slopev').textContent = $('#slope').value + '°';
+  worldSpec = w.spec;
 }
-loadWorld();
 $('#preset-go').onclick = async () => { $('#world-msg').textContent = 'building…'; const r = await post('/api/world', {preset: $('#preset').value}); $('#world-msg').textContent = 'loaded ' + r.name; post('/api/camera', {view: 'wide'}); loadWorld(); };
 document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => post('/api/camera', {view: b.dataset.view}));
 $('#obj-add').onclick = async () => { await post('/api/world/add', {object: {kind: $('#obj-kind').value, pos: [+$('#obj-x').value, +$('#obj-y').value]}}); loadWorld(); };
@@ -354,7 +516,7 @@ $('#fric').oninput = () => $('#fricv').textContent = (+$('#fric').value).toFixed
 $('#slope').oninput = () => $('#slopev').textContent = $('#slope').value + '°';
 $('#cond-apply').onclick = async () => { await post('/api/world/add', {friction: +$('#fric').value, gravity_tilt_deg: +$('#slope').value}); loadWorld(); };
 $('#random-go').onclick = async () => { $('#world-msg').textContent = 'building…'; const r = await post('/api/world/random', {seed: +$('#rseed').value, n: +$('#rn').value}); $('#world-msg').textContent = 'loaded ' + r.name; post('/api/camera', {view: 'wide'}); loadWorld(); };
-async function loadSaved() { const r = await fetch('/api/world/saved').then(x => x.json()); $('#wsaved').innerHTML = r.saved.map(n => `<option>${n}</option>`).join('') || '<option value="">(none saved)</option>'; }
+async function loadSaved() { const r = await getj('/api/world/saved'); $('#wsaved').innerHTML = r.saved.map(n => `<option>${esc(n)}</option>`).join('') || '<option value="">(none saved)</option>'; }
 loadSaved();
 $('#wsave').onclick = async () => { const r = await post('/api/world/save', {name: $('#wname').value || 'world'}); $('#world-msg').textContent = 'saved ' + r.name; loadSaved(); };
 $('#wload').onclick = async () => { if (!$('#wsaved').value) return; await post('/api/world/load', {name: $('#wsaved').value}); $('#world-msg').textContent = 'loaded ' + $('#wsaved').value; post('/api/camera', {view: 'wide'}); loadWorld(); };
@@ -362,25 +524,24 @@ $('#terrain-add').onclick = async () => { await post('/api/world/add', {terrain:
 
 // ---- RL
 async function loadRL() {
-  const r = await fetch('/api/rl/runs').then(x => x.json());
+  const r = await getj('/api/rl/runs');
   const rec = r.runs.filter(x => x.env === 'recover' && x.ckpt);
   const walk = r.runs.filter(x => x.env === 'gait' && x.ckpt);
-  $('#walk').innerHTML = '<option value="off">analytic wave gait</option>' + walk.map(x => `<option>${x.run}</option>`).join('');
-  $('#righter').innerHTML = rec.map(x => `<option>${x.run}</option>`).join('');
+  $('#walk').innerHTML = '<option value="off">analytic wave gait</option>' + walk.map(x => `<option>${esc(x.run)}</option>`).join('');
+  $('#righter').innerHTML = rec.map(x => `<option>${esc(x.run)}</option>`).join('');
   if (rec.some(x => x.run === 'recover1')) $('#righter').value = 'recover1';
-  $('#rl-runs').innerHTML = '<table><tr><th>run</th><th>env</th><th>rew</th><th>rate</th><th>steps</th><th>ret</th><th>ent</th><th>eval</th></tr>' +
-    r.runs.map(x => `<tr><td>${x.run}</td><td>${x.env}</td><td>${x.reward}</td><td>${x.rate ?? ''}</td><td>${(x.steps/1e6).toFixed(1)}M</td><td>${x.ret?.toFixed(0) ?? ''}</td><td>${x.ent?.toFixed(1) ?? ''}</td><td>${x.note}</td></tr>`).join('') + '</table>';
+  $('#rl-runs').innerHTML = '<table><tr><th>run</th><th>env</th><th>obs</th><th>rew</th><th>rate</th><th>steps</th><th>ret</th><th>robot</th><th>eval</th></tr>' +
+    r.runs.map(x => `<tr><td>${esc(x.run)}</td><td>${esc(x.env)}</td><td>v${x.obs_version ?? 1}</td><td>${esc(x.reward)}</td><td>${x.rate ?? ''}</td><td>${(x.steps/1e6).toFixed(1)}M</td><td>${x.ret?.toFixed(0) ?? ''}</td>` +
+      `<td title="${esc((x.flags || []).join(', '))}" style="color:${x.fingerprint && lastState && x.fingerprint === lastState.fingerprint ? 'var(--ok)' : 'var(--warn)'}">${esc(x.fingerprint || 'none')}</td><td>${esc(x.note)}</td></tr>`).join('') + '</table>';
 }
 loadRL();
 $('#righter-go').onclick = () => post('/api/rl/righter', {name: $('#righter').value});
 $('#righter-off').onclick = () => post('/api/rl/righter', {name: 'off'});
-$('#walk-go').onclick = () => post('/api/rl/walk', {name: $('#walk').value});
+$('#walk-go').onclick = async () => { const r = await post('/api/rl/walk', {name: $('#walk').value}); addLog(r.reply); gaitInit = false; };
 $('#stall').oninput = () => { $('#stallv').textContent = $('#stall').value; post('/api/cmd', {line: 'set reflex.stall_s ' + $('#stall').value}); };
 $('#deadline').oninput = () => { $('#deadlinev').textContent = $('#deadline').value; post('/api/cmd', {line: 'set reflex.fallen_max_s ' + $('#deadline').value}); };
-for (const [id, p] of [['gT','gait.T'],['gh','gait.h'],['ghs','gait.hstep'],['trip','reflex.trip']])
-  $('#' + id).oninput = () => { $('#' + id + 'v').textContent = $('#' + id).value; post('/api/cmd', {line: 'set ' + p + ' ' + $('#' + id).value}); };
 // ---- top-down map
-let worldSpec = {objects: []}, lastState = null, scanPts = [];
+let worldSpec = {objects: []}, scanPts = [];
 const MAP = {scale: 90, cx: 178, cy: 130};          // px per metre, origin
 function w2m(x, y) { return [MAP.cx + x * MAP.scale, MAP.cy - y * MAP.scale]; }
 function drawMap() {
@@ -405,20 +566,26 @@ function drawMap() {
   if (lastState) {
     if (lastState.goto) { const [x, y] = w2m(lastState.goto[0], lastState.goto[1]); g.strokeStyle = '#67e8f9'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 6, 0, 7); g.stroke(); }
     const [x, y] = w2m(lastState.pose.x, lastState.pose.y), yaw = lastState.pose.yaw_deg * Math.PI / 180;
+    const v = lastState.guards && lastState.guards.void;
+    if (v) { const wb = v.world_bearing_deg * Math.PI / 180; g.fillStyle = 'rgba(248,113,113,.45)'; g.beginPath(); g.moveTo(x, y); g.arc(x, y, 0.4 * MAP.scale, -wb - 0.5, -wb + 0.5); g.closePath(); g.fill(); }
     g.fillStyle = {NORMAL:'#4ade80', PLANT:'#fbbf24', BRACE:'#fb923c', RECOVER:'#60a5fa', FALLEN:'#f87171', RIGHTED:'#a78bfa'}[lastState.state] || '#a78bfa';
     g.beginPath(); g.arc(x, y, 0.11 * MAP.scale, 0, 7); g.fill();
     g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(yaw) * 0.16 * MAP.scale, y - Math.sin(yaw) * 0.16 * MAP.scale); g.stroke();
   }
 }
-$('#map').onclick = e => { const r = $('#map').getBoundingClientRect(); const sx = $('#map').width / r.width, sy = $('#map').height / r.height; const x = ((e.clientX - r.left) * sx - MAP.cx) / MAP.scale, y = (MAP.cy - (e.clientY - r.top) * sy) / MAP.scale; post('/api/tool/goto', {x: +x.toFixed(2), y: +y.toFixed(2)}); };
-setInterval(async () => { try { const s = await fetch('/api/scan').then(r => r.json()); scanPts = s.points; } catch (e) {} }, 700);
+$('#map').onclick = async e => {
+  if (LOCO_HELD) { addLog('goto: ' + LOCO_HELD); return; }
+  const r = $('#map').getBoundingClientRect(); const sx = $('#map').width / r.width, sy = $('#map').height / r.height;
+  const x = ((e.clientX - r.left) * sx - MAP.cx) / MAP.scale, y = (MAP.cy - (e.clientY - r.top) * sy) / MAP.scale;
+  const res = await post('/api/tool/goto', {x: +x.toFixed(2), y: +y.toFixed(2)});
+  addLog(`goto (${x.toFixed(2)}, ${y.toFixed(2)}): ${res.stopped || (res.ok ? 'ok' : 'refused')}${res.detail ? ' — ' + res.detail : ''}${res.error ? ' — ' + res.error : ''}`);
+};
+setInterval(async () => { try { const s = await getj('/api/scan'); scanPts = s.points; } catch (e) {} }, 700);
 setInterval(drawMap, 150);
-es.addEventListener('message', e => { lastState = JSON.parse(e.data); });
-const _loadWorld = loadWorld; loadWorld = async () => { await _loadWorld(); worldSpec = await fetch('/api/world').then(r => r.json()).then(w => w.spec); };
 loadWorld();
-fetch('/api/help').then(r => r.json()).then(h => $('#help').textContent = h.commands + '\n' + h.teleop + '\n\n' + h.rl);
+getj('/api/help').then(h => $('#help').textContent = h.commands + '\n' + h.teleop + '\n\n' + h.rl);
 
-// ---- gait lab: footfall diagram + servo realism
+// ---- gait lab: presets, check, footfall diagram + servo realism
 const FF = {cols: 356, rows: 5, buf: []};
 function pushFootfall(con, phase) { FF.buf.push({con, phase}); if (FF.buf.length > FF.cols) FF.buf.shift(); }
 setInterval(() => {
@@ -430,8 +597,23 @@ setInterval(() => {
   });
   g.fillStyle = '#9a94ab'; g.font = '10px system-ui'; for (let r = 0; r < FF.rows; r++) g.fillText(r, 3, r * rh + 11);
 }, 200);
-for (const [id, p] of [['gduty','gait.duty'],['gR0','gait.R0']])
+const GAIT_SLIDERS = [['gT','gait.T','T'],['gduty','gait.duty','duty'],['gh','gait.h','h'],['gR0','gait.R0','R0'],['ghs','gait.hstep','hstep']];
+function gaitSliders(g, reflex) {
+  for (const [id, , k] of GAIT_SLIDERS) if (g && g[k] !== undefined) { $('#' + id).value = g[k]; $('#' + id + 'v').textContent = g[k]; }
+  if (reflex) { $('#trip').value = reflex.trip; $('#tripv').textContent = reflex.trip; }
+}
+for (const [id, p] of [...GAIT_SLIDERS.map(x => [x[0], x[1]]), ['trip','reflex.trip']])
   $('#' + id).oninput = () => { $('#' + id + 'v').textContent = $('#' + id).value; post('/api/cmd', {line: 'set ' + p + ' ' + $('#' + id).value}); };
+async function loadGaits() {
+  const r = await getj('/api/gait');
+  $('#gp-list').innerHTML = Object.entries(r.presets).map(([k, p]) => `<option value="${esc(k)}">${esc(k)} (T ${p.T} h ${p.h} step ${p.hstep})</option>`).join('');
+  const e = r.envelope; $('#gp-env').textContent = `envelope now: |v| ≤ ${f1(e.v)} mm/s at any heading, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place (WaveGait.budget scales anything bigger)`;
+}
+loadGaits();
+$('#gp-load').onclick = async () => { const r = await post('/api/cmd', {line: 'gait ' + $('#gp-list').value}); addLog(r.reply); $('#gait-report').textContent = r.reply || ''; gaitInit = false; loadGaits(); };
+$('#gp-save').onclick = async () => { const n = $('#gp-name').value.trim(); if (!n) return; const r = await post('/api/cmd', {line: 'gait save ' + n}); $('#gait-report').textContent = r.reply || ''; loadGaits(); };
+$('#gait-check').onclick = async () => { $('#gait-report').textContent = 'checking…'; const r = await post('/api/cmd', {line: 'check'}); $('#gait-report').textContent = r.reply || ''; };
+function servoLoad(p) { $('#sv-on').checked = p.on; $('#sv-hold').value = p.hold_hz; $('#sv-holdv').textContent = p.hold_hz + ' Hz'; $('#sv-lat').value = p.latency_s * 1000; $('#sv-latv').textContent = Math.round(p.latency_s * 1000) + ' ms'; $('#sv-rate').value = p.rate_rad_s; $('#sv-ratev').textContent = p.rate_rad_s + ' rad/s'; $('#sv-quant').checked = p.quant; }
 function servoSend() {
   post('/api/servo', {on: $('#sv-on').checked, hold_hz: +$('#sv-hold').value, latency_s: $('#sv-lat').value / 1000, rate_rad_s: +$('#sv-rate').value, quant: $('#sv-quant').checked}).then(r => $('#sv-note').textContent = r.note);
 }
@@ -439,7 +621,34 @@ $('#sv-on').onchange = $('#sv-quant').onchange = servoSend;
 $('#sv-hold').oninput = () => { $('#sv-holdv').textContent = $('#sv-hold').value + ' Hz'; servoSend(); };
 $('#sv-lat').oninput = () => { $('#sv-latv').textContent = $('#sv-lat').value + ' ms'; servoSend(); };
 $('#sv-rate').oninput = () => { $('#sv-ratev').textContent = $('#sv-rate').value + ' rad/s'; servoSend(); };
-fetch('/api/state').then(r => r.json()).then(s => { const p = s.servo; $('#sv-on').checked = p.on; $('#sv-hold').value = p.hold_hz; $('#sv-holdv').textContent = p.hold_hz + ' Hz'; $('#sv-lat').value = p.latency_s * 1000; $('#sv-latv').textContent = Math.round(p.latency_s * 1000) + ' ms'; $('#sv-rate').value = p.rate_rad_s; $('#sv-ratev').textContent = p.rate_rad_s + ' rad/s'; $('#sv-quant').checked = p.quant; $('#au-browser').checked = s.browser_audio; });
+getj('/api/state').then(s => { if (s.browser_audio !== undefined) $('#au-browser').checked = s.browser_audio; });
+
+// ---- model panel (D052): limits, speeds, envelope, fingerprints; the studio's slider ranges
+async function loadModel() {
+  const m = await getj('/api/model'); MODEL = m;
+  const L = m.limits_deg, st = m.studio;
+  const rng = (id, lo, hi) => { const el = $('#' + id); el.min = lo; el.max = hi; };
+  rng('gs-bx', -st.body_xy_mm, st.body_xy_mm); rng('gs-by', -st.body_xy_mm, st.body_xy_mm); rng('gs-bz', st.body_z_mm[0], st.body_z_mm[1]);
+  rng('gs-yaw', -st.yaw_deg, st.yaw_deg); rng('gs-a0', L.yaw[0], L.yaw[1]); rng('gs-a1', L.hip[0], L.hip[1]); rng('gs-a2', L.knee[0], L.knee[1]);
+  rng('gs-rx', -st.reach_xy_mm, st.reach_xy_mm); rng('gs-ry', -st.reach_xy_mm, st.reach_xy_mm); rng('gs-rz', st.reach_z_mm[0], st.reach_z_mm[1]);
+  const ck = m.checkpoints || {};
+  $('#model-warn').textContent = Object.entries(ck).filter(([, c]) => c.status !== 'match').map(([w, c]) =>
+    `⚠ ${w}: ${c.status === 'mismatch' ? 'trained on robot ' + c.trained + ', this is ' + m.fingerprint : 'no fingerprint (trained before D052 on other physics)'}${c.flags.length ? ' [' + c.flags.join(', ') + ']' : ''} — re-evaluate before trusting it`).join('\n');
+  const e = m.envelope;
+  $('#model-info').textContent =
+    `${m.fingerprint_note}\n` +
+    `servo ${m.actuator.name}: stall ${m.actuator.stall_nm} N·m, continuous ${(+m.continuous_nm).toFixed(2)} N·m, no-load ${m.speeds.no_load} rad/s, damping ${(+m.damping_nms).toFixed(3)} N·m·s/rad\n` +
+    `speed budget: loaded ${m.speeds.loaded} · free ${m.speeds.free} · hard ${m.speeds.hard} · claw ${m.speeds.claw} rad/s   bus ${m.bus.hz} Hz, ${m.bus.latency_s * 1000} ms\n` +
+    `soft limits (deg): yaw ${L.yaw.join('..')} · hip ${L.hip.join('..')} · knee ${L.knee.join('..')} · claw ${m.claw_deg.join('..')}\n` +
+    `gait now: T ${m.gait.T} s, h ${m.gait.h}, R0 ${m.gait.R0}, duty ${m.gait.duty}, step ${m.gait.hstep} mm  (params: ${JSON.stringify(m.gait_defaults)})\n` +
+    `envelope: |v| ≤ ${f1(e.v)} mm/s, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place\n` +
+    `body: circumradius ${m.body.circumradius_mm} mm, stance torso z ${(m.body.stance_torso_z_m * 1000).toFixed(1)} mm, foot contact r ${m.body.foot_contact_radius_mm} mm\n` +
+    `studio: body ±${st.body_xy_mm} mm, z ${st.body_z_mm.join('..')} mm, yaw ±${st.yaw_deg}°, CoM margin fail < ${st.margin_fail_mm} / warn < ${st.margin_warn_mm} mm\n` +
+    `checkpoints: ${Object.entries(ck).map(([w, c]) => `${w} ${c.status}${c.trained ? ' (' + c.trained + ')' : ''}`).join(', ') || 'none loaded'}`;
+  reachDefault();
+}
+loadModel();
+document.querySelector('details:has(#model-info)')?.addEventListener('toggle', e => { if (e.target.open) loadModel(); });
 
 // ---- gesture studio
 let GS = {name: '', loop: false, keyframes: []}, gsKF = {};
@@ -461,34 +670,94 @@ function gsLoadFrame(f) {
 function gsLabels() {
   $('#gs-bv').textContent = `${$('#gs-bx').value} ${$('#gs-by').value} ${$('#gs-bz').value} mm`; $('#gs-yawv').textContent = $('#gs-yaw').value + '°';
   $('#gs-av').textContent = `${$('#gs-a0').value} ${$('#gs-a1').value} ${$('#gs-a2').value}°`; $('#gs-clawv').textContent = +$('#gs-claw-v').value === 0 ? 'closed' : Math.round($('#gs-claw-v').value * 100) + '% open';
+  $('#gs-rv').textContent = `${$('#gs-rx').value} ${$('#gs-ry').value} ${$('#gs-rz').value} mm`;
 }
-let gsTimer = null;
-function gsPreview() { clearTimeout(gsTimer); gsTimer = setTimeout(() => post('/api/gesture/preview', {spec: {keyframes: [Object.assign(gsFrame(), {t: 0})]}, t: 0}), 80); }
+let gsTimer = null, gsCheckTimer = null;
+function gsMsg(t) { $('#gs-msg').textContent = t || ''; }
+// the preview blends (D052 Playground): no client-side easing or hold tricks needed
+function gsPreview() { clearTimeout(gsTimer); gsTimer = setTimeout(async () => { const r = await post('/api/gesture/preview', {spec: {keyframes: [Object.assign(gsFrame(), {t: 0})]}, t: 0}); if (!r.ok) gsMsg(r.error); }, 80); }
 for (const id of ['gs-bx','gs-by','gs-bz','gs-yaw','gs-a0','gs-a1','gs-a2','gs-claw-v']) $('#' + id).oninput = () => { gsLabels(); gsPreview(); };
+for (const id of ['gs-rx','gs-ry','gs-rz']) $('#' + id).oninput = gsLabels;
 for (const id of ['gs-dz0','gs-dz1','gs-dz2','gs-dz3','gs-dz4','gs-arm','gs-arm-on','gs-claw']) $('#' + id).onchange = gsPreview;
+$('#gs-arm').addEventListener('change', reachDefault);
+function renderVerdict(v) {
+  const el = $('#gs-verdict');
+  if (!v) { el.className = 'verdict'; el.textContent = GS.keyframes.length ? '…' : 'no frames yet'; return; }
+  if (v.error && !v.lines) { el.className = 'verdict v-fail'; el.textContent = v.error; return; }
+  const s = v.summary || {}, lim = s.limits || {};
+  el.className = 'verdict ' + (!v.feasible ? 'v-fail' : (v.warnings && v.warnings.length ? 'v-warn' : 'v-pass'));
+  const head = `${v.feasible ? (v.warnings.length ? 'PASS with warnings' : 'PASS') : 'FAIL ' + v.fails.join(' ')}  ·  peak ${f1(s.peak_rad_s)} rad/s (leg ${s.peak_leg} ${s.peak_joint}, t ${f1(s.peak_t)} s; loaded ${lim.loaded} / free ${lim.free} / hard ${lim.hard})` +
+    `  ·  CoM margin ${f1(s.margin_mm)} mm  ·  jumps ${s.jumps}  ·  self-contacts ${s.self_contacts ?? '—'}${s.thermal ? '  ·  THERMAL: hot for long' : ''}`;
+  el.textContent = head + '\n' + (v.lines || []).slice(1).join('\n');
+}
+function gsCheck(delay = 250) {
+  clearTimeout(gsCheckTimer);
+  if (!GS.keyframes.length) { renderVerdict(null); return; }
+  gsCheckTimer = setTimeout(async () => renderVerdict(await post('/api/gesture/check', gsSpec())), delay);
+}
 function gsRender() {
   GS.keyframes.sort((a, b) => a.t - b.t);
-  $('#gs-frames').innerHTML = GS.keyframes.length ? GS.keyframes.map((f, i) => `<div><a href="#" data-kf="${i}">t=${f.t.toFixed(1)}s</a> body ${(f.body||[0,0,0]).join('/')} yaw ${f.yaw||0}${f.arm ? ' arm' + Object.keys(f.arm)[0] : ''}${f.say ? ' say:' + f.say : ''} ${f.ease && f.ease !== 'smooth' ? f.ease : ''}</div>`).join('') : '(no frames yet — pose, then snap)';
+  $('#gs-frames').innerHTML = GS.keyframes.length ? GS.keyframes.map((f, i) => `<div><a href="#" data-kf="${i}">t=${(+f.t).toFixed(1)}s</a> body ${(f.body||[0,0,0]).join('/')} yaw ${f.yaw||0}${f.arm ? ' arm' + Object.keys(f.arm)[0] : ''}${f.reach ? ' reach' + Object.keys(f.reach)[0] : ''}${f.reach_world ? ' reach_world' + Object.keys(f.reach_world)[0] : ''}${f.say ? ' say:' + esc(f.say) : ''} ${f.ease && f.ease !== 'smooth' ? f.ease : ''}</div>`).join('') : '(no frames yet — pose, then snap)';
   document.querySelectorAll('[data-kf]').forEach(a => a.onclick = e => { e.preventDefault(); gsLoadFrame(GS.keyframes[+a.dataset.kf]); gsPreview(); });
   const total = GS.keyframes.length ? GS.keyframes[GS.keyframes.length - 1].t : 0; $('#gs-scrub').max = Math.max(total, 0.1);
+  gsCheck();
 }
 $('#gs-snap').onclick = () => { const f = gsFrame(); GS.keyframes = GS.keyframes.filter(k => Math.abs(k.t - f.t) > 0.049); GS.keyframes.push(f); gsRender(); $('#gs-t').value = (+$('#gs-t').value + 0.8).toFixed(1); };
 $('#gs-frame-del').onclick = () => { const t = +$('#gs-t').value; GS.keyframes = GS.keyframes.filter(k => Math.abs(k.t - t) > 0.049); gsRender(); };
 $('#gs-clear').onclick = () => { GS = {name: '', loop: false, keyframes: []}; $('#gs-name').value = ''; gsLoadFrame({t: 0.8}); gsRender(); };
 $('#gs-hold-off').onclick = () => post('/api/gesture/preview', {off: true});
-$('#gs-scrub').oninput = () => { $('#gs-scrubv').textContent = (+$('#gs-scrub').value).toFixed(1) + ' s'; clearTimeout(gsTimer); gsTimer = setTimeout(() => post('/api/gesture/preview', {spec: gsSpec(), t: +$('#gs-scrub').value}), 60); };
+$('#gs-scrub').oninput = () => { $('#gs-scrubv').textContent = (+$('#gs-scrub').value).toFixed(1) + ' s'; clearTimeout(gsTimer);
+  gsTimer = setTimeout(async () => { const r = await post('/api/gesture/preview', {spec: gsSpec(), t: +$('#gs-scrub').value}); if (!r.ok) gsMsg(r.error); }, 60); gsCheck(400); };
 function gsSpec() { return {name: $('#gs-name').value || 'untitled', loop: $('#gs-loop').checked, keyframes: GS.keyframes}; }
-$('#gs-play').onclick = async () => { if (!GS.keyframes.length) return; const r = await post('/api/gesture/play', gsSpec()); $('#gs-msg').textContent = r.ok ? `playing ${r.total.toFixed(1)} s` : r.error; };
-$('#gs-save').onclick = async () => { const r = await post('/api/gesture/save', gsSpec()); $('#gs-msg').textContent = r.ok ? 'saved ' + r.name : r.error; if (r.ok) loadGestures(); };
-$('#gs-play-saved').onclick = () => post('/api/cmd', {line: 'gesture ' + $('#gs-list').value});
-$('#gs-edit').onclick = () => { const n = $('#gs-list').value; if (!gsKF[n]) { $('#gs-msg').textContent = n + ' is a code gesture (gait/pebble_gestures*.py)'; return; } GS = JSON.parse(JSON.stringify(gsKF[n])); $('#gs-name').value = n; $('#gs-loop').checked = !!GS.loop; gsRender(); if (GS.keyframes.length) gsLoadFrame(GS.keyframes[GS.keyframes.length - 1]); $('#gs-msg').textContent = 'editing ' + n; };
+$('#gs-loop').onchange = () => gsCheck();
+$('#gs-play').onclick = async () => { if (!GS.keyframes.length) return; const r = await post('/api/gesture/play', Object.assign(gsSpec(), {force: $('#gs-force').checked})); if (r.check) renderVerdict(r.check); gsMsg(r.ok ? `playing ${r.total.toFixed(1)} s` : r.error); };
+$('#gs-save').onclick = async () => { const r = await post('/api/gesture/save', Object.assign(gsSpec(), {force: $('#gs-force').checked})); if (r.check) renderVerdict(r.check); gsMsg(r.ok ? 'saved ' + r.name + (r.forced ? ' (FORCED past a FAIL)' : '') : r.error); if (r.ok) loadGestures(); };
+$('#gs-play-saved').onclick = async () => { const r = await post('/api/cmd', {line: 'gesture ' + $('#gs-list').value}); gsMsg(r.reply); };
+function gsLoadSpec(spec, name) {
+  gsMsg(''); GS = JSON.parse(JSON.stringify(spec)); GS.keyframes = GS.keyframes || []; $('#gs-name').value = name || spec.name || ''; $('#gs-loop').checked = !!GS.loop;
+  gsRender(); if (GS.keyframes.length) gsLoadFrame(GS.keyframes[GS.keyframes.length - 1]);
+}
+$('#gs-edit').onclick = () => { const n = $('#gs-list').value; if (!gsKF[n]) { gsMsg(n + ' is a code gesture (gait/pebble_gestures*.py)'); return; } gsLoadSpec(gsKF[n], n); gsMsg('editing ' + n); };
 $('#gs-del').onclick = async () => { const n = $('#gs-list').value; if (!gsKF[n] || !confirm('delete gesture ' + n + '?')) return; await post('/api/gesture/delete', {name: n}); loadGestures(); };
+async function loadDraft() { const m = await getj('/api/models'); if (!m.draft || !m.draft.spec) { gsMsg('no draft — ask a brain to compose_gesture first'); return; } gsLoadSpec(m.draft.spec); gsMsg(`draft ${m.draft.name}${m.draft.saved ? ' (saved)' : ''} loaded`); document.querySelector('details:has(#gs-verdict)').open = true; }
+$('#gs-draft').onclick = loadDraft;
 async function loadGestures() {
-  const r = await fetch('/api/gesture/list').then(x => x.json()); gsKF = r.keyframe; GESTURES = r.all;
-  $('#gs-list').innerHTML = r.all.map(g => `<option value="${g}">${g}${gsKF[g] ? ' (keyframe)' : ''}</option>`).join('');
-  $('#gesture').innerHTML = r.all.map(g => `<option>${g}</option>`).join('');
+  const r = await getj('/api/gesture/list'); gsKF = r.keyframe; GESTURES = r.all;
+  $('#gs-list').innerHTML = r.all.map(g => `<option value="${esc(g)}">${esc(g)}${gsKF[g] ? ' (keyframe)' : ''}</option>`).join('');
+  $('#gesture').innerHTML = r.all.map(g => `<option>${esc(g)}</option>`).join('');
 }
 loadGestures(); gsLabels();
+// REACH: the whole-body solver fills body lean/height/yaw + the arm
+function reachDefault() {
+  if (!MODEL) return; const L = +$('#gs-arm').value, p = MODEL.p_nom[L], k = 250 / Math.hypot(p[0], p[1]);
+  $('#gs-rx').value = Math.round(p[0] * k); $('#gs-ry').value = Math.round(p[1] * k); $('#gs-rz').value = 60; gsLabels();
+}
+$('#gs-solve').onclick = async () => {
+  const leg = +$('#gs-arm').value, target = [+$('#gs-rx').value, +$('#gs-ry').value, +$('#gs-rz').value];
+  $('#gs-solve-msg').textContent = `solving leg ${leg} → (${target.join(', ')}) mm …`;
+  const r = await post('/api/gesture/solve', {leg, target});
+  if (r.ok === undefined || r.error) { $('#gs-solve-msg').textContent = 'solve: ' + (r.error || 'failed'); return; }
+  const f = r.frame; $('#gs-bx').value = f.body[0]; $('#gs-by').value = f.body[1]; $('#gs-bz').value = f.body[2]; $('#gs-yaw').value = f.yaw;
+  const arm = f.arm[String(leg)]; $('#gs-arm-on').checked = true; [0,1,2].forEach(i => $('#gs-a' + i).value = arm[i]);
+  gsLabels(); gsPreview();
+  $('#gs-solve-msg').innerHTML = `<span style="color:${r.ok ? 'var(--ok)' : 'var(--bad)'}">${r.ok ? 'reachable' : 'NOT reachable — nearest pose'}</span>: body ${r.body.map(x => (+x).toFixed(0)).join('/')} mm, yaw ${(+r.yaw).toFixed(1)}°, arm ${r.arm.map(x => (+x).toFixed(0)).join('/')}°, CoM margin ${f1(r.margin)} mm — ${esc(r.note)}. Snap to keep it.`;
+};
+// TEACH: record the pose stream, get keyframes back
+function teachRender(t) {
+  const b = $('#gs-teach');
+  if (t) { b.textContent = `■ stop (${t.samples} samples, ${t.seconds} s)`; b.style.color = 'var(--bad)'; }
+  else if (b.textContent.startsWith('■')) { b.textContent = '● record pose stream'; b.style.color = ''; }
+}
+$('#gs-teach').onclick = async () => {
+  if (!$('#gs-teach').textContent.startsWith('■')) { const r = await post('/api/gesture/teach', {action: 'start'}); $('#gs-teach-msg').textContent = r.ok ? 'recording — pose with the sliders, play a gesture, or back-drive the real legs (robot → sim)…' : r.error; if (r.ok) { $('#gs-teach').textContent = '■ stop'; } return; }
+  $('#gs-teach-msg').textContent = 'converting…';
+  const r = await post('/api/gesture/teach', {action: 'stop', name: $('#gs-name').value || 'taught'});
+  $('#gs-teach').textContent = '● record pose stream'; $('#gs-teach').style.color = '';
+  if (!r.ok) { $('#gs-teach-msg').textContent = 'teach: ' + r.error; return; }
+  gsLoadSpec(r.spec); if (r.check) renderVerdict(r.check);
+  const tm = r.spec.taught || {};
+  $('#gs-teach-msg').textContent = `taught from ${r.meta.src}: ${r.meta.samples} samples (${r.meta.seconds} s) → ${r.spec.keyframes.length} keyframes, worst body-fit residual ${f1(tm.fit_residual_mm)} mm${tm.fit_residual_mm > 5 ? ' (> 5 mm: do not trust the body pose)' : ''}. Check the verdict before saving.`;
+};
 
 // ---- voice & sounds
 $('#au-browser').onchange = () => post('/api/audio', {browser: $('#au-browser').checked});
@@ -508,45 +777,80 @@ $('#cd-save').onclick = async () => { const r = await post('/api/chord/save', {n
 $('#cd-del').onclick = async () => { const n = $('#cd-load').value; if (!cdCustom[n] || !confirm('delete word ' + n + '?')) return; await post('/api/chord/delete', {name: n}); loadChords(); };
 $('#cd-load-go').onclick = () => { const n = $('#cd-load').value, src = cdCanon[n] || cdCustom[n]; if (!src) return; CD = JSON.parse(JSON.stringify(src)); $('#cd-name').value = cdCustom[n] ? n : n + '2'; cdRender(); };
 async function loadChords() {
-  const r = await fetch('/api/chord/list').then(x => x.json()); cdCanon = r.canon; cdCustom = r.custom; WORDS = r.lexicon;
-  $('#cd-load').innerHTML = Object.keys(cdCanon).map(w => `<option>${w}</option>`).join('') + Object.keys(cdCustom).map(w => `<option value="${w}">${w} (custom)</option>`).join('');
-  $('#word').innerHTML = WORDS.map(w => `<option>${w}</option>`).join(''); $('#gs-say').innerHTML = '<option value="">—</option>' + WORDS.map(w => `<option>${w}</option>`).join('');
-  $('#au-lex').innerHTML = WORDS.map(w => `<button data-say="${w}" style="padding:3px 7px; font-size:12px">${w}</button>`).join('');
+  const r = await getj('/api/chord/list'); cdCanon = r.canon; cdCustom = r.custom; WORDS = r.lexicon;
+  $('#cd-load').innerHTML = Object.keys(cdCanon).map(w => `<option>${esc(w)}</option>`).join('') + Object.keys(cdCustom).map(w => `<option value="${esc(w)}">${esc(w)} (custom)</option>`).join('');
+  $('#word').innerHTML = WORDS.map(w => `<option>${esc(w)}</option>`).join(''); $('#gs-say').innerHTML = '<option value="">—</option>' + WORDS.map(w => `<option>${esc(w)}</option>`).join('');
+  $('#au-lex').innerHTML = WORDS.map(w => `<button data-say="${esc(w)}" style="padding:3px 7px; font-size:12px">${esc(w)}</button>`).join('');
   document.querySelectorAll('[data-say]').forEach(b => b.onclick = () => post('/api/cmd', {line: 'say ' + b.dataset.say}));
 }
 loadChords(); cdRender();
 
-// ---- hardware
-const HW_KEYS = [0,1,2,3,4].flatMap(l => ['yaw','hip','knee'].map(j => `leg${l}_${j}`));
+// ---- hardware (D052: soft entry, locomotion hold, degraded/lost/cut/stale, re-arm, apply limits)
+const HW_KEYS = [0,1,2,3,4].flatMap(l => ['yaw','hip','knee'].map(j => `leg${l}_${j}`)).concat([0,1,2,3,4].map(i => `hand${i}_claw`));
 $('#hw-key').innerHTML = HW_KEYS.map(k => `<option>${k}</option>`).join('');
 $('#hw-key').onchange = () => $('#hw-jig').value = $('#hw-key').value.endsWith('knee') ? -90 : 0;
-async function hwPost(body) { const r = await post('/api/hw', body); $('#hw-msg').textContent = r.ok ? '' : ('hw: ' + r.error); return r; }
+let HW_ST = null;
+async function hwPost(body) { const r = await post('/api/hw', body); $('#hw-msg').innerHTML = r.ok ? '' : `<span style="color:var(--bad)">hw: ${esc(r.error)}</span>`; return r; }
 async function loadHW() {
-  const r = await fetch('/api/hw').then(x => x.json());
-  $('#hw-port').innerHTML = ['mock', ...r.ports].map(p => `<option>${p}</option>`).join(''); if (r.ports.length) $('#hw-port').value = r.ports[0];
+  const r = await getj('/api/hw');
+  $('#hw-port').innerHTML = ['mock', ...r.ports].map(p => `<option>${esc(p)}</option>`).join(''); if (r.ports.length) $('#hw-port').value = r.ports[0];
   hwRender(r.status);
 }
+function legIdsOf(id) {
+  if (!MODEL) return [id];
+  for (const ids of MODEL.leg_ids) if (ids.includes(id)) return ids;
+  return [id];
+}
 function hwRender(st) {
-  if (!st) { $('#hw-tel').textContent = 'not connected'; $('#hw-legs').textContent = '—'; return; }
-  $('#hw-mirror').value = st.mirror; $('#hw-speed').value = st.speed_cps; $('#hw-speedv').textContent = st.speed_cps ? st.speed_cps + ' c/s' : 'servo max';
-  $('#hw-legs').innerHTML = st.legs.map((l, i) => `<span class="chip" style="color:${l ? 'var(--ok)' : 'var(--muted)'}">leg ${i}${l ? ' ●' : ' ○'}</span>`).join(' ') + ` <span>${st.n_present} servos${st.tripped.length ? ', CUT: ' + st.tripped.join(',') : ''}${st.errors ? ', ' + st.errors + ' bus errors (' + st.last_error + ')' : ''}</span>`;
-  const rows = st.tel.map(t => `<tr><td>${t.id}</td><td>${t.label}</td><td>${t.pos_deg}°</td><td>${t.q_deg ?? ''}°</td><td>${t.load}%</td><td>${t.volt}</td><td style="color:${t.temp >= 60 ? 'var(--bad)' : ''}">${t.temp}°</td><td>${t.torque ? 'on' : 'off'}${t.faults.length ? ' ⚠' + t.faults.join(',') : ''}</td>
-    <td><input type="number" value="0" step="5" style="width:56px" data-jog="${t.id}" title="center-relative degrees"><button data-jogbtn="${t.id}">jog</button></td></tr>`).join('');
-  $('#hw-tel').innerHTML = rows ? `<table><tr><th>id</th><th>joint</th><th>servo</th><th>q</th><th>load</th><th>V</th><th>°C</th><th>torque</th><th>jog</th></tr>${rows}</table>` : 'connected — scan the bus';
+  HW_ST = st;
+  if (!st) { $('#hw-tel').textContent = 'not connected'; $('#hw-legs').innerHTML = ''; $('#hw-count').textContent = '—'; $('#hw-banner').style.display = 'none'; $('#hw-loco').style.display = 'none'; return; }
+  $('#hw-banner').style.display = st.port_ok ? 'none' : ''; $('#hw-banner').textContent = st.port_ok ? '' : `PORT ${st.port} LOST — mirror off, limp attempted; reopening every 2 s (then rescan / re-arm)`;
+  if (document.activeElement !== $('#hw-mirror')) $('#hw-mirror').value = st.mirror;
+  if (document.activeElement !== $('#hw-speed')) { $('#hw-speed').value = st.speed_cps; $('#hw-speedv').textContent = st.speed_cps ? st.speed_cps + ' c/s' : 'servo max'; }
+  $('#hw-loco').style.display = st.allow_locomotion ? 'none' : '';
+  $('#hw-loco').textContent = st.entry ? 'soft entry — locomotion held' : 'locomotion held (no real foot contacts)';
+  $('#hw-legs').innerHTML = st.legs.map((l, i) => {
+    const e = st.entry && st.entry[String(i)], cls = st.degraded[i] ? 'deg' : st.mirror_legs[i] && st.mirror !== 'off' ? 'mir' : l ? 'on' : '';
+    return `<div class="leg ${cls}" title="${st.degraded[i] ? 'degraded: silent for 10 ticks, left the mirror — re-arm its ids' : l ? 'all three servos answered the scan' : 'not on the bus (stays simulated)'}">leg ${i} ${l ? '●' : '○'}${st.degraded[i] ? ' degraded' : ''}${e ? `<progress max="1" value="${e.frac}" title="soft entry ${Math.round(e.frac * 100)} % (gap ${e.gap_deg}°, blend ${e.blend_s} s)"></progress>` : ''}</div>`; }).join('');
+  $('#hw-count').innerHTML = `${st.n_present} servos${st.tripped.length ? `, <span style="color:var(--bad)">CUT: ${st.tripped.join(',')}</span>` : ''}${st.lost.length ? `, <span style="color:var(--bad)">lost: ${st.lost.join(',')}</span>` : ''}${st.errors ? `, ${st.errors} bus errors (${esc(st.last_error)})` : ''}${st.rate_capped ? `, ${st.rate_capped} goals rate-capped` : ''}${st.nan_count ? `, ${st.nan_count} NaN pushes` : ''}`;
+  const rows = st.tel.map(t => { const tr = t.tripped, reason = tr ? (st.trip_reason[String(t.id)] || t.reason || 'tripped') : '';
+    return `<tr class="${tr ? 'tripped' : ''}"><td>${t.id}</td><td>${esc(t.label)}</td><td>${t.pos_deg ?? ''}°</td><td>${t.q_deg ?? ''}°</td><td>${t.load ?? ''}%</td><td>${t.volt ?? ''}</td><td style="color:${t.temp >= 60 ? 'var(--bad)' : ''}">${t.temp ?? ''}°</td><td>${t.torque ? 'on' : 'off'}${t.faults && t.faults.length ? ' ⚠' + t.faults.join(',') : ''}</td>` +
+      `<td>${t.missed || 0}</td><td>${f1(t.age_s)}</td><td>${tr ? esc(reason) + ` <button data-rearm="${t.id}" title="torque on for this whole leg (the only re-arm)">re-arm</button>` : ''}</td>` +
+      `<td><input type="number" value="0" step="5" style="width:52px" data-jog="${t.id}" title="center-relative degrees"><button data-jogbtn="${t.id}">jog</button></td></tr>`; }).join('');
+  $('#hw-tel').innerHTML = rows ? `<table><tr><th>id</th><th>joint</th><th>servo</th><th>q</th><th>load</th><th>V</th><th>°C</th><th>torque</th><th>miss</th><th>age s</th><th>trip</th><th>jog</th></tr>${rows}</table>` : 'connected — scan the bus';
   document.querySelectorAll('[data-jogbtn]').forEach(b => b.onclick = () => hwPost({action: 'jog', id: +b.dataset.jogbtn, deg: +document.querySelector(`[data-jog="${b.dataset.jogbtn}"]`).value}));
+  document.querySelectorAll('[data-rearm]').forEach(b => b.onclick = async () => { const ids = legIdsOf(+b.dataset.rearm); if (!confirm(`re-arm (torque on) ids ${ids.join(',')}?`)) return; const r = await hwPost({action: 'torque', on: true, ids}); if (r.ok) $('#hw-msg').textContent = 're-armed ' + r.ids.join(','); });
 }
 $('#hw-connect').onclick = async () => { $('#hw-msg').textContent = 'connecting…'; const r = await hwPost({action: 'connect', port: $('#hw-port').value}); if (r.ok) { hwRender(r.status); const s = await hwPost({action: 'scan'}); if (s.ok) hwRender(s.status); } };
-$('#hw-disconnect').onclick = async () => { await hwPost({action: 'disconnect'}); hwRender(null); };
+$('#hw-disconnect').onclick = async () => { await hwPost({action: 'disconnect'}); hwRender(null); $('#hw-limits-plan').innerHTML = ''; };
 $('#hw-scan').onclick = async () => { $('#hw-msg').textContent = 'scanning…'; const s = await hwPost({action: 'scan'}); if (s.ok) hwRender(s.status); };
-$('#hw-mirror').onchange = () => hwPost({action: 'mirror', mode: $('#hw-mirror').value});
+$('#hw-mirror').onchange = async () => { const want = $('#hw-mirror').value; const r = await hwPost({action: 'mirror', mode: want}); if (!r.ok) $('#hw-mirror').value = r.mirror || (HW_ST ? HW_ST.mirror : 'off'); };
 $('#hw-torque-on').onclick = () => hwPost({action: 'torque', on: true});
 $('#hw-limp').onclick = () => hwPost({action: 'limp'});
 $('#hw-speed').oninput = () => { $('#hw-speedv').textContent = +$('#hw-speed').value ? $('#hw-speed').value + ' c/s' : 'servo max'; hwPost({action: 'speed', speed_cps: +$('#hw-speed').value}); };
+$('#hw-limits').onclick = async () => {
+  $('#hw-limits-plan').textContent = 'planning…';
+  const p = await hwPost({action: 'limits', dry_run: true});
+  if (!p.ok) { $('#hw-limits-plan').textContent = ''; return; }
+  const plan = Object.values(p.result);
+  $('#hw-limits-plan').innerHTML = '<table><tr><th>id</th><th>joint</th><th>q (deg)</th><th>min</th><th>max</th><th>problem</th></tr>' +
+    plan.map(e => `<tr class="${e.problem ? 'tripped' : ''}"><td>${e.id}</td><td>${esc(e.key)}</td><td>${f1(e.q_lo)}..${f1(e.q_hi)}</td><td>${e.min}</td><td>${e.max}</td><td>${esc(e.problem || '')}</td></tr>`).join('') + '</table>';
+  if (!confirm(`Write MIN/MAX angle limits to the EEPROM of ${plan.length} servos (see the table)?`)) { $('#hw-limits-plan').innerHTML += '<div>not applied</div>'; return; }
+  const r = await hwPost({action: 'limits'});
+  if (r.ok) { const res = Object.values(r.result), bad = res.filter(x => !x.ok); $('#hw-limits-plan').innerHTML += `<div style="color:${bad.length ? 'var(--bad)' : 'var(--ok)'}">applied ${res.length - bad.length}/${res.length}${bad.length ? '; FAILED ' + bad.map(x => x.id + ' (' + esc(x.error) + ')').join(', ') : ''}</div>`; }
+};
 $('#hw-center').onclick = async () => { const r = await hwPost({action: 'center', key: $('#hw-key').value, jig_deg: +$('#hw-jig').value}); if (r.ok) $('#hw-msg').textContent = `${r.key}: offset ${r.offset} counts (${r.offset_deg}°) written to bench/calibration.yaml`; };
 $('#hw-dir-p').onclick = () => hwPost({action: 'dir', key: $('#hw-key').value, dir: 1});
 $('#hw-dir-m').onclick = () => hwPost({action: 'dir', key: $('#hw-key').value, dir: -1});
 $('#hw-setid').onclick = async () => { if (!confirm(`write servo ID ${$('#hw-old').value} → ${$('#hw-new').value}?`)) return; const r = await hwPost({action: 'set_id', old: +$('#hw-old').value, new: +$('#hw-new').value}); if (r.ok) $('#hw-scan').click(); };
-setInterval(async () => { if (document.querySelector('#hw-tel table') || $('#hw-tel').textContent.startsWith('connected')) { const r = await fetch('/api/hw').then(x => x.json()); if (r.status && !document.activeElement.dataset?.jog) { const vals = {}; document.querySelectorAll('[data-jog]').forEach(i => vals[i.dataset.jog] = i.value); hwRender(r.status); document.querySelectorAll('[data-jog]').forEach(i => { if (vals[i.dataset.jog] !== undefined) i.value = vals[i.dataset.jog]; }); } } }, 1000);
+setInterval(async () => {
+  if (!HW_ST) return;
+  let r; try { r = await getj('/api/hw'); } catch (e) { return; }      // server restarting: try again next tick
+  if (!r.status) { hwRender(null); return; }
+  if (document.activeElement && document.activeElement.dataset && document.activeElement.dataset.jog) return;
+  const vals = {}; document.querySelectorAll('[data-jog]').forEach(i => vals[i.dataset.jog] = i.value);
+  hwRender(r.status); document.querySelectorAll('[data-jog]').forEach(i => { if (vals[i.dataset.jog] !== undefined) i.value = vals[i.dataset.jog]; });
+}, 1000);
 loadHW();
 </script>
 </body>

@@ -29,17 +29,31 @@ TOL_MM = 0.5
 
 
 def body_frame_foot(model, data, torso_name, i):
-    """Foot point in torso frame. MJCF: named geom foot{i}. URDF (MuJoCo
-    import merges fixed links, foot{i} fuses into tibia{i}): the claw{i}_link
-    body frame origin coincides with the foot point — use that."""
+    """Foot point in torso frame. MJCF: site foot_tip{i} (D052: the foot
+    sphere's CENTRE sits r_c behind the IK point, so the geom is no longer
+    the foot point; the site is). URDF (MuJoCo import merges fixed links,
+    foot{i} fuses into tibia{i}): the claw{i}_link body frame origin
+    coincides with the foot point — use that."""
     t = model.body(torso_name).id
     R = data.xmat[t].reshape(3, 3)
     p0 = data.xpos[t]
     try:
-        pw = data.geom_xpos[model.geom(f"foot{i}").id]
+        pw = data.site_xpos[model.site(f"foot_tip{i}").id]
     except KeyError:
         pw = data.xpos[model.body(f"claw{i}_link").id]
     return R.T @ (pw - p0)
+
+
+def foot_contact_offset(model_u, model_m):
+    """Where each model's foot contact sphere sits relative to the foot point:
+    both must put it r_c behind it, with radius r_c (D052)."""
+    gm = model_m.geom("foot0")
+    # URDF: the fused tibia carries the foot collision sphere as its only sphere geom
+    tib = model_u.body("tibia0").id
+    sph = [g for g in range(model_u.ngeom) if model_u.geom_bodyid[g] == tib
+           and model_u.geom_type[g] == mujoco.mjtGeom.mjGEOM_SPHERE]
+    gu = model_u.geom(sph[0]) if sph else None
+    return gm, gu
 
 
 def set_joints(model, data, q):
@@ -95,6 +109,21 @@ def main():
     print(f"  URDF vs analytic worst {worst_ua:.4f} mm")
     if worst_um > TOL_MM or worst_ua > TOL_MM:
         fails.append(f"FK mismatch: um={worst_um:.3f} ua={worst_ua:.3f} mm")
+
+    # -- 2b. foot contact sphere (D052): same radius, same place ------------
+    gm, gu = foot_contact_offset(m_u, m_m)
+    if gu is None:
+        fails.append("URDF tibia0 has no foot collision sphere")
+    else:
+        ok = (abs(gm.size[0] - gu.size[0]) < 1e-6
+              and np.allclose(gm.pos, gu.pos, atol=1e-6))
+        report["foot_sphere"] = dict(r_mm=round(float(gm.size[0]) * 1000, 3),
+                                     mjcf_pos=[round(float(x), 5) for x in gm.pos],
+                                     urdf_pos=[round(float(x), 5) for x in gu.pos], ok=bool(ok))
+        print(f"foot sphere: r {gm.size[0]*1000:.2f} mm, mjcf {gm.pos}, urdf {gu.pos} "
+              f"-> {'ok' if ok else 'MISMATCH'}")
+        if not ok:
+            fails.append("foot contact sphere differs between URDF and MJCF")
 
     # -- 3. mass -----------------------------------------------------------
     # MuJoCo's URDF import fuses the fixed base_link into `world`, dropping

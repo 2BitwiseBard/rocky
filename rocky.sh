@@ -7,8 +7,10 @@
 #   rocky.sh play [--cliff]        live MuJoCo window + REPL + arrow-key/SPACE teleop (terminal)
 #   rocky.sh cockpit [--world W]   browser cockpit at http://127.0.0.1:8765 (cameras, chat
 #                                  with talk/local/Claude brains, vision, world editor, RL);
-#                                  Ctrl-C, the page's quit button or `cockpit-stop` end it;
-#                                  --host 0.0.0.0 to reach it from the phone over the tailnet
+#                                  Ctrl-C, the page's quit button or `cockpit-stop` end it.
+#                                  It binds loopback only: for the phone use `rocky.sh tailnet`
+#                                  (HTTPS, tailnet-only); --unsafe-lan is the one way to bind a
+#                                  non-loopback address and it has no auth (D052)
 #   rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background)
 #   rocky.sh tailnet [PORT]        publish the cockpit on the tailnet over HTTPS via
 #                                  `tailscale serve` (default https port 9445) — the phone
@@ -18,18 +20,22 @@
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it
 #   rocky.sh talk                  plain-text brain, no LLM (harness.intent REPL)
-#   rocky.sh voice [--backend mock]  push-to-talk: mic -> whisper-server -> intent
-#   rocky.sh test                  the fast verification ladder (driver/harness/gait/intent)
+#   rocky.sh voice [--backend mock]  push-to-talk: mic -> whisper-server -> intent (no wake
+#                                  word: pressing Enter is the operator's confirmation, D052 V2)
+#   rocky.sh test [pytest args]    the fast ladder, same suites as CI's fast job
+#                                  (driver/harness/gait/sim); `-m slow` suites are optional:
+#                                  .venv/bin/python -m pytest harness sim/tests -m slow -q
 #   rocky.sh jobs                  training runs in flight + last log line of each
 #   rocky.sh train-recover NAME [args]   capped v2 self-righting retrain (D045 recipe)
 #   rocky.sh eval-recover NAME [args]    20-episode righting eval of runs/NAME
-#   rocky.sh cad-check             whole-tree CAD CI (build123d) — 23/23 or it didn't happen
 #   rocky.sh train-walk NAME [args]  residual-gait PPO run (see docs/RL_GUIDE.md)
 #   rocky.sh eval-walk NAME [args]   deterministic eval of runs/NAME vs the bare gait
+#   rocky.sh cad-check             whole-tree CAD CI (build123d) — 23/23 or it didn't happen
+#   rocky.sh help                  this text (the whole header, so new commands show up)
 #
 # Env overrides: ROCKY_REPO, ROCKY_WORLD (flat|room|cliff), ROCKY_VIEWER (1|0),
 # ROCKY_AUDIO (1|0), ROCKY_LLM_MODEL, ROCKY_VOICE_SECS, ROCKY_VOICE_WAV (test file
-# instead of the mic).
+# instead of the mic), ROCKY_COCKPIT_PORT (tailnet's proxy target).
 set -euo pipefail
 
 ROCKY_REPO="${ROCKY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
@@ -40,9 +46,10 @@ export ROCKY_VIEWER="${ROCKY_VIEWER:-1}"
 export ROCKY_AUDIO="${ROCKY_AUDIO:-1}"
 export PYTHONUNBUFFERED=1
 
-[[ -x "$PY" ]] || { echo "no venv at $PY — see docs/LAPTOP_SETUP.md §0" >&2; exit 1; }
-
 cmd="${1:-help}"; shift || true
+# help must work before the venv exists (CI's launcher test runs it on a bare checkout)
+[[ -x "$PY" || "$cmd" =~ ^(help|-h|--help)$ ]] \
+  || { echo "no venv at $PY — see README.md Quickstart" >&2; exit 1; }
 case "$cmd" in
   play)
     cd "$ROCKY_REPO/sim" && exec "$PY" playground.py --viewer "$@" ;;
@@ -93,7 +100,9 @@ case "$cmd" in
     secs="${ROCKY_VOICE_SECS:-4}"
     fifo="$(mktemp -u /tmp/rocky-voice.XXXXXX)"; mkfifo "$fifo"
     wav="$(mktemp /tmp/rocky-utt.XXXXXX)"
-    "$PY" -m harness.intent --stdin "$@" < "$fifo" &
+    # --no-wake: push-to-talk is an explicit operator act, which is what the wake
+    # word stands in for on an always-on mic (D052 V2 review: it silently needed one)
+    "$PY" -m harness.intent --stdin --no-wake "$@" < "$fifo" &
     brain_pid=$!
     exec 3>"$fifo"
     trap 'exec 3>&- 2>/dev/null; kill "$brain_pid" 2>/dev/null; rm -f "$fifo" "$wav"' EXIT
@@ -116,7 +125,8 @@ case "$cmd" in
     cd "$ROCKY_REPO"
     "$PY" -m pytest driver/tests -q "$@"
     "$PY" -m pytest harness -m "not slow" -q "$@"
-    "$PY" -m pytest gait -q "$@" ;;
+    "$PY" -m pytest gait -q "$@"
+    "$PY" -m pytest sim/tests -m "not slow" -q "$@" ;;   # D052: CI runs these too
 
   jobs)
     # one line per run (AsyncVectorEnv forks a worker per env, all matching)
@@ -129,14 +139,16 @@ case "$cmd" in
 
   train-recover)
     name="${1:?run name}"; shift
-    cd "$ROCKY_REPO/sim" && mkdir -p "runs/$name"
+    cd "$ROCKY_REPO/sim"                          # train_ppo makes the run dir itself
     exec nice -n 10 "$PY" train_ppo.py --env recover --reward v2 --log-std-max -0.5 \
       --num-envs 8 --run-dir "runs/$name" "$@" ;;
 
   train-walk)
     name="${1:?run name}"; shift
-    cd "$ROCKY_REPO/sim" && mkdir -p "runs/$name"
-    exec nice -n 10 "$PY" train_ppo.py --env walk --num-envs 8 --run-dir "runs/$name" "$@" ;;
+    # D052: the env is called "gait" (walk was never a choice, so every train-walk died
+    # in argparse and left an empty run dir behind); train_ppo makes the run dir itself
+    cd "$ROCKY_REPO/sim"
+    exec nice -n 10 "$PY" train_ppo.py --env gait --num-envs 8 --run-dir "runs/$name" "$@" ;;
 
   eval-walk)
     name="${1:?run name}"; shift
@@ -150,7 +162,8 @@ case "$cmd" in
     cd "$ROCKY_REPO/cad" && exec "$PY" run_all_checks.py "$@" ;;
 
   help|-h|--help)
-    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' ;;
+    # the whole leading comment block after the shebang, however long it grows
+    awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}" ;;
 
   *)
     echo "unknown command: $cmd (try: rocky.sh help)" >&2; exit 2 ;;

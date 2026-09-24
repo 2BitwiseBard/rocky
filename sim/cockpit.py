@@ -21,19 +21,36 @@ Honesty: same MJCF, same guessed servo gains and friction as every other
 sim entry point (see playground.py's box). The vision tool sends the eye
 camera's JPEG to a local vision model; its words are the model's, not a
 sensor's.
+
+D052 (this file): the sim thread can no longer die silently (a step that
+raises limps the bridge, fails every waiting request and exits non-zero;
+/api/state carries a heartbeat); the server refuses a non-loopback --host
+unless --unsafe-lan (nothing here is authenticated) and every POST must be
+same-origin JSON (voice: multipart); goto shares the Playground's always-on
+void guard, reads the lidar at 8 Hz for what is in its way (a +-45 deg
+detour, then a sidestep, then stopped='blocked' with bearing + range) and
+calls a 3 s no-progress run 'stuck'; the gesture studio checks every spec
+with pebble_feasibility before it moves or saves anything, solves reaches
+with the whole-body pose solver and turns a recorded pose stream into
+keyframes; the residual walker is fed the observation its checkpoint was
+trained on (rl_common contract), not a hand-built one.
 """
 from __future__ import annotations
 import argparse
 import asyncio
-import base64
 import io
+import ipaddress
 import json
 import os
 import queue
+import socket
 import sys
 import threading
 import time
+import traceback
+import warnings
 from collections import deque
+from urllib.parse import urlsplit
 
 os.environ.setdefault("MUJOCO_GL", "egl")
 
@@ -46,51 +63,102 @@ for sub in ("gait", "perception", "sim"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 sys.path.insert(0, ROOT)
 
-from playground import (Playground, TELEOP_HELP, HELP_RL, PROBE_MAX,          # noqa: E402
-                        all_gestures, lexicon, chord_wav, CHORD_CUSTOM_DIR)
+from playground import (Playground, TELEOP_HELP, HELP_RL,                     # noqa: E402
+                        all_gestures, lexicon, chord_wav, CHORD_CUSTOM_DIR, gait_presets, GAIT_KEYS,
+                        shove_args)
 from pebble_keyframes import (KeyframeGesture, save_keyframe_gesture,           # noqa: E402
                               delete_keyframe_gesture, load_keyframe_gestures, GESTURE_DIR)
 from hw_bridge import HardwareBridge, serial_ports, MIRRORS                     # noqa: E402
+import hw_bridge                                                                # noqa: E402
 from world_builder import (build as build_world, PRESETS, KINDS, random_course,   # noqa: E402
                            saved_worlds, save_world, load_world)
 from pebble_reflex import ReflexSupervisor                             # noqa: E402
-from cliff import CliffDetector, CliffReaction                         # noqa: E402
-from sim_lidar import scan as lidar_scan, RANGE_MAX                    # noqa: E402
+from sim_lidar import scan as lidar_scan, RANGE_MAX, PUCK_DZ, RATE_HZ as LIDAR_HZ   # noqa: E402
+import rocky_model as rm                                               # noqa: E402
+import pebble_feasibility as pf                                        # noqa: E402
+import rl_common as rc                                                 # noqa: E402
+from model_fingerprint import robot_fingerprint, fingerprint_note      # noqa: E402
 from shove import Shove                                                # noqa: E402
 from harness.backend import CHORD_WORDS                                # noqa: E402
-from harness.intent import plan as intent_plan, execute as intent_execute   # noqa: E402
-from harness.local_brain import TOOLS as BRAIN_TOOLS, SYSTEM as BRAIN_SYSTEM, OpenAIChat   # noqa: E402
+# D052: the brains (roles, fallbacks, histories, voice, look) live in cockpit_brains
+from cockpit_brains import (Brains, TOOLS, SYSTEM, VISION_PROMPT, TOOL_NAMES,   # noqa: E402,F401
+                            validate_goto, goto_range_error, local_ai_key as _local_ai_key)
 
-V_GOTO = 45.0
+V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (45.5 mm/s today)
 GOTO_CAP_S = 40.0            # a goto that has not ended by then ends as "timeout"
-GOTO_STUCK_S = 6.0           # no 2 cm of progress toward the target for this long -> "stuck" (obstacle)
-LOOK_TOOL = {"type": "function", "function": {
-    "name": "look",
-    "description": "Look through the robot's eye camera: a vision model describes what "
-                   "is in front of the robot (obstacles, open space, objects).",
-    "parameters": {"type": "object", "properties": {}}}}
-TOOLS = BRAIN_TOOLS + [LOOK_TOOL]
+GOTO_STUCK_S = 3.0           # D052: no 2 cm of progress for this long -> "stuck" (was 6 s: a
+#                              robot shoving a low box for 6 s is 6 s of stalled servos)
+GOTO_SCAN_HZ = LIDAR_HZ      # the reactive layer reads the puck at its own rate (8 Hz)
+GOTO_CONE_DEG = 30.0         # a lidar return within +-30 deg of the travel heading ...
+GOTO_CLEAR_M = 0.35          # ... closer than this (from the puck = torso centre) is in the way.
+#                              The feet reach ~0.19 m out, so 0.35 m leaves ~15 cm to stop in.
+GOTO_DETOURS = 2             # detour 1 = +-45 deg off the target heading, 2 = a sidestep (90 deg);
+#                              blocked a third time -> stopped='blocked' (bearing + range)
+GOTO_DETOUR_S = 8.0          # a detour walks at most this long (~36 cm at 45 mm/s: past a
+#                              0.25 m-wide object with the leg span clear) ...
+GOTO_RESUME_S = 0.8          # ... or until the corridor toward the target has been clear this long
+GOTO_HALF_W = 0.25           # m: half the leg span (R0 185 mm + foot) — the corridor that must be clear
+GOTO_DETOUR_RESET_M = 0.15   # this much new progress after a detour earns the detours back
+TEACH_HZ = 20.0              # the studio's pose-stream recorder
+TEACH_MAX_S = 60.0           # ... stops itself after this long (1200 samples)
+HEARTBEAT_STALE_S = 2.0      # the UI calls the sim thread dead after this long without a loop
 AUDIO_DIR = os.path.join(ROOT, "audio")
 CHORD_SPEC_DIR = os.path.join(AUDIO_DIR, "custom")          # D051: chord words designed in the cockpit
-SYSTEM = BRAIN_SYSTEM + ("\nYou also have `look`: the robot's eye camera described by a vision "
-                         "model. Use it when asked what you see, before walking toward "
-                         "something, or when a goto was vetoed.")
-VISION_PROMPT = ("You are the eye of a small five-legged robot walking on a floor. Describe "
-                 "what is in front of it in two short sentences: obstacles or objects, roughly "
-                 "how far (near = within a few body lengths), and where the open floor is. "
-                 "If the view is mostly floor, say so.")
+
+class SimDead(RuntimeError):
+    """The sim thread has stopped (a fatal exception or quit); nothing it owns answers."""
 
 
-def _local_ai_key():
-    for k in ("ROCKY_LLM_API_KEY", "LOCAL_AI_KEY"):
-        if os.environ.get(k):
-            return os.environ[k]
-    conf = os.path.expanduser("~/.config/environment.d/local-ai.conf")
-    if os.path.exists(conf):
-        for line in open(conf):
-            if line.startswith("LOCAL_AI_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return "none"
+class _Job:
+    """One queued sim-thread call: runs fn and resolves the caller's future,
+    or fails it (fatal path) so no HTTP request waits forever (D052)."""
+    __slots__ = ("fn", "loop", "fut")
+
+    def __init__(self, fn, loop, fut):
+        self.fn, self.loop, self.fut = fn, loop, fut
+
+    def _set(self, how, val):
+        def cb():
+            if not self.fut.done():
+                getattr(self.fut, how)(val)
+        try:
+            self.loop.call_soon_threadsafe(cb)
+        except RuntimeError:                     # the loop is closed: nobody is waiting
+            pass
+
+    def run(self):
+        try:
+            r = self.fn()
+        except Exception as e:                   # surface, don't kill the sim
+            self._set("set_exception", e)
+            return e
+        self._set("set_result", r)
+        return None
+
+    def fail(self, exc):
+        self._set("set_exception", exc)
+
+
+def _jsonable(x):
+    """numpy scalars/arrays, tuples and int dict keys -> plain JSON types."""
+    if isinstance(x, dict):
+        return {str(k): _jsonable(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_jsonable(v) for v in x]
+    if isinstance(x, np.ndarray):
+        return _jsonable(x.tolist())
+    if isinstance(x, (np.bool_,)):
+        return bool(x)
+    if isinstance(x, np.integer):
+        return int(x)
+    if isinstance(x, (float, np.floating)):
+        f = float(x)
+        return f if np.isfinite(f) else None
+    return x
+
+
+def _wrap_rad(a):
+    return (a + np.pi) % (2 * np.pi) - np.pi
 
 
 class CockpitSim(Playground):
@@ -118,19 +186,97 @@ class CockpitSim(Playground):
         self.cam = dict(distance=1.4, elevation=-24.0, azimuth=0.0)     # behind the robot, looking +x
         self.render_every = int(round(1 / (15 * self.DT)))      # ~15 fps
         self.last = dict(con=np.zeros(5, bool), tilt=0.0, height=0.0, gxy=0.0)
-        self.chat_hist = {}
-        self.brain = dict(mode="talk", model=None, vision_model=None)
         self.rec = None                     # recording: dict(frames, t0, cmds, world)
         self.cmd_log = []                   # (sim t, line) — everything that drove the robot
         self.walk = None                    # residual walking policy: dict(policy, name, t_next, res)
         self.walk_note = "gait: analytic wave gait"
-        self.llm_base = os.environ.get("ROCKY_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
-        self.llm_key = _local_ai_key()
-        self._llm = None
+        self.brains = Brains(self)          # D052: roles, fallbacks, histories, voice, look
         self.browser_audio = True           # D051: chord words play in the browser (phone too), not on the server
         self.lexicon = lexicon()
         self.gesture_names = sorted(self.gestures)
-        self.log(f"world: {self.world_name} | {self.righter_note}")
+        # D052: the sim thread's pulse + its death certificate
+        self.last_step_wall = time.time()
+        self.last_loop_wall = time.time()
+        self.fatal = None                   # "Type: message" once the sim thread died
+        self.exit_on_fatal = False          # main() sets True: a dead sim thread ends the process (exit 1)
+        self.refusal = None                 # (wall time, text): the last command a guard refused (overlay)
+        self.teach = None                   # the studio's pose-stream recorder (dict) while recording
+        self.fingerprint = robot_fingerprint(self.model)
+        self.log(f"world: {self.world_name} | {self.righter_note} | robot {self.fingerprint}")
+
+    def note(self, kind, msg):
+        """Playground guard/gesture notes -> the events feed + console (D052)."""
+        super().note(kind, msg)
+        ev = getattr(self, "events", None)
+        if ev is None:                      # during Playground.__init__
+            return
+        ev.append((kind, str(msg)))
+        self.log(f"{kind}: {msg}")
+        if kind in ("void", "latch") or str(msg).startswith(("refused", "blocked")):
+            self.refusal = (time.time(), f"{kind}: {msg}")
+
+    def note_refusal(self, reply):
+        """A console/teleop reply that is a guard's refusal -> the overlay."""
+        r = str(reply or "")
+        body = r[len("[teleop] "):] if r.startswith("[teleop] ") else r
+        if body.startswith(("blocked", "locomotion held", "busy", "reflex is", "a safe-stop",
+                            "a goto is running", "wave refused", "gait presets change")):
+            self.refusal = (time.time(), body)
+
+    def idle_reason(self):
+        """None when the sim is at a planted standstill (what sim2real and the
+        studio's teach need), else why not — readable, for the UI."""
+        if self.sup.state != "NORMAL":
+            return f"reflex state is {self.sup.state}"
+        if np.any(self.cmd_v):
+            return "the sim is walking (velocity command) — stop first"
+        if self.goto_state is not None:
+            return "a goto is running — stop first"
+        if self.gesture is not None or self._ges is not None:
+            return "a gesture or studio pose is running — release it first"
+        return None
+
+    def is_idle(self):
+        """The Playground's standstill rule, plus (D052 V2) real-time speed:
+        the sim2real stream is paced by the sim loop, so at 8x the real legs
+        would get targets 8x faster than the sim's own 4.7 rad/s clamp."""
+        return super().is_idle() and self.speed == 1.0 and not self.paused
+
+    def sim2real_refusal(self):
+        """None when sim2real may start, else why (the UI shows it)."""
+        why = self.idle_reason()
+        if why:
+            return why
+        if self.speed != 1.0:
+            return f"the sim runs at {self.speed:g}x — set speed 1x first (the stream is paced by the sim)"
+        if self.paused:
+            return "the sim is paused"
+        return None
+
+    def set_speed(self, speed):
+        """Any thread. D052 V2: finite only (NaN used to stick and unthrottle
+        the loop for good) and 1x only while mirroring sim->real."""
+        v = float(speed)
+        if not np.isfinite(v):
+            raise ValueError("speed must be a finite number")
+        v = float(np.clip(v, 0.1, 8.0))
+        if v != 1.0 and self.sim2real:
+            raise ValueError("speed is locked at 1x while mirroring sim->real (the stream is paced by the sim)")
+        self.speed = v
+        return v
+
+    @property
+    def brain(self):
+        """The brain state dict (mode + role models) — live: writes stick."""
+        return self.brains.state
+
+    @property
+    def chat_hist(self):
+        return self.brains.hist
+
+    @property
+    def llm_base(self):
+        return self.brains.base
 
     def reload_library(self):
         """Any thread: re-read keyframe gestures + chord words from disk."""
@@ -142,7 +288,11 @@ class CockpitSim(Playground):
     def hw_connect(self, port):
         """Any thread. Open the bus (or the mock); the sim thread mirrors from the next step."""
         self.hw_disconnect()
-        hw = HardwareBridge(port, on_event=lambda k, m: (self.events.append(("hw:" + k, m)), self.log(f"hw {k}: {m}")))
+        # D052: is_idle gates sim2real (the Playground also ANDs its own is_idle in);
+        # on_event must not block — append + log only
+        hw = HardwareBridge(port, on_event=lambda k, m: (self.events.append(("hw:" + k, m)), self.log(f"hw {k}: {m}")),
+                            is_idle=self.is_idle)
+        hw.speed_cps = hw_bridge.ENTRY_SPEED_CPS    # the stream-speed slider starts gentle (200 c/s), not servo max
         self.hw = hw
         return hw.status()
 
@@ -155,21 +305,58 @@ class CockpitSim(Playground):
 
     # ------------------------------------------------------ D051: gesture studio
     def preview_pose(self, spec, t=None):
-        """Sim thread: hold the keyframe gesture's pose at time t (None = whole
-        gesture's last frame) until preview_off / a gesture / a walk."""
+        """Sim thread: hold the keyframe gesture's pose at time t (None = the
+        last AUTHORED frame) until preview_off / a gesture / a walk. D052: the
+        Playground blends into it (no snap) and the same standstill rule as a
+        gesture applies — a walking robot is refused, not stopped mid-stride."""
         kg = KeyframeGesture(spec)
-        tt = kg.total if t is None else float(t)
+        tt = kg.authored_total if t is None else float(t)
+        why = self.gesture_refusal(switching=self._ges is not None and self._ges["phase"] != "out")
+        if why:
+            raise ValueError(f"preview refused: {why}")
         fn = lambda g, _t, kg=kg, tt=tt: kg(g, tt)            # noqa: E731
         with self.lock:
             self.gesture = (fn, float("inf"), self.t)
-            self.cmd_v[:] = 0
+        self._ges_name = "studio pose"
         self.mode = "posing"
         return kg.total
 
     def preview_off(self):
-        with self.lock:
-            self.gesture = None
+        self.end_gesture()                     # blended out to the stance (D052)
         self.mode = "idle"
+
+    # ------------------------------------------------------ D052: teach recorder
+    def teach_start(self):
+        """Sim thread. Record the sim's joint targets (ctrl) at TEACH_HZ — or,
+        with the bridge in real2sim, the real legs' measured q — for the studio."""
+        self.teach = dict(qs=[], claw=[], t0=self.t, t_next=self.t, src="sim ctrl")
+        return {"ok": True, "recording": True, "hz": TEACH_HZ, "max_s": TEACH_MAX_S}
+
+    def _teach_sample(self):
+        tr = self.teach
+        if self.t < tr["t_next"]:
+            return
+        tr["t_next"] += 1.0 / TEACH_HZ
+        q = np.array(self.data.ctrl[:15], float).reshape(5, 3)
+        hw = self.hw
+        if hw is not None and getattr(hw, "mirror", "off") == "real2sim":
+            q_real, legs = hw.real_pose()
+            for i in range(5):
+                if legs[i]:
+                    q[i] = q_real[i]
+            tr["src"] = "real legs (real2sim) + sim ctrl"
+        tr["qs"].append(q.ravel().copy())
+        tr["claw"].append(np.array(self.data.ctrl[15:20], float) if self.model.nu >= 20 else np.zeros(5))
+        if len(tr["qs"]) >= int(TEACH_MAX_S * TEACH_HZ):
+            tr["full"] = True
+
+    def teach_stop(self):
+        """Sim thread: end the recording; returns (qs (T,15), claw (T,5), meta)."""
+        tr, self.teach = self.teach, None
+        if tr is None:
+            return None
+        return (np.array(tr["qs"]).reshape(-1, 15), np.array(tr["claw"]).reshape(-1, 5),
+                dict(src=tr["src"], samples=len(tr["qs"]), seconds=round(self.t - tr["t0"], 2)))
 
     # ---------------------------------------------------------- plumbing
     def log(self, line):
@@ -182,18 +369,19 @@ class CockpitSim(Playground):
             self.rec["cmds"].append((round(self.t - self.rec["t0"], 3), line))
 
     async def call(self, fn):
-        """Run fn() in the sim thread; await its result."""
+        """Run fn() in the sim thread; await its result. Raises SimDead when the
+        sim thread is gone (D052: before, a dead thread hung every request)."""
+        if not self.alive:
+            raise SimDead(self.fatal or "the sim thread has stopped")
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
-
-        def job():
+        self.pending.put(_Job(fn, loop, fut))
+        while True:
             try:
-                r = fn()
-                loop.call_soon_threadsafe(fut.set_result, r)
-            except Exception as e:                       # surface, don't kill the sim
-                loop.call_soon_threadsafe(fut.set_exception, e)
-        self.pending.put(job)
-        return await fut
+                return await asyncio.wait_for(asyncio.shield(fut), 1.0)
+            except asyncio.TimeoutError:
+                if not self.alive and not fut.done():
+                    raise SimDead(self.fatal or "the sim thread has stopped") from None
 
     def _drain(self):
         while True:
@@ -201,27 +389,75 @@ class CockpitSim(Playground):
                 job = self.pending.get_nowait()
             except queue.Empty:
                 return
-            try:
-                job()
-            except Exception as e:
-                self.log(f"job failed: {e}")
+            e = job.run()
+            if e is not None:
+                self.log(f"job failed: {type(e).__name__}: {e}")
+
+    def heartbeat(self):
+        """Any thread: the sim thread's pulse (wall clock)."""
+        now = time.time()
+        return dict(alive=bool(self.alive), fatal=self.fatal, last_step_wall=round(self.last_step_wall, 3),
+                    step_age_s=round(now - self.last_step_wall, 2), loop_age_s=round(now - self.last_loop_wall, 2),
+                    paused=bool(self.paused), stale_after_s=HEARTBEAT_STALE_S)
 
     # ---------------------------------------------------------- the loop
     def run_forever(self):
+        """The sim thread. D052: an exception out of step() is FATAL (the physics
+        state is unknown): _fatal limps the real legs, fails every waiting
+        request and — under main() — ends the process with exit code 1."""
         t_wall = time.monotonic()
-        while self.alive:
-            self._drain()
-            if self.paused:
-                time.sleep(0.02)
-                t_wall = time.monotonic()
-                continue
-            self.step()
-            t_wall += self.DT / max(self.speed, 0.05)
-            lag = t_wall - time.monotonic()
-            if lag > 0:
-                time.sleep(lag)
-            elif lag < -0.05:
-                t_wall = time.monotonic()
+        try:
+            while self.alive:
+                self.last_loop_wall = time.time()
+                self._drain()
+                if self.paused:
+                    time.sleep(0.02)
+                    t_wall = time.monotonic()
+                    continue
+                self.step()
+                self.last_step_wall = time.time()
+                t_wall += self.DT / max(self.speed, 0.05)
+                if not np.isfinite(t_wall):              # D052 V2: a NaN here never slept again
+                    t_wall = time.monotonic()
+                lag = t_wall - time.monotonic()
+                if lag > 0:
+                    time.sleep(lag)
+                elif lag < -0.05:
+                    t_wall = time.monotonic()
+        except BaseException as e:                       # noqa: BLE001 — any death is reported
+            self._fatal(e)
+            return
+        self._fail_pending(SimDead("the sim thread has stopped (quit)"))
+
+    def _fail_pending(self, exc):
+        while True:
+            try:
+                job = self.pending.get_nowait()
+            except queue.Empty:
+                break
+            job.fail(exc)
+        gs, self.goto_state = self.goto_state, None
+        if gs is not None and not gs["fut"].done():
+            try:
+                gs["loop"].call_soon_threadsafe(
+                    lambda f=gs["fut"]: f.done() or f.set_exception(exc))
+            except RuntimeError:
+                pass
+
+    def _fatal(self, e):
+        self.fatal = f"{type(e).__name__}: {e}"
+        self.alive = False
+        self.log(f"FATAL in the sim thread: {self.fatal} — real legs limped, requests failed")
+        print(f"cockpit: FATAL in the sim thread:\n{traceback.format_exc()}", file=sys.stderr, flush=True)
+        try:
+            if self.hw is not None:
+                self.hw_disconnect()                    # close() = stop the stream + limp every servo
+        except Exception as e2:                          # noqa: BLE001
+            print(f"cockpit: limp on fatal failed: {e2}", file=sys.stderr, flush=True)
+        self._fail_pending(SimDead(f"sim thread died: {self.fatal}"))
+        if self.exit_on_fatal:
+            time.sleep(1.0)                              # let the failed requests answer first
+            os._exit(1)
 
     def step(self):
         gs = self.goto_state
@@ -232,40 +468,54 @@ class CockpitSim(Playground):
         super().step()
         if gs is not None and self.goto_state is gs:
             self._goto_post(gs)
+        if self.teach is not None:
+            self._teach_sample()
         if self._k % self.render_every == 0:
-            self._render()
+            try:
+                self._render()
+            except Exception as e:                       # noqa: BLE001 — cameras are not physics
+                self.log(f"render failed ({type(e).__name__}: {e}); cameras off")
+                self._renderers = False
 
     # ------------------------------------------------- residual walker
     def _walk_residual(self):
-        """D050: the PPO residual gait policy (rocky_env.PebbleEnv's contract:
-        50 Hz, obs = gravity, gyro, qpos, qvel, gait phase, command/[60,60,0.6],
-        action = ±0.25 rad added to the analytic targets) on top of the
-        supervisor's output while the reflex state is NORMAL."""
+        """D050: the PPO residual gait policy on top of the supervisor's output
+        while the reflex state is NORMAL. D052: the observation is built by
+        rl_common's builder for the checkpoint's OWN obs version (v2: SimIMU
+        gravity/gyro, quantised one-tick-late encoders, a_prev; v1: the legacy
+        true-state vector), the command is the one the gait actually got
+        (cmd_eff, after the budget) and the action goes through the
+        checkpoint's EMA — exactly rocky_env.PebbleEnv.step."""
         w = self.walk
-        if self.sup.state != "NORMAL" or self.gesture is not None:
+        if self.sup.state != "NORMAL" or self.gesture_busy:
             self.residual = None
             return
         if self.t >= w["t_next"]:
-            w["t_next"] = self.t + 0.02
-            d = self.data
-            R = d.xmat[self.torso].reshape(3, 3)
-            grav = R.T @ np.array([0, 0, -1.0])
-            gyro = R.T @ d.cvel[self.torso][0:3]
+            w["t_next"] = self.t + rc.CTRL_DT
             ph = 2 * np.pi * ((self.sup.t_gait / self.gait.T) % 1.0)
-            with self.lock:
-                v = self.cmd_v.copy()
-            obs = np.concatenate([grav, gyro, d.qpos[w["jadr"]], d.qvel[w["vadr"]],
-                                  [np.sin(ph), np.cos(ph)], v / np.array([60.0, 60.0, 0.6])]).astype(np.float32)
-            a = np.clip(w["policy"](obs), -1, 1)
-            w["res"] = 0.25 * a
+            cmd_n = np.asarray(self.cmd_eff, float) / np.array([60.0, 60.0, 0.6])
+            obs = w["obs"](self.data, self.t, ph, cmd_n, w["a_f"])
+            a = np.clip(np.asarray(w["policy"](obs), float), -1, 1)
+            w["a_f"] = w["ema"] * a + (1.0 - w["ema"]) * w["a_f"]
+            w["res"] = w["act_scale"] * w["a_f"]
         self.residual = w["res"]
 
-    def set_walk(self, name):
-        """Sim thread. name: 'off' or a runs/NAME with a gait checkpoint."""
+    def set_walk(self, name, _keep_gait=None):
+        """Sim thread. name: 'off' or a runs/NAME with a gait checkpoint. D052:
+        the checkpoint's contract decides the obs builder, EMA and the GAIT it
+        trained on (pre-D052 walkers: T 1.6 s, step 32 mm — the phase in the obs
+        means nothing on another T), which is applied here and restored on 'off'."""
         self.residual = None
+        prev = self.walk
         if name in (None, "", "off", "analytic"):
             self.walk = None
-            self.walk_note = "gait: analytic wave gait"
+            note = ""
+            if prev is not None and prev.get("gait_prev") and self.idle_reason() is None:
+                try:
+                    self.apply_gait(**prev["gait_prev"])
+                except ValueError as e:                  # D052 V2: validated (e.g. sim2real is on)
+                    note = f" (gait not restored: {e})"
+            self.walk_note = "gait: analytic wave gait" + note
             return self.walk_note
         path = os.path.join(HERE, "runs", name, "latest.pt")
         if not os.path.exists(path):
@@ -274,12 +524,13 @@ class CockpitSim(Playground):
             import torch
             from train_ppo import Agent, RunningMeanStd
             ck = torch.load(path, map_location="cpu", weights_only=False)
-            if ck.get("obs_dim", 41) != 41:
-                return f"{name} is not a gait checkpoint (obs {ck.get('obs_dim')})"
-            agent = Agent(41, ck.get("act_dim", 15))
+            contract = rc.checkpoint_contract(ck, env_hint="gait")
+            rc.check_obs_contract(contract, "gait")         # ValueError: not a gait checkpoint we can feed
+            obs_dim = int(contract["obs_dim"])
+            agent = Agent(obs_dim, int(ck.get("act_dim", 15)))
             agent.load_state_dict(ck["model"])
             agent.eval()
-            rms = RunningMeanStd((41,))
+            rms = RunningMeanStd((obs_dim,))
             rms.load_state_dict(ck["obs_rms"])
 
             def policy(obs):
@@ -287,26 +538,158 @@ class CockpitSim(Playground):
                 with torch.no_grad():
                     return agent.actor(torch.as_tensor(np.clip(on, -10, 10), dtype=torch.float32)
                                        .unsqueeze(0)).squeeze(0).numpy()
+            jadr, vadr = rc.joint_addrs(self.model)
+            obs = rc.make_gait_obs(int(contract["obs_version"]), self.model, self.torso, jadr, vadr,
+                                   rc.foot_geoms(self.model))
+            obs.reset(noise=False)
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                fp_status = rc.check_fingerprint(contract, self.model, who=f"walker {name}")
         except Exception as e:
-            return f"walk policy {name}: {e}"
-        self.walk = dict(policy=policy, name=name, t_next=self.t, res=np.zeros(15),
-                         jadr=[self.model.joint(f"{n}{i}").qposadr[0] for i in range(5) for n in ("yaw", "hip", "knee")],
-                         vadr=[self.model.joint(f"{n}{i}").dofadr[0] for i in range(5) for n in ("yaw", "hip", "knee")])
-        self.walk_note = f"gait: analytic + residual policy {name} ({ck.get('global_step', 0):,} steps)"
+            return f"walk policy {name}: {type(e).__name__}: {e}"
+        # the gait it trained on
+        gp = contract.get("gait") or {}
+        want = {"T": gp.get("cycle_time"), "h": gp.get("body_height"), "R0": gp.get("stance_radius"),
+                "duty": gp.get("duty"), "hstep": gp.get("step_height")}
+        want = {k: float(v) for k, v in want.items() if v is not None}
+        cur = {k: float(getattr(self.gait, k)) for k in GAIT_KEYS}
+        gait_prev = _keep_gait if _keep_gait is not None else (prev.get("gait_prev") if prev else None)
+        gait_note = ""
+        if any(abs(cur[k] - v) > 1e-6 for k, v in want.items()):
+            why = self.idle_reason()
+            if why:
+                return f"walk policy {name} trained on gait {want}; switching the gait needs a standstill: {why}"
+            gait_prev = gait_prev or cur
+            try:
+                self.apply_gait(**want)
+            except ValueError as e:
+                return f"walk policy {name}: its training gait was refused: {e}"
+            gait_note = " | gait set to its training gait " + " ".join(f"{k}={v:g}" for k, v in want.items())
+            if self.gait.max_command()["v"] < 1.0:
+                # measured 2026-09-24: every pre-D052 walker trained on T 1.6 s / step 32 mm, whose
+                # swing lifts the foot faster than the servo budget allows -> WaveGait.budget zeroes
+                # every command. Honest answer: this walker cannot walk on the D052 servo.
+                gait_note += (" — WARNING: that gait has NO speed envelope under the D052 servo budget "
+                              "(its step lifts faster than the servo): every command is zeroed; retrain "
+                              "the walker on the D052 env")
+        self.walk = dict(policy=policy, name=name, t_next=self.t, res=np.zeros(15), a_f=np.zeros(15),
+                         obs=obs, ema=float(contract.get("ema_alpha", 1.0)),
+                         act_scale=float(contract.get("act_scale", 0.25)), contract=contract,
+                         fp_status=fp_status, gait_prev=gait_prev)
+        flags = contract.get("flags") or []
+        self.walk_note = (f"gait: analytic + residual policy {name} ({ck.get('global_step', 0):,} steps, "
+                          f"obs v{contract['obs_version']}, ema {self.walk['ema']:g}"
+                          + (f", {', '.join(flags)}" if flags else "")
+                          + (f", ROBOT CHANGED since training ({contract.get('robot_fingerprint')} vs "
+                             f"{self.fingerprint})" if fp_status == "mismatch" else "")
+                          + ")" + gait_note)
+        for w in caught:
+            self.log(f"walker: {w.message}")
         return self.walk_note
 
     # ------------------------------------------------------------- goto
+    def _cone_block(self, angles, ranges, heading):
+        """(range m, body bearing deg) of the nearest lidar return within
+        +-GOTO_CONE_DEG of the body-frame heading (rad) closer than
+        GOTO_CLEAR_M, else None."""
+        near = np.isfinite(ranges) & (ranges < GOTO_CLEAR_M) & \
+            (np.abs(_wrap_rad(angles - heading)) <= np.radians(GOTO_CONE_DEG))
+        if not near.any():
+            return None
+        i = int(np.argmin(np.where(near, ranges, np.inf)))
+        return float(ranges[i]), float(np.degrees(angles[i]))
+
+    def _cone_min(self, angles, ranges, heading):
+        m = np.isfinite(ranges) & (np.abs(_wrap_rad(angles - heading)) <= np.radians(GOTO_CONE_DEG))
+        return float(ranges[m].min()) if m.any() else float("inf")
+
+    @staticmethod
+    def _corridor_clear(angles, ranges, heading, length):
+        """No return inside the robot-wide strip (+-GOTO_HALF_W) ahead along the
+        heading for `length` m. Stricter than the cone at the side: this is what
+        ends a detour (the cone alone would let a leg clip the wall's end)."""
+        f = np.isfinite(ranges)
+        rel = _wrap_rad(angles[f] - heading)
+        along, lat = ranges[f] * np.cos(rel), ranges[f] * np.sin(rel)
+        return not bool(np.any((along > 0) & (along < length) & (np.abs(lat) < GOTO_HALF_W)))
+
+    def _goto_react(self, gs, tw, hd_goal, dist):
+        """D052 reactive layer (8 Hz): something within +-30 deg of where the
+        robot is walking and closer than 0.35 m -> detour (1: +-45 deg off the
+        target heading, toward the clearer side; 2: a sidestep, 90 deg, same
+        side). A detour lasts until the robot-wide corridor toward the target
+        has been clear for GOTO_RESUME_S (or GOTO_DETOUR_S at most); blocked a
+        third time -> stopped='blocked'. The puck sees only what stands above
+        its plane (~torso + 60 mm): lower things are left to the 3 s
+        no-progress rule ('stuck')."""
+        dt_ = gs.get("detour")
+        if dt_ is not None and self.t >= dt_["until"]:
+            gs["detour"] = None
+        if gs["tries"] and gs["best"] < gs["best_at_detour"] - GOTO_DETOUR_RESET_M:
+            gs["tries"] = 0                                  # made real progress: detours earned back
+            gs["side"] = None
+        if self._k % max(1, int(round(1.0 / (GOTO_SCAN_HZ * self.DT)))) != 0:
+            return
+        angles, ranges, _ = lidar_scan(self.model, self.data, self.torso)
+        dt_ = gs.get("detour")
+        if dt_ is not None:
+            if self._corridor_clear(angles, ranges, hd_goal, min(dist + 0.05, GOTO_CLEAR_M + GOTO_HALF_W)):
+                dt_["clear_since"] = dt_.get("clear_since") or self.t
+                if self.t - dt_["clear_since"] >= GOTO_RESUME_S:
+                    gs["detour"] = None
+                    self.log("goto: way toward the target is clear — back on course")
+            else:
+                dt_["clear_since"] = None
+        off = gs["detour"]["offset"] if gs.get("detour") else 0.0
+        hit = self._cone_block(angles, ranges, hd_goal + off)
+        if hit is None:
+            return
+        rng_m, bear = hit
+        if gs["tries"] >= GOTO_DETOURS:
+            gs["outcome"] = ("blocked", tw)
+            gs["block"] = dict(range_m=round(rng_m, 3), bearing_deg=round(bear, 1), detours=gs["tries"])
+            self.sup.request_stop()
+            self.log(f"goto blocked: obstacle {rng_m:.2f} m at {bear:.0f} deg (body) after {gs['tries']} detours")
+            return
+        gs["tries"] += 1
+        mag = np.radians(45.0 * gs["tries"])                 # 45 deg, then a 90 deg sidestep
+        side = gs.get("side")
+        if side is None:                                     # pick the clearer side once, then commit
+            left, right = self._cone_min(angles, ranges, hd_goal + mag), self._cone_min(angles, ranges, hd_goal - mag)
+            side = gs["side"] = 1.0 if left >= right else -1.0
+        gs["detour"] = dict(offset=side * mag, until=self.t + GOTO_DETOUR_S)
+        gs["best_t"] = tw                                    # a fresh no-progress window for the detour
+        gs["best_at_detour"] = gs["best"]
+        self.log(f"goto: obstacle {rng_m:.2f} m at {bear:.0f} deg — detour {gs['tries']}/{GOTO_DETOURS}: "
+                 f"{'sidestep' if gs['tries'] == 2 else 'heading'} {np.degrees(side * mag):+.0f} deg")
+
     def _goto_pre(self, gs):
         tw = self.t - gs["t0"]
         p = self.data.xpos[self.torso]
         dx, dy = gs["tx"] - p[0], gs["ty"] - p[1]
         dist = float(np.hypot(dx, dy))
-        if gs["outcome"] is None and dist < 0.025:
-            gs["outcome"] = ("arrived", tw)
-            self.sup.request_stop()
-        if gs["outcome"] is None:
-            if dist < gs["best"] - 0.02:
+        v = self.void
+        if gs["outcome"] is None and v is not None and v["t"] >= gs["t0"] - 1e-9:
+            # D052: the Playground's always-on void guard fired during this goto. It
+            # backs off and safe-stops by itself; the goto ends as 'cliff' once it has.
+            gs["void"] = dict(v)
+            if self._void_phase != "retreat":
+                gs["outcome"] = ("cliff", tw)
+        if gs["outcome"] is None and gs.get("void") is None:
+            if dist < 0.025:
+                gs["outcome"] = ("arrived", tw)
+                self.sup.request_stop()
+            elif self.sup.latched:
+                gs["outcome"] = ("blocked", tw)
+                gs["block"] = dict(detail=f"latched safe-stop ({self.sup.latch_reason}) — `clear` to release")
+            elif self.locomotion_held():
+                gs["outcome"] = ("blocked", tw)
+                gs["block"] = dict(detail="locomotion held: the real legs are mirroring (sim2real)")
+            elif dist < gs["best"] - 0.02:
                 gs["best"], gs["best_t"] = dist, tw
+            elif gs.get("detour") is not None:
+                gs["best_t"] = tw                    # a sidestep makes no progress by design; the
+                #                                      detour has its own time limit
             elif tw - gs["best_t"] > GOTO_STUCK_S and tw > 2.0:
                 gs["outcome"] = ("stuck", tw)          # D050: blocked, not a void
                 self.sup.request_stop()
@@ -318,47 +701,46 @@ class CockpitSim(Playground):
             gs["outcome"] = ("user", tw)
             self.sup.request_stop()
         self._stop_req = False
-        if gs["outcome"] is None:
-            ramp = min(tw / 0.6, 1.0)
+        vx = vy = wz = 0.0
+        if gs["outcome"] is None and gs.get("void") is None:
             ux, uy = (dx / dist, dy / dist) if dist > 1e-6 else (0.0, 0.0)
-            Rm = self.data.xmat[self.torso].reshape(3, 3)
-            yaw = float(np.arctan2(Rm[1, 0], Rm[0, 0]))
+            yaw = self.yaw()
             cy, sy = np.cos(yaw), np.sin(yaw)
-            ux, uy = cy * ux + sy * uy, -sy * ux + cy * uy
-            vx, vy, wz = gs["react"].command(tw, V_GOTO * ramp * ux, V_GOTO * ramp * uy, 0.0)
-            halted = gs["react"].retreat_until is not None and tw >= gs["react"].retreat_until
-            if halted:
-                gs["outcome"] = ("cliff", tw)
-                self.sup.request_stop()
-                vx, vy, wz = 0.0, 0.0, 0.0
-        else:
-            vx, vy, wz = 0.0, 0.0, 0.0
+            bx, by = cy * ux + sy * uy, -sy * ux + cy * uy     # target direction, body frame
+            hd_goal = float(np.arctan2(by, bx))
+            self._goto_react(gs, tw, hd_goal, dist)
+            if gs["outcome"] is None:
+                hd = hd_goal + (gs["detour"]["offset"] if gs.get("detour") else 0.0)
+                ramp = min(tw / 0.6, 1.0)
+                vx, vy = V_GOTO * ramp * np.cos(hd), V_GOTO * ramp * np.sin(hd)
         with self.lock:
             self.cmd_v[:] = [vx, vy, wz]
 
     def _goto_post(self, gs):
         tw = self.t - gs["t0"]
-        if gs["outcome"] is None and self._k % 10 == 0 and self.sup.state == "NORMAL":
-            g = self.gait
-            ph = [(self.sup.t_gait / g.T + g.phase_off[i]) % 1.0 for i in range(5)]
-            settled = [ph[i] < g.duty and 0.12 < ph[i] / g.duty < 0.95 for i in range(5)]
-            # D050: a void needs the leg to have PROBED all the way down and found nothing
-            fired = gs["det"].update(tw, settled, self.last["con"], probed_out=self.probe_out)
-            if fired:
-                gs["react"].on_void(tw)
-                self.events.append(("void", round(float(self.data.xpos[self.torso][0]), 3)))
-                self.log(f"VOID detected (leg {fired} probed {PROBE_MAX:.0f} mm down, nothing there) — retreating")
         if gs["outcome"] is None and self.last["tilt"] > 60:
             gs["outcome"] = ("FELL", tw)
         if gs["outcome"] is not None and tw > gs["outcome"][1] + 1.5:
             reason = gs["outcome"][0]
             res = {"ok": reason == "arrived", "stopped": reason, "pose": self.pose()}
             if reason == "cliff":
-                res["detail"] = "VOID detected by the real detector; PLANT->BRACE halt"
+                v = gs.get("void") or {}
+                res["detail"] = (f"VOID at {v.get('bearing_deg', float('nan')):.0f} deg (leg {v.get('leg')}) — "
+                                 "the always-on void guard backed off and safe-stopped; `clear` releases it")
+                res["void"] = _jsonable({k: v.get(k) for k in ("bearing_deg", "world_bearing_deg", "leg")})
             if reason == "FELL":
                 res["detail"] = "the robot fell during the goto; the righter takes over"
             if reason == "stuck":
-                res["detail"] = "no progress toward the target: something is in the way (not a void)"
+                res["detail"] = ("no progress toward the target for 3 s: something is in the way that the "
+                                 "lidar cannot see (lower than the puck plane) — not a void")
+            if reason == "blocked":
+                b = gs.get("block") or {}
+                if "range_m" in b:
+                    res["detail"] = (f"obstacle {b['range_m']:.2f} m away at {b['bearing_deg']:.0f} deg "
+                                     f"(body frame) — {b['detours']} detours tried; pick another target")
+                    res["obstacle"] = b
+                else:
+                    res["detail"] = b.get("detail", "a guard stopped the goto")
             self.mode = "idle" if reason == "arrived" else "safe_stop"
             self.goto_state = None
             with self.lock:
@@ -374,9 +756,9 @@ class CockpitSim(Playground):
     def _start_goto(self, tx, ty, fut, loop):
         if self.goto_state is not None:
             self._resolve(self.goto_state, {"ok": False, "stopped": "preempted", "pose": self.pose()})
-        self.goto_state = dict(tx=float(tx), ty=float(ty), t0=self.t, det=CliffDetector(),
-                               react=CliffReaction(self.gait), outcome=None, fut=fut, loop=loop,
-                               best=float("inf"), best_t=0.0)
+        self.goto_state = dict(tx=float(tx), ty=float(ty), t0=self.t, outcome=None, fut=fut, loop=loop,
+                               best=float("inf"), best_t=0.0, detour=None, tries=0,
+                               best_at_detour=float("inf"), void=None, block=None, side=None)
         self.mode = "walking"
         self.events.append(("goto", (round(float(tx), 3), round(float(ty), 3))))
         self.log(f"goto ({tx:.2f}, {ty:.2f})")
@@ -462,22 +844,30 @@ class CockpitSim(Playground):
         self.torso = model.body("torso").id
         self.fids = [model.geom(f"foot{i}").id for i in range(5)]
         self._renderers = None
-        self.goto_state = None
+        self._abandon_goto("world changed")
         self.gesture = None
         self.push = None
-        ck = getattr(getattr(self.sup, "righter", None), "ckpt", None)   # keep the chosen righter
-        self._respawn(p_xy if same_world else np.zeros(2), yaw)
-        self.righter_note = self._install_righter(ck)
+        self._respawn(p_xy if same_world else np.zeros(2), yaw, keep_righter=True)
+        self.fingerprint = robot_fingerprint(model)
         if self.walk is not None:
-            self.set_walk(self.walk["name"])
+            self.set_walk(self.walk["name"], _keep_gait=self.walk.get("gait_prev"))
         self.log(f"world: {name} ({model.ngeom} geoms) | {self.righter_note}")
 
-    def _respawn(self, xy=(0.0, 0.0), yaw=0.0):
+    def _abandon_goto(self, why):
+        gs, self.goto_state = self.goto_state, None
+        if gs is not None:
+            self._resolve(gs, {"ok": False, "stopped": "preempted", "detail": why, "pose": self.pose()})
+
+    def _respawn(self, xy=(0.0, 0.0), yaw=0.0, keep_righter=False):
+        """keep_righter: re-install the chosen righter on the fresh supervisor —
+        and keep 'righter off' off (D052: a world change used to bring the
+        default checkpoint back)."""
+        old = getattr(self.sup, "righter", None)
         from pebble_gait import leg_ik, body_to_leg
         q0 = np.array([leg_ik(body_to_leg(i, self.gait.p_nom[i])) for i in range(5)]).flatten()
         jadr = [self.model.joint(f"{n}{i}").qposadr[0] for i in range(5) for n in ("yaw", "hip", "knee")]
         mujoco.mj_resetData(self.model, self.data)      # world bodies (the ball) back to their spawn
-        self.data.qpos[0:3] = [xy[0], xy[1], (self.gait.h + 14) / 1000.0 + self.z0]
+        self.data.qpos[0:3] = [xy[0], xy[1], rm.spawn_z_m(self.gait.h, platform_z_m=self.z0)]   # D052: not +14 mm
         self.data.qpos[3:7] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
         self.data.qpos[jadr] = q0
         self.data.ctrl[:] = 0
@@ -487,15 +877,18 @@ class CockpitSim(Playground):
             self.cmd_v[:] = 0
         self.sup = ReflexSupervisor(self.gait)
         self.mode = "idle"
+        if keep_righter:
+            if old is not None:
+                self.righter_note = self._install_righter(getattr(old, "ckpt", None))
+            elif not self.righter_note.startswith("no righter ("):
+                self.righter_note = "no righter (stall/deadline ramp only)"
 
     def reset(self):
         """Sim thread: respawn at the origin, fresh supervisor, same world."""
-        self.goto_state = None
+        self._abandon_goto("reset")
         self.gesture = None
         self.push = None
-        ck = getattr(getattr(self.sup, "righter", None), "ckpt", None)   # keep the chosen righter
-        self._respawn()
-        self.righter_note = self._install_righter(ck)
+        self._respawn(keep_righter=True)
         self.log("reset")
         return "reset: origin, upright, planted"
 
@@ -506,28 +899,94 @@ class CockpitSim(Playground):
         return {"x": round(float(p[0]), 3), "y": round(float(p[1]), 3),
                 "yaw_deg": round(float(np.degrees(np.arctan2(R[1, 0], R[0, 0]))), 1)}
 
+    def _hw_brief(self):
+        """The bridge's state for the 10 Hz feed: attributes only (no bus traffic)."""
+        hw = self.hw
+        if hw is None:
+            return None
+        try:
+            entry = {str(leg): round(min(1.0, (time.monotonic() - b["t0"]) / max(b["T"], 1e-6)), 2)
+                     for leg, b in list(getattr(hw, "_blend", {}).items())}
+            return dict(port=hw.port, mirror=hw.mirror, legs=[bool(x) for x in hw.legs_present],
+                        mirror_legs=[bool(x) for x in hw.mirror_legs], degraded=[bool(x) for x in hw.degraded],
+                        n=len(hw.present), errors=hw.errors, port_ok=bool(hw.port_ok),
+                        allow_locomotion=bool(hw.allow_locomotion), locomotion_ok=bool(hw.locomotion_ok),
+                        entry=entry or None, speed_cps=hw.speed_cps,
+                        tripped=sorted(int(i) for i in hw.robot.monitor.tripped))
+        except Exception as e:                               # noqa: BLE001 — a feed must not die on the bridge
+            return dict(port=hw.port, mirror=getattr(hw, "mirror", "?"), error=f"{type(e).__name__}: {e}",
+                        legs=[False] * 5, n=0, errors=0)
+
+    def _ckpt_fp(self):
+        """Robot-fingerprint status of the loaded righter and walker checkpoints."""
+        out = {}
+        r = getattr(self.sup, "righter", None)
+        if r is not None and getattr(r, "contract", None) is not None:
+            out["righter"] = dict(status=getattr(r, "fingerprint", "unknown"),
+                                  trained=r.contract.get("robot_fingerprint"), flags=list(r.contract.get("flags") or []))
+        w = self.walk
+        if w is not None:
+            out["walker"] = dict(status=w.get("fp_status", "unknown"), trained=w["contract"].get("robot_fingerprint"),
+                                 flags=list(w["contract"].get("flags") or []), name=w["name"])
+        return out
+
     def snapshot(self):
-        """Sim thread: the state feed."""
+        """Sim thread: the state feed. D052 V2: never raises — a broken field
+        (a gait value that slipped past validation, a bridge mid-teardown)
+        gives a partial state with 'error' instead of a 500, so the UI and the
+        MCP server's liveness probe keep seeing a live cockpit."""
+        try:
+            return self._snapshot()
+        except Exception as e:                           # noqa: BLE001 — the feed must not die
+            return self._snapshot_min(e)
+
+    def _snapshot_min(self, e):
+        out = dict(t=round(self.t, 2), state=getattr(self.sup, "state", "?"), mode=self.mode,
+                   world=self.world_name, tilt=0.0, events=[], console=list(self.console)[-40:],
+                   error=f"{type(e).__name__}: {e}", heartbeat=self.heartbeat())
+        for k, f in (("pose", self.pose), ("hw", self._hw_brief)):
+            try:
+                out[k] = f()
+            except Exception:                            # noqa: BLE001
+                out[k] = None
+        try:
+            out["tilt"] = round(float(self.last["tilt"]), 1)
+            out["events"] = _jsonable(list(self.events)[-12:])
+        except Exception:                                # noqa: BLE001
+            pass
+        return out
+
+    def _snapshot(self):
         with self.lock:
             v = self.cmd_v.copy()
         gs = self.goto_state
+        ref = self.refusal if (self.refusal and time.time() - self.refusal[0] < 6.0) else None
+        tr = self.teach
         return dict(t=round(self.t, 2), pose=self.pose(), state=self.sup.state, mode=self.mode,
-                    cmd=[round(float(x), 2) for x in v], tilt=round(self.last["tilt"], 1),
-                    height=round(self.last["height"] * 1000), contacts=[bool(c) for c in self.last["con"]],
+                    cmd=[round(float(x), 2) for x in v], cmd_eff=[round(float(x), 2) for x in self.cmd_eff],
+                    tilt=round(self.last["tilt"], 1),
+                    height=round(self.last["height"] * 1000), kin_h=round(float(self.last.get("kin_h", 0.0)) * 1000),
+                    contacts=[bool(c) for c in self.last["con"]],
                     gyro=round(self.last["gxy"], 2), world=self.world_name, righter=self.righter_note,
                     speed=self.speed, paused=self.paused, trips=self.sup.trip_count, falls=self.sup.fall_count,
                     recording=self.rec is not None, walk=self.walk_note, frame=self.frames["chase"][0],
-                    said=list(self.said), servo=dict(self.servo.p), browser_audio=self.browser_audio,
-                    hw=None if self.hw is None else dict(port=self.hw.port, mirror=self.hw.mirror,
-                                                         legs=[bool(x) for x in self.hw.legs_present],
-                                                         n=len(self.hw.present), errors=self.hw.errors),
-                    goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture is not None,
-                    events=list(self.events)[-12:], console=list(self.console)[-40:],
+                    said=list(self.said), servo=dict(self.servo.p), servo_note=self.servo.describe(),
+                    browser_audio=self.browser_audio, hw=self._hw_brief(),
+                    goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture_busy,
+                    gesture_phase=self.gesture_phase,
+                    events=_jsonable(list(self.events)[-12:]), console=list(self.console)[-40:],
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
                                                 duty=self.gait.duty, hstep=self.gait.hstep,
-                                                phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)),
+                                                phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)
+                                                if self.gait.T > 0 else None),
                     reflex=dict(trip=self.sup.gyro_trip, stall_s=self.sup.stall_s,
-                                fallen_max_s=self.sup.fallen_max_s))
+                                fallen_max_s=self.sup.fallen_max_s),
+                    guards=_jsonable(self.guard_status()), refusal=None if ref is None else ref[1],
+                    idle=self.idle_reason() is None, idle_reason=self.idle_reason(),
+                    teach=None if tr is None else dict(samples=len(tr["qs"]), seconds=round(self.t - tr["t0"], 1),
+                                                      src=tr["src"], full=bool(tr.get("full"))),
+                    fingerprint=self.fingerprint, ckpt_fp=self._ckpt_fp(),
+                    heartbeat=self.heartbeat())
 
     async def tool_say(self, word):
         if chord_wav(word) is None:
@@ -537,35 +996,69 @@ class CockpitSim(Playground):
         return {"ok": True, "word": word, "note": r}
 
     async def tool_gesture(self, name):
+        """D052: through start_gesture (the Playground's standstill rule, the same
+        one the MCP server enforces) and done only when the exit blend is."""
         if name not in self.gestures:
             return {"ok": False, "error": f"unknown gesture {name!r}", "hint": f"available: {', '.join(self.gesture_names)}"}
-        if self.goto_state is not None or float(np.abs(self.cmd_v).sum()) > 0:
-            return {"ok": False, "error": "busy", "hint": "walking; stop() first"}
         fn, total = self.gestures[name]
+        why = await self.call(lambda: self.start_gesture(fn, total, name))
+        if why:
+            return {"ok": False, "error": "busy", "hint": why}
         self.events.append(("gesture", name))
-
-        def start():
-            with self.lock:
-                self.gesture = (fn, total, self.t)
-            self.mode = "gesturing"
-        await self.call(start)
-        t_end = time.monotonic() + total / max(self.speed, 0.05) + 3.0
-        while self.gesture is not None and time.monotonic() < t_end:
+        self.mode = "gesturing"
+        t_end = time.monotonic() + (total + 6.0) / max(self.speed, 0.05)     # + entry/exit blends
+        await asyncio.sleep(0.1)
+        while self.gesture_busy and time.monotonic() < t_end and self.alive:
             await asyncio.sleep(0.05)
         self.mode = "idle"
         return {"ok": True, "gesture": name, "duration_s": round(total, 1), "pose": self.pose(),
                 "note": "rendered in physics"}
 
     async def tool_goto(self, x, y):
+        """D052: arguments are checked BEFORE the sim thread sees them (goto(x='here')
+        raised there and 500'd /api/chat; goto(NaN, 0) poisoned cmd_v), the target
+        must be within GOTO_MAX_M of the robot, and a guard that forbids walking
+        answers stopped='blocked' instead of a goto that can only end as 'stuck'."""
+        tx, ty, err = validate_goto(x, y)
+        if err:
+            return {"ok": False, "error": err}
         loop = asyncio.get_running_loop()
         fut = loop.create_future()
-        await self.call(lambda: self._start_goto(x, y, fut, loop))
+
+        def start():
+            pose = self.pose()
+            err = goto_range_error(tx, ty, pose)
+            if err:
+                return {"ok": False, "error": err, "pose": pose}
+            why = None
+            p = self.data.xpos[self.torso]
+            u = np.array([tx - p[0], ty - p[1]])
+            u = u / max(float(np.linalg.norm(u)), 1e-9)
+            yaw = self.yaw()
+            ub = np.array([np.cos(yaw) * u[0] + np.sin(yaw) * u[1], -np.sin(yaw) * u[0] + np.cos(yaw) * u[1], 0.0])
+            vb = self.void_blocks(V_GOTO * ub)
+            if hasattr(self, "locomotion_held") and self.locomotion_held():
+                why = "locomotion held: the real legs are mirroring (sim2real) without foot contacts"
+            elif getattr(self.sup, "latched", False):
+                why = f"latched safe-stop ({getattr(self.sup, 'latch_reason', '')}) — `clear` to release"
+            elif vb is not None:
+                why = f"blocked: void at {vb:.0f} deg (latched by the void guard) — `clear` to release"
+            elif self.gesture_busy:
+                why = "a gesture is running — stop first"
+            if why:
+                return {"ok": False, "stopped": "blocked", "detail": why, "pose": pose}
+            self._start_goto(tx, ty, fut, loop)
+            return None
+        early = await self.call(start)
+        if early is not None:
+            return early
         return await fut
 
     async def tool_stop(self):
         def do_stop():
             with self.lock:
                 self.cmd_v[:] = 0
+            self.end_gesture()                  # D052: a gesture is blended out, not cut
             if self.goto_state is not None:
                 self._stop_req = True
             else:
@@ -590,10 +1083,14 @@ class CockpitSim(Playground):
                 hit = ranges[m][np.isfinite(ranges[m])]
                 sectors.append({"bearing_deg": c + 22, "min_range_m": round(float(hit.min()), 3) if hit.size else None,
                                 "clear": bool(hit.size == 0)})
+            plane_z = float(self.data.xpos[self.torso][2] - self.z0 + PUCK_DZ)
             out = {"ok": True, "n_points": int(len(ranges)), "range_max_m": float(RANGE_MAX),
                    "world": self.world_name, "sectors": sectors,
                    "frontiers": [{"bearing_deg": s["bearing_deg"]} for s in sectors if s["clear"]],
-                   "note": "2D horizontal scan: walls/obstacles yes, voids below its plane no"}
+                   "scan_plane_m": round(plane_z, 3),
+                   "note": (f"2D horizontal scan from the puck ~{plane_z:.2f} m above the floor: walls and "
+                            f"anything TALLER than ~{plane_z:.2f} m yes; lower obstacles (curbs, boxes, rubble, "
+                            "steps) are INVISIBLE to it, and so are voids — a clear sector is not a clear path")}
             finite = np.isfinite(ranges)
             if finite.any():
                 i = int(np.argmin(np.where(finite, ranges, np.inf)))
@@ -611,142 +1108,34 @@ class CockpitSim(Playground):
                 "last_events": [list(e) for e in s["events"][-5:]]}
 
     async def tool_look(self, model=None):
-        n, jpg = self.frames["eye"]
-        if not jpg:
-            return {"ok": False, "error": "no eye frame yet (renderer off?)"}
-        m = model or self.brain.get("vision_model") or "vision-model"
-        b64 = base64.b64encode(jpg).decode()
+        """The eye through the vision role's fallback chain (cockpit_brains)."""
+        return await self.brains.look(model)
 
-        def ask():
-            from openai import OpenAI
-            client = OpenAI(base_url=self.llm_base, api_key=self.llm_key, timeout=120)
-            r = client.chat.completions.create(model=m, max_tokens=160, messages=[
-                {"role": "user", "content": [
-                    {"type": "text", "text": VISION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}])
-            return (r.choices[0].message.content or "").strip()
-        try:
-            text = await asyncio.to_thread(ask)
-        except Exception as e:
-            return {"ok": False, "error": f"vision model {m}: {e}"}
-        self.events.append(("look", text[:60]))
-        self.log(f"look ({m}): {text}")
-        return {"ok": True, "model": m, "description": text}
-
-    TOOL_NAMES = ("say", "gesture", "goto", "stop", "scan_summary", "status", "look")
+    TOOL_NAMES = TOOL_NAMES
 
     async def tool(self, name, args):
-        if name not in self.TOOL_NAMES:
-            return {"ok": False, "error": f"no such tool {name}"}
-        if name in ("goto", "gesture", "say", "stop"):
-            self.note_cmd(f"tool {name} {json.dumps(args or {})}")
-        try:
-            return await getattr(self, "tool_" + name)(**(args or {}))
-        except TypeError as e:
-            return {"ok": False, "error": f"bad arguments for {name}: {e}"}
+        """Every tool call (brains, MCP proxy, replays) — never raises (D052)."""
+        return await self.brains.tool(name, args)
 
     @property
     def tools(self):
         """The harness backend surface (say/gesture/goto/...) as an object,
         for harness.intent.execute and anything else written against the
-        MCP contract. (The Playground's `gesture` attribute is its gesture
-        STATE, hence the indirection.)"""
-        return _ToolSurface(self)
-
+        MCP contract, routed through brains.tool (same guards and checks).
+        (The Playground's `gesture` attribute is its gesture STATE, hence
+        the indirection.)"""
+        return self.brains.surface()
 
     # ------------------------------------------------------------ brains
     def llm_models(self):
-        try:
-            from openai import OpenAI
-            client = OpenAI(base_url=self.llm_base, api_key=self.llm_key, timeout=5)
-            ids = [m.id for m in client.models.list().data]
-        except Exception:
-            ids = []
-        skip = ("embedding", "reranker", "lab")
-        return [m for m in ids if not any(m.startswith(s) for s in skip)]
+        """[{id, name, vision, loaded, selector, targets, quarantined}] (blocking)."""
+        return self.brains.catalog(refresh=True)[0] or []
 
     def claude_available(self):
-        try:
-            import anthropic                                        # noqa: F401
-        except ImportError:
-            return False
-        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+        return self.brains.claude_available()
 
-    async def chat(self, text, mode=None, model=None):
-        mode = mode or self.brain["mode"]
-        self.brain["mode"] = mode
-        if model:
-            self.brain["model"] = model
-        trace = []
-        if mode == "talk":
-            p = intent_plan(text)
-            results = await intent_execute(self.tools, p)
-            for name, res in results:
-                trace.append({"tool": name, "result": res})
-            reply = p["reply"]
-            if results and results[-1][0] in ("status", "scan_summary"):
-                reply += " " + json.dumps(results[-1][1])[:400]
-            return {"reply": reply, "trace": trace, "mode": mode}
-        if mode == "local":
-            return await self._chat_openai(text, self.brain.get("model") or "qwen3.6-35b-a3b", trace)
-        if mode == "claude":
-            if not self.claude_available():
-                return {"reply": "Claude in the cockpit needs `pip install anthropic` and ANTHROPIC_API_KEY. "
-                                 "Without a key, run `./rocky.sh chat` in a terminal: with the cockpit up, "
-                                 "Claude Code drives THIS sim over MCP and you watch it here.",
-                        "trace": [], "mode": mode}
-            return await self._chat_claude(text, self.brain.get("model") or "claude-sonnet-5", trace)
-        return {"reply": f"unknown mode {mode}", "trace": [], "mode": mode}
-
-    async def _chat_openai(self, text, model, trace):
-        hist = self.chat_hist.setdefault("local", [{"role": "system", "content": SYSTEM}])
-        if self._llm is None:
-            self._llm = OpenAIChat(self.llm_base, self.llm_key, think=False)
-        hist.append({"role": "user", "content": text})
-        content = ""
-        for _hop in range(6):
-            try:
-                resp = await asyncio.to_thread(self._llm.chat, model, hist, TOOLS)
-            except Exception as e:
-                return {"reply": f"local model error: {e}", "trace": trace, "mode": "local"}
-            msg = resp["message"]
-            content = msg.get("content") or ""
-            calls = msg.get("tool_calls") or []
-            hist.append({"role": "assistant", "content": content, "tool_calls": calls})
-            if not calls:
-                break
-            for tc in calls:
-                name = tc["function"]["name"]
-                args = tc["function"]["arguments"] or {}
-                res = await self.tool(name, args)
-                trace.append({"tool": name, "args": args, "result": res})
-                hist.append({"role": "tool", "name": name, "tool_call_id": tc.get("id"),
-                             "content": json.dumps(res)})
-        return {"reply": content, "trace": trace, "mode": "local", "model": model}
-
-    async def _chat_claude(self, text, model, trace):
-        import anthropic
-        client = anthropic.Anthropic()
-        hist = self.chat_hist.setdefault("claude", [])
-        hist.append({"role": "user", "content": text})
-        tools = [{"name": t["function"]["name"], "description": t["function"]["description"],
-                  "input_schema": t["function"]["parameters"]} for t in TOOLS]
-        content = ""
-        for _hop in range(6):
-            r = await asyncio.to_thread(lambda: client.messages.create(
-                model=model, max_tokens=600, system=SYSTEM, tools=tools, messages=hist))
-            hist.append({"role": "assistant", "content": r.content})
-            uses = [b for b in r.content if b.type == "tool_use"]
-            content = " ".join(b.text for b in r.content if b.type == "text")
-            if not uses:
-                break
-            results = []
-            for u in uses:
-                res = await self.tool(u.name, dict(u.input))
-                trace.append({"tool": u.name, "args": dict(u.input), "result": res})
-                results.append({"type": "tool_result", "tool_use_id": u.id, "content": json.dumps(res)})
-            hist.append({"role": "user", "content": results})
-        return {"reply": content, "trace": trace, "mode": "claude", "model": model}
+    async def chat(self, text, mode=None, model=None, source=None, trusted=False):
+        return await self.brains.chat(text, mode, model, source=source, trusted=trusted)
 
 
 class _SceneTail:
@@ -781,19 +1170,121 @@ class _Shift:
         return self._arr[self._n0 + i]
 
 
-class _ToolSurface:
-    def __init__(self, sim):
-        self._sim = sim
+# ---------------------------------------------------------------- HTTP guard (D052)
+TAILNET_V4 = ipaddress.ip_network("100.64.0.0/10")     # tailscale CGNAT range
+TAILNET_SUFFIX = ".ts.net"                             # MagicDNS names (tailscale serve)
+JSON_EXEMPT = {"/api/voice": "multipart/form-data"}    # the one non-JSON POST
 
-    def __getattr__(self, name):
-        if name in CockpitSim.TOOL_NAMES:
-            return getattr(self._sim, "tool_" + name)
-        raise AttributeError(name)
+
+def is_loopback(host):
+    h = (host or "").strip("[]").lower()
+    if h == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def _split_hostport(hp, default_port):
+    """'Host: name:port' / '[::1]:port' / 'name' -> (name lowercased, port int)."""
+    hp = (hp or "").strip().lower()
+    if hp.startswith("["):
+        name, _, rest = hp[1:].partition("]")
+        port = rest[1:] if rest.startswith(":") else ""
+    elif hp.count(":") == 1:
+        name, _, port = hp.partition(":")
+    else:
+        name, port = hp, ""
+    try:
+        return name, int(port) if port else default_port
+    except ValueError:
+        return name, -1
+
+
+def host_allowed(name, extra=()):
+    """The Host header names this server answers to: loopback, the tailnet
+    (MagicDNS *.ts.net and 100.64/10 — tailscale serve keeps the Host), this
+    machine's hostname and whatever ROCKY_COCKPIT_HOSTS / extra add. Anything
+    else is a DNS-rebinding attempt (a page on evil.example resolving to
+    127.0.0.1 would otherwise pass the Origin == Host check)."""
+    name = (name or "").strip("[]").lower()
+    if not name:
+        return False
+    if is_loopback(name) or name.endswith(TAILNET_SUFFIX) or name in {h.lower() for h in extra}:
+        return True
+    try:
+        if ipaddress.ip_address(name) in TAILNET_V4:
+            return True
+    except ValueError:
+        pass
+    me = socket.gethostname().lower()
+    env = [h.strip().lower() for h in os.environ.get("ROCKY_COCKPIT_HOSTS", "").split(",") if h.strip()]
+    return name in (me, me.split(".")[0]) or name in env
+
+
+def request_refusal(method, path, headers, extra_hosts=(), check_host=True):
+    """None, or (status, reason) — the D052 rules for one request:
+      * Host must be one this server answers to (check_host; off with --unsafe-lan)
+      * a POST carrying an Origin must be same-origin: Origin's host:port ==
+        Host (default ports by the Origin's scheme — tailscale serve sends
+        Host x.ts.net:9445 with Origin https://x.ts.net:9445, which passes)
+      * a POST must be application/json (/api/voice: multipart/form-data) —
+        a cross-site HTML form can only send urlencoded / multipart / text
+        without a CORS preflight, so this closes the classic CSRF door."""
+    host_hdr = headers.get("host", "")
+    if check_host and not host_allowed(_split_hostport(host_hdr, 80)[0], extra_hosts):
+        return 403, f"host {host_hdr!r} is not one this cockpit answers to (DNS-rebinding guard)"
+    if method != "POST":
+        return None
+    origin = headers.get("origin")
+    if origin is not None:
+        if origin.strip().lower() == "null":
+            return 403, "cross-origin POST refused (Origin: null)"
+        o = urlsplit(origin.strip())
+        dport = 443 if o.scheme == "https" else 80
+        if o.scheme not in ("http", "https") or not o.hostname:
+            return 403, f"cross-origin POST refused (Origin {origin!r})"
+        oh = (o.hostname.lower(), o.port or dport)
+        hh = _split_hostport(host_hdr, dport)
+        if oh != hh:
+            return 403, f"cross-origin POST refused (Origin {origin} != Host {host_hdr})"
+    ctype = headers.get("content-type", "").split(";")[0].strip().lower()
+    want = JSON_EXEMPT.get(path, "application/json")
+    if ctype != want:
+        return 415, f"POST {path} needs Content-Type {want} (got {ctype or 'none'})"
+    return None
+
+
+class RequestGuard:
+    """Pure-ASGI middleware (BaseHTTPMiddleware buffers the endless MJPEG/SSE
+    streams): applies request_refusal to every HTTP request."""
+
+    def __init__(self, app, extra_hosts=(), check_host=True):
+        self.app, self.extra_hosts, self.check_host = app, tuple(extra_hosts), check_host
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+            bad = request_refusal(scope.get("method", "GET"), scope.get("path", ""), headers,
+                                  self.extra_hosts, self.check_host)
+            if bad is not None:
+                status, why = bad
+                body = json.dumps({"ok": False, "error": why}).encode()
+                await send({"type": "http.response.start", "status": status,
+                            "headers": [(b"content-type", b"application/json"),
+                                        (b"content-length", str(len(body)).encode())]})
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------- HTTP
-def make_app(sim: CockpitSim):
+def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
+    """extra_hosts: more Host names to answer to (tests pass 'testserver');
+    check_host=False (--unsafe-lan) answers to any Host."""
     from starlette.applications import Starlette
+    from starlette.middleware import Middleware
     from starlette.responses import JSONResponse, HTMLResponse, StreamingResponse, Response
     from starlette.routing import Route
 
@@ -802,13 +1293,28 @@ def make_app(sim: CockpitSim):
     async def index(_):
         return HTMLResponse(open(ui_path).read())
 
+    def dead_state():
+        return {"alive": False, "fatal": sim.fatal, "heartbeat": sim.heartbeat(),
+                "console": list(sim.console)[-40:]}
+
     async def state(_):
-        return JSONResponse(await sim.call(sim.snapshot))
+        try:
+            s = await sim.call(sim.snapshot)
+        except SimDead:
+            return JSONResponse(dead_state(), status_code=503)
+        s["heartbeat"] = sim.heartbeat()                 # fresh, from this thread
+        s["alive"] = True
+        return JSONResponse(s)
 
     async def events(_):
         async def gen():
-            while sim.alive:
-                s = await sim.call(sim.snapshot)
+            while True:
+                try:
+                    s = await sim.call(sim.snapshot)
+                    s["alive"] = True
+                except SimDead:
+                    yield f"data: {json.dumps(dead_state())}\n\n"
+                    return
                 yield f"data: {json.dumps(s)}\n\n"
                 await asyncio.sleep(0.1)
         return StreamingResponse(gen(), media_type="text/event-stream",
@@ -845,19 +1351,23 @@ def make_app(sim: CockpitSim):
         if r:
             for ln in str(r).splitlines():
                 sim.log(ln)
+        sim.note_refusal(r)
         return JSONResponse({"reply": r})
 
     async def teleop(request):
         body = await request.json()
-        sim.note_cmd("teleop " + str(body.get("key", "")))
-        r = sim.teleop(str(body.get("key", "")))
+        key = str(body.get("key", ""))
+        sim.note_cmd("teleop " + key)
+        r = await sim.call(lambda: sim.teleop(key))     # D052: in the sim thread (it touches the gesture machine)
         if r:
             sim.log(r)
+        sim.note_refusal(r)
         return JSONResponse({"reply": r})
 
     async def chat(request):
         body = await request.json()
-        r = await sim.chat(str(body.get("text", "")), body.get("mode"), body.get("model"))
+        r = await sim.chat(str(body.get("text", "")), body.get("mode"), body.get("model"),
+                           source=body.get("source"), trusted=bool(body.get("trusted", False)))
         sim.log(f"[{r['mode']}] {body.get('text', '')[:80]}")
         for tcall in r["trace"]:
             sim.log(f"  {tcall['tool']}({json.dumps(tcall.get('args', {}))}) -> {json.dumps(tcall['result'])[:120]}")
@@ -867,21 +1377,15 @@ def make_app(sim: CockpitSim):
 
     async def chat_clear(request):
         body = await request.json()
-        sim.chat_hist.pop(body.get("mode", "local"), None)
+        sim.brains.clear(body.get("mode", "local"))
         return JSONResponse({"ok": True})
 
     async def brain(request):
         body = await request.json()
-        for k in ("mode", "model", "vision_model"):
-            if k in body:
-                sim.brain[k] = body[k]
-        return JSONResponse(sim.brain)
+        return JSONResponse(await asyncio.to_thread(sim.brains.set_roles, body))
 
     async def models(_):
-        ids = await asyncio.to_thread(sim.llm_models)
-        vis = [m for m in ids if any(k in m for k in ("vl", "vision", "gemma"))]
-        return JSONResponse({"models": ids, "vision_models": vis, "claude": sim.claude_available(),
-                             "base_url": sim.llm_base, "brain": sim.brain})
+        return JSONResponse(await asyncio.to_thread(sim.brains.models_payload))
 
     async def world_get(_):
         return JSONResponse({"presets": list(PRESETS), "kinds": list(KINDS), "name": sim.world_name,
@@ -938,8 +1442,15 @@ def make_app(sim: CockpitSim):
 
     async def shove(request):
         body = await request.json()
-        fx, fy = float(body.get("fx", 40)), float(body.get("fy", 0))
-        dur = float(body.get("dur", 0.4))
+        try:                                              # D052 V2: finite, clamped (1e9 N blew MuJoCo up)
+            fx, fy, dur = shove_args(float(body.get("fx", 40)), float(body.get("fy", 0)),
+                                     float(body.get("dur", 0.4)))
+        except (TypeError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+        if sim.sim2real:
+            return JSONResponse({"ok": False, "error": "shove refused: mirroring sim->real (the real legs "
+                                                      "would get the sim's reaction) — mirror off first"},
+                                status_code=409)
 
         def do_push():
             sh = Shove(fx, fy, dur=dur, t0=sim.t)
@@ -956,10 +1467,20 @@ def make_app(sim: CockpitSim):
     async def speed(request):
         body = await request.json()
         if "speed" in body:
-            sim.speed = float(np.clip(float(body["speed"]), 0.1, 8.0))
+            try:
+                sim.set_speed(body["speed"])
+            except (TypeError, ValueError) as e:
+                return JSONResponse({"ok": False, "error": str(e), "speed": sim.speed, "paused": sim.paused},
+                                    status_code=400)
         if "paused" in body:
             sim.paused = bool(body["paused"])
         return JSONResponse({"speed": sim.speed, "paused": sim.paused})
+
+    async def ping(_):
+        """D052 V2: liveness WITHOUT the sim thread (/api/state waits for it, so
+        a 1 s console `check` made the cockpit look dead to the MCP server)."""
+        hb = sim.heartbeat()
+        return JSONResponse({"ok": bool(sim.alive), "heartbeat": hb}, status_code=200 if sim.alive else 503)
 
     VIEWS = {"follow": dict(distance=0.9, elevation=-18.0), "wide": dict(distance=2.2, elevation=-35.0),
              "top": dict(distance=2.6, elevation=-89.0), "low": dict(distance=1.0, elevation=-6.0)}
@@ -1112,38 +1633,26 @@ def make_app(sim: CockpitSim):
         return JSONResponse({"reply": r})
 
     async def voice(request):
-        """Browser audio blob -> ffmpeg -> whisper-server -> text."""
-        import shutil
-        import subprocess
-        import tempfile
+        """Browser audio blob -> whisper -> {ok, text, wake, motion_blocked, dropped}.
+        Transcribe only: the UI shows the text and sends it to /api/chat with
+        source='voice' (trusted=true once the operator confirmed it)."""
         form = await request.form()
         up = form.get("audio")
         if up is None:
             return JSONResponse({"ok": False, "error": "no audio"})
-        raw = await up.read()
-        if not shutil.which("ffmpeg"):
-            return JSONResponse({"ok": False, "error": "ffmpeg not installed"})
-        with tempfile.TemporaryDirectory() as td:
-            src = os.path.join(td, "in.webm")
-            wav = os.path.join(td, "in.wav")
-            open(src, "wb").write(raw)
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-ar", "16000", "-ac", "1", wav], check=False)
-            if not os.path.exists(wav):
-                return JSONResponse({"ok": False, "error": "could not decode the audio"})
-            import httpx
-            try:
-                async with httpx.AsyncClient(timeout=60) as c:
-                    r = await c.post(os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082") + "/v1/audio/transcriptions",
-                                     files={"file": ("in.wav", open(wav, "rb"), "audio/wav")},
-                                     data={"response_format": "text", "temperature": "0.0"})
-                text = r.text.strip()
-            except Exception as e:
-                return JSONResponse({"ok": False, "error": f"whisper-server: {e}"})
-        sim.log(f"🎤 {text}")
-        return JSONResponse({"ok": True, "text": text})
+        r = await sim.brains.transcribe(await up.read(), mode=form.get("mode"))
+        if r.get("text"):
+            sim.log(f"🎤 {r['text']}")
+        elif r.get("dropped"):
+            sim.log(f"🎤 (dropped: {'; '.join(r['dropped'])[:160]})")
+        return JSONResponse(r)
 
     async def quit_(_):
         sim.log("quit requested from the page")
+        try:
+            await asyncio.to_thread(sim.hw_disconnect)     # D052: real legs limp before the process goes
+        except Exception as e:                             # noqa: BLE001
+            sim.log(f"hw disconnect on quit: {e}")
         sim.alive = False
 
         def bye():
@@ -1243,15 +1752,62 @@ def make_app(sim: CockpitSim):
         return JSONResponse({"code": [g for g in sim.gesture_names if g not in kf], "keyframe": kf,
                              "all": sim.gesture_names, "dir": os.path.relpath(GESTURE_DIR, ROOT)})
 
-    async def gesture_save(request):
-        spec = await request.json()
+    def _spec_of(body):
+        """A studio body: the spec itself or {spec, force}; returns (spec, force)."""
+        if not isinstance(body, dict):
+            raise ValueError("expected a JSON object")
+        spec = body.get("spec") if isinstance(body.get("spec"), dict) else dict(body)
+        force = bool(body.get("force", False))
+        spec = {k: v for k, v in spec.items() if k not in ("force", "t", "fs")}
+        return spec, force
+
+    def _report_json(rep):
+        """The studio's verdict: headline + the numbers the UI colours."""
+        pk, leg, joint, tpk = rep.peak() if np.isfinite(rep.vmax).any() else (0.0, 0, "yaw", 0.0)
+        lim = pf.speed_limits()
+        return _jsonable(dict(
+            ok=bool(rep.ok), feasible=bool(rep.ok), verdict=rep.lines[0] if rep.lines else "",
+            lines=list(rep.lines), fails=rep.fails, warnings=rep.warnings, codes=dict(rep.codes),
+            summary=dict(peak_rad_s=round(pk, 2), peak_leg=leg, peak_joint=joint, peak_t=round(tpk, 2),
+                         limits=lim, margin_mm=rep.margin_min, support_min=rep.support_min,
+                         jumps=len(rep.jumps), self_contacts=rep.self_contacts,
+                         thermal="THERMAL" in rep.codes, claw_rad_s=rep.claw_vmax, total_s=rep.total),
+            report=rep.to_json()))
+
+    async def _check_spec(spec):
+        return await asyncio.to_thread(pf.check_spec, spec, sim.gait, 100.0, sim.model)
+
+    async def gesture_check(request):
+        """D052: the studio's verdict for a spec (never moves anything)."""
         try:
-            path = save_keyframe_gesture(spec)
-        except (ValueError, KeyError) as e:
+            spec, _ = _spec_of(await request.json())
+        except ValueError as e:
+            return JSONResponse({"ok": False, "feasible": False, "error": str(e)})
+        return JSONResponse(_report_json(await _check_spec(spec)))
+
+    async def gesture_save(request):
+        """D052: refused on a FAIL verdict unless force; never over a code gesture."""
+        try:
+            spec, force = _spec_of(await request.json())
+        except ValueError as e:
             return JSONResponse({"ok": False, "error": str(e)})
+        name = str(spec.get("name", ""))
+        g = sim.gestures.get(name)
+        if g is not None and not hasattr(g[0], "spec"):
+            return JSONResponse({"ok": False, "error": f"{name!r} is a built-in gesture — pick another name"})
+        rep = await _check_spec(spec)
+        verdict = _report_json(rep)
+        if not rep.ok and not force:
+            return JSONResponse({"ok": False, "error": "not feasible — not saved (tick 'force' to save it anyway)",
+                                 "check": verdict})
+        try:
+            path = await asyncio.to_thread(save_keyframe_gesture, spec, GESTURE_DIR, force, sim.gait)
+        except (ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"ok": False, "error": str(e), "check": verdict})
         sim.reload_library()
-        sim.log(f"gesture saved: {os.path.relpath(path, ROOT)}")
-        return JSONResponse({"ok": True, "name": os.path.basename(path)[:-5], "all": sim.gesture_names})
+        sim.log(f"gesture saved: {os.path.relpath(path, ROOT)}" + ("" if rep.ok else " (FORCED past a FAIL)"))
+        return JSONResponse({"ok": True, "name": os.path.basename(path)[:-5], "all": sim.gesture_names,
+                             "forced": bool(force and not rep.ok), "check": verdict})
 
     async def gesture_delete(request):
         body = await request.json()
@@ -1267,27 +1823,117 @@ def make_app(sim: CockpitSim):
         spec = body.get("spec") or {}
         try:
             total = await sim.call(lambda: sim.preview_pose(spec, body.get("t")))
-        except (ValueError, KeyError) as e:
+        except (ValueError, KeyError, TypeError) as e:
             return JSONResponse({"ok": False, "error": str(e)})
         return JSONResponse({"ok": True, "total": total})
 
     async def gesture_play(request):
-        """Play an UNSAVED keyframe spec once (the studio's ▶)."""
-        spec = await request.json()
+        """Play an UNSAVED keyframe spec once (the studio's ▶). D052: checked
+        first — a FAIL is refused unless force; through start_gesture (blended)."""
         try:
+            spec, force = _spec_of(await request.json())
             kg = KeyframeGesture(spec)
+        except (ValueError, KeyError, TypeError) as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+        rep = await _check_spec(spec)
+        verdict = _report_json(rep)
+        if not rep.ok and not force:
+            return JSONResponse({"ok": False, "error": "not feasible — not played (tick 'force' to play it anyway)",
+                                 "check": verdict})
+        why = await sim.call(lambda: sim.start_gesture(kg, kg.total, spec.get("name") or "studio"))
+        if why:
+            return JSONResponse({"ok": False, "error": f"refused: {why}", "check": verdict})
+        sim.mode = "gesturing"
+        for t_cue, w in kg.cues:                       # chord cues fire on their frame (after the entry blend)
+            asyncio.get_running_loop().call_later((t_cue + 0.3) / max(sim.speed, 0.05), lambda w=w: asyncio.ensure_future(sim.tool_say(w)))
+        return JSONResponse({"ok": True, "total": kg.total, "check": verdict})
+
+    async def gesture_solve(request):
+        """D052 REACH: whole-body pose for 'put leg L's hand at (x, y, z)' (GROUND
+        frame mm: the unposed stance's body frame, floor at z = -h). ~1-3 s."""
+        import pebble_pose_solver as ps
+        body = await request.json()
+        try:
+            leg = int(body.get("leg", 0))
+            tgt = [float(x) for x in body.get("target", [])]
+            if leg not in range(5) or len(tgt) != 3 or not np.isfinite(tgt).all():
+                raise ValueError("need leg 0..4 and target [x, y, z] (mm, finite)")
+            kw = dict(keep_margin_mm=float(body.get("keep_margin_mm", 25.0)))
+            if body.get("yaw_deg") is not None:
+                kw["yaw_deg"] = float(body["yaw_deg"])
+        except (TypeError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+        try:
+            r = await asyncio.to_thread(ps.solve_reach, sim.gait, leg, tuple(tgt), None, **kw)
         except (ValueError, KeyError) as e:
             return JSONResponse({"ok": False, "error": str(e)})
+        return JSONResponse(_jsonable(r))
 
-        def start():
-            with sim.lock:
-                sim.gesture = (kg, kg.total, sim.t)
-                sim.cmd_v[:] = 0
-            sim.mode = "gesturing"
-        await sim.call(start)
-        for t_cue, w in kg.cues:                       # chord cues fire on their frame
-            asyncio.get_running_loop().call_later(t_cue / max(sim.speed, 0.05), lambda w=w: asyncio.ensure_future(sim.tool_say(w)))
-        return JSONResponse({"ok": True, "total": kg.total})
+    async def gesture_teach(request):
+        """D052 TEACH: start / stop / status of the pose-stream recorder. stop ->
+        keyframes_from_stream -> a spec for the studio + its feasibility verdict."""
+        import pebble_pose_solver as ps
+        body = await request.json()
+        act = str(body.get("action", "status"))
+        if act == "start":
+            if sim.teach is not None:
+                return JSONResponse({"ok": False, "error": "already recording"})
+            r = await sim.call(sim.teach_start)
+            sim.log(f"teach: recording the pose stream at {TEACH_HZ:.0f} Hz")
+            return JSONResponse(r)
+        if act == "status":
+            tr = sim.teach
+            return JSONResponse({"ok": True, "recording": tr is not None,
+                                 "samples": 0 if tr is None else len(tr["qs"])})
+        if act != "stop":
+            return JSONResponse({"ok": False, "error": f"unknown action {act}"})
+        got = await sim.call(sim.teach_stop)
+        if got is None:
+            return JSONResponse({"ok": False, "error": "not recording"})
+        qs, claw, meta = got
+        if len(qs) < 4:
+            return JSONResponse({"ok": False, "error": f"only {len(qs)} samples — record at least 0.2 s"})
+        name = str(body.get("name") or "taught")
+        try:
+            spec = await asyncio.to_thread(ps.keyframes_from_stream, qs, TEACH_HZ, claw,
+                                           float(body.get("tol_deg", 2.0)), name, sim.gait)
+        except (ValueError, KeyError) as e:
+            return JSONResponse({"ok": False, "error": str(e), "meta": meta})
+        verdict = _report_json(await _check_spec(spec))
+        sim.log(f"teach: {meta['samples']} samples ({meta['seconds']} s, {meta['src']}) -> "
+                f"{len(spec.get('keyframes', []))} keyframes; {verdict['verdict']}")
+        return JSONResponse(_jsonable({"ok": True, "spec": spec, "meta": meta, "check": verdict}))
+
+    async def model_info(_):
+        """D052: what the sim believes the robot is (rocky_model) + fingerprints."""
+        import pebble_pose_solver as ps
+
+        def build():
+            g = sim.gait
+            p = rm.params()
+            return dict(
+                params_rev=rm.params_rev(), fingerprint=sim.fingerprint, fingerprint_note=fingerprint_note(sim.model),
+                limits_deg=rm.joint_limits_deg(), claw_deg=list(rm.claw_limits("deg")),
+                speeds=dict(pf.speed_limits(), no_load=rm.no_load_rad_s()),
+                actuator=rm.actuator(), claw_actuator=rm.actuator("claw"),
+                continuous_nm=rm.continuous_nm(), damping_nms=rm.damping_nms(),
+                bus=dict(hz=rm.bus_hz(), latency_s=rm.latency_s()),
+                gait_defaults=rm.gait_defaults(), reflex_defaults=rm.reflex_defaults(),
+                gait={k: float(getattr(g, k)) for k in GAIT_KEYS}, envelope=g.max_command(),
+                body=dict(circumradius_mm=float(p["body"]["circumradius"]), stance_radius_mm=float(g.R0),
+                          body_height_mm=float(g.h), stance_torso_z_m=rm.stance_torso_z_m(g.h),
+                          foot_contact_radius_mm=rm.foot_contact_radius_mm()),
+                studio=dict(body_xy_mm=ps.OFFSET_XY_MM, body_z_mm=list(ps.OFFSET_Z_MM), yaw_deg=ps.YAW_MAX_DEG,
+                            reach_xy_mm=round(float(g.R0) + 140.0), reach_z_mm=[-float(g.h), 160.0],
+                            margin_fail_mm=pf.MARGIN_FAIL_MM, margin_warn_mm=pf.MARGIN_WARN_MM),
+                p_nom=np.round(np.asarray(g.p_nom, float), 1).tolist(),
+                leg_ids=rm.leg_ids(), hand_ids=rm.hand_ids(),
+                checkpoints=sim._ckpt_fp())
+        return JSONResponse(_jsonable(await asyncio.to_thread(build)))
+
+    async def gait_list(_):
+        return JSONResponse({"presets": gait_presets(), "current": {k: float(getattr(sim.gait, k)) for k in GAIT_KEYS},
+                             "envelope": _jsonable(sim.gait.max_command())})
 
     # ---------------------------------------------------------- D051: servo realism
     async def servo_set(request):
@@ -1322,12 +1968,27 @@ def make_app(sim: CockpitSim):
                 found = await loop.run_in_executor(None, hw.scan)
                 return JSONResponse({"ok": True, "found": {str(k): v for k, v in found.items()}, "status": hw.status()})
             if act == "mirror":
-                return JSONResponse({"ok": True, "mirror": hw.set_mirror(str(body.get("mode", "off")))})
+                mode = str(body.get("mode", "off"))
+                if mode == "sim2real":
+                    why = sim.sim2real_refusal()                # D052: the bridge refuses too; say why here
+                    if why:
+                        return JSONResponse({"ok": False, "error": f"sim2real refused: {why}",
+                                             "mirror": hw.mirror})
+                return JSONResponse({"ok": True, "mirror": await loop.run_in_executor(None, hw.set_mirror, mode)})
+            if act == "limits":
+                ids = body.get("ids")
+                ids = None if ids in (None, "", []) else [int(i) for i in ids]
+                res = await loop.run_in_executor(None, lambda: hw.apply_limits(
+                    ids, float(body.get("margin", 2.0)), bool(body.get("dry_run", False))))
+                return JSONResponse({"ok": True, "dry_run": bool(body.get("dry_run", False)),
+                                     "result": _jsonable(res)})
             if act == "torque":
                 ids = body.get("ids")
-                return JSONResponse({"ok": True, "ids": hw.torque(bool(body.get("on", True)), ids)})
+                ids = None if ids is None else [int(i) for i in ids]
+                on = bool(body.get("on", True))
+                return JSONResponse({"ok": True, "ids": await loop.run_in_executor(None, hw.torque, on, ids)})
             if act == "limp":
-                return JSONResponse({"ok": True, "ids": hw.limp()})
+                return JSONResponse({"ok": True, "ids": await loop.run_in_executor(None, hw.limp)})
             if act == "jog":
                 return JSONResponse({"ok": True, "deg": hw.jog(int(body["id"]), float(body["deg"]), int(body.get("speed", 200)))})
             if act == "set_id":
@@ -1337,7 +1998,7 @@ def make_app(sim: CockpitSim):
             if act == "dir":
                 return JSONResponse({"ok": True, "dir": hw.set_dir(str(body["key"]), int(body.get("dir", 1)))})
             if act == "speed":
-                hw.speed_cps = int(body.get("speed_cps", 0))
+                hw.speed_cps = max(0, int(body.get("speed_cps", hw_bridge.ENTRY_SPEED_CPS)))
                 return JSONResponse({"ok": True, "speed_cps": hw.speed_cps})
             return JSONResponse({"ok": False, "error": f"unknown action {act}"})
         except Exception as e:                          # a bus error is an answer, not a 500
@@ -1349,7 +2010,7 @@ def make_app(sim: CockpitSim):
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
 
     routes = [
-        Route("/", index), Route("/api/state", state), Route("/api/events", events),
+        Route("/", index), Route("/api/state", state), Route("/api/events", events), Route("/api/ping", ping),
         Route("/video/{cam}.mjpg", video), Route("/frame/{cam}.jpg", frame),
         Route("/api/cmd", cmd, methods=["POST"]), Route("/api/teleop", teleop, methods=["POST"]),
         Route("/api/chat", chat, methods=["POST"]), Route("/api/chat/clear", chat_clear, methods=["POST"]),
@@ -1374,24 +2035,46 @@ def make_app(sim: CockpitSim):
         Route("/api/gesture/list", gesture_list), Route("/api/gesture/save", gesture_save, methods=["POST"]),
         Route("/api/gesture/delete", gesture_delete, methods=["POST"]), Route("/api/gesture/preview", gesture_preview, methods=["POST"]),
         Route("/api/gesture/play", gesture_play, methods=["POST"]),
+        Route("/api/gesture/check", gesture_check, methods=["POST"]),
+        Route("/api/gesture/solve", gesture_solve, methods=["POST"]),
+        Route("/api/gesture/teach", gesture_teach, methods=["POST"]),
+        Route("/api/model", model_info), Route("/api/gait", gait_list),
         Route("/api/servo", servo_set, methods=["POST"]),
         Route("/api/hw", hw_status), Route("/api/hw", hw_action, methods=["POST"]),
     ]
-    return Starlette(routes=routes)
+
+    async def sim_dead(_request, exc):
+        return JSONResponse({"ok": False, "error": f"sim thread stopped: {exc}", "alive": False}, status_code=503)
+
+    return Starlette(routes=routes, exception_handlers={SimDead: sim_dead},
+                     middleware=[Middleware(RequestGuard, extra_hosts=tuple(extra_hosts), check_host=check_host)])
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=int(os.environ.get("ROCKY_COCKPIT_PORT", "8765")))
     ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--unsafe-lan", action="store_true",
+                    help="allow a non-loopback --host. NOTHING in the cockpit is authenticated: anyone who "
+                         "reaches the port drives the robot (and the real servos when connected). Prefer "
+                         "./rocky.sh tailnet (tailscale serve, tailnet-only HTTPS)")
     ap.add_argument("--world", default=os.environ.get("ROCKY_WORLD", "flat"))
-    ap.add_argument("--brain", default="talk", choices=["talk", "local", "claude"])
+    ap.add_argument("--brain", default="talk", choices=["talk", "local", "multimodal", "claude"])
     args = ap.parse_args(argv)
+    if not is_loopback(args.host) and not args.unsafe_lan:
+        print(f"cockpit: refusing --host {args.host}: the cockpit has NO authentication — anyone who can reach "
+              "the port drives the robot. Use ./rocky.sh tailnet (tailscale serve keeps it on 127.0.0.1) "
+              "or pass --unsafe-lan if you really mean it.", file=sys.stderr, flush=True)
+        raise SystemExit(2)
+    if args.unsafe_lan:
+        print(f"cockpit: WARNING --unsafe-lan: serving on {args.host} with NO authentication and no Host "
+              "check — every device that reaches this port can drive the robot.", file=sys.stderr, flush=True)
     import uvicorn
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
     sim.brain["mode"] = args.brain
+    sim.exit_on_fatal = True                     # D052: a dead sim thread ends the process (exit 1)
     threading.Thread(target=sim.run_forever, daemon=True).start()
-    app = make_app(sim)
+    app = make_app(sim, check_host=not args.unsafe_lan)
     print(f"cockpit: http://{args.host}:{args.port}  (world {sim.world_name}; {sim.righter_note})", flush=True)
     # uvicorn's graceful shutdown waits for open connections, and this server's
     # connections are endless streams (MJPEG, SSE): a Ctrl-C or `cockpit-stop`

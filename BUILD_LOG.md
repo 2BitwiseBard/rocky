@@ -8,6 +8,119 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-24 · Session 9f (laptop) — the full review and D052: the sim stops flattering the servo
+
+**Ask:** review everything before a real servo goes on the bus. The owner
+had measured that morning (scratch, not in the repo) that with joint
+damping = stall / no-load (0.62 N·m·s/rad) the wave gait still walks
+(242 of 273 mm; max joint speed 4.2 vs 7.4 rad/s ideal) but turns 145°
+where the ideal model turned 157°, and with the torque derated to 1.9 N·m
+as well only 103°; walk + turn yawed 74° vs 103°. "The turn envelope must
+shrink, and that is the correct answer."
+
+**The review:** 4 reviewers, 29 verified findings, worked as nine packages
+(A model identity, B feasibility + authoring, C always-on loop, D1 cockpit,
+D2 brains, E bus safety, F hardware-shaped RL, G launcher/CI, W worlds),
+then a verification pass (V1) and a second review of the implemented tree
+(V2, 27 findings; every HIGH/MEDIUM it could reproduce fixed). The theme
+of the findings: the sim was right about logic and flattering about the
+servo, nothing checked what a gesture or command asked of a joint, and the
+D051 bridge would have enabled torque toward whatever goal a servo last held.
+
+**What broke (found, not caused):**
+- Gestures asked the impossible and nothing said so: fist_bump peaked at
+  14.8 rad/s (the servo does 4.7 unloaded), beckon 5.9, turn_in_place 5.2,
+  jazz_hands stepped its claw 23° in one tick; the gait at 45 mm/s asked
+  a loaded knee 4.6 rad/s, and `walk 0 0 0.5` drove the yaw joint at
+  7.4 rad/s past its limit.
+- `recover1`'s 7/20 was flattered twice: an ideal 5 rad/s actuator, and a
+  handoff test (torso z > 0.09) that passes a robot kneeling on its shins
+  with 0–2 feet down. On the D052 model it is 2/20 on that test and 0/20
+  on the hardware one.
+- The icy-floor preset never did anything: MuJoCo takes the max friction of
+  a pair and the feet said 1.2.
+- 96/200 random courses put an object within 0.3 m of the spawn.
+- `rocky.sh train-walk` passed `--env walk`, which the trainer rejected.
+- Every MCP `gesture` sent to a running cockpit raised a TypeError (the
+  tool wrapper's `name` argument collided with the gesture's).
+- The sim thread could die and leave every HTTP request hanging forever.
+- The 40 g claw mass was counted twice (2.705 kg compiled vs 2.670).
+- In this round's own code, caught before shipping: the hands were checked
+  against the 12 V leg window (a false "volt" every poll); the first soft
+  entry jumped 20° on a knee resting outside its soft range; the servo
+  model's load derate counted the torque-speed line a second time on top
+  of the MJCF damping (now off by default).
+
+**What changed (D052; details in `docs/decisions.md`):**
+- **One servo identity** in `params.yaml` (`actuators`, `joints` with
+  speed budgets loaded 3.0 / free 4.0 / hard 4.7 rad/s, `gait`, `reflex`,
+  `sensing`), one loader `gait/rocky_model.py`; MJCF, URDF, servo model,
+  shove, driver clamp and cockpit all read it. Damping 0.626 N·m·s/rad,
+  forcerange 1.911 N·m, μ 0.8 + torsional friction, the foot surface is
+  the IK foot point, spawn 1.4 mm. Robot fingerprint `5a32f772ca99`.
+- **Gait** T 2.0 s / step 24 mm (duty 0.8 kept; 0.75 was rejected by the
+  checker: CoM 59 mm outside the planted feet for 25 % of the cycle) and
+  `WaveGait.budget()` on every command source: 45.5 mm/s at any heading,
+  0.246 rad/s in place.
+- **One feasibility checker** gating code gestures, keyframe saves, the
+  studio, gait presets and the brain's `compose_gesture`; a reach solver
+  and teach-by-demonstration in the studio. Gestures reworked until they
+  pass.
+- **Always-on loop** in the Playground: blended gestures with the reflex
+  watching, one void guard for every source, trip latch, lead-limited
+  probe, servo model on, NaN hold + 4.7 rad/s clamp on every target stream.
+- **RL** on the robot's own action path and sensors (obs v2), checkpoint
+  contracts with the fingerprint, `handoff_ok`, shoves in the gait env.
+- **The bus gets a safe first move**: standstill-only mirror, soft entry
+  (parked goal, 40 % torque, 200 c/s, blend), whole-leg fault cuts,
+  degraded / lost with explicit re-arm, heartbeat, port-loss limp, EEPROM
+  angle limits (`bench/apply_limits.py`), mirror dropped when the sim's
+  reflex leaves NORMAL. Eight deliberate breakages, eight test failures.
+- **Cockpit**: loud sim-thread death, request guard (Host allow-list,
+  same-origin, JSON), `--unsafe-lan`, brains in `sim/cockpit_brains.py`,
+  reactive lidar goto, model panel. CI diffs the generated model files.
+
+**Measured on the D052 tree:**
+
+| | before | D052 |
+|---|---|---|
+| `run_sim` walk (8 s, ~261 commanded) | 264 mm, tilt 1.03° | 246 mm, tilt 0.84°, height 117 mm (was 129) |
+| walk 45 mm/s, 6 s | 259 mm, peak joint 4.20 rad/s | 231 mm, peak 3.14 rad/s |
+| turn 0.5 rad/s, 6 s | 155°, peak 7.19 rad/s | 103° (owner 103), peak 3.16 |
+| walk + turn (45, 0, 0.35) | 103° yaw, peak 8.13 rad/s | 76° yaw (owner 74), peak 3.18 |
+| `recover1` stood, hybrid | 7/20 (pre-D052 model) | 2/20 legacy handoff · **0/20** `handoff_ok` · 0/20 servo nominal · 0/20 randomised |
+| system (supervisor + righter + stall ramp) | — | **20/20** vs 11/20 with no righter; 9/9 declared falls end on the stall ramp, 0 on a handoff |
+| `recover1` jitter, 40 N shove | 73–75 % pinned, ~10 rev/s, 4.5°/tick | 52 %, 6.7 rev/s, 3.3° (servo nominal) |
+| shove, standing | 25 N (0.94 BW) all directions | 30–35 N (1.15–1.34 BW) |
+| shove, walking | min 0.76 BW, mean ~0.91 | min 0.76 BW, mean 1.15 |
+| gestures (`audit_gestures`) | 5 of 10 code gestures FAIL (speed / limits, same checker) | 20 rows, 0 FAIL; tracking p95 13–19° on arm + gait rows (warn at 10) |
+| fast suite | ~101 (97 at D050 + 4 at D051) | 297 passed, 1 strict xfail |
+
+What got worse is the point: the turn envelope shrank, mixed commands scale
+down ((45, 0, 0.35) → (19.6, 0, 0.152)), the walkers on disk have no
+envelope on the D052 servo (their gait's swing alone asks a loaded knee
+4.43 rad/s) and are zeroed until retrained, and no righter earns a handoff
+by itself. The shove envelope got *better*, which is suspicious in the
+other direction (slower, lower gait plus joint damping; not isolated).
+
+**Still open:**
+- **No real servo** has touched any of this; every bridge rule ran on the
+  mock. GOAL_SPEED 0, torque-enable toward the last goal, angle-limit
+  behaviour and the POSITION_OFFSET sign are VERIFY-ON-BENCH (B32).
+- **The tailnet path is unexercised** (tailscale was logged out).
+- Owner decision: the 4.0 rad/s free budget exceeds what the MJCF lets any
+  joint reach (1.911 / 0.626 = 3.05 rad/s) — a strict xfail until either
+  peak torque + a thermal model goes into the sim or free drops to ≤ 3.0.
+- The void guard misses cliffs approached at 10–20° (V2 finding); the void
+  retreat barely retreats; goto's reactive layer is not a planner.
+- On its back with no righter the supervisor loops FALLEN → RIGHTED every 3 s.
+- No training on the new contract yet: B34 has the overnight recipe.
+  μ 0.8, continuous 0.65 × stall, the SCS0009 numbers, foot-switch forces
+  and all observation noise are guesses marked VERIFY.
+- No real LLM tool loop or Claude brain call ran; CI has not run on GitHub.
+- New backlog: B33 (CAD CoM/inertia, SEA slide joint, ToF), B34 (retrain),
+  B35 (the onboard loop).
+
 ## 2026-09-24 · Session 9e (laptop) — toward the real robot: gesture studio, chord designer, servo realism, the hardware bridge, tailnet (D051)
 
 **Ask:** "how do we get it set up with tailscale?" and "what else makes it
@@ -45,7 +158,7 @@ own `handle_exit`, verified with a camera stream open.
 Playwright pass through every new panel on the mock bus with zero console errors.
 **Not verified:** a real servo — none has been on this bus yet (B32 is the runbook).
 
- — cockpit round two: feet that feel for the floor, recordings, worlds on disk, the walker, voice (D050)
+## 2026-09-23 · Session 9d (laptop) — cockpit round two: feet that feel for the floor, recordings, worlds on disk, the walker, voice (D050)
 
 Asked for: all six follow-ups, plus how to start/stop the cockpit.
 

@@ -1,7 +1,7 @@
 {
  "torso": 1448.9,
  "coxa": 78.3,
- "femur": 34.0,
+ "femur": 35.0,
  "tibia": 131.0,
  "hand": 38.6,
  "_note": "derived from cad/out STL volumes x PLA/PETG x print_estimate fill factors + params.mass_hw (ALL VERIFY); grams"

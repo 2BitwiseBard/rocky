@@ -40,19 +40,14 @@ def fk_body(i, theta):
 
 
 def foot_contacts(model, data):
-    """Contact flags per foot geom (the microswitch stand-in)."""
-    out = np.zeros(N_LEGS, dtype=bool)
-    for i in range(N_LEGS):
-        gid = model.geom(f"foot{i}").id
-        f = 0.0
-        for c in range(data.ncon):
-            con = data.contact[c]
-            if gid in (con.geom1, con.geom2):
-                F = np.zeros(6)
-                mujoco.mj_contactForce(model, data, c, F)
-                f += F[0]
-        out[i] = f > CONTACT_FORCE_N
-    return out
+    """Contact flags per foot geom (the microswitch stand-in). D052: delegates
+    to perception/contacts.py — world contacts only (a foot on the robot's own
+    body no longer counts) — at this file's historical 1.5 N threshold, no
+    hysteresis, so the odometry / cliff / gesture experiments keep their
+    calibration. New code: call contacts.foot_contacts with the params switch."""
+    from contacts import foot_contacts as _fc
+    fids = [model.geom(f"foot{i}").id for i in range(N_LEGS)]
+    return _fc(model, data, fids, close_n=CONTACT_FORCE_N)
 
 
 def run_scene(name, amp_mm, T_total, cmd_fn):

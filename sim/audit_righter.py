@@ -13,7 +13,21 @@ deadline ramp and how long it took, the landing tilt (~180 = on the back, the ha
 times FALLEN was entered (a ramp that fails re-enters it). Reference: recover1 on 2026-09-23 measured pinned
 0.73, 4-23 rev/s, 4.4 deg/tick — a 50 Hz staircase of 5.7 deg jumps.
 
+D052: once the servo model is in the loop the righter's target is not what
+the joint sees, so "pinned at the rate limit" stops meaning jitter (a
+policy can pin the clamp and the servo still slews smoothly — or not pin
+it and the joint still chatters). Two new columns measure the JOINT side,
+over the same FALLEN phase, per joint per second (mean over joints):
+  ctrl rev/s   direction reversals of data.ctrl AFTER the servo filter (what
+               the MuJoCo actuator is actually told, every physics step)
+  qvel flip/s  sign flips of the joint velocity, 0.2 rad/s deadband (what
+               you would SEE: the leg shaking)
+The old columns stay for comparison with the D048 numbers. --servo picks
+the servo model (auto = the checkpoint's contract: off for pre-D052
+checkpoints, nominal for D052 ones).
+
   python audit_righter.py runs/recover1/latest.pt runs/recover5_v3/latest.pt --episodes 5
+  python audit_righter.py runs/recover1/latest.pt --servo nominal
 """
 import argparse
 import os
@@ -32,9 +46,34 @@ from run_reflex_fallen import SHOVE_N, SHOVE_S, T_SHOVE, T_TOTAL        # noqa: 
 from righter import PolicyRighter, foot_contacts                        # noqa: E402
 from rocky_recover_env import CTRL_DT                                   # noqa: E402
 from shove import Shove                                                 # noqa: E402
+import rl_common as rc                                                  # noqa: E402
+
+QVEL_DEADBAND = 0.2       # rad/s: below this a velocity sign is noise, not a shake
 
 
-def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S):
+def reversals_per_s(X, dt, deadband=0.0, diff=True):
+    """Mean over columns of direction reversals per second. diff=True: of the
+    per-sample moves of X (a target / ctrl stream); diff=False: of X's own sign
+    (a velocity). Samples with |value| <= deadband carry no direction."""
+    X = np.asarray(X, float)
+    if len(X) < 3:
+        return float("nan")
+    D = np.diff(X, axis=0) if diff else X
+    S = np.where(np.abs(D) > max(deadband, 1e-9), np.sign(D), 0.0)
+    flips = []
+    for j in range(S.shape[1]):
+        s = S[:, j][S[:, j] != 0]
+        flips.append(int((s[1:] * s[:-1] < 0).sum()))
+    return float(np.mean(flips) / (len(X) * dt))
+
+
+def servo_mode_for(contract, requested="auto"):
+    if requested != "auto":
+        return requested
+    return "off" if contract.get("servo", "off") == "off" else "nominal"
+
+
+def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="auto"):
     rng = np.random.default_rng(seed)
     gait = WaveGait()
     data, q0 = make_data(model, gait)
@@ -43,6 +82,10 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S):
     DT = model.opt.timestep
     righter = PolicyRighter(ckpt, model, data, torso, fids)
     sup = ReflexSupervisor(gait, gyro_trip=TRIP, gyro_calm=TRIP / 2, righter=righter)
+    sm = rc.make_servo()
+    rc.apply_servo_params(sm, rc.servo_params(servo_mode_for(righter.contract, servo)))
+    sm.reset(q0)
+    ctrl_log, qvel_log = [], []
     az = rng.uniform(0, 2 * np.pi)
     shove = Shove(shove_n * np.cos(az), shove_n * np.sin(az), dur=shove_s, t0=T_SHOVE)
     ticks, last, terr = [], None, []
@@ -59,7 +102,8 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S):
         vx = V_X * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
         q, state = sup.step(t, vx, 0.0, 0.0, gyro_xy_of(model, data, torso),
                             contacts=foot_contacts(model, data, fids), gyro_vec=w[:2],
-                            tilt_deg=tilt, height=float(data.xpos[torso][2]))
+                            tilt_deg=tilt, height=float(data.xpos[torso][2]),
+                            q_meas=data.qpos[rc.joint_addrs(model)[0]].reshape(5, 3))   # V2: handoff_ok
         if state == FALLEN and prev != FALLEN:
             falls += 1
             if t_fallen is None:
@@ -69,9 +113,11 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S):
             t_righted = t
             reason = sup.right_reason
         prev = state
-        data.ctrl[:15] = q.flatten()
+        data.ctrl[:15] = sm.filter(q.flatten(), DT, force=data.actuator_force[:15])
         data.ctrl[15:20] = 0.0
         if state == FALLEN and righter._target is not None:
+            ctrl_log.append(data.ctrl[:15].copy())
+            qvel_log.append(data.qvel[righter._vadr].copy())
             tg = righter._target.copy()
             if last is None or not np.array_equal(tg, last):
                 ticks.append(tg)
@@ -91,7 +137,9 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S):
         out.update(pinned=float((np.abs(d) >= righter.rate_limit - 1e-6).mean()),
                    rev_s=float(((np.sign(d[1:]) * np.sign(d[:-1])) < 0).sum(0).mean() / (len(T) * CTRL_DT)),
                    move_deg=float(np.degrees(np.abs(d).mean())),
-                   track_deg=float(np.degrees(np.mean(terr))))
+                   track_deg=float(np.degrees(np.mean(terr))),
+                   ctrl_rev_s=reversals_per_s(ctrl_log, DT),
+                   qvel_flip_s=reversals_per_s(qvel_log, DT, deadband=QVEL_DEADBAND, diff=False))
     return out
 
 
@@ -100,13 +148,17 @@ def main():
     ap.add_argument("ckpts", nargs="+")
     ap.add_argument("--episodes", type=int, default=5)
     ap.add_argument("--shove", type=float, default=SHOVE_N)
+    ap.add_argument("--servo", default="auto", choices=["auto"] + list(rc.SERVO_MODES),
+                    help="servo model in the loop (auto: the checkpoint's contract)")
     args = ap.parse_args()
     model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
     print(f"shove {args.shove:.0f} N peak half-sine x {SHOVE_S} s at the rim, {args.episodes} seeds")
-    print(f"{'checkpoint':34s} rate  fell  upright  by-policy  t_right  pinned  rev/s  |move|  track")
+    print(f"{'checkpoint':34s} rate  fell  upright  by-policy  t_right  pinned  rev/s  |move|  track"
+          f"  ctrl rev/s  qvel flip/s  servo")
     for ck in args.ckpts:
-        rs = [audit_episode(model, ck, s, args.shove) for s in range(args.episodes)]
-        rl = PolicyRighter(ck, model, mujoco.MjData(model), 0, []).rate_limit / CTRL_DT
+        rs = [audit_episode(model, ck, s, args.shove, servo=args.servo) for s in range(args.episodes)]
+        probe = PolicyRighter(ck, model, mujoco.MjData(model), 0, [])
+        rl = probe.rate_limit / CTRL_DT
         have = [r for r in rs if "pinned" in r]
         f = lambda k: np.mean([r[k] for r in have]) if have else float("nan")   # noqa: E731
         tr = [r["t_right"] for r in rs if r["t_right"] is not None]
@@ -115,7 +167,9 @@ def main():
         print(f"{os.path.relpath(ck, HERE):34s} {rl:4.1f}  {sum(r['fell'] for r in rs):2d}/{len(rs)}  "
               f"{sum(r['upright_end'] for r in rs):2d}/{len(rs)}    {sum(r['by_policy'] for r in rs):2d}/{len(rs)}     "
               f"{np.mean(tr) if tr else float('nan'):5.1f}   {f('pinned'):5.2f}  {f('rev_s'):5.1f}  "
-              f"{f('move_deg'):5.2f}°  {f('track_deg'):4.1f}°   landed at tilt {lands}°, FALLEN entries {falls}, ramp reasons {[r['reason'] for r in rs]}")
+              f"{f('move_deg'):5.2f}°  {f('track_deg'):4.1f}°  {f('ctrl_rev_s'):9.1f}  {f('qvel_flip_s'):11.1f}  "
+              f"{servo_mode_for(probe.contract, args.servo)}   landed at tilt {lands}°, FALLEN entries {falls}, "
+              f"ramp reasons {[r['reason'] for r in rs]}")
 
 
 if __name__ == "__main__":

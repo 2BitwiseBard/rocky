@@ -23,6 +23,10 @@ from print_estimate import stl_volume_cm3, PLA, PLATES       # noqa: E402
 
 P = params()
 HW = P["mass_hw"]
+# D052: servo masses come from the actuator identity (params `actuators:`);
+# mass_hw.servo_* are YAML aliases of the same numbers, kept for old readers
+SERVO_G = float(P["actuators"][P["leg"].get("servo", "st3215")]["mass_g"])
+CLAW_SERVO_G = float(P["actuators"][P["leg"].get("claw_servo", "scs0009")]["mass_g"])
 PETG = 1.27
 
 FILL = {}
@@ -54,13 +58,13 @@ def main():
         "busboard_bracket": printed_g("busboard_bracket"),
         "battery": HW["battery_3s_5200"],
         "electronics_pod": HW["electronics_pod"],
-        "yaw servos x5": 5 * HW["servo_st3215"],
+        "yaw servos x5": 5 * SERVO_G,
         "coxa_yaw_base x5": 5 * printed_g("coxa_yaw_base"),
     }
     # ---- per leg links (the moving mass the gait carries)
     coxa = {                     # rotates about yaw: fork + femur servo
         "coxa_fork": printed_g("coxa_fork"),
-        "femur servo": HW["servo_st3215"],
+        "femur servo": SERVO_G,
         "horn_coupler": printed_g("horn_coupler"),
         "fasteners": HW["fasteners_per_leg"] / 3,
     }
@@ -72,7 +76,7 @@ def main():
     }
     tibia = {                    # swings about the knee: knee servo + carrier + shin + hand
         "tibia_knee_carrier": printed_g("tibia_knee_carrier"),
-        "knee servo": HW["servo_st3215"],
+        "knee servo": SERVO_G,
         "tibia_tube": HW["tibia_tube"],
         "tibia_sea_outer": printed_g("tibia_sea_outer"),
         "tibia_sea_slider": printed_g("tibia_sea_slider"),
@@ -80,7 +84,7 @@ def main():
         "hand_hub": printed_g("hand_hub"),
         "hand_cam": printed_g("hand_cam"),
         "hand_finger x3": 3 * printed_g("hand_finger"),
-        "claw servo": HW["servo_scs0009"],
+        "claw servo": CLAW_SERVO_G,
         "foot_pad_tpu": HW["foot_pad_tpu"],
         "fasteners": HW["fasteners_per_leg"] / 3,
     }

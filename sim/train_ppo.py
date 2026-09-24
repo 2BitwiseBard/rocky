@@ -24,7 +24,19 @@ Notes
 * AsyncVectorEnv forks one MuJoCo per worker; use --sync on platforms where
   fork is flaky (Windows) or for debugging.
 * Domain randomization is ON by default (--no-randomize to disable):
-  friction x[0.7,1.4] per episode + random torso pushes (--push-prob).
+  rl_common.DomainRandomizer (friction U(0.5,1.5), per-link mass, torso
+  CoM, kp, joint offsets, gravity tilt) + obs noise; --push-prob is the
+  probability of one rim shove per episode (gait env).
+* D052: --servo off|nominal|random (default random) puts the ST3215 model
+  (hold, latency, slew, counts, voltage sag) in the loop;
+  --rate-limit defaults to 4.0 rad/s (params 'free' speed) and --ema-alpha
+  to 0.4 for NEW runs. The env's config() (obs names/version, servo and DR
+  ranges, reward weights, robot fingerprint, MuJoCo version) is saved in
+  every checkpoint as env_config; eval_* and the righter replay it.
+* gymnasium >= 1.0 vector envs autoreset on the NEXT step by default; this
+  loop assumes SAME_STEP (rl_common.make_vec_env pins it) — under
+  NEXT_STEP every episode boundary fed PPO one transition whose action was
+  ignored and whose reward was 0.
 * Checkpoints are atomic (tmp+rename); Ctrl-C saves before exiting.
 * KL early stop (--target-kl) keeps the residual policy from tearing up
   the gait prior in one bad update.
@@ -43,6 +55,7 @@ import torch.nn as nn
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import rl_common as rc                                         # noqa: E402
 
 
 # --------------------------------------------------------------- utilities
@@ -127,21 +140,16 @@ class Agent(nn.Module):
         return action, logp, ent, self.value(x)
 
 
-def make_env(seed, cmd, randomize, push_prob, cmd_sample=False, env_name="gait", reward="v1",
-             rate_limit=5.0):
-    def thunk():
-        import gymnasium as gym
-        if env_name == "recover":                       # session 8: self-righting
-            from rocky_recover_env import RecoverEnv
-            env = RecoverEnv(randomize=randomize, seed=seed, reward=reward,
-                             rate_limit_rad_s=rate_limit)
-        else:
-            from rocky_env import PebbleEnv
-            env = PebbleEnv(cmd=cmd, randomize=randomize, push_prob=push_prob,
-                            cmd_sample=cmd_sample, seed=seed)
-        env = gym.wrappers.RecordEpisodeStatistics(env)
-        return env
-    return thunk
+def env_kwargs(args, cmd):
+    """The env constructor kwargs a run's args imply (both envs take **_)."""
+    return dict(cmd=cmd, randomize=not args.no_randomize, push_prob=args.push_prob,
+                cmd_sample=args.cmd_sample, reward=args.reward, rate_limit_rad_s=args.rate_limit,
+                servo=args.servo, ema_alpha=args.ema_alpha)
+
+
+def make_env(seed, env_name="gait", **kw):
+    """Vector-env thunk (rl_common.make_env). kw: env constructor kwargs."""
+    return rc.make_env(seed, env_name, **kw)
 
 
 # ------------------------------------------------------------------- train
@@ -172,16 +180,23 @@ def parse_args(argv=None):
     p.add_argument("--cmd-sample", action="store_true",
                    help="re-draw (vx,vy,wz) each episode: train the full "
                         "command envelope (the command is in obs)")
-    p.add_argument("--push-prob", type=float, default=0.03,
-                   help="per-policy-step random torso push probability")
-    p.add_argument("--env", type=str, default="gait", choices=["gait", "recover"],
-                   help="gait = residual walking (PebbleEnv); recover = self-righting")
+    p.add_argument("--push-prob", type=float, default=0.7,
+                   help="gait env: probability of ONE rim shove per episode (U(10,35) N "
+                        "half-sine, 0.3-0.5 s; D052 — it was a per-step 0.24 N.s tap)")
+    p.add_argument("--env", type=str, default="gait", choices=["gait", "walk", "recover"],
+                   help="gait (= walk) = residual walking (PebbleEnv); recover = self-righting")
+    p.add_argument("--servo", type=str, default="random", choices=list(rc.SERVO_MODES),
+                   help="servo model in the loop: off (ideal, pre-D052), nominal (datasheet), "
+                        "random (per-episode latency/slew/voltage draw; D052 default)")
+    p.add_argument("--ema-alpha", type=float, default=rc.EMA_ALPHA,
+                   help="in-env EMA on the policy output (1.0 = off); its state is in the obs")
     p.add_argument("--reward", type=str, default="v1", choices=["v1", "v2", "v3"],
                    help="recover env only: v2 = handoff-criterion success + feet term (D041); "
                         "v3 = v2 + smoothness cost on the servo target (D048)")
-    p.add_argument("--rate-limit", type=float, default=5.0,
-                   help="recover env only: servo target slew limit, rad/s (recorded in the "
-                        "checkpoint; the righter adapter replays it)")
+    p.add_argument("--rate-limit", type=float, default=rc.SERVO_SAFE_RAD_S,
+                   help="recover env only: policy-side command clamp, rad/s (default 4.0 = params "
+                        "'free' speed; the servo model slews on its own after it). Recorded in the "
+                        "checkpoint; the righter replays it. v1-v3 runs used 5.0 (> the 4.7 no-load)")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--torch-threads", type=int, default=0,
@@ -196,6 +211,8 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.env == "walk":
+        args.env = "gait"
     cmd = tuple(float(x) for x in args.cmd.split(","))
     device = torch.device(
         args.device if args.device != "auto"
@@ -206,15 +223,16 @@ def main(argv=None):
     ckpt_path = os.path.join(args.run_dir, "latest.pt")
     log_path = os.path.join(args.run_dir, "train_log.jsonl")
 
-    import gymnasium as gym
-    env_fns = [make_env(args.seed + i, cmd, not args.no_randomize,
-                        args.push_prob, args.cmd_sample, args.env, args.reward,
-                        args.rate_limit)
-               for i in range(args.num_envs)]
-    envs = gym.vector.SyncVectorEnv(env_fns) if args.sync \
-        else gym.vector.AsyncVectorEnv(env_fns, daemon=True)
+    kw = env_kwargs(args, cmd)
+    # the env's own contract, from one throwaway instance in this process
+    probe = make_env(args.seed, args.env, **kw)()
+    env_config = probe.get_wrapper_attr("config")()
+    probe.close()
+    env_fns = [make_env(args.seed + i, args.env, **kw) for i in range(args.num_envs)]
+    envs = rc.make_vec_env(env_fns, sync=args.sync)
     obs_dim = int(np.prod(envs.single_observation_space.shape))
     act_dim = int(np.prod(envs.single_action_space.shape))
+    assert obs_dim == env_config["obs_dim"], (obs_dim, env_config["obs_dim"])
 
     agent = Agent(obs_dim, act_dim, log_std_init=args.log_std_init).to(device)
     agent.log_std_max = args.log_std_max
@@ -228,6 +246,16 @@ def main(argv=None):
         rp = ckpt_path if args.resume == "auto" else args.resume
         if os.path.exists(rp):
             ck = torch.load(rp, map_location=device, weights_only=False)
+            old = rc.checkpoint_contract(ck, env_hint=args.env)
+            if old["obs_version"] != env_config["obs_version"] or old["obs_dim"] != obs_dim:
+                envs.close()
+                raise SystemExit(f"cannot resume {rp}: it was trained on {old['env']} obs "
+                                 f"v{old['obs_version']} ({old['obs_dim']} values), this env builds "
+                                 f"v{env_config['obs_version']} ({obs_dim}). Pre-D052 checkpoints do not "
+                                 f"resume under the D052 contract — start a fresh run")
+            if old.get("robot_fingerprint") and old["robot_fingerprint"] != env_config["robot_fingerprint"]:
+                print(f"WARNING: resuming a checkpoint trained on robot {old['robot_fingerprint']} "
+                      f"against robot {env_config['robot_fingerprint']}")
             agent.load_state_dict(ck["model"])
             opt.load_state_dict(ck["optimizer"])
             obs_rms.load_state_dict(ck["obs_rms"])
@@ -250,6 +278,7 @@ def main(argv=None):
                         global_step=global_step, update=update,
                         elapsed=t_prev + time.time() - t_start,
                         args=vars(args), obs_dim=obs_dim, act_dim=act_dim,
+                        env_config=env_config, obs_version=env_config["obs_version"],
                         torch_rng=torch.get_rng_state(),
                         np_rng=np.random.get_state()), tmp)
         os.replace(tmp, ckpt_path)
@@ -290,7 +319,9 @@ def main(argv=None):
     print(f"device {device} | {args.num_envs} envs "
           f"({'sync' if args.sync else 'async'}) | batch {batch} | "
           f"{n_updates} updates to {args.total_steps:,} steps | "
-          f"DR={'off' if args.no_randomize else 'on'} push={args.push_prob}")
+          f"DR={'off' if args.no_randomize else 'on'} push={args.push_prob} | servo {args.servo} "
+          f"ema {args.ema_alpha} | obs v{env_config['obs_version']} ({obs_dim}) | "
+          f"{env_config['fingerprint_note']}")
 
     for update in range(update0 + 1, n_updates + 1):
         if not args.no_anneal_lr:
@@ -320,10 +351,9 @@ def main(argv=None):
                 np.clip(rew / np.sqrt(ret_rms.var + 1e-8), -10, 10),
                 dtype=torch.float32)
             next_done = torch.as_tensor(done, dtype=torch.float32)
-            if "episode" in infos:
-                m = infos["_episode"]
-                ep_returns += list(np.asarray(infos["episode"]["r"])[m])
-                ep_lengths += list(np.asarray(infos["episode"]["l"])[m])
+            r_, l_ = rc.episode_stats(infos)
+            ep_returns += r_
+            ep_lengths += l_
 
         with torch.no_grad():
             obs_n = (next_obs_np - obs_rms.mean) / np.sqrt(obs_rms.var + 1e-8)

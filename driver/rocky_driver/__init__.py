@@ -21,7 +21,8 @@ from .transport import Transport, SerialTransport
 from .mock import MockServo, MockTransport, make_pebble_mock, make_factory_fresh_mock
 from .bus import (FeetechBus, Telemetry, SafetyMonitor, SafetyLimits,
                   BusError, NoResponse)
-from .robot import PebbleRobot, load_bus_params, load_calibration
+from .robot import PebbleRobot, load_bus_params, load_calibration, soft_enable
+from .stream import SoftStream
 
 __version__ = "0.1.0"
 __all__ = [
@@ -29,5 +30,5 @@ __all__ = [
     "BAUD_CODES", "Transport", "SerialTransport", "MockServo", "MockTransport",
     "make_pebble_mock", "make_factory_fresh_mock", "FeetechBus", "Telemetry",
     "SafetyMonitor", "SafetyLimits", "BusError", "NoResponse", "PebbleRobot",
-    "load_bus_params", "load_calibration",
+    "load_bus_params", "load_calibration", "soft_enable", "SoftStream",
 ]

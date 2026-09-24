@@ -43,6 +43,9 @@ CHORD_WORDS = [
 GESTURES = ["jazz_hands", "fist_bump", "beckon",   # B18 shipped session 6
             "wave", "bow", "look_around", "shake", "sit",
             "turn_in_place", "sidestep"]                 # v2 library, session 8
+# D052: these two take direction left|right ("turn right" used to be a
+# 20 cm sidestep-by-goto in the regex brain; the gait turns either way)
+SIGNED = ["turn_in_place", "sidestep"]
 
 EDGE_X = 0.35          # the mock world's void, same as sim/run_cliff.py
 SAFE_MARGIN = 0.18     # the detector historically stops ~185 mm short
@@ -71,16 +74,26 @@ class MockBackend:
         return {"ok": True, "word": word}
 
     # ------------------------------------------------------------ gesture
-    async def gesture(self, name: str) -> dict:
+    async def gesture(self, name: str, direction: str | None = None) -> dict:
         if name not in GESTURES:
             return {"ok": False, "error": f"unknown gesture {name!r}",
                     "hint": f"available: {', '.join(GESTURES)}"}
+        if direction not in (None, "", "left", "right") or (direction and name not in SIGNED):
+            return {"ok": False, "error": f"direction {direction!r} does not apply to {name}",
+                    "hint": f"direction left|right is for {', '.join(SIGNED)} only"}
         if self.mode == "walking":
             return {"ok": False, "error": "busy",
                     "hint": "robot is walking; stop() first or wait for "
                             "the goto to resolve"}
         self.events.append(("gesture", name))
-        return {"ok": True, "gesture": name}
+        out = {"ok": True, "gesture": name}
+        if direction:
+            out["direction"] = direction
+        return out
+
+    # ------------------------------------------------------ list_gestures
+    async def list_gestures(self) -> dict:
+        return {"ok": True, "gestures": list(GESTURES), "signed": list(SIGNED)}
 
     # --------------------------------------------------------------- goto
     async def goto(self, x: float, y: float) -> dict:

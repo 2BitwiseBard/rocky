@@ -12,6 +12,7 @@ cd bench
 python3 bus_scan.py --mock
 python3 assign_ids.py --mock --yes
 python3 calibrate_centers.py --mock --yes
+python3 apply_limits.py --mock --yes
 python3 pose_check.py --mock --yes
 python3 register_dump.py --mock
 python3 thermal_soak.py --mock --ids 2 --minutes 20 --mock-load 62
@@ -114,7 +115,46 @@ python3 pose_check.py --port /dev/ttyACM0     # acceptance: <2 deg everywhere
 - Jig poses: yaw straight out, femur horizontal, knee at −90° (comb),
   claw fully closed. The script stores software offsets in
   `bench/calibration.yaml` (git-tracked). `--burn` also writes STS EEPROM.
-- If the nudge test flips any `dir` sign, re-run once (offsets depend on dir).
+- If the nudge test flips a `dir` sign the offset is re-derived from the same
+  reading (D052) — no second run needed.
+- Offsets live in ONE place (D052): the yaml, unless `--burn` (then the
+  EEPROM holds it and the yaml stores 0). `apply_limits.py` refuses a servo
+  with both non-zero.
+- Then burn the hardware backstop: `python3 apply_limits.py --port /dev/ttyACM0`
+  — MIN/MAX_ANGLE_LIMIT = the params joint limits + dir + offset + 2°, read
+  back and verified. Re-run after every recalibration.
+
+## 5b. Cockpit bring-up (sim ↔ one real leg, D051/D052)
+
+The cockpit's Hardware panel is `sim/hw_bridge.py`. Rules it enforces, so you
+know what a refusal means:
+
+1. **Close every bench script first** — one process per port. Connect
+   `mock` once to rehearse, then the real port.
+2. **Scan** (mirror must be off). Partial legs and hands show in the table and
+   are monitored (temp, volt, faults, "lost") but are not mirrored — the
+   one-servo-at-a-time bench is covered.
+3. **Jog** one servo: the clamp is in the gait frame through your calibration
+   (hip −70…90, knee −150…−20, yaw ±40, claw 0…55); a jog drops any stream.
+4. **Center / dir / apply limits** from the panel (mirror off). Flipping a dir
+   re-derives that joint's offset from the stored jig pose — the event says so.
+5. **real2sim** first: move the real leg by hand, the sim leg follows — this is
+   the "does the frame match?" check. Torque state is left as it is.
+6. **sim2real** only with the sim standing still (refused otherwise). The entry
+   is soft: goal parked where the leg IS, torque limit 40 %, 200 cps, a
+   smoothstep blend of ≥ 1.5 s (longer for big gaps), released after ≥ 3 s.
+   Walking stays disabled while streaming (no real foot contacts yet).
+7. **What cuts the mirror by itself**: a fault bit or ≥ 65 °C on any servo of a
+   leg limps that whole leg (`hw:cut`); 10 silent ticks drop a leg
+   (`hw:degraded`); 3 silent monitor polls trip the servo (`hw:lost`); no sim
+   targets for 2 s turns the mirror off (`hw:stale`); 25 failed ticks = port
+   lost, limp attempted, reopen every 2 s (`hw:lost` / `hw:reopen`). Non-finite
+   targets keep the leg's last good pose (`hw:nan`); goal steps faster than
+   4.7 rad/s are capped (`hw:rate`).
+8. **Re-arm** a tripped servo or a degraded leg only by torque-on with its ids
+   named (the panel's re-arm button). A mirror change or rescan never re-arms.
+9. **Stop** turns the mirror off and the legs hold; **Limp** drops torque on
+   every present servo; **disconnect / quit** limps and closes the port.
 
 ## 6. Health monitor always-on habit
 
@@ -175,7 +215,7 @@ python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 1000 --arm-mm 100
 | symptom | usual cause |
 |---|---|
 | no response at any baud | TX/RX swap, charge-only USB cable, dead PSU channel |
-| responds, then silence after ID write | two servos shared the old ID — rescan, unplug one |
+| responds, then silence after ID write | two servos shared the old ID — rescan, unplug one (the cockpit's set_id refuses an occupied id) |
 | position jumps 180° on power cycle | multi-turn wrap — power-cycle at center, check ANGULAR_RESOLUTION |
 | servo hot at idle | holding torque against gravity — torque off when parked, sleep pose |
 | checksum errors under load | brownout: PSU current limit too low, or wire gauge too thin |

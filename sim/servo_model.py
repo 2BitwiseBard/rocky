@@ -18,14 +18,44 @@ shows up here first, not on the bench:
 `ServoModel.filter(target, dt)` is called once per physics step with the
 15 joint targets; it returns the targets the actuator should track. All
 parameters live-tunable (the cockpit's Realism panel); `off` bypasses.
+
+D052: the defaults are the servo identity from params.yaml (via
+gait/rocky_model.py), not copies. And the slew now slows under load when
+the caller hands in the previous step's actuator forces:
+
+    rate = rate_rad_s * max(0.2, 1 - |tau| / stall)
+
+— the DC motor's torque-speed line again (the MJCF joint damping is the
+same line on the physics side). `filter(target, dt)` without forces is the
+old behaviour exactly, so existing callers are unchanged.
+
+D052 V2 (review): that derate is now OFF by default (`load_derate`). It
+counted the torque-speed line twice: the D052 MJCF already carries it
+(joint damping = stall / no-load, forcerange), and a position actuator's
+|tau| saturates as soon as the tracking error passes ~5.5 deg, so every lag
+slowed the goal further — the sim followed ~25 % slower than the servo
+(review measurement, audit_gestures streams: wave peak 2.54 vs 3.25 rad/s,
+p95 lag 25.2 vs 18.0 deg). A real ST3215's goal register is not slowed by
+load; only its motor is, which the damping models. Callers still pass their
+forces (the API is unchanged); `set(load_derate=True)` brings the old
+behaviour back for an A/B.
 """
 from __future__ import annotations
+import os
+import sys
+
 import numpy as np
 
-STS_COUNTS_PER_RAD = 4096 / (2 * np.pi)
-ST3215_NO_LOAD_RAD_S = 4.7          # 0.222 s / 60 deg at 12 V (Feetech datasheet)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gait"))
+import rocky_model as _rm                                              # noqa: E402
 
-DEFAULTS = dict(on=False, hold_hz=50.0, latency_s=0.02, rate_rad_s=ST3215_NO_LOAD_RAD_S, quant=True)
+STS_COUNTS_PER_RAD = _rm.counts_per_rad()          # 4096 / 2 pi
+ST3215_NO_LOAD_RAD_S = _rm.no_load_rad_s()         # 0.222 s / 60 deg at 12 V (Feetech datasheet)
+LOAD_SLEW_FLOOR = 0.2                               # even at stall the goal still creeps (never freeze)
+
+DEFAULTS = dict(on=False, hold_hz=_rm.bus_hz(), latency_s=_rm.latency_s(),
+                rate_rad_s=ST3215_NO_LOAD_RAD_S, quant=True, stall_nm=_rm.stall_nm(),
+                load_derate=False)     # D052 V2: one torque-speed line (the MJCF's), see above
 
 
 class ServoModel:
@@ -50,8 +80,10 @@ class ServoModel:
                 self.p[k] = type(DEFAULTS[k])(v)
         return dict(self.p)
 
-    def filter(self, target, dt):
-        """target: (n,) rad the controller wants NOW; returns what the actuator sees."""
+    def filter(self, target, dt, force=None):
+        """target: (n,) rad the controller wants NOW; returns what the actuator sees.
+        force: optional (n,) actuator forces from the PREVIOUS step (N.m) —
+        used only with load_derate on (off by default since D052 V2)."""
         target = np.asarray(target, float)
         if not self.p["on"]:
             self.pos = target.copy()
@@ -71,8 +103,12 @@ class ServoModel:
             self.queue.append((self.t + self.p["latency_s"], g))
         while self.queue and self.queue[0][0] <= self.t:
             self.goal = self.queue.pop(0)[1]
-        # 3. slew limit toward the effective goal
-        step = self.p["rate_rad_s"] * dt
+        # 3. slew limit toward the effective goal (load-derated when forces are given)
+        rate = self.p["rate_rad_s"]
+        if force is not None and self.p["load_derate"]:
+            load = np.abs(np.asarray(force, float)) / max(self.p["stall_nm"], 1e-9)
+            rate = rate * np.maximum(LOAD_SLEW_FLOOR, 1.0 - load)
+        step = rate * dt
         d = self.goal - self.pos
         self.pos = self.pos + np.clip(d, -step, step)
         return self.pos.copy()
@@ -82,4 +118,5 @@ class ServoModel:
         if not p["on"]:
             return "servo model: off (ideal position actuators)"
         return (f"servo model: hold {p['hold_hz']:.0f} Hz, latency {p['latency_s'] * 1000:.0f} ms, "
-                f"slew {p['rate_rad_s']:.1f} rad/s, {'4096-count' if p['quant'] else 'no'} quantisation")
+                f"slew {p['rate_rad_s']:.1f} rad/s{' load-derated' if p['load_derate'] else ''}, "
+                f"{'4096-count' if p['quant'] else 'no'} quantisation")

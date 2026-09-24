@@ -35,6 +35,19 @@ hw:=serial  rocky_driver/RockySystem C++ plugin — skeleton today; port the
             loop needs to shed the topic hop (it won't at 50 Hz/20 servos)
 ```
 
+**D052 V2 — what the ROS path does and does NOT have yet** (the cockpit's
+`sim/hw_bridge.py` is the reference): `hw_bridge_node.py` now streams through
+`rocky_driver.SoftStream` (goal parked where each servo is at 40 % torque
+before enable, smoothstep entry at 200 cps, NaN hold, 4.7 rad/s clamp),
+ignores a joint command that misses a leg joint, and publishes NO contacts
+until the switches are wired; `gait_node.py` takes its gait from
+`cad/params.yaml` and fits every `/cmd_vel` into `WaveGait.budget()`, with the
+same rate clamp. Still missing: the reflex supervisor (no IMU / contact
+inputs on this path), the sim2real heartbeat, the leg-level fault cut and
+the degraded-leg re-entry. Neither node has been run under ROS (no rclpy on
+the dev box) — treat `hw:=topic` as bench-only, one leg, hand on the power
+switch, until it has.
+
 ## First bringup on the laptop (when ROS exists)
 
 ```bash

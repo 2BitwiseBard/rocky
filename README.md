@@ -19,16 +19,18 @@ The physical robot is not assembled yet. Everything "green" below is green
 in simulation or in CAD checks, which this project treats as a different
 claim from "it works on hardware".
 
-## Status (2026-09-22)
+## Status (2026-09-24)
 
 | area | state | evidence |
 |---|---|---|
 | **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215 servo** (D047); four joint coupons gate the next print run | `cad/run_all_checks.py` 23/23 (joint suite, printability, single-solid gate) |
 | **Physical build** | nothing assembled; the first prints (pre-D047) did not fit and are retired; servos not yet ordered | `media/2026-09-22_first_prints.jpg`, `docs/PRINT_PLAN_2026-09-22.md`, `bom/SHOPPING_LIST_2026-09-22.md` |
-| **Sim + control** | the analytic wave gait walks (264 mm in 8 s, 1° tilt); the reflex supervisor safe-stops, braces and hands off to a righter; self-righting is a **hybrid** (RL rights the body from a side landing, an analytic ramp stands it, and from the back the ramp does the righting: 7/20 stood on this machine, 12/20 in the cloud run, pure-RL 0/20); four retrains scored worse and are recorded as negatives, the latest pair (D048) traded handoffs for a smoother policy | `docs/SIM_GUIDE.md`, `docs/RL_GUIDE.md`, `docs/RL_TOUR.md` |
-| **Tests** | driver 58, harness 22, gait 9, intent 14, sim 3 → 92 fast tests in ~3 s; URDF ≡ MJCF ≡ analytic FK | GitHub Actions `ci.yml` |
+| **Sim + control** | since D052 the sim stops flattering the servo: one servo identity in `params.yaml` (damping = stall / no-load 0.63 N·m·s/rad, torque capped at the 1.9 N·m continuous budget, foot μ 0.8), and every motion source — walk, teleop, goto, gestures, keyframe files, the brain — goes through one feasibility checker and the gait's speed envelope (45.5 mm/s, 0.246 rad/s in place). The wave gait walks 246 mm of ~261 commanded in 8 s, 0.84° tilt; turning shrank to what the servo can do (103° where the ideal model turned 155°). 20 gesture/gait rows audited, 0 FAIL, but tracking lag p95 is 13–19° on the fast ones. The reflex supervisor safe-stops, braces, hands off to a righter; an always-on void guard stops a walk at a table edge | `docs/SIM_GUIDE.md`, `sim/audit_gestures.py`, `docs/decisions.md` D052 |
+| **RL / self-righting** | a **hybrid**: RL rights the body, an analytic ramp stands it. Since D052 both envs train on the robot's own action path and sensors (EMA filter, servo model, noisy IMU / encoders / foot switches, no torso height) and the handoff is `handoff_ok`, computable on the Pi. Policy-to-handoff on the D052 model: `recover1` **2/20** on the legacy height test, **0/20** on `handoff_ok` (pure-RL 0/20) — pre-D052 it was 7/20 here, 12/20 in the cloud, flattered by an ideal actuator and a test that passed a robot kneeling on its shins. System level (supervisor + righter + the 3 s stall ramp): **20/20 vs 11/20 with no righter**, every declared fall ended by the stall ramp, none by a handoff. Every checkpoint on disk is pre-D052 (flagged `legacy obs`); no retrain on the new contract yet (B34). The walkers have no speed envelope on the D052 servo and are zeroed until retrained | `docs/RL_GUIDE.md` §4, `docs/RL_TOUR.md` |
+| **Tests** | 297 fast tests + 1 strict xfail (driver 69, gait 47, harness 37, sim 145) in ~85 s; URDF ≡ MJCF ≡ analytic FK; CI also regenerates the model files and fails on a diff | GitHub Actions `ci.yml`, `./rocky.sh test` |
 | **Harness** | six-tool MCP server on a mock and on MuJoCo (+ `look` where an eye exists); a local LLM (llama-swap / Ollama) or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
-| **Cockpit** | browser playground on one running sim: chase + eye cameras, top-down map, chat with a switchable brain (regex / local model / Claude) and voice, a vision model behind `look`, world editor (presets, obstacles, terrain, friction, slopes, saved and random courses), recordings with replay, RL panel (righter and walker hot-swap); feet feel for the floor, so rubble, rough ground and small stairs are crossed and a table edge still stops it (D050). D051: a keyframe **gesture studio**, a **chord designer** for new words (audio plays in the browser), a footfall diagram + a **servo realism** model, and a **hardware panel** that mirrors the sim to real legs as they come onto the bus (mock-verified); `rocky.sh tailnet` puts it on the phone over HTTPS | `docs/SIM_GUIDE.md` §3b–3c, `sim/cockpit.py`, `sim/hw_bridge.py` |
+| **Cockpit** | browser playground on one running sim: chase + eye cameras, top-down map, chat with a switchable brain (regex / local model / multimodal / Claude, fallback chains, quarantined models unselectable) and wake-word-gated voice, a vision model behind `look`, world editor (presets, obstacles, terrain, friction that now reaches the feet, saved and random courses), recordings with replay, RL panel; feet feel for the floor (D050). D051: gesture studio, chord designer, servo realism, hardware panel. D052: every studio change is feasibility-checked (a FAIL is not played or saved), a reach solver and teach-by-demonstration, gait presets + `check`, guard chips (VOID, LATCHED, locomotion held), a model/fingerprint panel, goto with a reactive lidar layer; a dead sim thread fails loudly; loopback-only with a Host / same-origin guard, the phone via `rocky.sh tailnet` (written, **not yet exercised**) | `docs/SIM_GUIDE.md` §3b–3c, `sim/cockpit.py`, `sim/cockpit_brains.py` |
+| **Hardware bus** | `rocky_driver` + the cockpit's bridge, made safe before any servo touched it (D052): sim → robot only from a standstill, a soft first move (goal parked where the leg is, 40 % torque, 200 c/s, blend), whole-leg fault cuts, silent servos dropped and re-armed only by name, NaN / 4.7 rad/s guards at the bus, heartbeat, port-loss limp, EEPROM angle limits (`bench/apply_limits.py`), the mirror dropped when the sim's reflex leaves NORMAL. Mutation-tested on the byte-faithful mock. **No real servo has been on the bus yet** | `sim/hw_bridge.py`, `bench/BENCH_RUNBOOK.md`, `docs/DESIGN_BACKLOG.md` B32 |
 | **Review** | full project review with dispositions | `docs/REVIEW_2026-09-22.md` |
 
 ## Layout
@@ -64,15 +66,17 @@ rocky/
 ```bash
 git clone https://github.com/2BitwiseBard/rocky && cd rocky
 python3 -m venv .venv && . .venv/bin/activate        # or: uv venv && . .venv/bin/activate
-pip install -e ".[sim,harness,dev]"                  # + ".[rl]" for torch, ".[cad]" for build123d
-python -m pytest driver/tests gait harness -m "not slow" -q     # 89 passed (+3 in sim/tests after build_mjcf)
-MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, headless
+pip install -e ".[sim,harness,cockpit,rl,dev]"      # + ".[cad]" for build123d
+./rocky.sh test                                      # the fast suites CI runs (driver/harness/gait/sim)
+MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, headless; exits 1 on a fall
 MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + arrow-key teleop
 ./rocky.sh cockpit                                   # browser playground: http://127.0.0.1:8765
 ```
 
-`./rocky.sh help` lists the laptop shortcuts (they assume `.venv` in the
+`./rocky.sh help` lists every launcher command (they assume `.venv` in the
 repo root and, for `brain`/`voice`, a local llama-swap and whisper-server).
+The phone reaches the cockpit through `./rocky.sh tailnet` (HTTPS over the
+tailnet); the cockpit itself stays on 127.0.0.1.
 
 ## Driving it
 
@@ -105,7 +109,7 @@ These are the ones that have actually cost something when broken.
 ## Where the record lives
 
 - `BUILD_LOG.md` — engineering notebook, newest entry first.
-- `docs/decisions.md` — numbered decisions (D001–D048), cited everywhere.
+- `docs/decisions.md` — numbered decisions (D001–D052), cited everywhere.
 - `docs/DESIGN_BACKLOG.md` — ideas with verdicts (shipped / negative / deferred).
 - `NOTES_INBOX.md` — raw measurements and results, filed later.
 

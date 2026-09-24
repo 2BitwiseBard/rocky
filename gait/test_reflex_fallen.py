@@ -164,3 +164,28 @@ def test_brace_holds_feet_when_airborne():
                          gyro_vec=np.array([0.0, 0.0]))
         t += DT
     assert not np.allclose(sup._last_feet[:, 2], z0), "crouch did not resume"
+
+
+def test_handoff_uses_the_joint_state_when_q_meas_is_fed():
+    """D052 V2 (review): the robot and the cockpit pass q_meas, so the handoff is
+    rocky_recover_env.handoff_ok (tilt + switches + the joints' kinematic height)
+    — a robot kneeling on its shins passes the old world-z rule, and a mutation
+    that disabled handoff_ok left the whole suite green."""
+    import pebble_reflex
+    assert pebble_reflex._handoff_fn() is not None, "handoff_ok must be importable from gait/"
+    folded = np.tile(np.radians([0.0, 10.0, -150.0]), (N_LEGS, 1))   # deck on its shins, feet tucked
+    con = np.ones(N_LEGS, bool)
+    for q_meas, want_handoff in ((folded, False), (None, True)):
+        sup = make_sup(stall_s=10.0, fallen_max_s=10.0)
+        q_meas = sup._planted_q() if q_meas is None else q_meas
+        sup._enter_fallen(0.0)
+        t, st = 0.0, FALLEN
+        while st == FALLEN and t < 3.0:
+            _q, st = sup.step(t, 0.0, 0.0, 0.0, 0.1, contacts=con, tilt_deg=5.0, height=0.12,
+                              q_meas=q_meas)
+            t += DT
+        if want_handoff:
+            assert st == RIGHTED and sup.right_reason == "handoff"
+            assert t >= sup.handoff_hold_s - 1e-9
+        else:
+            assert st == FALLEN and sup.right_reason != "handoff"   # height 0.12 m alone no longer passes

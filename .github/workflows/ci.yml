@@ -19,27 +19,64 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: launcher parses (bash -n rocky.sh)
+        run: bash -n rocky.sh
       - run: pip install -e ".[sim,harness,dev]"
       - name: unit suites (driver, gait, harness fast)
         run: python -m pytest driver/tests gait harness -m "not slow" -q
+      - name: regenerate the model files (MJCF + URDF) from params
+        run: |
+          python sim/build_mjcf.py
+          python ros2/rocky_description/generate_urdf.py
+      - name: committed generated files are current (D052)
+        # a params/generator change without the regenerated pebble.xml / URDF fails here
+        run: |
+          git diff --exit-code sim/pebble.xml \
+            ros2/rocky_description/urdf/pebble.urdf ros2/rocky_description/urdf/pebble.urdf.xacro
       - name: "sim smoke: the bare wave gait walks (no GL on the runner, physics + metrics only)"
+        # run_sim.py exits 1 on a fall or a walk outside its calibrated band (D052);
+        # pipefail carries that exit code through tail
         run: |
           set -o pipefail
-          python sim/build_mjcf.py
-          python sim/run_sim.py | tail -3
-      - name: sim unit tests (shove model)
+          python sim/run_sim.py | tail -4
+      - name: sim unit tests (shove model, model consistency, launcher)
         run: python -m pytest sim/tests -q
       - name: URDF == MJCF == analytic FK
-        run: |
-          python ros2/rocky_description/generate_urdf.py
-          python sim/check_urdf_parity.py
+        run: python sim/check_urdf_parity.py
       - name: harness slow test (physics-backed goto, no rendering)
         run: python -m pytest harness -m slow -q
 
-  cad:
-    # the parametric CAD check tree (build123d): ~2 min, runs on pushes to main
+  changes:
+    # PRs only pay for the CAD job when they touch the design pipeline; pushes to
+    # main and manual runs always get it. Plain git, no third-party action.
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    outputs:
+      cad: ${{ steps.diff.outputs.cad }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "cad=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE" HEAD \
+              | grep -qE '^(cad/|sim/build_mjcf\.py$|sim/mass_audit\.py$|\.github/workflows/ci\.yml$)'; then
+            echo "cad=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cad=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  cad:
+    # the parametric CAD check tree (build123d, ~2 min) and the whole design
+    # pipeline on top of it: every push to main, and PRs that touch cad/** or
+    # the mass/MJCF generators
+    needs: changes
+    if: needs.changes.outputs.cad == 'true'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +85,19 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[cad]"
+      - run: pip install -e ".[sim,cad]"
       - name: run_all_checks (23 modules incl. joint suite + printability)
         working-directory: cad
         run: python run_all_checks.py
+      - name: "design-pipeline: CAD -> masses -> MJCF -> URDF -> parity, committed files current (D052)"
+        # mass_audit reads the STLs run_all_checks just rebuilt; everything downstream
+        # of it must match what is committed, or a CAD edit shipped without its regen.
+        # Honest caveat: mass_budget.json rounds to 0.1 g of STL volume, so an OCCT /
+        # build123d upgrade that moves a volume by a hair can trip this on its own.
+        run: |
+          python sim/mass_audit.py
+          python sim/build_mjcf.py
+          python ros2/rocky_description/generate_urdf.py
+          python sim/check_urdf_parity.py
+          git diff --exit-code sim/mass_budget.json sim/pebble.xml \
+            ros2/rocky_description/urdf/pebble.urdf ros2/rocky_description/urdf/pebble.urdf.xacro
