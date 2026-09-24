@@ -523,6 +523,8 @@ def run_interactive(pg, use_viewer):
         import mujoco.viewer
         viewer_ctx = mujoco.viewer.launch_passive(pg.model, pg.data,
                                                   key_callback=pg.on_key)
+        with viewer_ctx.lock():
+            viewer_ctx.opt.geomgroup[3] = 1       # world objects / room walls are group 3
     print(TELEOP_HELP)
     print("type `help` for the command list, `help rl` for the RL hooks", flush=True)
     t_wall = time.monotonic()

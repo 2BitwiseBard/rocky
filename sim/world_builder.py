@@ -34,8 +34,8 @@ DEFAULT = {"base": "flat", "friction": 1.2, "gravity_tilt_deg": 0.0,
            "gravity_tilt_dir_deg": 0.0, "terrain": None, "objects": []}
 KINDS = ("box", "wall", "ramp", "stairs", "rubble", "ball")
 OBST_RGBA = "0.55 0.5 0.62 1"
-EYE_CAM = ('<camera name="eye" pos="0.10 0 0.075" mode="fixed" '
-           'xyaxes="0 -1 0 0.34 0 0.94" fovy="70"/>')   # forward, ~20 deg down
+EYE_CAM = ('<camera name="eye" pos="0.10 0 0.095" mode="fixed" '
+           'xyaxes="0 -1 0 0.26 0 0.97" fovy="70"/>')   # above the shoulder blocks, forward, 15 deg down
 
 
 def _fric(spec):

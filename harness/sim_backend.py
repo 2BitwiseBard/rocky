@@ -87,6 +87,8 @@ class SimBackend:
             try:
                 import mujoco.viewer
                 self.viewer = mujoco.viewer.launch_passive(self.model, self.data)
+                with self.viewer.lock():
+                    self.viewer.opt.geomgroup[3] = 1     # room walls / obstacles are group 3
             except Exception as e:                       # no display, no GL…
                 print(f"[sim_backend] viewer unavailable ({e}); running "
                       "headless", file=sys.stderr)

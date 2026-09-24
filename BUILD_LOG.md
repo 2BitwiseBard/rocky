@@ -36,6 +36,15 @@ terrain, and a way for the model to "see".
   contract to a running cockpit; `ROCKY_BACKEND=auto` (now in
   `.mcp.json.example` and my `.mcp.json`) picks it when it answers, else
   the in-process sim. So `./rocky.sh chat` drives what the browser shows.
+- Fix after the first look: world objects are geom group 3 (the lidar
+  convention) and MuJoCo renderers and viewers HIDE group 3 by default, so
+  every preset built but drew nothing ("presets don't show anything").
+  The cockpit renderers and both viewer windows now enable group 3. Also:
+  a top-down map (objects, lidar hits, robot, goto target, click-to-goto),
+  named camera views (follow/wide/top/low, default behind the robot), the
+  HUD marker and goto flag drawn into the chase stream, the eye raised
+  above the shoulder blocks, and respawn via mj_resetData (a plain qpos=0
+  had dropped the pushable ball onto the origin with a zero quaternion).
 - Verified: talk chat, local brain (qwen3.6-35b-a3b → say + look; the
   vision model read the obstacle course correctly enough), world swaps and
   edits, righter hot-swap (kept across reset/world change — a bug found

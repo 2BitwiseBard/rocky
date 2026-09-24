@@ -105,10 +105,13 @@
       <div class="row"><label>shove</label>
         <button data-shove="20,0">20 N →</button><button data-shove="40,0">40 N →</button><button data-shove="0,40">40 N ↑</button><button data-shove="60,0">60 N →</button>
         <span class="small">half-sine at the shell rim, 0.4 s</span></div>
-      <div class="row"><label>camera</label><input id="cam-az" type="range" min="0" max="360" value="135" style="width:110px"> <input id="cam-el" type="range" min="-80" max="-2" value="-18" style="width:80px"> <input id="cam-d" type="range" min="0.4" max="2.5" step="0.05" value="0.9" style="width:80px"></div>
+      <div class="row"><label>camera</label><button data-view="follow">follow</button><button data-view="wide">wide</button><button data-view="top">top</button><button data-view="low">low</button></div>
+      <div class="row"><label>orbit</label><input id="cam-az" type="range" min="0" max="360" value="0" style="width:110px" title="azimuth"> <input id="cam-el" type="range" min="-89" max="-2" value="-24" style="width:80px" title="elevation"> <input id="cam-d" type="range" min="0.4" max="3" step="0.05" value="1.4" style="width:80px" title="distance"></div>
     </div></details>
-    <details><summary>World</summary><div class="body">
-      <div class="row"><label>preset</label><select id="preset" style="flex:1"></select><button id="preset-go">load</button></div>
+    <details><summary>World &amp; map</summary><div class="body">
+      <canvas id="map" width="356" height="260" style="width:100%; background:#0d0c12; border:1px solid var(--line); border-radius:6px"></canvas>
+      <div class="small">Top-down map: robot (purple, heading tick), objects from the world spec (grey), lidar hits (blue dots), goto target (cyan). Click the map to send a goto there.</div>
+      <div class="row"><label>preset</label><select id="preset" style="flex:1"></select><button id="preset-go">load</button><span id="world-msg" class="small"></span></div>
       <div class="row"><label>add</label>
         <select id="obj-kind"></select>
         <input id="obj-x" type="number" step="0.1" value="0.6" style="width:64px" title="x (m)">
@@ -227,7 +230,8 @@ async function loadWorld() {
   $('#slope').value = w.spec.gravity_tilt_deg || 0; $('#slopev').textContent = $('#slope').value + '°';
 }
 loadWorld();
-$('#preset-go').onclick = async () => { await post('/api/world', {preset: $('#preset').value}); loadWorld(); };
+$('#preset-go').onclick = async () => { $('#world-msg').textContent = 'building…'; const r = await post('/api/world', {preset: $('#preset').value}); $('#world-msg').textContent = 'loaded ' + r.name; post('/api/camera', {view: 'wide'}); loadWorld(); };
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => post('/api/camera', {view: b.dataset.view}));
 $('#obj-add').onclick = async () => { await post('/api/world/add', {object: {kind: $('#obj-kind').value, pos: [+$('#obj-x').value, +$('#obj-y').value]}}); loadWorld(); };
 $('#obj-clear').onclick = async () => { await post('/api/world/add', {clear: true}); loadWorld(); };
 $('#fric').oninput = () => $('#fricv').textContent = (+$('#fric').value).toFixed(2);
@@ -251,6 +255,43 @@ $('#stall').oninput = () => { $('#stallv').textContent = $('#stall').value; post
 $('#deadline').oninput = () => { $('#deadlinev').textContent = $('#deadline').value; post('/api/cmd', {line: 'set reflex.fallen_max_s ' + $('#deadline').value}); };
 for (const [id, p] of [['gT','gait.T'],['gh','gait.h'],['ghs','gait.hstep'],['trip','reflex.trip']])
   $('#' + id).oninput = () => { $('#' + id + 'v').textContent = $('#' + id).value; post('/api/cmd', {line: 'set ' + p + ' ' + $('#' + id).value}); };
+// ---- top-down map
+let worldSpec = {objects: []}, lastState = null, scanPts = [];
+const MAP = {scale: 90, cx: 178, cy: 130};          // px per metre, origin
+function w2m(x, y) { return [MAP.cx + x * MAP.scale, MAP.cy - y * MAP.scale]; }
+function drawMap() {
+  const c = $('#map'), g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  g.strokeStyle = '#26232f'; g.lineWidth = 1;
+  for (let m = -3; m <= 3; m++) { const [x0, y0] = w2m(m, -3), [x1, y1] = w2m(m, 3); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); const [a0, b0] = w2m(-3, m), [a1, b1] = w2m(3, m); g.beginPath(); g.moveTo(a0, b0); g.lineTo(a1, b1); g.stroke(); }
+  if (worldSpec.base === 'cliff') { g.fillStyle = '#1a1826'; const [x0, y0] = w2m(-0.45, 0.5), [x1, y1] = w2m(0.35, -0.5); g.fillRect(x0, y0, x1 - x0, y1 - y0); g.fillStyle = '#3a1a1a'; g.fillRect(x1, y0, 60, y1 - y0); }
+  if (worldSpec.terrain) { const t = worldSpec.terrain, [x, y] = w2m(t.pos[0], t.pos[1]), r = (t.size_m || 1.6) / 2 * MAP.scale; g.fillStyle = '#2b2836'; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+  g.fillStyle = '#6f6a80';
+  for (const o of worldSpec.objects || []) {
+    const [x, y] = w2m(o.pos[0], o.pos[1]);
+    if (o.kind === 'rubble') { g.strokeStyle = '#6f6a80'; g.beginPath(); g.arc(x, y, (o.radius_m || 0.5) * MAP.scale, 0, 7); g.stroke(); continue; }
+    if (o.kind === 'ball') { g.fillStyle = '#d99a4a'; g.beginPath(); g.arc(x, y, Math.max(3, (o.radius_m || 0.05) * MAP.scale), 0, 7); g.fill(); g.fillStyle = '#6f6a80'; continue; }
+    const yaw = (o.yaw_deg || 0) * Math.PI / 180; let L = 0.1, W = 0.1;
+    if (o.kind === 'wall') { L = o.len_m || 1; W = 0.04; } else if (o.kind === 'ramp') { L = o.len_m || 0.6; W = o.width_m || 0.6; }
+    else if (o.kind === 'stairs') { L = (o.steps || 3) * (o.run_m || 0.15); W = o.width_m || 0.6; } else if (o.size) { L = o.size[0]; W = o.size[1]; }
+    g.save(); g.translate(x, y); g.rotate(-yaw);
+    const off = (o.kind === 'ramp' || o.kind === 'stairs') ? L / 2 * MAP.scale : 0;
+    g.fillRect(off - L / 2 * MAP.scale, -W / 2 * MAP.scale, L * MAP.scale, W * MAP.scale); g.restore();
+  }
+  g.fillStyle = '#60a5fa'; for (const [px, py] of scanPts) { const [x, y] = w2m(px, py); g.fillRect(x - 1, y - 1, 2, 2); }
+  if (lastState) {
+    if (lastState.goto) { const [x, y] = w2m(lastState.goto[0], lastState.goto[1]); g.strokeStyle = '#67e8f9'; g.lineWidth = 2; g.beginPath(); g.arc(x, y, 6, 0, 7); g.stroke(); }
+    const [x, y] = w2m(lastState.pose.x, lastState.pose.y), yaw = lastState.pose.yaw_deg * Math.PI / 180;
+    g.fillStyle = {NORMAL:'#4ade80', PLANT:'#fbbf24', BRACE:'#fb923c', RECOVER:'#60a5fa', FALLEN:'#f87171', RIGHTED:'#a78bfa'}[lastState.state] || '#a78bfa';
+    g.beginPath(); g.arc(x, y, 0.11 * MAP.scale, 0, 7); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(yaw) * 0.16 * MAP.scale, y - Math.sin(yaw) * 0.16 * MAP.scale); g.stroke();
+  }
+}
+$('#map').onclick = e => { const r = $('#map').getBoundingClientRect(); const sx = $('#map').width / r.width, sy = $('#map').height / r.height; const x = ((e.clientX - r.left) * sx - MAP.cx) / MAP.scale, y = (MAP.cy - (e.clientY - r.top) * sy) / MAP.scale; post('/api/tool/goto', {x: +x.toFixed(2), y: +y.toFixed(2)}); };
+setInterval(async () => { try { const s = await fetch('/api/scan').then(r => r.json()); scanPts = s.points; } catch (e) {} }, 700);
+setInterval(drawMap, 150);
+es.addEventListener('message', e => { lastState = JSON.parse(e.data); });
+const _loadWorld = loadWorld; loadWorld = async () => { await _loadWorld(); worldSpec = await fetch('/api/world').then(r => r.json()).then(w => w.spec); };
+loadWorld();
 fetch('/api/help').then(r => r.json()).then(h => $('#help').textContent = h.commands + '\n' + h.teleop + '\n\n' + h.rl);
 </script>
 </body>

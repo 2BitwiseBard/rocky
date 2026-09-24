@@ -106,7 +106,7 @@ class CockpitSim(Playground):
         self._stop_req = False
         self.frames = {"chase": (0, b""), "eye": (0, b"")}
         self._renderers = None
-        self.cam = dict(distance=0.9, elevation=-18.0, azimuth=135.0)
+        self.cam = dict(distance=1.4, elevation=-24.0, azimuth=0.0)     # behind the robot, looking +x
         self.render_every = int(round(1 / (15 * self.DT)))      # ~15 fps
         self.last = dict(con=np.zeros(5, bool), tilt=0.0, height=0.0, gxy=0.0)
         self.chat_hist = {}
@@ -257,16 +257,48 @@ class CockpitSim(Playground):
             ecam = mujoco.MjvCamera()
             ecam.type = mujoco.mjtCamera.mjCAMERA_FIXED
             ecam.fixedcamid = self.model.camera("eye").id
+            # world objects are geom group 3 (lidar-visible, sim_lidar's
+            # convention) and renderers hide group 3 by default: show it
+            self._vopt = mujoco.MjvOption()
+            self._vopt.geomgroup[3] = 1
             self._renderers = (chase, eye, cam, ecam)
         if self._renderers is False:
             return
         chase, eye, cam, ecam = self._renderers
         cam.lookat[:] = self.data.xpos[self.torso]
         cam.distance, cam.elevation, cam.azimuth = self.cam["distance"], self.cam["elevation"], self.cam["azimuth"]
-        chase.update_scene(self.data, cam)
+        chase.update_scene(self.data, cam, self._vopt)
+        self._overlay(chase.scene)
         self._put("chase", chase.render())
-        eye.update_scene(self.data, ecam)
+        eye.update_scene(self.data, ecam, self._vopt)
         self._put("eye", eye.render())
+
+    def _overlay(self, scn):
+        """State marker + command arrow (the playground HUD) and the goto
+        target as a flag, appended to the renderer's scene."""
+        n0 = scn.ngeom
+        try:
+            self.draw_hud_into(scn)
+        except Exception:
+            scn.ngeom = n0
+        gs = self.goto_state
+        if gs is not None and scn.ngeom + 2 <= scn.maxgeom:
+            base = np.array([gs["tx"], gs["ty"], self.z0 + 0.002])
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_CYLINDER, np.array([0.03, 0.002, 0]),
+                                base, np.eye(3).flatten(), np.array([0.4, 0.8, 1.0, 0.6], dtype=np.float32))
+            scn.ngeom += 1
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_ARROW, np.zeros(3), np.zeros(3),
+                                np.eye(3).flatten(), np.array([0.4, 0.8, 1.0, 0.9], dtype=np.float32))
+            mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_ARROW, 0.006, base + [0, 0, 0.16], base + [0, 0, 0.02])
+            scn.ngeom += 1
+
+    def draw_hud_into(self, scn):
+        """draw_hud without resetting ngeom (the renderer's scene already
+        holds the world)."""
+        n0 = scn.ngeom
+        self.draw_hud(_SceneTail(scn, n0))
 
     def _put(self, name, rgb):
         from PIL import Image
@@ -301,8 +333,7 @@ class CockpitSim(Playground):
         from pebble_gait import leg_ik, body_to_leg
         q0 = np.array([leg_ik(body_to_leg(i, self.gait.p_nom[i])) for i in range(5)]).flatten()
         jadr = [self.model.joint(f"{n}{i}").qposadr[0] for i in range(5) for n in ("yaw", "hip", "knee")]
-        self.data.qpos[:] = 0
-        self.data.qvel[:] = 0
+        mujoco.mj_resetData(self.model, self.data)      # world bodies (the ball) back to their spawn
         self.data.qpos[0:3] = [xy[0], xy[1], (self.gait.h + 14) / 1000.0 + self.z0]
         self.data.qpos[3:7] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
         self.data.qpos[jadr] = q0
@@ -565,6 +596,38 @@ class CockpitSim(Playground):
         return {"reply": content, "trace": trace, "mode": "claude", "model": model}
 
 
+class _SceneTail:
+    """View of an MjvScene whose ngeom counts from an offset, so the
+    playground's draw_hud (which starts at 0) appends instead of clearing."""
+
+    def __init__(self, scn, n0):
+        self._scn, self._n0 = scn, n0
+
+    @property
+    def ngeom(self):
+        return self._scn.ngeom - self._n0
+
+    @ngeom.setter
+    def ngeom(self, v):
+        self._scn.ngeom = self._n0 + v
+
+    @property
+    def maxgeom(self):
+        return self._scn.maxgeom - self._n0
+
+    @property
+    def geoms(self):
+        return _Shift(self._scn.geoms, self._n0)
+
+
+class _Shift:
+    def __init__(self, arr, n0):
+        self._arr, self._n0 = arr, n0
+
+    def __getitem__(self, i):
+        return self._arr[self._n0 + i]
+
+
 class _ToolSurface:
     def __init__(self, sim):
         self._sim = sim
@@ -743,12 +806,30 @@ def make_app(sim: CockpitSim):
             sim.paused = bool(body["paused"])
         return JSONResponse({"speed": sim.speed, "paused": sim.paused})
 
+    VIEWS = {"follow": dict(distance=0.9, elevation=-18.0), "wide": dict(distance=2.2, elevation=-35.0),
+             "top": dict(distance=2.6, elevation=-89.0), "low": dict(distance=1.0, elevation=-6.0)}
+
     async def camera(request):
         body = await request.json()
+        if body.get("view") in VIEWS:
+            sim.cam.update(VIEWS[body["view"]])
         for k in ("distance", "elevation", "azimuth"):
             if k in body:
                 sim.cam[k] = float(body[k])
         return JSONResponse(sim.cam)
+
+    async def scan(_):
+        def do_scan():
+            angles, ranges, origin = lidar_scan(sim.model, sim.data, sim.torso)
+            R = sim.data.xmat[sim.torso].reshape(3, 3)
+            yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+            pts = []
+            for a, r in zip(angles[::4], ranges[::4]):
+                if np.isfinite(r):
+                    pts.append([round(float(origin[0] + r * np.cos(a + yaw)), 3),
+                                round(float(origin[1] + r * np.sin(a + yaw)), 3)])
+            return {"points": pts, "origin": [round(float(origin[0]), 3), round(float(origin[1]), 3)], "yaw": yaw}
+        return JSONResponse(await sim.call(do_scan))
 
     async def tool(request):
         name = request.path_params["name"]
@@ -777,7 +858,7 @@ def make_app(sim: CockpitSim):
         Route("/api/rl/curves.png", rl_curves),
         Route("/api/look", look, methods=["POST"]), Route("/api/shove", shove, methods=["POST"]),
         Route("/api/reset", reset, methods=["POST"]), Route("/api/speed", speed, methods=["POST"]),
-        Route("/api/camera", camera, methods=["POST"]), Route("/api/tool/{name}", tool, methods=["POST"]),
+        Route("/api/camera", camera, methods=["POST"]), Route("/api/scan", scan), Route("/api/tool/{name}", tool, methods=["POST"]),
         Route("/api/help", help_), Route("/favicon.ico", favicon),
     ]
     return Starlette(routes=routes)
