@@ -16,7 +16,15 @@ Everything returned is a fresh copy — mutate freely, the cache is safe.
     lo, hi = rm.joint_limits_rad()          # (yaw, hip, knee) tuples, rad
     rm.servo_speed("loaded")                # 3.0 rad/s
     WaveGait(**rm.gait_defaults())
-    rm.stall_nm(), rm.continuous_nm()       # 2.94, 1.911 N.m (leg servo)
+    rm.stall_nm(), rm.continuous_nm()       # 2.94 (peak = sim forcerange), 1.911 N.m (thermal)
+    rm.dc_speed(), rm.dc_speed(rm.continuous_nm())   # 4.7 / 3.05 rad/s (the DC line, no load)
+    rm.thermal()                            # the RL thermal proxy's constants (budget 54)
+
+D052 amendment (owner, 2026-09-24): a position servo's instantaneous torque
+is its STALL torque; continuous_frac is a THERMAL (sustained) budget, not an
+instantaneous cap. The MJCF forcerange / URDF effort are stall_nm(); the
+sustained budget is enforced where time matters (rl_common.ThermalProxy,
+pebble_feasibility THERMAL_LOAD), not by clipping every step.
 """
 from __future__ import annotations
 
@@ -97,14 +105,24 @@ def actuator(name: str | None = None) -> dict:
 
 
 def stall_nm(name: str | None = None) -> float:
-    """Stall torque (N.m). Use it for bodyweight quotes, NOT as a sustained budget."""
+    """Stall torque (N.m) = the servo's PEAK (instantaneous) torque: the MJCF
+    forcerange and the URDF effort since the D052 amendment. Not a sustained budget."""
     return actuator(name)["stall_nm"]
 
 
+peak_nm = stall_nm                  # D052 amendment: the name says what the sim clips at
+
+
 def continuous_nm(name: str | None = None) -> float:
-    """Thermal (sustained) torque budget = continuous_frac x stall — the sim's forcerange."""
+    """Thermal (SUSTAINED) torque budget = continuous_frac x stall. What the servo
+    can hold for minutes — not an instantaneous cap (D052 amendment: the sim's
+    forcerange is stall; this is where the thermal proxy starts to heat)."""
     a = actuator(name)
     return a["stall_nm"] * float(a["continuous_frac"])
+
+
+def continuous_frac(name: str | None = None) -> float:
+    return float(actuator(name)["continuous_frac"])
 
 
 def no_load_rad_s(name: str | None = None) -> float:
@@ -116,6 +134,33 @@ def damping_nms(name: str | None = None) -> float:
     the joint damping that makes a saturated servo slow down under load."""
     a = actuator(name)
     return a["stall_nm"] / float(a["no_load_rad_s"])
+
+
+def dc_speed(motor_nm: float | None = None, load_nm: float = 0.0, name: str | None = None) -> float:
+    """Steady joint speed (rad/s) on the DC torque-speed line: the motor puts out
+    `motor_nm` (default: stall, the MJCF forcerange), the joint carries `load_nm`,
+    and the rest is eaten by the back-EMF damping — (motor - load) / damping.
+    No load: 4.7 rad/s at stall (= no-load speed), 3.05 at the continuous torque
+    (a thermally derated joint, and the 'loaded' speed budget). Stall motor with
+    the continuous torque as load: 1.65."""
+    m = stall_nm(name) if motor_nm is None else float(motor_nm)
+    return max(0.0, (m - float(load_nm)) / damping_nms(name))
+
+
+def thermal(name: str | None = None) -> dict:
+    """The thermal proxy's constants (D052 amendment): heat integrates
+    ((|tau_e|/stall)^2 - continuous_frac^2) dt (tau_e = the ELECTRICAL torque,
+    force - damping x qvel: rl_common.motor_torque), clamped at 0; it trips at
+    budget = (trip_frac^2 - continuous_frac^2) x trip_s load-fraction^2.s —
+    i.e. `trip_s` seconds at `trip_frac` x stall (the driver mock's 70 C cut:
+    ~3 min at 0.85). Servos without trip keys inherit the leg servo's."""
+    a = actuator(name)
+    leg = actuator()
+    cf = float(a["continuous_frac"])
+    tf = float(a.get("thermal_trip_frac", leg["thermal_trip_frac"]))
+    ts = float(a.get("thermal_trip_s", leg["thermal_trip_s"]))
+    return dict(stall_nm=a["stall_nm"], continuous_frac=cf, trip_frac=tf, trip_s=ts,
+                budget=(tf * tf - cf * cf) * ts)
 
 
 def counts_per_rad(name: str | None = None) -> float:
@@ -155,7 +200,14 @@ def claw_limits(unit: str = "deg") -> tuple[float, float]:
 
 def servo_speed(kind: str = "loaded") -> float:
     """Joint speed budget (rad/s): 'loaded' (stance, carrying weight), 'free'
-    (swinging leg) or 'hard' (= the leg servo's no-load speed; never exceed)."""
+    (swinging leg) or 'hard' (= the leg servo's no-load speed; never exceed).
+
+    'loaded' = 3.0 is dc_speed(continuous_nm()) = 1.911 / 0.626 = 3.05 rad/s
+    rounded down: the fastest a joint turns while its motor stays inside the
+    SUSTAINED (thermal) torque budget — an upper bound, a joint that also
+    carries a load L gets (1.911 - L) / 0.626. 'free' = 4.0 is ~85 % of the
+    4.7 no-load speed (dc_speed()), which the MJCF reaches since the D052
+    amendment (forcerange = stall; it capped at 3.06 with the continuous clip)."""
     v = _p()["joints"]["vel_rad_s"]
     if kind not in v:
         raise KeyError(f"servo_speed kind must be one of {sorted(v)}")
@@ -229,7 +281,8 @@ def spawn_z_m(body_height: float | None = None, platform_z_m: float = 0.0) -> fl
 
 def stance_torso_z_m(body_height: float | None = None) -> float:
     """Where the torso settles on a rigid floor with ideal servos (m) — no clearance.
-    Real servos sag ~1-2 mm below this under the D052 forcerange."""
+    Real servos sag ~1-2 mm below this under the D052 forcerange (the joint
+    damping and the kp=20 position error, not the clip: stance loads are ~0.1-0.2 x stall)."""
     h = gait_defaults()["body_height"] if body_height is None else float(body_height)
     return (h + spawn_dz_mm(h, clearance_mm=0.0)) / 1000.0
 
@@ -266,7 +319,8 @@ def joint_to_id(leg: int, joint: str) -> int:
 def summary() -> str:
     a = actuator()
     lo, hi = joint_limits_deg()["hip"]
-    return (f"{a['name']}: stall {a['stall_nm']:.2f} N.m, continuous {continuous_nm():.2f}, "
+    return (f"{a['name']}: stall {a['stall_nm']:.2f} N.m (peak = sim clip), continuous "
+            f"{continuous_nm():.2f} (thermal, budget {thermal()['budget']:.0f}), "
             f"no-load {a['no_load_rad_s']:.1f} rad/s, damping {damping_nms():.3f} N.m.s/rad; "
             f"speed budget loaded {servo_speed('loaded'):.1f} / free {servo_speed('free'):.1f} / "
             f"hard {servo_speed('hard'):.1f} rad/s; hip {lo:.0f}..{hi:.0f} deg; params {params_rev()}")

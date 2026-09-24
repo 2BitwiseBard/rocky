@@ -51,22 +51,98 @@ def test_loader_numbers():
     assert rm.damping_nms() == pytest.approx(2.94 / 4.7)
     # the loaded speed budget IS where the continuous clip meets the damping line
     assert rm.continuous_nm() / rm.damping_nms() == pytest.approx(rm.servo_speed("loaded"), abs=0.1)
+    # D052 amendment: peak = stall; the DC line at stall / at continuous torque, no load
+    assert rm.peak_nm() == rm.stall_nm()
+    assert rm.dc_speed() == pytest.approx(rm.no_load_rad_s())
+    assert rm.dc_speed(rm.continuous_nm()) == pytest.approx(3.055, abs=1e-3)
+    assert rm.dc_speed(load_nm=rm.continuous_nm()) == pytest.approx((2.94 - 1.911) / (2.94 / 4.7))
+    th = rm.thermal()
+    assert th["budget"] == pytest.approx((0.85 ** 2 - 0.65 ** 2) * 180.0)       # 54 load^2.s
+    assert rm.thermal("claw")["trip_s"] == th["trip_s"]                          # inherits the leg's
     assert rm.foot_contact_radius_mm() == pytest.approx(6.5)
     lo, hi = rm.joint_limits_rad()
     assert np.allclose(np.degrees(lo), [-40, -70, -150]) and np.allclose(np.degrees(hi), [40, 90, -20])
 
 
-@pytest.mark.xfail(strict=True, reason="OWNER DECISION PENDING (D052 V2): forcerange = continuous torque caps a "
-                   "free leg at continuous/damping = 3.06 rad/s, below the 4.0 rad/s free budget the studio "
-                   "and pebble_feasibility allow. Fix the model (peak-torque forcerange + a thermal limit) or "
-                   "lower joints.vel_rad_s.free to <= 3.0 — then this XPASSes and must be un-marked.")
 def test_a_free_joint_can_reach_the_free_speed_budget(model):
-    """The review's 'SIM vs BUDGET MISMATCH', kept visible: the fastest a joint
-    can swing with no load in the MJCF is forcerange / damping (the torque the
-    clip allows is all eaten by the damping line there)."""
+    """The review's 'SIM vs BUDGET MISMATCH' (a strict xfail until the D052
+    amendment): the fastest a joint can swing with no load in the MJCF is
+    forcerange / damping — with forcerange = stall that is the 4.7 no-load
+    speed, above the 4.0 free budget (it was 3.06 with the continuous clip)."""
     dofs = [model.jnt_dofadr[model.joint(f"{n}{i}").id] for i in range(N) for n in rm.LEG_JOINTS]
     reach = model.actuator_forcerange[:15, 1] / model.dof_damping[dofs]
     assert reach.min() >= rm.servo_speed("free") - 1e-6, reach.min()
+    assert reach == pytest.approx(rm.no_load_rad_s(), abs=1e-3)
+
+
+def _swing_peak(joint, q_from, q_to, forcerange=None, secs=0.8):
+    """Peak |qdot| of one joint stepped from q_from to q_to in the MJCF, the
+    torso pinned 1 m up with gravity off (no load: only the motor's own line)."""
+    m = mujoco.MjModel.from_xml_path(XML)
+    m.opt.gravity[:] = 0.0
+    a = m.actuator(joint).id
+    if forcerange is not None:
+        m.actuator_forcerange[a] = [-forcerange, forcerange]
+    d = mujoco.MjData(m)
+    jadr = [m.joint(f"{n}{i}").qposadr[0] for i in range(N) for n in rm.LEG_JOINTS]
+    j = m.joint(joint)
+    d.qpos[0:7] = [0, 0, 1.0, 1, 0, 0, 0]
+    d.qpos[j.qposadr[0]] = q_from
+    d.ctrl[:15] = d.qpos[jadr]
+    d.ctrl[a] = q_to
+    peak = 0.0
+    for _ in range(int(secs / m.opt.timestep)):
+        mujoco.mj_step(m, d)
+        d.qpos[0:7] = [0, 0, 1.0, 1, 0, 0, 0]
+        d.qvel[0:6] = 0.0
+        peak = max(peak, abs(float(d.qvel[j.dofadr[0]])))
+    return peak
+
+
+SWINGS = (("yaw0", -0.6, 0.6), ("hip2", -1.1, 1.4), ("knee4", -2.5, -0.4))
+
+
+@pytest.mark.parametrize("joint,q_from,q_to", SWINGS)
+def test_mjcf_free_joint_swings_past_the_free_budget(joint, q_from, q_to):
+    """Dynamic, not just the ratio: a big unloaded step saturates the actuator
+    at the peak torque and the joint runs up the DC line to ~4.7 rad/s (>= the
+    4.0 free budget the studio / pebble_feasibility allow). Measured 4.71."""
+    v = _swing_peak(joint, q_from, q_to)
+    assert v >= rm.servo_speed("free"), v
+    assert v == pytest.approx(rm.no_load_rad_s(), abs=0.1)
+
+
+@pytest.mark.parametrize("joint,q_from,q_to", SWINGS)
+def test_mjcf_joint_at_continuous_torque_reaches_3p05(joint, q_from, q_to):
+    """A joint whose motor is held to the continuous torque (what a thermally
+    derated joint gets, rl_common.ThermalProxy) tops out at continuous /
+    damping = 3.05 rad/s — the 'loaded' speed budget. Measured 3.06."""
+    v = _swing_peak(joint, q_from, q_to, forcerange=rm.continuous_nm())
+    assert v == pytest.approx(rm.dc_speed(rm.continuous_nm()), abs=0.05)
+    assert v >= rm.servo_speed("loaded")
+
+
+def test_feasibility_thermal_load_verdict():
+    """pebble_feasibility.judge_load (fed by audit_gestures' MuJoCo playback):
+    RMS |tau_e|/stall > continuous_frac warns, > the 0.85 trip fraction fails."""
+    import pebble_feasibility as pf
+    q = pf.planted_q()
+
+    def hold(g, t):
+        return q, np.zeros(N)
+    assert pf.LOAD_WARN == pytest.approx(0.65) and pf.LOAD_FAIL == pytest.approx(0.85)
+    load = np.full((N, 3), 0.2)
+    rep = pf.judge_load(pf.check(hold, 1.0, name="hold"), load)
+    assert rep.ok and not [c for c in rep.codes if c.startswith("THERMAL_LOAD")]
+    assert "RMS load 0.20 x stall" in rep.lines[0] and rep.to_json()["load_rms"][0][0] == 0.2
+    load[2, 1] = 0.7
+    rep = pf.judge_load(pf.check(hold, 1.0, name="hold"), load)
+    assert rep.ok and rep.warnings == ["THERMAL_LOAD_WARN"]
+    assert any("THERMAL_LOAD_WARN: leg 2 hip RMS load 0.70" in ln for ln in rep.lines)
+    load[4, 2] = 0.9
+    rep = pf.judge_load(pf.check(hold, 1.0, name="hold"), load.ravel())
+    assert not rep.ok and rep.fails == ["THERMAL_LOAD"] and rep.lines[0].startswith("FAIL")
+    assert any("FAIL THERMAL_LOAD: leg 4 knee RMS load 0.90" in ln for ln in rep.lines)
 
 
 def test_id_map_inverts_params_not_divmod():
@@ -104,10 +180,11 @@ def test_mjcf_ranges_damping_forcerange(model):
             jid = model.joint(f"{j}{i}").id
             assert model.dof_damping[model.jnt_dofadr[jid]] == pytest.approx(rm.damping_nms(), abs=1e-4)
             a = model.actuator(f"{j}{i}").id
-            assert np.allclose(model.actuator_forcerange[a], [-rm.continuous_nm(), rm.continuous_nm()],
+            # D052 amendment: the clip is the PEAK (stall) torque; continuous is thermal
+            assert np.allclose(model.actuator_forcerange[a], [-rm.stall_nm(), rm.stall_nm()],
                                atol=1e-4)
         a = model.actuator(f"claw{i}").id
-        assert model.actuator_forcerange[a][1] == pytest.approx(rm.continuous_nm("claw"), abs=1e-4)
+        assert model.actuator_forcerange[a][1] == pytest.approx(rm.stall_nm("claw"), abs=1e-4)
 
 
 def test_compiled_mass_equals_budget(model):
@@ -149,7 +226,8 @@ def test_spawn_settles_to_stance_height(model):
     data = mujoco.MjData(model)
     data.qpos[0:3] = [0, 0, rm.spawn_z_m()]
     data.qpos[3:7] = [1, 0, 0, 0]
-    data.qpos[7:22] = q0
+    data.qpos[[model.joint(f"{n}{i}").qposadr[0] for i in range(N)
+               for n in ("yaw", "hip", "knee")]] = q0   # claws interleave in qpos: never qpos[7:22]
     data.ctrl[:15] = q0
     for _ in range(int(0.8 / model.opt.timestep)):
         mujoco.mj_step(model, data)
@@ -174,10 +252,10 @@ def test_urdf_limits_effort_velocity_damping():
         assert math.degrees(float(L.get("lower"))) == pytest.approx(lim[kind][0], abs=1e-3)
         assert math.degrees(float(L.get("upper"))) == pytest.approx(lim[kind][1], abs=1e-3)
         if kind == "claw":
-            assert float(L.get("effort")) == pytest.approx(rm.continuous_nm("claw"), abs=1e-3)
+            assert float(L.get("effort")) == pytest.approx(rm.stall_nm("claw"), abs=1e-3)
             assert float(L.get("velocity")) == pytest.approx(rm.no_load_rad_s("claw"))
         else:
-            assert float(L.get("effort")) == pytest.approx(rm.continuous_nm(), abs=1e-3)
+            assert float(L.get("effort")) == pytest.approx(rm.stall_nm(), abs=1e-3)   # peak (amendment)
             assert float(L.get("velocity")) == pytest.approx(rm.servo_speed("hard"))
             assert float(j.find("dynamics").get("damping")) == pytest.approx(rm.damping_nms(), abs=1e-3)
         seen += 1

@@ -21,11 +21,23 @@ meta:
 # ------------------------------------------------------------
 actuators:
   st3215:                # Feetech STS3215 / Waveshare ST3215 — the 15 leg joints
-    stall_nm_12v: 2.94   # 30 kg.cm at 12 V (datasheet, D002). VERIFY on bench/torque_step
+    stall_nm_12v: 2.94   # 30 kg.cm at 12 V (datasheet, D002). VERIFY on bench/torque_step.
+                         # D052 amendment (owner, 2026-09-24): a position servo's INSTANTANEOUS
+                         # torque is its stall torque — the MJCF forcerange and the URDF effort
+                         # are this number (peak), not the continuous one below
     no_load_rad_s: &st3215_no_load 4.7   # 0.222 s / 60 deg no-load at 12 V (datasheet)
-    continuous_frac: 0.65  # thermal budget x stall: what it can HOLD for minutes.
-                           # A guess from hobby-servo practice, not a datasheet
-                           # number — VERIFY with a 10-min hold + temp log
+                         # with damping = stall / no-load the sim's DC line gives an unloaded joint
+                         # 4.7 rad/s with the motor at stall and 3.05 rad/s with it held to the
+                         # continuous torque (= joints.vel_rad_s.loaded; rocky_model.dc_speed)
+    continuous_frac: 0.65  # THERMAL (sustained) budget x stall: what it can HOLD for minutes.
+                           # NOT an instantaneous cap (D052 amendment) — sustained load above it
+                           # heats the RL envs' thermal proxy and trips pebble_feasibility's
+                           # THERMAL_LOAD verdict. A guess from hobby-servo practice, not a
+                           # datasheet number — VERIFY with a 10-min hold + temp log
+    thermal_trip_frac: 0.85  # sustained load (x stall) that trips the servo's over-temp cut ...
+    thermal_trip_s: 180.0    # ... after this long: the driver mock's thermal model (70 C cut at
+                             # 85 % load in ~3 min). The proxy budget = (0.85^2 - 0.65^2) x 180 =
+                             # 54 s (load-fraction^2 above continuous). VERIFY with the same hold test
     counts_per_rev: 4096   # 12-bit magnetic encoder over 360 deg
     latency_s: 0.02        # sync-write -> servo acts: ~one bus tick (VERIFY with an echo test)
     bus_hz: 50             # sync-write rate the driver runs
@@ -48,9 +60,12 @@ joints:                  # soft limits: CAD-validated sweeps (D008) — the MJCF
     knee: [-150, -20]
     claw: [0, 55]        # capped until hand v0.3 (see BUILD_LOG 07-28)
   vel_rad_s:             # speed budgets for anything that plans or authors motion
-    loaded: 3.0          # a stance joint carrying body weight. = continuous torque /
-                         # the motor's damping line (1.9 N.m / 0.62 = 3.06 rad/s): past
-                         # this the servo cannot also hold the load (D052)
+    loaded: 3.0          # a stance joint carrying body weight: the fastest a joint turns with
+                         # its motor inside the continuous (thermal) torque, dc_speed(continuous)
+                         # = 1.911 / 0.626 = 3.05 rad/s — sustained faster motion under load
+                         # costs heat (D052; since the amendment the clip is the peak, so this
+                         # is a thermal budget, not a hard stop: at 3.0 rad/s a stall-driven
+                         # motor still has ~1.06 N.m for the load)
     free: 4.0            # a swinging (unloaded) leg: ~85 % of no-load, margin for the ramp
     hard: *st3215_no_load  # never command faster than the motor can turn at all
 

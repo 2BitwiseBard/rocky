@@ -41,6 +41,17 @@ What a Report judges (every threshold comes from gait/rocky_model.py):
                the body lifted clear of the floor (every 3rd sample).
   THERMAL      warning: a joint spends > 30 % of the samples above 0.6x its
                speed class limit (sustained speed = sustained current).
+  THERMAL_LOAD from a MuJoCo PLAYBACK (judge_load(rep, load_rms); sim/
+               audit_gestures.py runs it): a joint's RMS electrical torque
+               (actuator_force - damping x qvel, rl_common.motor_torque) /
+               stall over the motion — RMS because heat goes as tau^2, so a
+               duty-cycled overload is not averaged away — above
+               continuous_frac (0.65) = WARN
+               (THERMAL_LOAD_WARN), above the thermal trip fraction (0.85,
+               ~3 min to the servo's over-temp cut) = FAIL. D052 amendment:
+               the MJCF now clips at the PEAK (stall) torque, so a motion
+               that leans on more than the continuous torque is no longer
+               stopped by the sim — this is where it is caught.
   SLIP         kind="static": the CoM's horizontal acceleration relative to
                the planted feet needs more friction than the feet have
                (> mu_slide g = FAIL, > half of it = SLIP_WARN). mu from params
@@ -85,8 +96,10 @@ JOINTS = rm.LEG_JOINTS
 
 FAIL_CODES = ("NAN", "LIMIT_YAW", "LIMIT_HIP", "LIMIT_KNEE", "LIMIT_CLAW", "SPEED_LOADED",
               "SPEED_FREE", "SPEED_HARD", "SPEED_CLAW", "JUMP", "SUPPORT", "MARGIN",
-              "SELF_CONTACT", "REACH", "LOOP_WRAP", "SPEC", "SLIP")
-WARN_CODES = ("THERMAL", "MARGIN_WARN", "MARGIN_GAIT", "SLIP_WARN")
+              "SELF_CONTACT", "REACH", "LOOP_WRAP", "SPEC", "SLIP", "THERMAL_LOAD")
+WARN_CODES = ("THERMAL", "MARGIN_WARN", "MARGIN_GAIT", "SLIP_WARN", "THERMAL_LOAD_WARN")
+LOAD_WARN = rm.continuous_frac()        # 0.65 x stall: the sustained (thermal) budget
+LOAD_FAIL = rm.thermal()["trip_frac"]   # 0.85 x stall: the servo's over-temp cut in ~3 min
 MU_SLIDE = float(rm.params()["leg"]["foot"]["mu_slide"])
 SLIP_WINDOW_S = 0.04            # acceleration is judged over +-40 ms (servo response)
 G_MM_S2 = 9810.0
@@ -407,6 +420,7 @@ class Report:
     acc_max_g: float = 0.0                               # CoM horizontal accel vs planted feet, in g
     self_contacts: int | None = None
     self_contact_pairs: list = field(default_factory=list)
+    load_rms: np.ndarray | None = None                  # (5,3) RMS tau_e/stall, MuJoCo playback
     lines: list = field(default_factory=list)
     notes: list = field(default_factory=list)
 
@@ -436,6 +450,7 @@ class Report:
                     support_t=f(self.support_t), acc_max_g=f(self.acc_max_g),
                     self_contacts=self.self_contacts,
                     self_contact_pairs=self.self_contact_pairs[:10],
+                    load_rms=None if self.load_rms is None else np.round(self.load_rms, 3).tolist(),
                     violations=self.violations, lines=self.lines, notes=self.notes)
 
     def __str__(self):
@@ -707,6 +722,9 @@ def _lines(rep, V) -> list:
             + (f"; accel {rep.acc_max_g:.2f} g" if rep.kind == "static" else ""))
     if rep.self_contacts is not None:
         head += f"; self-contact samples {rep.self_contacts}"
+    if rep.load_rms is not None:
+        i, j = np.unravel_index(int(np.argmax(rep.load_rms)), rep.load_rms.shape)
+        head += f"; RMS load {rep.load_rms[i, j]:.2f} x stall (leg {i} {JOINTS[j]})"
     out.append(head)
     seen = set()
     for vi in rep.violations:
@@ -744,12 +762,40 @@ def _lines(rep, V) -> list:
                        f"(> {vi['limit']:.2f}; foot mu {MU_SLIDE:g}) at t={vi['t']:.2f}s")
         elif c == "SPEED_CLAW":
             out.append(f"  {tag} SPEED_CLAW: {vi['value']:.1f} rad/s > {vi['limit']:.0f}")
+        elif c in ("THERMAL_LOAD", "THERMAL_LOAD_WARN"):
+            out.append(f"  {tag} {c}:{where} RMS load {vi['value']:.2f} x stall over the motion "
+                       f"(> {vi['limit']:.2f}: " + ("the servo's over-temp cut in ~3 min if sustained)"
+                                                    if c == "THERMAL_LOAD" else "above its continuous budget)"))
     for jmp in rep.jumps[:8]:
         out.append(f"  FAIL JUMP ({jmp['where']}): leg {jmp['leg']} {jmp['joint']} steps "
                    f"{jmp['dq_deg']:.1f} deg at t={jmp['t']:.2f}s")
     for n in rep.notes:
         out.append(f"  note: {n}")
     return out
+
+
+# ------------------------------------------------------------------ thermal (MuJoCo playback)
+def judge_load(rep: Report, load_rms) -> Report:
+    """Add the THERMAL_LOAD verdict to a Report from a MuJoCo playback of the
+    same motion: load_rms = each leg joint's sqrt(mean(tau_e^2)) / stall over
+    the motion, (5,3) or (15,) leg-major, tau_e = rl_common.motor_torque (the
+    current term: actuator_force - damping x qvel). RMS, not mean |tau|: the
+    thermal model is in tau^2, so a 50 % duty of stall (mean 0.50, RMS 0.71)
+    must not pass as sustainable — it trips rl_common.ThermalProxy in ~11 min. > continuous_frac (0.65) =
+    THERMAL_LOAD_WARN, > the thermal trip fraction (0.85) = THERMAL_LOAD
+    (FAIL). Mutates and returns rep (ok + lines recomputed)."""
+    L = np.asarray(load_rms, float).reshape(N_LEGS, 3)
+    rep.load_rms = L
+    for code, lim, mask in (("THERMAL_LOAD", LOAD_FAIL, L > LOAD_FAIL),
+                            ("THERMAL_LOAD_WARN", LOAD_WARN, (L > LOAD_WARN) & (L <= LOAD_FAIL))):
+        if not mask.any():
+            continue
+        rep.codes[code] = int(mask.sum())
+        for i, j in zip(*np.nonzero(mask)):
+            _add(rep, code, 0, leg=int(i), joint=JOINTS[j], value=L[i, j], limit=lim)
+    rep.ok = not rep.fails
+    rep.lines = _lines(rep, speed_limits())
+    return rep
 
 
 # ------------------------------------------------------------------ gait + specs

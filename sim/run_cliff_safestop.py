@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
+import rocky_model as rm                                             # noqa: E402
 from pebble_reflex import ReflexSupervisor, body_gyro_xy             # noqa: E402
 from cliff import CliffDetector, CliffReaction                        # noqa: E402
 from run_odom import foot_contacts                                    # noqa: E402
@@ -58,7 +59,7 @@ def run(mode, record=None):
                    for i in range(N_LEGS)]).flatten()
     jadr = [model.joint(f"{n}{i}").qposadr[0]
             for i in range(5) for n in ("yaw", "hip", "knee")]
-    data.qpos[0:3] = [0, 0, (gait.h + 14) / 1000.0 + PLAT_H]
+    data.qpos[0:3] = [0, 0, rm.spawn_z_m(gait.h, platform_z_m=PLAT_H)]    # D052: was h + 14 mm
     data.qpos[3:7] = [1, 0, 0, 0]
     data.qpos[jadr] = q0
     data.ctrl[:15] = q0

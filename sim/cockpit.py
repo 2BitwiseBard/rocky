@@ -230,6 +230,9 @@ class CockpitSim(Playground):
             return f"reflex state is {self.sup.state}"
         if np.any(self.cmd_v):
             return "the sim is walking (velocity command) — stop first"
+        why = self.motion_reason()           # a void retreat / pending stop / gate hold (review fix)
+        if why:
+            return why
         if self.goto_state is not None:
             return "a goto is running — stop first"
         if self.gesture is not None or self._ges is not None:
@@ -247,6 +250,10 @@ class CockpitSim(Playground):
         why = self.idle_reason()
         if why:
             return why
+        hot = self.thermal_status()["tripped"]
+        if hot:                              # review fix: the sim's servos are past their thermal budget
+            return (f"{', '.join(hot)} past the thermal budget in the sim (the real servo would be at "
+                    f"its over-temp cut) — let it cool")
         if self.speed != 1.0:
             return f"the sim runs at {self.speed:g}x — set speed 1x first (the stream is paced by the sim)"
         if self.paused:
@@ -830,14 +837,21 @@ class CockpitSim(Playground):
             self.rec["frames"].append(rgb.copy())
 
     # ------------------------------------------------------- world swaps
-    def set_world(self, spec, name="custom"):
-        """Sim thread. Rebuild the world; the robot respawns upright where it
-        stands (or at the origin if that is now inside something)."""
+    def set_world(self, spec, name="custom", keep_pose=None):
+        """Sim thread. Rebuild the world; the robot respawns upright. An EDIT
+        of the current world keeps its pose and heading; a DIFFERENT world
+        starts it at the origin facing +x (yaw 0), which is what GOTO_DOC and
+        the brains are told (D052 review: the old heading was carried into a
+        fresh world, so "forward" and the map's +x disagreed from the start).
+        keep_pose: True for an edit (/api/world/add passes it — its first edit
+        of a preset renames the world 'custom', which a name comparison took
+        for a new world and teleported the robot home), False to force the
+        origin; None = keep only when the name is unchanged (a reload)."""
         model, z0 = build_world(spec)
         old = self.data
         p_xy = old.xpos[self.torso][:2].copy()
         yaw = float(np.arctan2(old.xmat[self.torso].reshape(3, 3)[1, 0], old.xmat[self.torso].reshape(3, 3)[0, 0]))
-        same_world = (name == self.world_name)
+        same_world = (name == self.world_name) if keep_pose is None else bool(keep_pose)
         self.model, self.z0 = model, z0
         self.world_spec, self.world_name = dict(spec), name
         self.data = mujoco.MjData(model)
@@ -847,7 +861,7 @@ class CockpitSim(Playground):
         self._abandon_goto("world changed")
         self.gesture = None
         self.push = None
-        self._respawn(p_xy if same_world else np.zeros(2), yaw, keep_righter=True)
+        self._respawn(p_xy if same_world else np.zeros(2), yaw if same_world else 0.0, keep_righter=True)
         self.fingerprint = robot_fingerprint(model)
         if self.walk is not None:
             self.set_walk(self.walk["name"], _keep_gait=self.walk.get("gait_prev"))
@@ -1413,7 +1427,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         if body.get("clear"):
             spec["objects"] = []
             spec["terrain"] = None
-        await sim.call(lambda: sim.set_world(spec, "custom"))
+        await sim.call(lambda: sim.set_world(spec, "custom", keep_pose=True))   # an edit: keep the pose
         return JSONResponse({"ok": True, "spec": spec})
 
     async def rl_runs(_):

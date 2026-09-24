@@ -31,10 +31,20 @@ D052 — what changed and why:
     (the servo draw's 10-40 ms latency replaces it).
   * height target = rocky_model.stance_torso_z_m() (the old (h+14)/1000
     was 14 mm above the D052 stance and biased the reward).
+  * D052 amendment: the MJCF clips at the servo's PEAK (stall) torque; the
+    continuous budget is a thermal one, enforced by rl_common.ThermalProxy
+    (heat += ((|tau_e|/stall)^2 - 0.65^2) dt, tau_e = force - damping x qvel
+    (rl_common.motor_torque, the current term); past the 54 budget the joint's
+    forcerange ramps to continuous and the reward pays -0.5 x mean derate).
+    From cold it cannot trip inside an 8 s episode (at stall it takes 93 s);
+    thermal_heat0=(lo, hi) starts each episode with a warm servo (fraction
+    of the budget, per joint) so a policy can meet a derated leg. Default
+    (0, 0): off unless asked. info carries thermal_heat_max / _tripped.
 
 reward = 0.75 vel tracking + 0.25 yaw-rate tracking - 0.02 |a|^2
          - 0.1 |a - a_last|^2 (raw action; the weight is a first guess)
-         - 1.2 tilt^2 - 8 |h - h_stance| ; -5 on a fall ; +1 on survival.
+         - 1.2 tilt^2 - 8 |h - h_stance| - 0.5 mean(thermal derate)
+         ; -5 on a fall ; +1 on survival.
 Control at 50 Hz (10 physics substeps); episode 8 s.
 cmd_sample=True re-draws the command every episode (30% pure forward,
 else vx[15,60] vy[-25,25] wz[-0.35,0.35]) -> ONE policy for the whole
@@ -78,7 +88,7 @@ ACT_SCALE = 0.25            # rad of residual authority per joint
 SHOVE_PEAK_N = (10.0, 35.0)
 SHOVE_DUR_S = (0.3, 0.5)
 REWARD_WEIGHTS = dict(vel=0.75, yaw=0.25, act=0.02, dact=0.1, tilt=1.2, height=8.0,
-                      fall=5.0, survive=1.0)
+                      fall=5.0, survive=1.0, thermal=rc.THERMAL_PENALTY)
 
 
 class PebbleEnv(gym.Env if gym else object):
@@ -87,13 +97,16 @@ class PebbleEnv(gym.Env if gym else object):
     def __init__(self, cmd=(45.0, 0.0, 0.0), randomize=False, push_prob=0.0,
                  cmd_sample=False, render_mode=None, seed=None, servo="random",
                  ema_alpha=rc.EMA_ALPHA, obs_version=rc.OBS_VERSIONS["gait"],
-                 obs_noise=None, ep_seconds=EP_SECONDS, gait_params=None, cmd_budget=True, **_):
+                 obs_noise=None, ep_seconds=EP_SECONDS, gait_params=None, cmd_budget=True,
+                 thermal=True, thermal_heat0=(0.0, 0.0), **_):
         """push_prob: probability of ONE rim shove per episode (D052; it was a
         per-step tap probability). servo: off | nominal | random. ema_alpha 1.0
         = no filter. gait_params: WaveGait kwargs (default params `gait:`; a
         checkpoint replays the gait it trained on — rl_common.LEGACY_GAIT for
         pre-D052 ones). obs_version 1 + servo 'off' + ema 1.0 + LEGACY_GAIT =
-        the pre-D052 env."""
+        the pre-D052 env. thermal: the ThermalProxy derate + penalty (heat is
+        tracked either way); thermal_heat0: (lo, hi) per-joint starting heat,
+        fraction of the budget, drawn each episode."""
         self.model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
         self.data = mujoco.MjData(self.model)
         self._note = rc.env_note(self.model)            # fingerprint BEFORE any DR
@@ -130,6 +143,8 @@ class PebbleEnv(gym.Env if gym else object):
         self._a_f = np.zeros(15)
         self._prev_action = np.zeros(15)
         self.shove = None
+        self.thermal = rc.ThermalProxy(on=thermal)
+        self.thermal_heat0 = tuple(float(x) for x in thermal_heat0)
         if gym:
             self.observation_space = spaces.Box(-np.inf, np.inf, (self.obs_builder.dim,),
                                                 dtype=np.float32)
@@ -153,6 +168,7 @@ class PebbleEnv(gym.Env if gym else object):
                                                          t0_s=(1.0, self.ep_seconds - 1.5), at="shell rim"),
                     cmd_sample=bool(self.cmd_sample), cmd_budget=self.cmd_budget,
                     gait=dict(self.gait_params),
+                    thermal=dict(self.thermal.config(), heat0=self.thermal_heat0),
                     h_stance_m=self.h_stance, reward_rev=rc.REWARD_REV,
                     reward_weights=dict(REWARD_WEIGHTS), **self._note)
 
@@ -175,6 +191,8 @@ class PebbleEnv(gym.Env if gym else object):
         self.dr_draw = self.dr.draw(self.rng) if self.randomize else self.dr.nominal()
         self.servo_draw = rc.servo_params(self.servo_mode, self.rng)
         self.dr.apply(self.dr_draw, voltage=self.servo_draw["voltage"])
+        lo, hi = self.thermal_heat0                      # the rng is only touched when asked
+        self.thermal.reset(self.model, self.rng.uniform(lo, hi, 15) if hi > 0 else lo)
         rc.refresh_constants(self.model, self.data)
         mujoco.mj_resetData(self.model, self.data)
         rc.apply_servo_params(self.servo, self.servo_draw)
@@ -226,6 +244,8 @@ class PebbleEnv(gym.Env if gym else object):
             tgt = self.servo.filter(target, dt, force=d.actuator_force[:15])
             d.ctrl[:15] = tgt + self._q_offset
             mujoco.mj_step(self.model, d)
+            self.thermal.accumulate(rc.motor_torque(self.model, d, self._vadr))
+        derate = self.thermal.update(CTRL_DT, self.model)
         self._t += CTRL_DT
         self._step_n += 1
 
@@ -247,7 +267,8 @@ class PebbleEnv(gym.Env if gym else object):
         self._prev_action = action.copy()
         r_tilt = -W["tilt"] * tilt ** 2
         r_h = -W["height"] * h_err
-        reward = float(W["vel"] * r_vel + W["yaw"] * r_yaw + r_act + r_dact + r_tilt + r_h)
+        r_heat = -W["thermal"] * float(derate.mean())
+        reward = float(W["vel"] * r_vel + W["yaw"] * r_yaw + r_act + r_dact + r_tilt + r_h + r_heat)
         terminated = bool(tilt > np.deg2rad(45) or h < 0.05)
         if terminated:
             reward -= W["fall"]
@@ -255,7 +276,7 @@ class PebbleEnv(gym.Env if gym else object):
         if truncated and not terminated:
             reward += W["survive"]
         info = dict(v_body=v_body[:2], tilt_deg=np.rad2deg(tilt), height=h,
-                    shoved=self.shove is not None and self._t >= self.shove.t0)
+                    shoved=self.shove is not None and self._t >= self.shove.t0, **self.thermal.info())
         return self._obs(), reward, terminated, truncated, info
 
     def render(self):

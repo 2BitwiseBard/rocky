@@ -12,6 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import (WaveGait, ArmedGait, stance_manip_targets, arm_pose,
                          claw_cycle, leg_ik, body_to_leg, N_LEGS)
+import rocky_model as rm                                             # noqa: E402
 
 model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
 data = mujoco.MjData(model)
@@ -72,9 +73,10 @@ SEGMENTS = [
 ]
 
 # init
-data.qpos[0:3] = [0, 0, (g5.h + 14) / 1000.0]
+data.qpos[0:3] = [0, 0, rm.spawn_z_m(g5.h)]            # D052: was h + 14 mm
 data.qpos[3:7] = [1, 0, 0, 0]
-data.qpos[7:7+15] = Q_NOM.flatten()
+data.qpos[[model.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS)
+           for n in ("yaw", "hip", "knee")]] = Q_NOM.flatten()   # claws interleave in qpos: never qpos[7:22]
 data.ctrl[:15] = Q_NOM.flatten()
 mujoco.mj_forward(model, data)
 for _ in range(int(0.8 / DT)):

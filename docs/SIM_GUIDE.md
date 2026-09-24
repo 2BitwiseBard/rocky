@@ -29,18 +29,32 @@ the ST3215's 2.94 N·m stall and 4.7 rad/s no-load:
 | quantity | value | where it comes from |
 |---|---|---|
 | joint damping | 0.626 N·m·s/rad | stall / no-load: the servo's torque-speed line |
-| leg actuator forcerange | ±1.911 N·m | 0.65 × stall, the continuous (thermal) budget — a guess, VERIFY |
-| loaded / free / hard speed | 3.0 / 4.0 / 4.7 rad/s | 3.0 ≈ continuous / damping (3.05); 4.7 = no-load |
+| leg actuator forcerange | ±2.94 N·m | the stall (PEAK) torque: the servo's instantaneous limit (D052 amendment) |
+| continuous torque | 1.911 N·m | 0.65 × stall, a THERMAL budget judged over time, not a clip — `rl_common.ThermalProxy` (RL envs: derates a hot joint; playground/cockpit: accounting only) and `THERMAL_LOAD` in `audit_gestures`. 0.65 is a guess, VERIFY |
+| loaded / free / hard speed | 3.0 / 4.0 / 4.7 rad/s | 3.0 ≈ continuous / damping (3.05: the top speed of a joint whose motor is held to the continuous torque, measured 3.06 — an upper bound, not a speed at which it also carries a load); 4.7 = no-load, which an unloaded MJCF joint now reaches (measured 4.71) |
+| thermal proxy (RL envs; accounting only in the playground) | heat += ((\|τ_e\| / stall)² − 0.65²)·dt, ≥ 0; budget 54 | = (0.85² − 0.65²) × 180 s (`actuators.st3215.thermal_trip_frac` / `thermal_trip_s`): trips after 180 s at 0.85 × stall, 93.5 s at stall, never at ≤ 0.65 (the driver mock's 70 °C cut: 167 s / 88 s; at 0.80 both 248 s). A tripped joint's forcerange ramps 2.94 → 1.911 N·m as heat goes 54 → 64.8; reward −0.5 × mean derate; `thermal_heat0` warm-starts an episode (default off). 0.85 and 180 s are VERIFY |
+| claw (SCS0009) | forcerange ±0.23 N·m, damping 0.0242 N·m·s/rad | its stall, and stall / no-load (0.23 / 9.5) like the legs; every SCS0009 number is a guess, VERIFY |
 | joint soft limits | yaw ±40°, hip −70…90°, knee −150…−20°, claw 0…55° | the CAD-validated sweeps (D008) |
 | foot | 6.5 mm sphere whose surface is the gait's IK foot point (site `foot_tip{i}`); μ 0.8, torsional 0.005 m | μ is a TPU-on-tile guess, VERIFY |
 
-With that, no MJCF joint can move faster than about 3.05 rad/s even
-unloaded; that is below the 4.0 rad/s "free" budget the authoring tools
-allow, and it is an open owner decision (§7). Before D052 the actuators
-were clamped at stall (2.94 N·m) with joint damping 0.05, which let the gait ask for
-7.4 rad/s and turn 50 % further than the servo could. `sim/model_fingerprint.py`
-hashes the robot (not the world) — `5a32f772ca99` — and every RL
-checkpoint records it.
+With that an unloaded MJCF joint tops out at 4.70 rad/s (forcerange /
+damping, measured 4.71) and at 3.05 rad/s with its motor held to the
+continuous torque (what a thermally derated joint gets), so the 4.0 rad/s
+"free" budget is reachable. The first D052 cut clipped the actuators at
+1.911 N·m, which capped every joint at 3.05 rad/s; the owner's amendment
+(2026-09-24) made the clip the peak and moved the continuous budget into a
+thermal model: heat += ((|τ_e| / stall)² − 0.65²) dt, budget
+(0.85² − 0.65²) × 180 s = 54 (3 min at 0.85 × stall trips, 93 s at stall,
+never at ≤ 0.65), where τ_e = actuator force − damping × qvel is the
+motor's CURRENT term — the raw force counts the back-EMF voltage as heat
+(a free yaw swung at 4.7 rad/s reads ~0.87 × stall RMS of force but ~0.22
+of current). `audit_gestures` judges each joint's RMS τ_e / stall (> 0.65
+warns `THERMAL_LOAD_WARN`, > 0.85 fails `THERMAL_LOAD`). Before D052 the
+actuators were clamped at stall with joint damping 0.05, which let the gait
+ask for 7.4 rad/s and turn 50 % further than the servo could.
+`sim/model_fingerprint.py` hashes the robot (not the world) —
+`ceb63a1254c3` since the amendment (`5a32f772ca99` was the 1.911 N·m clip) —
+and every RL checkpoint records it.
 
 **The control stack is the real one.** The sim does not have its own
 controller. It imports `gait/pebble_gait.py` (closed-form IK, the five-
@@ -63,6 +77,19 @@ bridge feed to real servos. Two D052 pieces sit in front of them:
   studio, gait presets and the brain's `compose_gesture` are all checked
   by it; `sim/audit_gestures.py` runs it plus a physics pass over
   everything (20 rows, 0 FAIL on 2026-09-24).
+- **The Playground's always-on guards** (§3) wrap both for every
+  command source. Since the D052 follow-up the void guard has a
+  **touchdown gate**: a stance foot that has not felt ground 140 ms
+  after its commanded touchdown runs the gait clock back to that
+  touchdown and holds it until the foot finds ground or the void guard
+  fires (the wave gait lifts the next leg the instant one lands, so at
+  a 10–20° approach a leading foot over the edge used to lose its
+  neighbour before its probe finished, and the robot tipped in ~0.3 s).
+  The void retreat is the approach played backwards (every foot goes back
+  to a foothold it already stood on), not a walk back along the void
+  bearing. `set gate.wait 1` is the careful walk: every touchdown waits
+  for its switch (~17 % slower on every surface, safer at edges; off by
+  default).
 
 **Sensing in the sim.** `sim/sim_imu.py` gives gravity (from
 `model.opt.gravity`, so a slope reads as a slope) and gyro with optional
@@ -96,8 +123,11 @@ reflex trip, does the gesture reach, does a gait tweak break a joint
 limit or a speed budget) and directional for dynamics (push envelopes,
 stability trends). Absolute numbers are "±real-robot-TBD" until a real
 servo answers on the bench (D017 re-baseline, B32). D052 made the sim
-harsher, not calibrated: the shove envelope actually got *better* under
-it (standing 25 → 30–35 N), which may be flattery in the other direction.
+harsher, not calibrated. Its first cut reported a *better* shove envelope
+(standing 25 → 30–35 N); that was the 1.911 N·m clip letting the legs
+yield into a slide, read on a 5 N grid. On the peak-torque model the
+standing tip threshold is 29 N (1.11 BW) at its weakest direction, 2 N
+below the 1.911 clip on the same tree (D052a).
 
 ## 2. Step by step: first run
 
@@ -107,13 +137,22 @@ python sim/build_mjcf.py                              # writes sim/pebble.xml fr
 MUJOCO_GL=egl python sim/run_sim.py                   # headless walk, ~10 s
 ```
 
-Expected:
+Expected (measured 2026-09-24 on the D052 model as amended the same day:
+DC-line joint damping 0.626 N.m.s/rad, forcerange = stall 2.94 N.m with
+0.65 x stall as the thermal budget, the foot-sphere spawn; `--out DIR`
+keeps the video and contact sheet out of `sim/`):
 
 ```
-tilt: mean 0.34 deg, max 1.03 deg
-walk +X displacement: 264 mm (commanded ~261 mm), lateral drift -37 mm
+body height: mean 117.0 mm (target ~118, rigid ideal servos), std 0.34 mm, min 116.0
+tilt: mean 0.31 deg, max 0.83 deg
+walk +X displacement: 246 mm (commanded ~261 mm), lateral drift -14 mm
+turn in place: 55.4 deg at the budgeted 0.246 rad/s (commanded ~54 deg; asked 0.6 rad/s)
 fell over: no
 ```
+
+The pre-D052 numbers (264 mm, drift -37 mm, tilt max 1.03 deg) were the
+flattering servo. The script exits non-zero on a fall or when the walk or
+the turn leaves its smoke band, so CI catches a regression.
 
 `MUJOCO_GL=egl` (or `osmesa`) renders offscreen; use `glfw` when you want
 a window.
@@ -476,17 +515,41 @@ python -m harness.intent                                  # REPL
 ./rocky.sh brain                                          # qwen3.6-35b-a3b via llama-swap
 python -m harness.local_brain --base-url http://127.0.0.1:8080/v1 --model qwen3.6-35b-a3b
 
-# Claude Code as the brain, over MCP, with the window and speakers on
-cp .mcp.json.example .mcp.json     # set "cwd" to the repo; add ROCKY_VIEWER=1 ROCKY_AUDIO=1 MUJOCO_GL=glfw
+# Claude Code as the brain, over MCP
+cp .mcp.json.example .mcp.json     # works as is from the repo root: the command is .venv/bin/python (relative)
 ./rocky.sh chat                    # then: "wave, then walk to (0.25, 0) and tell me what you see"
 
 # voice: push-to-talk through whisper-server into the intent parser
 ./rocky.sh voice
 ```
 
-Environment knobs: `ROCKY_BACKEND=sim|mock`, `ROCKY_WORLD=flat|room|cliff`,
-`ROCKY_VIEWER=1` (open the passive window and pace to real time),
-`ROCKY_AUDIO=1` (play chord-speak samples).
+`.mcp.json` needs no `"cwd"` for Claude Code: `./rocky.sh chat` starts
+`claude` in the repo root, so the relative `.venv/bin/python` and
+`-m harness.server` resolve there. Clients that start elsewhere (Claude
+Desktop, other MCP hosts) need the absolute python path and a `"cwd"`
+pointing at the repo.
+
+Which body answers the tools — `ROCKY_BACKEND`:
+
+| value | backend |
+|---|---|
+| `auto` (the example's choice) | the running cockpit (`./rocky.sh cockpit`, `ROCKY_COCKPIT_URL`, default `http://127.0.0.1:8765`) whenever it answers, else the in-process sim; re-checked on every call and logged to stderr |
+| `cockpit` | the cockpit, or refuse to start when nothing answers |
+| `sim` | the in-process MuJoCo sim (`harness/sim_backend.py`) |
+| `mock` | the millisecond contract, no physics — the default when unset |
+
+The in-process `SimBackend` is **not** the D052 loop. It has no servo
+model, no speed budget (`pebble_feasibility`) and no always-on void probe
+(that lives in `sim/playground.py`, which the cockpit runs). Its goto runs
+the reflex supervisor and the D034 cliff detector as before, and every leg
+target is NaN-guarded and rate-clamped to the servo's hard speed (4.7 rad/s)
+— nothing more. For D052-true behaviour, drive the cockpit (`auto` picks it
+when it is up).
+
+With the in-process sim only: `ROCKY_WORLD=flat|room|cliff` (default
+`cliff`), `ROCKY_VIEWER=1` (open the passive window and pace to real
+time), `ROCKY_AUDIO=1` (play chord-speak samples), `MUJOCO_GL=glfw` for the
+window. With the cockpit these belong to the cockpit, not to the MCP server.
 
 ## 6. Regenerating after a CAD change
 
@@ -527,28 +590,68 @@ Hardware and the onboard loop (B32, B35):
   backend (`ROCKY_BACKEND=auto` with a cockpit running) is the D052 loop.
 
 The model (B33, D052 open items):
-- **The free speed budget (4.0 rad/s) exceeds what any MJCF joint can
-  reach** (forcerange / damping = 3.05 rad/s). Arm moves and swing yaw
-  authored to the free budget lag 13–19° at p95 in physics. Kept visible
-  as a strict xfail (`test_model_consistency`) until the owner chooses:
-  peak torque plus a thermal model in the sim, or free ≤ 3.0.
+- ~~The free speed budget (4.0 rad/s) exceeds what any MJCF joint can
+  reach~~ — closed by the D052 amendment: forcerange = stall (peak), an
+  unloaded joint reaches 4.71 rad/s, the continuous budget is a thermal
+  model (§1); the strict xfail is now a passing test.
 - Tracking lag p95 is 16.6–18.7° on every gait row of `audit_gestures`
   (warn at 10, fail at 20): the sim is close to saying the gait asks more
   than the servo follows.
 - Link CoMs and inertias are primitive shapes, the SEA spring is rigid,
   no backlash; μ 0.8, the thermal fraction 0.65, every SCS0009 number and
   the switch forces are guesses.
-- The shove envelope got better under D052 (standing 25 → 30–35 N); the
-  cause (slower, lower gait vs joint damping) is not isolated.
+- The shove envelope on the peak model (D052a): standing 29–≥ 37 N by
+  direction on a 1 N grid (floor 1.11 BW at 0° and 180°; the 5 N grid of
+  `sim/shove_envelope.py` rounds it to 25 N, 0.95 BW), walking 20–35 N
+  (min 0.76 BW, mean 1.08). The 1.911 N·m clip tipped 2–3 N later on the
+  same tree: more torque makes Pebble slightly *easier* to tip (one probe
+  says the clipped legs yielded into a slide). Neither is calibrated.
+- The thermal proxy never trips from cold inside an 8 s gait or 6 s
+  recover episode (a 30 s wave-gait walk at 45 mm/s stays near zero
+  heat), so training only meets a derated joint through `thermal_heat0`
+  warm starts, an env argument that is off by default and has no trainer
+  flag yet.
+  Between 0.65 and ~0.77 × stall it trips slowly (800 s at 0.70) where the
+  driver mock never does: conservative there. 0.65 / 0.85 / 180 s need a
+  10-minute bench hold with a temperature log.
+- Still only on fingerprint `5a32f772ca99`: the 6 s envelope runs (walk
+  231 mm, turn 103°), `recover1` with the nominal / randomised servo and
+  its jitter, `recover5_v3_warm`, and the RL smokes. `recover1`'s default,
+  legacy-handoff and system evals were re-measured on the peak model and
+  did not move beyond noise (RL_GUIDE §4).
+- The tracked `push_results.json`, `push_reflex_results.json`,
+  `push_reflex_v2_results.json`, `terrain_results.json` and
+  `cliff_safestop_results.json` predate the spawn-pose fix (every leg
+  spawned in the wrong pose, a 9.8° spawn tilt that every `tilt_max`
+  reported) and the peak clip: historical until regenerated, and
+  `run_push_reflex_v2`'s TRIP = 1.8 was calibrated on that bad spawn.
+- Servo heat: the RL envs derate a hot joint; the playground / cockpit
+  only account it (`guard_status()['thermal']`, the `servo heat` chip,
+  sim2real refused past the budget); the studio and `compose_gesture`
+  judge kinematics only — the thermal verdict is `audit_gestures`'.
 
 Behaviour:
-- **The void guard misses cliffs approached at 10–20°** (D052 V2 review
-  finding, not yet fixed); a plain head-on walk stops short (x 0.19–0.20 m
-  on the 0.35 m platform).
-- The void retreat barely retreats (~20 mm *forward* during a 1.2 s
-  retreat in one run): `WaveGait.foot_targets` is position-from-phase, so
-  reversing v mid-stance moves the stance feet by Δv·s·T. The safe-stop is
-  what saves it.
+- **The void guard still falls in a narrow band of approach angles**
+  (D052a). The touchdown gate (D052 P2) fixed most of the 10–20° misses,
+  but a 1° grid (walk 15/25/35/45 × −30…60°, 310 approaches) still has 7
+  falls with the late gate (45 mm/s @ 12.5–14.5°, 25 @ 15–16°, 35 @
+  20–21°, 15 @ 17.5°) and 9 with the careful walk (`set gate.wait 1`), at
+  other angles (14–20°): a leading foot lands on the edge's lip and gives
+  way while the next leg swings. The foot switch cannot see this: a foot
+  sphere centred 0–9 mm past the edge sits on the corner, closes its
+  switch, then slides off. Pinned as a strict xfail
+  (`test_void_guard_lip_band_known_gap`). Outside the band the guard
+  stops with room to spare (walk 45 at 0–45°: max torso x 166–230 mm on
+  the 0.35 m platform, 0 falls), and the retreat, now the approach played
+  backwards, backs off 39–59 mm at walk 45 (14–28 mm at walk 25).
+- The careful walk (`set gate.wait 1`) cuts the old 72-approach sweep
+  from 6 falls to 1 but walks 17 % slower on every surface (flat 0.625 →
+  0.521 m in 15 s); whether it becomes the default is the owner's call.
+  Even the default gate costs 2.6–4 % of distance on rough terrain and
+  stairs (occasional holds) and 5–6 holds per step-down run.
+- The touchdown gate sets the supervisor's gait clock from the playground
+  and reads its private `_last_t`; `gait/pebble_reflex.py` has no API for
+  it yet, so the Pi's loop (B35) cannot reuse it as is.
 - Goto's reactive layer is not a planner: a 0.25 m-wide wall ends it
   `blocked` (the sidestep makes ~25 mm/s), and anything below the lidar
   plane ends it `stuck`.

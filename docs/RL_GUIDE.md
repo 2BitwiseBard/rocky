@@ -42,7 +42,10 @@ The action path, per 50 Hz control tick:
    substep: 50 Hz hold, bus latency, slew at `rate × (1 − |τ|/stall)`
    (it slows under load) and 4096-count goals.
 5. Plus a per-joint calibration offset, then into the MuJoCo position
-   actuator (joint damping 0.62 N·m·s/rad, forcerange 1.9 N·m × voltage).
+   actuator (joint damping 0.626 N·m·s/rad, forcerange 2.94 N·m — the
+   stall/peak torque — × voltage, derated toward the continuous 1.91 N·m
+   by `rl_common.ThermalProxy` when a joint's heat passes its budget; the
+   heat is integrated from the ELECTRICAL torque, force − damping × qvel).
 
 `--servo` selects step 4: `off` is the pre-D052 ideal actuator; `nominal`
 is the datasheet servo (20 ms, 4.7 rad/s); `random` (the default) draws
@@ -73,7 +76,29 @@ the old +14 mm), −5 for a fall, +1 for surviving the episode. Recover
 held 1 s. Recover `v2` (D041): success is the handoff criterion held
 0.5 s, plus a feet-down term while upright. Recover `v3` (D048): v2 plus
 0.1·mean((Δtarget / rate limit)²) (0.3 before D052). Every version has
-−0.01·|a|² − 0.2·|Δa|² on the raw action (the Δa weight was 0.02).
+−0.01·|a|² − 0.2·|Δa|² on the raw action (the Δa weight was 0.02). Both
+envs also pay −0.5 × the mean thermal derate over the 15 joints (below);
+it is 0 unless a joint has run past its heat budget. `REWARD_REV` stays
+`D052`.
+
+**Servo heat** (the D052 amendment, `rl_common.ThermalProxy`). The
+actuator clips at the stall (peak) torque, so the continuous budget
+(0.65 × stall) is enforced over time instead: per joint,
+heat += ((|τ_e| / stall)² − 0.65²)·dt, clamped at 0, integrated once per
+50 Hz tick from the mean over its substeps, with τ_e = actuator force −
+damping × qvel (`rl_common.motor_torque`, the motor-current term; the raw
+force would count back-EMF as heat). Budget (0.85² − 0.65²) × 180 s = 54,
+from `actuators.st3215.thermal_trip_frac` / `thermal_trip_s`: 3 min at
+0.85 × stall or 93.5 s at stall trips it. Past the budget that joint's
+forcerange ramps from peak down to 0.65 × peak as heat goes 54 → 64.8
+(on top of the episode's voltage draw), so a hot joint cannot exceed the
+continuous torque and cools once the load drops. Heat and trips are in
+`info` (`thermal_heat_max` as a fraction of the budget, `thermal_tripped`,
+`thermal_derate_max`) and in `config()['thermal']`. **From cold nothing
+trips inside an 8 s gait or 6 s recover episode**; the env argument
+`thermal_heat0=(lo, hi)` (fractions of the budget, per joint) warm-starts
+episodes, default (0, 0) — the rng is only drawn when hi > 0, so seeded
+episode streams are unchanged — and `train_ppo` has no flag for it yet.
 
 **The handoff criterion is hardware-computable** (D052):
 `rocky_recover_env.handoff_ok(tilt_deg, feet_contacts, hip_knee_q)` is
@@ -111,9 +136,14 @@ tracking kernel simply pays less there.
 **The deployment idea.** The residual gait policy is a bounded trim on a
 controller that already runs on hardware. The recovery policy hands over
 to the analytic planted stance once the handoff criterion is met
-(`gait/pebble_reflex.py` FALLEN → RIGHTED, D042; pebble_reflex still uses
-the height test until it adopts `handoff_ok`). Neither replaces the
-analytic stack; both are gated by it.
+(`gait/pebble_reflex.py` FALLEN → RIGHTED, D042). Since D052 the
+supervisor uses `handoff_ok` itself whenever it is fed the measured joints
+and foot contacts (`step(..., contacts=..., q_meas=...)`) — the playground
+(and so the cockpit), `run_reflex_fallen.py` and `eval_recover.py` feed
+both. Only a caller that passes no `q_meas` (the older run scripts, the
+in-process MCP `SimBackend`) still gets the privileged tilt + torso-height
+test, which the Pi cannot compute.
+Neither policy replaces the analytic stack; both are gated by it.
 
 ## 2. What a run produces
 
@@ -257,8 +287,16 @@ columns, none replacing another:
   evaluator; the 10/20 quoted before predates the D047 regeneration of
   `pebble.xml`).
 - **D052 model** (2026-09-24: joint damping 0.626 N·m·s/rad, forcerange
-  1.911 N·m, foot μ 0.8, fingerprint `5a32f772ca99`). This is the baseline
-  for any comparison from now on.
+  1.911 N·m, foot μ 0.8, fingerprint `5a32f772ca99`) — superseded the same
+  day by the **D052 amendment** (forcerange = stall 2.94 N·m peak, the
+  continuous 1.911 N·m enforced by the thermal proxy, fingerprint `ceb63a1254c3`).
+  The amended model is the baseline for any comparison from now on.
+  `recover1`'s default (`handoff_ok`), `--handoff legacy` and
+  `--supervisor` evals were re-measured on it the same day, with an A/B on
+  the same tree with the 1.911 N·m clip restored in memory (**bold** below
+  = peak model, "clip" = that A/B); its servo / rand / jitter cells, every
+  `recover5_v3_warm` cell, the gait rows and the 2 000-step smokes are
+  still the `5a32…` numbers.
 
 **Every checkpoint below is legacy** (obs v1, true-state observation,
 ideal actuator, 5 rad/s; the gait ones on the old T 1.6 s / 32 mm gait).
@@ -279,7 +317,7 @@ ramp, 14 s, on `handoff_ok`), with the no-righter row in brackets.
 |---|---|---|---|---|---|---|---|
 | `robust_fwd2` | gait | 3 M | 228.6 | — | — | legacy replay 245 mm vs zero 320; servo 236 vs 298; servo random + DR + shoves 216 vs 250 (0/3 falls each); **no envelope** on the D052 servo, so the cockpit zeroes it | legacy obs, T 1.6 gait. Pre-D052: loses to the bare gait on the clean task (298 vs 365 mm); D031: the wave gait is a strong controller. Still loses on D052 |
 | `cmd_sample3` | gait, `--cmd-sample` | 7 M | 224 | — | — | not re-measured; no envelope (same gait) | same conclusion under full DR |
-| **`recover1`** | recover v1, 5 rad/s | 2 M | — | **12/20 / 7/20** | 0/20 | stood **2/20** legacy · **0/20** hw (back 0/6, side 0/7, tumble 0/7; hold-pose 1/20, random 0/20) · 0/20 servo · 0/20 rand · pure-RL 0/20 · system **20/20** (no righter 11/20), 9 declared falls: 0 handoff exits, 9 stall · jitter (servo): 52 % pinned, 6.7 rev/s, 3.3°/tick, ctrl rev/s 7.5 | **the shipped righter**, legacy. Pre-D052 jitter: 75 % pinned, 10 reversals/s, 4.5°/tick. Its legacy "handoffs" were a robot kneeling on its shins with 0–2 feet down and knees at −110…−150° |
+| **`recover1`** | recover v1, 5 rad/s | 2 M | — | **12/20 / 7/20** | 0/20 | stood **5/20** legacy (back 0/6, side 3/7, tumble 2/7; clip 3/20, D052 run 2/20 — noise at 20 episodes) · **0/20** hw (back 0/6, side 0/7, tumble 0/7; end tilt median 16.6°, best 3.5°; hold-pose 1/20, random 0/20; clip 0/20) · pure-RL **0/20** · system **20/20** (no righter 11/20; back 6/6 vs 0/6, side 7/7 vs 5/7, tumble 7/7 vs 6/7), 9 declared falls: 0 handoff, 9 stall, 0 deadline exits, t_stood median **0.46 s** (no righter 0.40; clip 0.80 / 0.62) · on `5a32…`: 0/20 servo · 0/20 rand · jitter (servo): 52 % pinned, 6.7 rev/s, 3.3°/tick, ctrl rev/s 7.5 | **the shipped righter**, legacy. Pre-D052 jitter: 75 % pinned, 10 reversals/s, 4.5°/tick. Its legacy "handoffs" were a robot kneeling on its shins with 0–2 feet down and knees at −110…−150° |
 | `recover2` | recover v2, uncapped | 3.67 M | ~610 (stochastic) | 2/20 | 0/20 | not re-measured | sigma inflated to 22 nats; mean policy decayed (D045) |
 | `recover3_capped` | recover1 → v2 capped | 4 M | 543 | — / 7/20 | 0/20 | not re-measured | every dimension pinned at the cap; success carried by noise |
 | `recover3_scratch` | recover v2 capped, scratch | 3 M | — | — / 3/20 | 0/20 | not re-measured | never rights from the back |
@@ -308,7 +346,10 @@ something useful — they leave the body in a pose the stall ramp can stand
 the servo in the loop the staircase mostly disappears, which is what the
 filter-in-the-env rung (§5.9) was meant to buy. `recover1` stays the
 installed righter because it is the one that has been through the demos,
-not because it wins anything on D052.
+not because it wins anything on D052. The peak-torque amendment changes
+none of this: 0/20 on the hardware test either way, 5/20 vs 3/20 on the
+legacy test is inside the noise, and the system count is the same; only
+the stall ramp stands the righter's pose faster (median 0.46 s vs 0.80).
 
 ## 5. The experiment ladder
 

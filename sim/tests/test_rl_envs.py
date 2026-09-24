@@ -340,3 +340,181 @@ def test_gait_env_trains_on_budgeted_commands():
     old = rc.checkpoint_contract({"env_config": dict(raw.config(), cmd_budget=None), "args": {}})
     assert "unbudgeted cmd" in old["flags"]
     assert "unbudgeted cmd" not in rc.checkpoint_contract({"env_config": env.config(), "args": {}})["flags"]
+
+
+# ------------------------------------------------------------------ D052 amendment: thermal proxy
+def _proxy_trip_s(x, dt=0.1, limit_s=3600.0):
+    th = rc.ThermalProxy(n=1)
+    t = 0.0
+    while not th.tripped()[0] and t < limit_s:
+        th.accumulate(np.array([x * th.stall]))
+        th.update(dt)
+        t += dt
+    return t
+
+
+def test_thermal_proxy_matches_the_driver_mock():
+    """heat += ((|tau|/stall)^2 - 0.65^2) dt, budget (0.85^2 - 0.65^2) x 180 = 54:
+    3 min at 0.85 x stall trips, never at <= continuous — and the trip times
+    sit within ~10 % of driver/rocky_driver/mock.py's 70 C cut (the model the
+    budget was chosen to match)."""
+    from rocky_driver.mock import MockServo
+    assert rc.ThermalProxy().budget == pytest.approx(54.0)
+    assert _proxy_trip_s(0.85) == pytest.approx(180.0, abs=0.2)
+    assert _proxy_trip_s(1.0) == pytest.approx(54.0 / (1 - 0.65 ** 2), abs=0.2)     # 93.5 s at stall
+    assert _proxy_trip_s(0.65, dt=1.0) >= 3600.0 and _proxy_trip_s(0.5, dt=1.0) >= 3600.0  # never
+    for pct in (80, 85, 100):
+        s = MockServo(servo_id=1)
+        s.put("TORQUE_ENABLE", 1)
+        s.external_load_pct = pct
+        t = 0.0
+        while s.get("TORQUE_ENABLE") == 1 and t < 600:
+            s.advance(0.1)
+            t += 0.1
+        assert _proxy_trip_s(pct / 100) == pytest.approx(t, rel=0.1), (pct, t)
+    # below continuous it cools at the same scale, never below 0
+    th = rc.ThermalProxy(n=1)
+    th.heat[:] = 10.0
+    for _ in range(10):
+        th.accumulate(np.array([0.1 * th.stall]))
+    th.update(1.0)
+    assert th.heat[0] == pytest.approx(10.0 - (0.65 ** 2 - 0.01))
+    th.update(0.0)
+    for _ in range(100):
+        th.accumulate(np.zeros(1))
+        th.update(1.0)
+    assert th.heat[0] == 0.0
+
+
+def test_thermal_proxy_trips_in_the_env_after_sustained_overload():
+    """Drive every joint into its stop (the actuator saturates at the PEAK torque,
+    x = 1): the proxy trips at ~93.5 s, then the hot joints' forcerange ramps
+    from 2.94 toward the continuous 1.91 N.m and the heat stops climbing."""
+    from rocky_recover_env import Q_LO, Q_HI
+    env = RecoverEnv(servo="nominal", seed=0)
+    env.reset(seed=0)
+    peak = env.model.actuator_forcerange[:15, 1].copy()
+    np.testing.assert_allclose(peak, rc.rm.stall_nm())                # MJCF clip = stall (amendment)
+    into_stops = np.where(np.arange(15) % 3 == 1, Q_HI + 0.6, Q_LO - 0.6)
+    trip_t, k = None, 0
+    while trip_t is None and k < 6000:
+        env.hold_step(into_stops)
+        k += 1
+        if env.thermal.tripped().any():
+            trip_t = k * rc.CTRL_DT
+    assert trip_t == pytest.approx(54.0 / (1 - 0.65 ** 2), abs=1.5), trip_t
+    assert np.allclose(np.abs(env.data.actuator_force[:15]), peak, rtol=0.02)   # saturated at peak
+    for _ in range(int(30 / rc.CTRL_DT)):                             # 30 s more in the stops
+        env.hold_step(into_stops)
+    fr = env.model.actuator_forcerange[:15, 1]
+    assert np.all(fr < 0.85 * peak) and np.all(fr >= 0.65 * peak - 1e-9), fr / peak
+    assert env.thermal.heat.max() <= (1 + rc.THERMAL_RAMP) * env.thermal.budget + 1e-9
+    _obs, _r, _te, _tr, info = env.step(np.zeros(15))
+    assert info["thermal_tripped"] == 15 and info["thermal_heat_max"] > 1.0
+    assert 0.0 < info["thermal_derate_max"] <= 1.0
+    cfg = env.config()["thermal"]
+    assert cfg["budget"] == pytest.approx(54.0) and cfg["penalty"] == rc.THERMAL_PENALTY
+    # a new episode starts cold and at peak again (the derate never leaks across resets)
+    env.reset(seed=1)
+    np.testing.assert_allclose(env.model.actuator_forcerange[:15, 1], peak)
+    assert env.thermal.heat.max() == 0.0
+
+
+@pytest.mark.parametrize("cls", [RecoverEnv, PebbleEnv])
+def test_thermal_warm_start_derates_and_costs(cls):
+    """thermal_heat0 starts an episode with warm servos: past the ramp the joint
+    is at continuous from the first tick and the reward pays -0.5 x mean derate;
+    thermal=False keeps the peak clip (heat still tracked)."""
+    e = cls(servo="nominal", thermal_heat0=(1.3, 1.3))
+    e.reset(seed=0)
+    np.testing.assert_allclose(e.model.actuator_forcerange[:15, 1], rc.rm.continuous_nm())
+    _o, _r, _te, _tr, info = e.step(np.zeros(15))
+    assert info["thermal_derate_max"] == 1.0 and info["thermal_tripped"] == 15
+    assert e.config()["thermal"]["heat0"] == (1.3, 1.3)
+    off = cls(servo="nominal", thermal=False, thermal_heat0=(1.3, 1.3))
+    off.reset(seed=0)
+    np.testing.assert_allclose(off.model.actuator_forcerange[:15, 1], rc.rm.stall_nm())
+    _o, _r, _te, _tr, info = off.step(np.zeros(15))
+    assert info["thermal_derate_max"] == 0.0 and info["thermal_heat_max"] > 1.0
+
+
+def test_thermal_proxy_does_not_trip_under_the_wave_gait():
+    """The zero-residual wave gait at 45 mm/s for 30 s: stance loads are
+    ~0.07-0.18 x stall mean per joint (peaks ~0.8), so the heat never builds
+    (measured max 0.0002 of the budget) and nothing is derated."""
+    e = PebbleEnv(servo="nominal", ep_seconds=30.0, cmd=(45.0, 0.0, 0.0))
+    e.reset(seed=0)
+    x0 = float(e.data.xpos[e.torso][0])
+    worst = 0.0
+    for _ in range(int(30.0 / rc.CTRL_DT)):
+        _o, _r, term, _tr, info = e.step(np.zeros(15))
+        assert not term
+        assert info["thermal_tripped"] == 0 and info["thermal_derate_max"] == 0.0
+        worst = max(worst, info["thermal_heat_max"])
+    assert worst < 0.02, worst
+    assert float(e.data.xpos[e.torso][0]) - x0 > 1.0                # it really walked (~1.26 m)
+
+
+def test_thermal_heat_is_the_current_not_the_voltage():
+    """Review fix: the proxy (and audit_gestures' load) integrate the ELECTRICAL
+    torque, rl_common.motor_torque = actuator_force - dof_damping x qvel. A
+    free yaw joint swung 0.6 rad at 2 Hz (torso pinned, peaks at the 4.70 rad/s
+    no-load speed) holds actuator_force near stall (RMS ~0.87) but draws little
+    current (RMS ~0.22): it must heat NOTHING, where the raw-force proxy gained
+    ~19 of its 54 budget per minute."""
+    import mujoco
+    m = mujoco.MjModel.from_xml_path(rc.os.path.join(rc.HERE, "pebble.xml"))
+    _jadr, vadr = rc.joint_addrs(m)
+    aid, dof = m.actuator("yaw0").id, vadr[0]
+    d = mujoco.MjData(m)
+    d.qpos[2] = 0.5
+    mujoco.mj_forward(m, d)
+    root = d.qpos[:7].copy()
+    d.ctrl[:] = d.qpos[[m.jnt_qposadr[m.actuator_trnid[i, 0]] for i in range(m.nu)]]
+    th, raw = rc.ThermalProxy(), rc.ThermalProxy()
+    th.reset(m)
+    raw.reset(m)
+    F2, E2, vmax, n = 0.0, 0.0, 0.0, 0
+    sub = int(round(rc.CTRL_DT / m.opt.timestep))
+    for k in range(int(12.0 / m.opt.timestep)):
+        t = k * m.opt.timestep
+        d.ctrl[aid] = 0.6 * np.sin(2 * np.pi * 2.0 * t)
+        d.qpos[:7] = root
+        d.qvel[:6] = 0
+        mujoco.mj_step(m, d)
+        tau_e = rc.motor_torque(m, d, vadr)
+        th.accumulate(tau_e)
+        raw.accumulate(d.actuator_force[:15])
+        if (k + 1) % sub == 0:
+            th.update(rc.CTRL_DT)
+            raw.update(rc.CTRL_DT)
+        if t > 1.0:
+            F2 += (d.actuator_force[aid] / th.stall) ** 2
+            E2 += (tau_e[0] / th.stall) ** 2
+            vmax = max(vmax, abs(d.qvel[dof]))
+            n += 1
+    assert vmax > 4.5                                              # really saturated
+    assert np.sqrt(F2 / n) > 0.8 and np.sqrt(E2 / n) < 0.3, (np.sqrt(F2 / n), np.sqrt(E2 / n))
+    assert th.heat[0] == 0.0 and raw.heat[0] > 2.0, (th.heat[0], raw.heat[0])
+    # the check the review asked for: a saturated unloaded swing heats less than continuous^2
+    assert E2 / n < th.cf ** 2
+
+
+def test_duty_cycled_overload_is_judged_by_rms():
+    """Review fix: heat goes as tau^2, so a 50 % duty of stall (mean |x| 0.50,
+    RMS 0.71) trips the proxy (~11.5 min) and judge_load must warn on it —
+    the old mean-|tau| column passed it clean."""
+    import pebble_feasibility as pf
+    x = np.where(np.arange(20) % 2 == 0, 1.0, 0.0)                # stall / zero, 1 s each
+    assert abs(x).mean() == 0.5 and np.sqrt((x ** 2).mean()) == pytest.approx(0.7071, abs=1e-3)
+    th, t = rc.ThermalProxy(n=1), 0.0
+    while not th.tripped()[0] and t < 3600:
+        th.accumulate(np.array([x[int(t) % 20] * th.stall]))
+        th.update(0.1)
+        t += 0.1
+    assert t == pytest.approx(691, abs=5)
+    q = pf.planted_q()
+    load = np.zeros((rc.N_LEGS, 3))
+    load[0, 1] = np.sqrt((x ** 2).mean())
+    rep = pf.judge_load(pf.check(lambda g, tt: (q, np.zeros(rc.N_LEGS)), 1.0, name="duty"), load)
+    assert rep.warnings == ["THERMAL_LOAD_WARN"]

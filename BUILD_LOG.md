@@ -121,6 +121,44 @@ other direction (slower, lower gait plus joint damping; not isolated).
 - New backlog: B33 (CAD CoM/inertia, SEA slide joint, ToF), B34 (retrain),
   B35 (the onboard loop).
 
+**Later the same day (D052 follow-ups, D052a):** the owner ruled on the
+open speed question — a position servo's instantaneous torque is its stall
+torque, and 0.65 × stall is a *thermal* budget. The 1.911 N·m clip had
+capped an unloaded joint at 3.06 rad/s, below the 4.7 no-load and the 4.0
+free budget; the leg clip is now 2.94 N·m (claws 0.23, with their own
+DC-line damping), an unloaded joint reaches 4.71 rad/s, and the D052
+strict xfail passes. The continuous budget moved to where time matters: a
+heat integral in both RL envs (trips after 3 min at 0.85 × stall, then
+derates the joint and costs reward), a `THERMAL_LOAD` verdict in
+`audit_gestures`, and accounting in the live sim (sim → robot refused
+while a joint is past its budget). A review of that round moved the heat
+onto the motor current (force − damping × qvel), not the raw force, which
+had counted a free joint spinning at no-load as stall-level heat. Second
+package: the void guard's 10–20° misses. The wave gait lifts the next leg
+the instant one lands, so two leading legs straddling the edge left the
+CoM outside the other three and the robot tipped in ~0.3 s, before its
+probe finished. A touchdown gate (a foot that has not felt ground 140 ms
+after touchdown winds the gait back and waits) and a retreat that replays
+the approach backwards stop walk 45 at all eleven headings tried from −30
+to 60° (was: fell at 10, 15 and 20°) and cut a 72-approach sweep from 28
+falls to 6; a 1° grid still finds a lip band (7 of 310 falls, a foot
+centred on the edge's corner closes its switch and slides off), pinned as
+a strict xfail. Third package: an older spawn bug — six files (and three
+scripts built on one of them) wrote the leg angles into `qpos[7:22]`,
+which interleaves the claws, so every push and terrain trial began with a
+9.8° spawn tilt (every `tilt_max` read 9.83°); the tracked push / terrain
+JSONs predate the fix. Re-measured on the peak model against an in-memory
+1.911 A/B: nothing moves in normal operation (no joint reaches the old
+clip: worst RMS load 0.39 × stall); `recover1` 5/20 legacy vs 3/20
+(noise), 0/20 `handoff_ok`, system 20/20 vs 11/20 unchanged; the shove
+floor is 29 N (1.11 BW) standing, 2 N *below* the clip — D052's "harder to
+tip" was the clip letting legs yield into a slide, read on a 5 N grid.
+Fast suite 325 passed, 2 strict xfail. Still open: the lip band, the
+careful walk as default (1 fall in 72 but 17 % slower — the owner's call),
+the thermal constants (VERIFY on the bench), and the rest of the list
+above — except the free-budget question (closed) and the retreat that
+barely retreated (fixed).
+
 ## 2026-09-24 · Session 9e (laptop) — toward the real robot: gesture studio, chord designer, servo realism, the hardware bridge, tailnet (D051)
 
 **Ask:** "how do we get it set up with tailscale?" and "what else makes it

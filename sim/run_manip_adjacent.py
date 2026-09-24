@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 import pebble_manip_adjacent as pma
 from pebble_manip_adjacent import AdjacentManip, T_TOTAL
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS
+import rocky_model as rm   # noqa: E402  (D052 spawn height)
 
 CLAW_MAX = np.deg2rad(55)
 
@@ -35,7 +36,7 @@ def make(control=False):
     data = mujoco.MjData(model)
     g = man.g
     q0 = np.array([leg_ik(body_to_leg(i, g.p_nom[i])) for i in range(N_LEGS)]).flatten()
-    data.qpos[0:3] = [0, 0, (g.h + 14) / 1000.0]
+    data.qpos[0:3] = [0, 0, rm.spawn_z_m(g.h)]             # D052: was h + 14 mm
     data.qpos[3:7] = [1, 0, 0, 0]
     # NOTE: qpos joint order is interleaved per leg (yaw,hip,knee,claw)x5 —
     # NOT [15 leg joints][5 claws] like ctrl. Write by joint address.

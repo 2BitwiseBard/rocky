@@ -23,6 +23,9 @@ What lives here:
   GaitObs       LegacyGaitObs for version-1 checkpoints)
   DomainRandomizer   per-episode draws from stored base values
   servo_params  the per-episode servo draw (off / nominal / random)
+  ThermalProxy  per-joint heat from sustained load (D052 amendment): the
+                MJCF clips at PEAK (stall) torque, so the sustained
+                (continuous) budget is enforced here, over time
   checkpoint_contract   what a checkpoint says about the env it trained in
   make_env / make_vec_env   the trainer's env factory (SAME_STEP autoreset)
 
@@ -356,6 +359,117 @@ def make_servo(n=N_JOINTS):
 def apply_servo_params(servo, sp):
     servo.set(on=sp["on"], hold_hz=sp["hold_hz"], latency_s=sp["latency_s"],
               rate_rad_s=sp["rate_rad_s"], quant=sp["quant"])
+
+
+# ---------------------------------------------------------------- thermal proxy
+THERMAL_RAMP = 0.2          # derate ramps in over heat = budget .. (1 + ramp) x budget
+THERMAL_PENALTY = 0.5       # reward -= this x mean(derate) over the 15 joints, per control step
+
+
+def motor_torque(model, data, vadr, n=N_JOINTS):
+    """The leg servos' ELECTRICAL torque (15,), the part of the motor torque
+    that is current — and so I^2R heat. In this model actuator_force is the
+    motor's VOLTAGE term (duty x stall, clipped at peak) and the joint damping
+    D = stall / no-load is its back-EMF line, so the current-producing torque
+    is F - D * qvel, not F: a free joint saturated at no-load speed reads
+    F ~ stall but draws ~no-load current (F - Dv ~ 0), and a back-driven
+    joint (braking, a shove, a landing) draws MORE than F says. model.dof_damping
+    (not the params constant) keeps it right under any damping change."""
+    vadr = np.asarray(vadr, int)
+    return np.asarray(data.actuator_force[:n], float) - model.dof_damping[vadr] * data.qvel[vadr]
+
+
+class ThermalProxy:
+    """Per-joint servo heat (D052 amendment). The MJCF forcerange is the servo's
+    PEAK (stall) torque — its instantaneous limit — and continuous_frac x stall
+    is a THERMAL budget, so it is enforced over time, here:
+
+        x    = |tau_e| / stall                     (mean of x^2 over the tick's substeps)
+        tau_e = motor_torque() = actuator_force - dof_damping * qvel   (the current term)
+        heat += (x^2 - continuous_frac^2) * dt,    clamped at 0
+
+    i.e. load above continuous heats, load below cools at the same scale (a
+    servo resting at ~0.1 x stall sheds 0.41 per second). No separate leak:
+    the continuous^2 term IS the cooling. budget (rocky_model.thermal()) =
+    (0.85^2 - 0.65^2) x 180 s = 54: 3 min at 0.85 x stall trips, 93 s at
+    stall, never at <= 0.65 — within ~10 % of the driver mock's 70 C cut
+    (167 s at 0.85, 88 s at stall, 248 s at 0.80 vs 248 here).
+
+    Tripped (heat > budget): the joint's forcerange ramps from its peak down
+    to continuous_frac x peak over heat = budget .. (1 + THERMAL_RAMP) x
+    budget — the servo's own protection, softened so it does not chatter. A
+    derated joint can no longer exceed continuous, so its heat stops rising
+    and it recovers once the load drops. `peak` is captured AFTER the domain
+    randomiser set this episode's forcerange (voltage), so the derate
+    composes with it. The real servo cuts torque at 70 C instead
+    (sim/hw_bridge does nothing: the servo protects itself)."""
+
+    def __init__(self, n=N_JOINTS, on=True, name=None, ramp=THERMAL_RAMP):
+        c = rm.thermal(name)
+        self.n, self.on, self.ramp = int(n), bool(on), float(ramp)
+        self.stall, self.cf, self.budget = float(c["stall_nm"]), float(c["continuous_frac"]), float(c["budget"])
+        self.trip_frac, self.trip_s = float(c["trip_frac"]), float(c["trip_s"])
+        self.heat = np.zeros(self.n)
+        self.peak = None
+        self._acc = np.zeros(self.n)
+        self._k = 0
+
+    def reset(self, model, heat0=0.0):
+        """New episode: capture the (DR-scaled) peak forcerange; heat0 = starting
+        heat as a fraction of the budget (scalar or (n,)) — a servo that is already warm."""
+        self.peak = model.actuator_forcerange[:self.n].copy()
+        self.heat = np.broadcast_to(np.asarray(heat0, float) * self.budget, (self.n,)).copy()
+        self._acc[:] = 0.0
+        self._k = 0
+        self.apply(model)
+
+    def accumulate(self, tau_e):
+        """Call once per physics substep with motor_torque(model, data, vadr) —
+        the electrical torque, NOT raw data.actuator_force (which counts the
+        back-EMF voltage as heat and overstates a fast unloaded swing ~2x+)."""
+        x = np.asarray(tau_e[:self.n], float) / self.stall
+        self._acc += x * x
+        self._k += 1
+
+    def update(self, dt, model=None):
+        """Integrate the substeps seen since the last update over dt, then (model
+        given) write the derated forcerange. Returns the derate (n,) in [0, 1]."""
+        if self._k:
+            x2 = self._acc / self._k
+            self.heat = np.maximum(0.0, self.heat + (x2 - self.cf * self.cf) * float(dt))
+            self._acc[:] = 0.0
+            self._k = 0
+        if model is not None:
+            self.apply(model)
+        return self.derate()
+
+    def derate(self):
+        if not self.on:
+            return np.zeros(self.n)
+        return np.clip((self.heat - self.budget) / (self.ramp * self.budget), 0.0, 1.0)
+
+    def scale(self):
+        """forcerange multiplier per joint: 1 (cool) .. continuous_frac (fully derated)."""
+        return 1.0 - (1.0 - self.cf) * self.derate()
+
+    def apply(self, model):
+        if self.peak is not None:
+            model.actuator_forcerange[:self.n] = self.peak * self.scale()[:, None]
+
+    def tripped(self):
+        return self.heat > self.budget
+
+    def info(self):
+        return dict(thermal_heat_max=float(self.heat.max() / self.budget),   # fraction of the budget
+                    thermal_tripped=int(self.tripped().sum()),
+                    thermal_derate_max=float(self.derate().max()))
+
+    def config(self):
+        return dict(on=self.on, model="heat += ((|F - D qvel|/stall)^2 - continuous_frac^2) dt, clamp 0",
+                    stall_nm=self.stall, continuous_frac=self.cf, trip_frac=self.trip_frac,
+                    trip_s=self.trip_s, budget=self.budget, ramp=self.ramp,
+                    derate="forcerange x (1 - (1 - cf) x clip((heat - budget) / (ramp budget), 0, 1))",
+                    penalty=THERMAL_PENALTY)
 
 
 # ---------------------------------------------------------------- domain randomisation

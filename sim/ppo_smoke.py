@@ -11,7 +11,9 @@ Pass criteria (asserted):
   * mean return over iterations does not collapse (>60 % of iter-1)
   * checkpoint round-trips (save -> load -> same action)
 
-Usage: MUJOCO_GL=osmesa python3 ppo_smoke.py [--iters 3] [--horizon 1024]
+Usage: MUJOCO_GL=osmesa python3 ppo_smoke.py [--iters 3] [--horizon 1024] [--out DIR]
+(--out: where the checkpoint + log go, default sim/; the obs width comes from
+the env, so it follows rl_common's current gait obs contract.)
 """
 import argparse
 import json
@@ -29,7 +31,7 @@ torch.manual_seed(0)
 
 
 class ActorCritic(nn.Module):
-    def __init__(self, obs_dim=41, act_dim=15, hidden=128):
+    def __init__(self, obs_dim, act_dim=15, hidden=128):
         super().__init__()
         self.pi = nn.Sequential(nn.Linear(obs_dim, hidden), nn.Tanh(),
                                 nn.Linear(hidden, hidden), nn.Tanh(),
@@ -123,10 +125,16 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--iters", type=int, default=3)
     ap.add_argument("--horizon", type=int, default=1024)
+    ap.add_argument("--out", default=HERE, help="dir for ppo_smoke_ckpt.pt + ppo_smoke_log.json")
     args = ap.parse_args()
 
     env = PebbleEnv()
-    ac = ActorCritic()
+    # the obs width is the env's (rl_common's gait obs contract), never a
+    # literal: it was hard-coded 41 and broke when the contract grew
+    obs_dim = int(env.observation_space.shape[0])
+    act_dim = int(env.action_space.shape[0])
+    print(f"PebbleEnv: obs_dim {obs_dim}, act_dim {act_dim}")
+    ac = ActorCritic(obs_dim, act_dim)
     opt = torch.optim.Adam(ac.parameters(), lr=3e-4)
     log = []
     for it in range(1, args.iters + 1):
@@ -145,13 +153,14 @@ def main():
     first, last = log[0]["mean_ep_return"], log[-1]["mean_ep_return"]
     assert last > 0.6 * first, f"return collapsed: {first} -> {last}"
 
-    ckpt = os.path.join(HERE, "ppo_smoke_ckpt.pt")
+    os.makedirs(args.out, exist_ok=True)
+    ckpt = os.path.join(args.out, "ppo_smoke_ckpt.pt")
     torch.save(ac.state_dict(), ckpt)
-    ac2 = ActorCritic()
+    ac2 = ActorCritic(obs_dim, act_dim)
     ac2.load_state_dict(torch.load(ckpt, weights_only=True))
-    o = torch.zeros(41)
+    o = torch.zeros(obs_dim)
     assert torch.allclose(ac.pi(o), ac2.pi(o)), "checkpoint roundtrip failed"
-    with open(os.path.join(HERE, "ppo_smoke_log.json"), "w") as f:
+    with open(os.path.join(args.out, "ppo_smoke_log.json"), "w") as f:
         json.dump(log, f, indent=1)
     print(f"PPO SMOKE PASS — plumbing verified "
           f"(returns {first:.0f} -> {last:.0f}); checkpoint + log saved.")

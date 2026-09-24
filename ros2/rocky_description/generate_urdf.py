@@ -14,8 +14,10 @@ Masses/geometry mirror sim/build_mjcf.py's budget model; URDF inertials are
 computed analytically for each primitive so MuJoCo/Gazebo/RViz all agree.
 D052: limits, effort, velocity and damping come from gait/rocky_model.py
 (params `actuators:` / `joints:`), the same loader the MJCF uses. effort =
-the CONTINUOUS torque (the MJCF forcerange), velocity = the no-load speed
-(the hard ceiling); the foot is the 6.5 mm contact sphere whose surface is
+the PEAK (stall) torque = the MJCF forcerange since the D052 amendment
+(the continuous 0.65 x stall is a thermal budget, not an instantaneous
+limit — a URDF effort is the latter), velocity = the no-load speed (the
+hard ceiling); the foot is the 6.5 mm contact sphere whose surface is
 the foot_fix frame (the IK foot point), and the claw prongs are carved out
 of the tibia budget instead of added on top.
 
@@ -42,10 +44,11 @@ L3 = P["leg"]["l3_tibia"] * MM
 RB = P["body"]["circumradius"] * MM
 Z_HIP = P["leg"]["hip_axis_z"] * MM     # femur pivot height (params SSOT, D047)
 LIM = rm.joint_limits_deg()             # joints.pos_deg (D052; bus.soft_limits_deg aliases it)
-EFFORT = rm.continuous_nm()             # N*m: continuous budget = the MJCF forcerange (D052)
+EFFORT = rm.stall_nm()                  # N*m: peak = the MJCF forcerange (D052 amendment; was continuous)
 VEL = rm.servo_speed("hard")            # rad/s: no-load, 0.222 s/60 deg @ 12 V (was a stray 5.2)
 DAMP = rm.damping_nms()                 # N*m*s/rad: stall / no-load, = the MJCF joint damping
-CLAW_EFFORT = rm.continuous_nm("claw")  # SCS0009, all VERIFY
+CLAW_DAMP = rm.damping_nms("claw")      # the SCS0009's line (0.0242), = the MJCF claw damping
+CLAW_EFFORT = rm.stall_nm("claw")       # SCS0009 peak, all VERIFY
 CLAW_VEL = rm.no_load_rad_s("claw")
 R_FOOT = rm.foot_contact_radius_mm() * MM   # contact sphere, centred R_FOOT behind the foot point
 M_PRONG = 0.004                         # each visual claw prong (MJCF parity)
@@ -182,7 +185,7 @@ def leg_macro() -> str:
       <axis xyz="0 0 1"/>
       <limit lower="{deg(LIM['claw'][0])}" upper="{deg(LIM['claw'][1])}"
              effort="{CLAW_EFFORT:.4f}" velocity="{CLAW_VEL}"/>
-      <dynamics damping="0.01"/>
+      <dynamics damping="{CLAW_DAMP:.4f}"/>
     </joint>
   </xacro:macro>
 """

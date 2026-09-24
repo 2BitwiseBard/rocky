@@ -31,6 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
+import rocky_model as rm   # noqa: E402  (D052 spawn height)
 from legged_odom import LeggedOdomEKF, quat_to_R, StillnessGate      # noqa: E402
 from run_odom import (fk_body, IMU_HZ, GYRO_NOISE, ACC_NOISE,        # noqa: E402
                       QVEL_NOISE, GYRO_BIAS, ACC_BIAS, ENC_NOISE,
@@ -112,7 +113,7 @@ def main():
     vadr = [model.joint(f"{n}{i}").dofadr[0]
             for i in range(5) for n in ("yaw", "hip", "knee")]
     # start ON the clear center ring (r = 0.55 m, CCW), heading tangent
-    data.qpos[0:3] = [-0.55, 0.0, (gait.h + 14) / 1000.0]
+    data.qpos[0:3] = [-0.55, 0.0, rm.spawn_z_m(gait.h)]    # D052: was h + 14 mm
     data.qpos[3:7] = [np.cos(-np.pi / 4), 0, 0, np.sin(-np.pi / 4)]  # yaw -90
     data.qpos[jadr] = q0
     data.ctrl[:15] = q0

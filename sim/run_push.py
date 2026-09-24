@@ -22,6 +22,7 @@ import mujoco
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS
+import rocky_model as rm                                             # noqa: E402
 
 V_X = 45.0
 T_PUSH = 3.5          # gait has settled by then
@@ -34,9 +35,10 @@ FORCES = [2, 4, 6, 8, 11, 14, 18, 22, 27]     # N (2.7 kg robot: 22 N ~ 0.8 g la
 def make_data(model, gait):
     data = mujoco.MjData(model)
     q0 = np.array([leg_ik(body_to_leg(i, gait.p_nom[i])) for i in range(N_LEGS)]).flatten()
-    data.qpos[0:3] = [0, 0, (gait.h + 14) / 1000.0]
+    data.qpos[0:3] = [0, 0, rm.spawn_z_m(gait.h)]            # D052: was h + 14 mm
     data.qpos[3:7] = [1, 0, 0, 0]
-    data.qpos[7:7 + 15] = q0
+    data.qpos[[model.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS)
+               for n in ("yaw", "hip", "knee")]] = q0   # claws interleave in qpos: never qpos[7:22]
     data.ctrl[:15] = q0
     mujoco.mj_forward(model, data)
     return data, q0

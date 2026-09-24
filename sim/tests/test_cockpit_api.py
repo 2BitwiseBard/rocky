@@ -353,3 +353,55 @@ def test_residual_walker_gets_its_trained_contract():
     sim.set_walk("off")
     import rocky_model as rm
     assert sim.walk is None and sim.gait.T == pytest.approx(rm.gait_defaults()["cycle_time"])
+
+
+# ------------------------------------------------------------------ review round 3 (D052 amendment)
+def test_editing_a_preset_world_keeps_the_pose_and_heading():
+    """Review repro: /api/world/add always renamed the world 'custom' and
+    set_world decided 'same world' by name, so the FIRST edit of any preset
+    teleported the robot to the origin and reset its yaw."""
+    import mujoco
+    sim = _make_sim()
+    a = np.radians(34.0) / 2
+    sim.data.qpos[0:2] = [0.06, 0.014]
+    sim.data.qpos[3:7] = [np.cos(a), 0, 0, np.sin(a)]
+    mujoco.mj_forward(sim.model, sim.data)
+    c = _start(sim)
+    try:
+        r = c.post("/api/world/add", json={"object": {"kind": "box", "pos": [1.4, 0.0],
+                                                      "size": [0.1, 0.1, 0.05]}}).json()
+        assert r["ok"] and sim.world_name == "custom"
+        p = sim.data.xpos[sim.torso]
+        assert np.hypot(p[0] - 0.06, p[1] - 0.014) < 0.01, p
+        assert abs(np.degrees(sim.yaw()) - 34.0) < 1.5, np.degrees(sim.yaw())
+        # a preset switch still starts at the origin facing +x
+        assert c.post("/api/world", json={"preset": "flat"}).json()["ok"]
+        p = sim.data.xpos[sim.torso]
+        assert np.hypot(p[0], p[1]) < 0.01 and abs(np.degrees(sim.yaw())) < 1.0
+    finally:
+        sim.alive = False
+
+
+def test_sim2real_refusal_covers_a_void_retreat_and_a_hot_servo():
+    """Review repro: during the void retreat idle_reason said None (cmd_v was
+    zeroed) and sim2real started while the retreat still walked. And a joint
+    past its thermal budget in the sim now refuses sim2real too."""
+    sim = _make_sim("cliff")
+    sim.speed = 1.0
+    for _ in range(int(1.0 / sim.DT)):
+        sim.step()
+    sim.do("walk 45")
+    for _ in range(int(12.0 / sim.DT)):
+        sim.step()
+        if sim._void_phase == "retreat":
+            break
+    assert sim._void_phase == "retreat"
+    assert "void guard" in (sim.idle_reason() or "") and "void guard" in (sim.sim2real_refusal() or "")
+    assert not sim.is_idle()
+    sim2 = _make_sim()
+    sim2.speed = 1.0
+    for _ in range(int(0.5 / sim2.DT)):
+        sim2.step()
+    assert sim2.sim2real_refusal() is None
+    sim2.thermal.heat[7] = 1.1 * sim2.thermal.budget
+    assert "past the thermal budget" in sim2.sim2real_refusal() and "leg 2 hip" in sim2.sim2real_refusal()

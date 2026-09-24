@@ -34,6 +34,7 @@ Commands (REPL or --script, ';'-separated):
                         gait.hstep reflex.trip reflex.stall_s
                         reflex.fallen_max_s servo.on servo.hold_hz
                         servo.latency_s servo.rate_rad_s servo.quant
+                        gate.wait (1 = careful walk, see the touchdown gate)
                         (phase-continuous: changing T rescales the clock so
                         feet don't teleport)
     gait NAME           load a gait preset (gait/gaits/NAME.json; `default`
@@ -58,15 +59,29 @@ Commands (REPL or --script, ';'-separated):
 ALWAYS-ON GUARDS (D052 — every command source goes through them: walk,
 teleop, the cockpit's goto and residual walker, the hardware mirror):
     void guard          a stance foot that probes 30 mm and finds nothing
-                        while walking = a void: back away, safe-stop, and
-                        refuse any command with a component toward it
-                        ("blocked: void at N deg") until `clear`
+                        while walking = a void: back away (the approach
+                        played backwards: every foot returns to a foothold it
+                        already stood on), safe-stop, and refuse any command
+                        with a component toward it ("blocked: void at N deg")
+                        until `clear`
+    touchdown gate      a stance foot whose switch has not confirmed ground
+                        140 ms after its touchdown holds the gait (the leg
+                        that just lifted goes back down) until it finds ground
+                        or the void guard fires (D052 P2: cliff at 10-20 deg).
+                        `set gate.wait 1` = careful walk: every touchdown
+                        waits for its switch (~17 % slower, safer at edges)
     trip escalation     3 gyro trips in 5 s latch a safe-stop; velocity is
                         ignored until `clear`
     servo realism       ON: 50 Hz bus hold, 20 ms latency, 4.7 rad/s slew,
                         4096-count goals (`set servo.on 0` = ideal actuators);
                         every joint target is rate-clamped at 4.7 rad/s and a
                         non-finite target is dropped (last good one held)
+    thermal             every leg joint's heat from its ELECTRICAL torque
+                        (force - damping x qvel), rl_common.ThermalProxy with
+                        the derate OFF: notes at 50 % of the budget and at the
+                        trip (3 min at 0.85 x stall); a tripped joint refuses
+                        sim2real until it cools (the real servo would be at
+                        its over-temp cut). Reset on a respawn
     hardware            while mirroring sim->real: no probe on the real feet,
                         no walking (velocity OR a gaited gesture) until the
                         bridge allows locomotion, no gesture during its soft
@@ -78,7 +93,12 @@ teleop, the cockpit's goto and residual walker, the hardware mirror):
 
 HONESTY BOX (read before trusting a number): this is the same MJCF the
 whole sim stack uses — masses from CAD, D052 servo identity (damping =
-stall / no-load, forcerange = continuous torque) and the servo realism
+stall / no-load, forcerange = stall (peak) torque — the continuous budget
+is thermal, judged over time: here by rl_common.ThermalProxy in ACCOUNTING
+mode (guard_status()['thermal'], notes at half the budget and at the trip,
+sim2real refused while a joint is past it; the sim never derates), in the RL
+envs by the same proxy with the derate on, in audit_gestures by
+pebble_feasibility.judge_load) and the servo realism
 layer above, friction guessed, no gear backlash. It is EXCELLENT for logic
 (does the reflex trip? does the gesture reach? does a gait tweak break the
 sweep limits?) and DIRECTIONAL for dynamics (push envelopes, stability
@@ -106,13 +126,14 @@ sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 sys.path.insert(0, HERE)
 import rocky_model as rm                                              # noqa: E402
+import rl_common as rc                                                # noqa: E402
 import pebble_feasibility as pf                                       # noqa: E402
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
 from pebble_reflex import ReflexSupervisor, body_gyro_xy             # noqa: E402,F401
 from pebble_gestures import (jazz_hands, fist_bump, beckon,          # noqa: E402
                              JAZZ_TOTAL, BUMP_TOTAL, BECKON_TOTAL)
 from contacts import foot_contacts                                    # noqa: E402
-from cliff import CliffDetector, CliffReaction                        # noqa: E402
+from cliff import CliffDetector                                       # noqa: E402
 from sim_imu import SimIMU                                            # noqa: E402
 from shove import Shove                                               # noqa: E402
 
@@ -231,9 +252,52 @@ SEEK, PRELOAD, HOLD, SWING = "SEEK", "PRELOAD", "HOLD", "SWING"
 
 GESTURE_BLEND_MIN_S = 0.3   # entry/exit blend floor (D052)
 VOID_RETREAT_CYCLES = 0.6   # the always-on guard backs off 0.6 gait cycles (goto keeps 1.6)
-VOID_RETREAT_MIN = 25.0     # mm/s toward-speed assumed when the void was found turning
 VOID_TOL = 1.0              # mm/s: a command component toward a latched void above this is refused
+# D052 P2 — the touchdown gate ("feel before you lift"). The wave gait lifts
+# the next leg at the very instant the previous one lands (duty 0.8 x 5 legs:
+# exactly one foot in the air at all times). Approaching the cliff at 10-20 deg
+# the TWO leading legs (3 and 4, at -54 / +18 deg in the body) straddle the
+# edge: leg 3 lands 40-50 mm past it and leg 4 lifts at once, leaving legs 0-2,
+# whose triangle does not contain the CoM — the robot tipped over the edge in
+# ~0.3 s, long before a 30 mm probe could finish (the guard fired at 10 deg and
+# still fell; at 15 deg it never fired). Now a stance foot whose switch has not
+# CONFIRMED ground GATE_TICKS after its commanded touchdown holds the gait:
+# the clock is run back (GATE_REWIND_RATE x real time) to that touchdown — the
+# leg that just lifted goes back down where it was — and held there while the
+# late foot keeps probing. Ground found -> the clock resumes; probed out -> void.
+# Measured (servo realism on, 45 mm/s): the switch closes 2-4 ticks after the
+# commanded touchdown on flat ground and rubble, <= 8 on rough terrain / stairs.
+GATE_TICKS = 7              # 50 Hz ticks (140 ms): > the flat-ground confirm (first contact <= 4 + 2)
+GATE_WINDOW_TICKS = 6       # only a foot this fresh (7..12 ticks) can start a hold: the rewind stays short
+GATE_REWIND_RATE = 3.0      # gait-clock s per s while running back to the late foot's touchdown — a CEILING:
+#                             each hold runs at min(this, the servo budget / the gait's own peak joint
+#                             rate at that command) (_rewind_rate; review fix: at 45 mm/s the 3x rewind
+#                             asked for up to 18 rad/s and only the 4.7 rad/s clamp held it)
+GATE_MAX_S = 1.5            # a hold that found neither ground nor a void by then is released
+#                             (and that foot is left to the void detector for the rest of its stance)
+GATE_EPS_S = 0.002          # hold the clock this far past the touchdown (the late leg stays in stance)
+GATE_WAIT = False           # `set gate.wait 1` — the CAREFUL walk: EVERY touchdown holds the gait
+#                             until that foot's switch first closes (the next leg never lifts off a
+#                             support the robot has not felt). Measured 2026-09-24, 72 cliff approaches
+#                             (8 commands x 9 headings): 1 fall vs 6 with the late gate alone, but
+#                             walking is 17 % slower everywhere (flat 45 mm/s x 15 s: 0.521 vs 0.625 m)
+#                             because the switch closes 2-4 ticks after every commanded touchdown.
+#                             Off by default: the owner decides whether the table-top walk pays that.
+#                             Review round 3 (same day), a 1-deg grid (walk 15/25/35/45 x -30..60 deg,
+#                             310 approaches): late gate 7 falls (a band at 13-21 deg: 45 @ 12.5-14.5,
+#                             25 @ 15-16, 35 @ 20-21, 15 @ 17.5), careful walk 9 falls at OTHER angles
+#                             (14-20 deg). Mechanism: a leading foot on the edge's lip (sphere centre
+#                             0-8 mm past it). Open — test_void_guard_lip_band_known_gap (strict xfail).
+# The void retreat plays the approach BACKWARDS (the gait clock runs in reverse
+# with the approach command): every foot goes back to a foothold it already
+# stood on, and the void leg is the first one lifted — back onto the platform.
+# The old retreat (walk -0.6 x v along the void bearing) lifted the next leg in
+# the forward order while the void leg still hung over the edge.
+VOID_RETREAT_RATE = 1.0     # gait-clock s per s during the retreat
 NAN_LOG_S = 1.0             # throttle for the non-finite-target note
+THERMAL_NOTE_FRAC = 0.5     # a joint past this fraction of its thermal budget gets a note (once,
+#                             re-armed below THERMAL_REARM_FRAC)
+THERMAL_REARM_FRAC = 0.25
 SHOVE_MAX_N = 200.0         # D052 V2: a console/cockpit shove is clamped to this peak (the tip
 #                             threshold is ~25-35 N; 1e9 N blew MuJoCo up and auto-reset the sim)
 SHOVE_DUR_S = (0.05, 2.0)   # and to this duration range
@@ -392,17 +456,30 @@ class Playground:
         self._probe_hits = np.zeros(N_LEGS, int)
         self._probe_goal = np.zeros(N_LEGS)
         self._probe_age = np.zeros(N_LEGS, int)       # 50 Hz ticks since this stance's touchdown
+        self._rate_cache = {}
         self.cliff_det = CliffDetector()
-        self.cliff_react = CliffReaction(self.gait, retreat_cycles=VOID_RETREAT_CYCLES)
         self.void = None
         self._void_bearings = []                  # world-frame bearings (deg) of latched voids
         self._void_phase = None                   # None | 'retreat' | 'held'
-        self._void_speed = 0.0
+        self._retreat = None                      # dict(v, tg_end, t_end): the approach played backwards
+        self._gate = None                         # dict(leg, tg, t0): the touchdown gate's hold
+        self._gate_skip = np.zeros(N_LEGS, bool)  # this stance timed out of a hold: not gated again
+        self._felt = np.zeros(N_LEGS, bool)       # this stance's switch has closed at least once
+        self.gate_wait = GATE_WAIT                # `set gate.wait 0|1` (see GATE_WAIT)
+        self.gate_count = 0                       # holds started (a HUD counter; rough ground uses it)
+        self._v_gait = np.zeros(3)                # the command the supervisor got this step
         self._ges = None
         self._latch_seen = bool(self.sup.latched)
         self._q_cmd = self.data.ctrl[:15].copy()  # last good, rate-clamped joint target
         self._claw_cmd = self.data.ctrl[15:20].copy() if m.nu >= 20 else None
         self.servo.reset(self._q_cmd)
+        # review fix (D052 amendment): the clip is the PEAK torque, so the continuous
+        # budget has to be judged over time HERE too — accounting only (on=False: the
+        # sim never derates; the RL envs do), from the electrical torque
+        self._vadr = np.array(rc.joint_addrs(m)[1])
+        self.thermal = rc.ThermalProxy(on=False)
+        self._thermal_noted = np.zeros(15, bool)
+        self._thermal_tripped = np.zeros(15, bool)
         self._model_seen, self._data_seen, self._sup_seen = m, self.data, self.sup
 
     def _sync_external(self):
@@ -469,10 +546,27 @@ class Playground:
         hw = self.hw
         return self.sim2real and not bool(getattr(hw, "allow_locomotion", False))
 
+    def motion_reason(self):
+        """None at a planted standstill, else why the sim is still moving on its
+        own — what the ASK (cmd_v) does not show (review fix: the void guard
+        zeroes cmd_v and then retreats with the approach command, so sim2real
+        could start mid-retreat and stream the walk to the real legs)."""
+        if self._void_phase == "retreat":
+            return "the void guard is backing off — wait for its safe-stop"
+        if np.any(self.cmd_eff):
+            return "the gait is still moving (effective command) — stop first"
+        if getattr(self.sup, "_stop_req", False):
+            return "a safe-stop is pending"
+        if self._gate is not None:
+            return "the touchdown gate is holding a step"
+        return None
+
     def is_idle(self):
         """What the hardware bridge may start sim2real from: planted standstill
-        (state NORMAL, no velocity asked, no gesture or blend, no goto)."""
+        (state NORMAL, no velocity asked or still being executed — a void
+        retreat, a pending safe-stop, a gate hold — no gesture or blend, no goto)."""
         return (self.sup.state == "NORMAL" and not np.any(self.cmd_v)
+                and self.motion_reason() is None
                 and self.gesture is None and self._ges is None
                 and getattr(self, "goto_state", None) is None)
 
@@ -513,13 +607,15 @@ class Playground:
         return dict(
             void=None if v is None else {k: (round(float(x), 2) if isinstance(x, (float, np.floating)) else x)
                                          for k, x in v.items() if k != "xy"},
-            void_phase=self._void_phase, latched=bool(self.sup.latched), latch_reason=self.sup.latch_reason,
+            void_phase=self._void_phase, gate=None if self._gate is None else int(self._gate["leg"]),
+            gate_count=int(self.gate_count), gate_wait=bool(self.gate_wait), latched=bool(self.sup.latched), latch_reason=self.sup.latch_reason,
             locomotion_held=self.locomotion_held(), budget_k=round(float(self.budget_k), 3),
             budget_note=self.budget_note(), cmd_eff=[round(float(x), 3) for x in self.cmd_eff],
             probe_on=bool(self.probe_on), probe_state=list(self.probe_state),
             probe_dz=[round(float(x), 1) for x in self.probe_dz], probe_out=[bool(x) for x in self.probe_out],
             gesture_phase=self.gesture_phase, nan_count=int(self.nan_count),
-            servo_on=bool(self.servo.p["on"]), kin_h=round(float(self.last.get("kin_h", 0.0)), 4))
+            servo_on=bool(self.servo.p["on"]), kin_h=round(float(self.last.get("kin_h", 0.0)), 4),
+            thermal=self.thermal_status())
 
     # ------------------------------------------------------------ physics
     def step(self):
@@ -565,10 +661,15 @@ class Playground:
         state0 = self.sup.state
         probing = (self.probe_on and not self.sim2real and not monitor
                    and state0 in ("NORMAL", "PLANT", "RECOVER", "BRACE"))
+        tick = self._k % int(round(PROBE_TICK_S / self.DT)) == 0
         if not probing:
             self._probe_reset()
-        elif state0 != "BRACE" and self._k % int(round(PROBE_TICK_S / self.DT)) == 0:
+        elif state0 != "BRACE" and tick:
             self._probe_tick(con, self.sup.last_stance, q_meas)
+        # --- touchdown gate + the backwards retreat drive the gait clock ---
+        self._v_gait = v_sup.copy()
+        self._gate_update(state0, v_sup, probing, tick)
+        self._drive_clock(state0)
         q, state = self.sup.step(self.t, v_sup[0], v_sup[1], v_sup[2], gxy,
                                  contacts=con, gyro_vec=w_body[:2], tilt_deg=tilt_deg,
                                  height=kin_h, monitor=monitor,
@@ -613,6 +714,9 @@ class Playground:
                 with self.lock:               # over: wrench already zeroed
                     self.push = None
         mujoco.mj_step(m, d)
+        self.thermal.accumulate(rc.motor_torque(m, d, self._vadr))
+        if tick:
+            self._thermal_tick()
         self.t += self.DT
         self._k += 1
         if self.recording and self._k % self._spf == 0:
@@ -624,6 +728,30 @@ class Playground:
             self._cam.lookat[:] = d.xpos[self.torso]
             self._renderer.update_scene(d, self._cam)
             self._frames.append(self._renderer.render())
+
+    # ------------------------------------------------------------ thermal (accounting)
+    def _thermal_tick(self):
+        """50 Hz: integrate the heat, note a joint crossing half its budget and
+        its trip (each once, re-armed once it has cooled)."""
+        self.thermal.update(PROBE_TICK_S)
+        frac = self.thermal.heat / self.thermal.budget
+        name = lambda j: f"leg {j // 3} {rm.LEG_JOINTS[j % 3]}"          # noqa: E731
+        for j in np.nonzero((frac > THERMAL_NOTE_FRAC) & ~self._thermal_noted)[0]:
+            self._thermal_noted[j] = True
+            self.note("thermal", f"{name(j)} at {100 * frac[j]:.0f} % of its thermal budget — sustained "
+                                 f"load above the continuous {rm.continuous_frac():.2f} x stall")
+        for j in np.nonzero((frac > 1.0) & ~self._thermal_tripped)[0]:
+            self._thermal_tripped[j] = True
+            self.note("thermal", f"{name(j)} PAST its thermal budget — the real servo would be at its "
+                                 f"over-temp cut; sim2real is refused until it cools")
+        self._thermal_tripped &= frac > 1.0
+        self._thermal_noted &= frac > THERMAL_REARM_FRAC
+
+    def thermal_status(self):
+        frac = self.thermal.heat / self.thermal.budget
+        j = int(np.argmax(frac))
+        return dict(heat_max=round(float(frac[j]), 3), hot=f"leg {j // 3} {rm.LEG_JOINTS[j % 3]}",
+                    tripped=[f"leg {i // 3} {rm.LEG_JOINTS[i % 3]}" for i in np.nonzero(frac > 1.0)[0]])
 
     # ------------------------------------------------------------ target guards
     def _guard_target(self, target):
@@ -673,6 +801,17 @@ class Playground:
             v = np.zeros(3)
         if self.sup.latched:
             v[:] = 0
+        if self._void_phase == "retreat" and self.locomotion_held():
+            # review fix: nothing may walk while the mirror holds locomotion —
+            # the retreat ends where it is (safe-stop, `clear` releases)
+            self._retreat = dict(self._retreat or {}, t_end=-1.0)
+        if self._void_phase == "retreat":
+            rv = self._retreat_cmd()
+            self.budget_k = 1.0
+            # the gait gets the APPROACH command with its clock running backwards
+            # (_drive_clock); cmd_eff reports what the body does: the reverse
+            self.cmd_eff = -VOID_RETREAT_RATE * rv
+            return rv
         v = self._void_filter(v)
         if np.any(v):
             b = self._budget(v)
@@ -698,20 +837,25 @@ class Playground:
                 return _wrap_deg(wb - np.degrees(self.yaw()))
         return None
 
+    def _retreat_cmd(self):
+        """The approach command while the backwards retreat runs, else (the
+        clock is back VOID_RETREAT_CYCLES, the time bound passed, or a latch)
+        end it: stop and wait for `clear`. Returns the command for the gait."""
+        r = self._retreat
+        if (r is not None and not self.sup.latched and self.t < r["t_end"]
+                and self.sup.t_gait > r["tg_end"] + 1e-9):
+            return r["v"].copy()
+        self._retreat = None
+        self._void_phase = "held"                # retreat done: stop and wait for `clear`
+        with self.lock:
+            self.cmd_v[:] = 0
+        self.sup.request_stop()
+        self.note("void", "retreat done — safe-stop; `clear` releases the void guard")
+        return np.zeros(3)
+
     def _void_filter(self, v):
         if not self._void_bearings:
             return v
-        if self._void_phase == "retreat":
-            if self.t < (self.cliff_react.retreat_until or 0.0):
-                u = self._bearing_unit(self._void_bearings[-1])
-                rv = self.cliff_react.command(self.t, *(self._void_speed * u), 0.0)
-                return np.array([rv[0], rv[1], 0.0])
-            self._void_phase = "held"            # retreat done: stop and wait for `clear`
-            with self.lock:
-                self.cmd_v[:] = 0
-            self.sup.request_stop()
-            self.note("void", "retreat done — safe-stop; `clear` releases the void guard")
-            return np.zeros(3)
         for wb in self._void_bearings:           # project out anything toward a latched void
             u = self._bearing_unit(wb)
             c = float(np.dot(v[:2], u))
@@ -727,7 +871,13 @@ class Playground:
             return
         g = self.gait
         ph = [(self.sup.t_gait / g.T + g.phase_off[i]) % 1.0 for i in range(N_LEGS)]
-        settled = [ph[i] < g.duty and 0.12 < ph[i] / g.duty < 0.95 for i in range(N_LEGS)]
+        settle = self._settle_ticks()
+        # settled by the gait phase OR by the probe's own clock: while the
+        # touchdown gate holds the gait at a late foot's touchdown its PHASE
+        # never gets past the 0.12 margin, but its probe keeps counting
+        settled = [(ph[i] < g.duty and 0.12 < ph[i] / g.duty < 0.95)
+                   or (self.probe_state[i] == SEEK and self._probe_age[i] > settle)
+                   for i in range(N_LEGS)]
         fired = self.cliff_det.update(self.t, settled, con, probed_out=self.probe_out)
         if fired:
             self._on_void(int(fired[0]))
@@ -736,11 +886,13 @@ class Playground:
         feet = self.sup.last_feet_raw if self.sup.last_feet_raw is not None else self.gait.p_nom
         body_deg = float(np.degrees(np.arctan2(feet[leg][1], feet[leg][0])))
         world_deg = _wrap_deg(body_deg + np.degrees(self.yaw()))
-        u = self._bearing_unit(world_deg)
-        toward = float(np.dot(self.cmd_eff[:2], u))
-        self._void_speed = max(toward, VOID_RETREAT_MIN)
-        self.cliff_react = CliffReaction(self.gait, retreat_cycles=VOID_RETREAT_CYCLES)
-        self.cliff_react.on_void(self.t)
+        span = VOID_RETREAT_CYCLES * self.gait.T
+        # the approach, backwards: the command the gait had, the clock run back
+        # `span` from here (the void leg lifts first — back to its old foothold)
+        self._retreat = dict(v=np.asarray(self._v_gait, float).copy(),
+                             tg_end=self.sup.t_gait - span,
+                             t_end=self.t + span / VOID_RETREAT_RATE + 2.0)
+        self._gate = None
         self._void_bearings.append(world_deg)
         self._void_phase = "retreat"
         p = self.data.xpos[self.torso]
@@ -757,8 +909,9 @@ class Playground:
         self.void = None
         self._void_bearings = []
         self._void_phase = None
+        self._retreat = None
+        self._gate = None
         self.cliff_det = CliffDetector()
-        self.cliff_react = CliffReaction(self.gait, retreat_cycles=VOID_RETREAT_CYCLES)
         return had
 
     def clear(self):
@@ -798,6 +951,108 @@ class Playground:
             self.cmd_v[:] = v
         return None
 
+    # ------------------------------------------------------------ touchdown gate
+    def _gate_update(self, state0, v_sup, probing, tick):
+        """Start / release the touchdown gate's hold (see GATE_TICKS). A hold
+        starts at a probe tick, in NORMAL, walking, when a stance foot is still
+        SEEKing GATE_TICKS after its commanded touchdown (or, in the careful
+        walk — gate_wait — at every touchdown whose switch has not closed yet);
+        it lasts through a PLANT/BRACE/RECOVER the tipping may cause and ends
+        when that foot finds ground (careful walk: first switch close), the
+        void fires (the retreat takes the clock), the command or the probe goes
+        away, or GATE_MAX_S passes.
+
+        Review fixes: a hold ends when the command CHANGES (not only when it
+        goes to zero), and its rewind runs inside the servo budget
+        (_rewind_rate)."""
+        g = self._gate
+        ok = (probing and not self.sup.latched and bool(np.any(v_sup))
+              and self._void_phase is None and self._ges is None)
+        if g is not None:
+            i = g["leg"]
+            if (not ok or bool(np.any(np.abs(np.asarray(v_sup, float) - g["v"]) > 1e-6))
+                    or (tick and (self.probe_state[i] != SEEK or (g["wait"] and self._felt[i])))):
+                self._gate = None                        # ground found (or nothing left to gate)
+            elif self.t - g["t0"] > GATE_MAX_S:
+                self._gate = None
+                self._gate_skip[i] = True
+                self.note("gate", f"leg {i} found neither ground nor a void in {GATE_MAX_S:.1f} s — "
+                                  f"gait released")
+            return
+        if not (ok and tick and state0 == "NORMAL"):
+            return
+        stance = self.sup.last_stance
+        if stance is None:
+            return
+        wait = bool(self.gate_wait)
+        gt = self.gait
+        late = [i for i in range(N_LEGS)
+                if stance[i] and self.probe_state[i] == SEEK and not self._gate_skip[i]
+                and (GATE_TICKS <= self._probe_age[i] < GATE_TICKS + GATE_WINDOW_TICKS
+                     or (wait and not self._felt[i] and self._probe_age[i] < GATE_WINDOW_TICKS))]
+        if not late:
+            return
+        i = max(late, key=lambda j: self._probe_age[j])
+        ph = (self.sup.t_gait / gt.T + gt.phase_off[i]) % 1.0
+        if ph >= gt.duty:
+            return
+        # a careful-walk hold (GATE_WAIT) ends at the first switch close; a late-foot
+        # hold only when the probe confirms ground (or the void guard fires)
+        self._gate = dict(leg=i, tg=self.sup.t_gait - ph * gt.T + GATE_EPS_S, t0=self.t,
+                          wait=bool(wait and self._probe_age[i] < GATE_TICKS),
+                          v=np.asarray(v_sup, float).copy(), rate=self._rewind_rate(v_sup))
+        self.gate_count += 1
+
+    def _rewind_rate(self, v):
+        """Gait-clock s per s for a hold's rewind at command v: the fastest the
+        clock may run back without a joint exceeding its class budget — the
+        swinging leg the free budget (4.0), the planted ones the loaded (3.0) —
+        from the gait's own peak joint rates over one cycle at v (cached),
+        capped at GATE_REWIND_RATE and floored at 1 (the gait itself fits its
+        budget: WaveGait.budget)."""
+        g = self.gait
+        key = (tuple(np.round(np.asarray(v, float), 4)), g.h, g.R0, g.T, g.duty, g.hstep)
+        r = self._rate_cache.get(key)
+        if r is None:
+            if len(self._rate_cache) > 256:
+                self._rate_cache.clear()
+            ts = np.linspace(0.0, g.T, 121)
+            qs, sts = zip(*[g.joint_targets(t, *key[0])[:2] for t in ts])
+            qs, sts = np.array(qs), np.array(sts)                # (n,5,3), (n,5)
+            rate = np.abs(np.diff(qs, axis=0)) / (ts[1] - ts[0])  # (n-1,5,3)
+            both = sts[1:] & sts[:-1]
+            w_sw = float(rate[~both].max()) if (~both).any() else 0.0
+            w_st = float(rate[both].max()) if both.any() else 0.0
+            lim = [GATE_REWIND_RATE]
+            if w_sw > 1e-6:
+                lim.append(rm.servo_speed("free") / w_sw)
+            if w_st > 1e-6:
+                lim.append(rm.servo_speed("loaded") / w_st)
+            r = float(max(1.0, min(lim)))
+            self._rate_cache[key] = r
+        return r
+
+    def _drive_clock(self, state0):
+        """Set the supervisor's gait clock for THIS step (it adds its dt in
+        NORMAL / PLANT / RECOVER, then computes the feet): run it back to the
+        gate's hold point and keep it there, or run it backwards through the
+        void retreat. BRACE freezes the clock itself."""
+        s = self.sup
+        if state0 not in ("NORMAL", "PLANT", "RECOVER") or s.latched:
+            return
+        if self._void_phase == "retreat" and self._retreat is not None:
+            target = max(self._retreat["tg_end"], s.t_gait - VOID_RETREAT_RATE * self.DT)
+        elif self._gate is not None:
+            target = max(self._gate["tg"], s.t_gait - self._gate.get("rate", GATE_REWIND_RATE) * self.DT)
+        else:
+            return
+        last = getattr(s, "_last_t", None)
+        s.t_gait = target - (0.0 if last is None else max(0.0, self.t - last))
+
+    def _settle_ticks(self):
+        """Probe ticks after a commanded touchdown before a contactless foot is lowered."""
+        return int(np.ceil(PROBE_SETTLE_FRAC * self.gait.duty * self.gait.T / PROBE_TICK_S))
+
     # ------------------------------------------------------------ probe
     def _probe_reset(self):
         """Outside probing (FALLEN/RIGHTED, a gesture, probe off, sim2real): the
@@ -818,7 +1073,7 @@ class Playground:
         raw = self.sup.last_feet_raw
         if q_meas is not None and raw is not None:
             meas = raw[:, 2] - pf.feet_body(q_meas)[:, 2]     # mm the real foot is below its raw target
-        settle = int(np.ceil(PROBE_SETTLE_FRAC * self.gait.duty * self.gait.T / dt))
+        settle = self._settle_ticks()
         stance = np.ones(N_LEGS, bool) if stance is None else np.asarray(stance, bool)
         for i in range(N_LEGS):
             st = self.probe_state[i]
@@ -832,6 +1087,10 @@ class Playground:
                 st = SEEK
                 self._probe_hits[i] = 0
                 self._probe_age[i] = 0
+                self._gate_skip[i] = False
+                self._felt[i] = False
+            if con[i]:
+                self._felt[i] = True
             if st == SEEK:
                 self._probe_age[i] += 1
                 if con[i]:
@@ -1035,8 +1294,13 @@ class Playground:
         with self.lock:
             if "T" in kw:
                 ph = (self.sup.t_gait / g.T) % 1.0          # phase continuity
+                t_old, T_old = self.sup.t_gait, g.T
                 g.T = float(kw["T"])
                 self.sup.t_gait = ph * g.T
+                self._gate = None                           # its hold point is in the old clock
+                if self._retreat is not None:               # keep the retreat's remaining span, rescaled
+                    left = max(0.0, t_old - self._retreat["tg_end"]) * g.T / T_old
+                    self._retreat["tg_end"] = self.sup.t_gait - left
             for k in ("duty", "hstep", "h", "R0"):
                 if k in kw:
                     setattr(g, k, float(kw[k]))
@@ -1286,7 +1550,7 @@ class Playground:
         if c == "set":
             if len(args) != 2:
                 return "set PARAM VALUE — params: gait.T gait.h gait.R0 "\
-                       "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s "\
+                       "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s gate.wait "\
                        "servo.on servo.hold_hz servo.latency_s servo.rate_rad_s servo.quant"
             p = args[0]
             try:
@@ -1309,6 +1573,13 @@ class Playground:
                     self.apply_gait(**{k: val})
                 except ValueError as e:
                     return f"set {p} refused: {e}"
+            elif p == "gate.wait":
+                self.gate_wait = bool(val)
+                with self.lock:
+                    self._gate = None
+                return (f"gate.wait = {int(self.gate_wait)}  (" + ("careful walk: every touchdown waits for "
+                        "its switch — ~17 % slower, safer at an edge" if self.gate_wait else
+                        "late-foot gate only") + ")")
             elif p == "reflex.trip":
                 self.sup.gyro_trip = val
             elif p == "reflex.stall_s":

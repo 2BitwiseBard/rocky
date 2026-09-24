@@ -27,7 +27,8 @@ sys.path.insert(0, HERE)
 RUNS = os.path.join(HERE, "runs")
 
 # recorded evals (deterministic policy, this machine) — see RL_GUIDE §4. D052 = on the
-# 2026-09-24 model (damping 0.62, forcerange 1.9, mu 0.8); the rest predate it.
+# 2026-09-24 model (damping 0.62, forcerange 1.9, mu 0.8); the rest predate it. The D052
+# amendment raised forcerange to stall (2.94 N.m): none of these were re-run on it.
 RESULTS = {
     "robust_fwd2": "D052: 245 mm vs bare gait 320 (servo on: 236 vs 298) — loses (D031)",
     "cmd_sample3": "walk under full DR: same conclusion (pre-D052)",

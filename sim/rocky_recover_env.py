@@ -22,7 +22,9 @@ robot's, end to end, and every stage is in the loop the policy trains on:
        rate_rad_s (the load derate is off since D052 V2: the MJCF damping
        carries the torque-speed line), 4096-count goals
     -> + per-joint calibration offset (DR)  -> the MuJoCo position actuator
-       (D052 damping 0.62 N.m.s/rad, forcerange 1.9 N.m x voltage)
+       (D052 damping 0.62 N.m.s/rad; forcerange 2.94 N.m = the servo's PEAK
+       torque x voltage since the D052 amendment, derated toward 1.91 by
+       rl_common.ThermalProxy when a joint runs hot — see rocky_env)
 
 obs v2 (57, rl_common.RecoverObs) — only what the Pi can read:
   gravity dir (3) + gyro (3) from sim_imu (noise, per-episode bias);
@@ -46,6 +48,9 @@ reward per 50 Hz step (h is privileged — fine in a reward, never in obs):
       0.3 in D048 — with the EMA + servo in the loop it is a backstop)
   -0.01 * mean(a^2)  -0.2 * mean((a - a_last)^2) on the RAW action (was 0.02:
       the filter must not hide a chattering policy from the cost)
+  -0.5 * mean(thermal derate) (D052 amendment; 0 unless a joint ran past
+      the thermal budget — from cold that takes 93 s at stall, so only with
+      thermal_heat0 warm starts inside a 6 s episode)
   success: +10 and the episode ends
 
 reset: torso dropped from 0.16 m in a random orientation {back, side,
@@ -101,7 +106,7 @@ HANDOFF_H = 0.09
 HANDOFF_HOLD_S = 0.5
 HANDOFF_FEET = 3
 REWARD_WEIGHTS = dict(upright=1.0, height=0.5, stand_v1=3.0, stand=2.0, feet=0.2, success=10.0,
-                      act=0.01, dact=0.2, v3_pinned=0.1)
+                      act=0.01, dact=0.2, v3_pinned=0.1, thermal=rc.THERMAL_PENALTY)
 
 
 def kinematic_height_m(hip_knee_q, feet_contacts=None):
@@ -155,10 +160,11 @@ class RecoverEnv(gym.Env if gym else object):
     def __init__(self, randomize=False, seed=None, render_mode=None, reward="v1",
                  rate_limit_rad_s=SERVO_SAFE_RAD_S, servo="random", ema_alpha=rc.EMA_ALPHA,
                  obs_version=rc.OBS_VERSIONS["recover"], obs_noise=None,
-                 ep_seconds=EP_SECONDS, **_):
+                 ep_seconds=EP_SECONDS, thermal=True, thermal_heat0=(0.0, 0.0), **_):
         """servo: off | nominal | random (see rl_common.servo_params).
         obs_noise: None = follow `randomize`. ema_alpha 1.0 = no filter.
-        obs_version 1 + ema_alpha 1.0 + servo 'off' + rate 5.0 = the pre-D052 env."""
+        obs_version 1 + ema_alpha 1.0 + servo 'off' + rate 5.0 = the pre-D052 env.
+        thermal / thermal_heat0: rl_common.ThermalProxy, as in rocky_env.PebbleEnv."""
         assert reward in REWARDS, reward
         self.reward_version = reward
         self.rate_limit_rad_s = float(rate_limit_rad_s)
@@ -188,6 +194,9 @@ class RecoverEnv(gym.Env if gym else object):
         self.servo_draw = rc.servo_params("off")
         self.dr_draw = self.dr.nominal()
         self._q_offset = np.zeros(15)
+        self.thermal = rc.ThermalProxy(on=thermal)
+        self.thermal_heat0 = tuple(float(x) for x in thermal_heat0)
+        self._derate = np.zeros(15)
         if gym:
             self.observation_space = spaces.Box(-np.inf, np.inf, (self.obs_builder.dim,), dtype=np.float32)
             self.action_space = spaces.Box(-1.0, 1.0, (15,), dtype=np.float32)
@@ -219,6 +228,7 @@ class RecoverEnv(gym.Env if gym else object):
                     reward_weights=dict(REWARD_WEIGHTS),
                     handoff=dict(tilt_deg=HANDOFF_TILT_DEG, feet=HANDOFF_FEET, kin_h_m=HANDOFF_H,
                                  hold_s=HANDOFF_HOLD_S, fn="rocky_recover_env.handoff_ok"),
+                    thermal=dict(self.thermal.config(), heat0=self.thermal_heat0),
                     **self._note)
 
     # ------------------------------------------------------------------ state
@@ -250,6 +260,8 @@ class RecoverEnv(gym.Env if gym else object):
             tgt = self.servo.filter(self._target, self.model.opt.timestep, force=d.actuator_force[:15])
             d.ctrl[:15] = tgt + self._q_offset
             mujoco.mj_step(self.model, d)
+            self.thermal.accumulate(rc.motor_torque(self.model, d, self._vadr))
+        self._derate = self.thermal.update(CTRL_DT, self.model)
         self._t += CTRL_DT
 
     def hold_step(self, q_target):
@@ -268,6 +280,9 @@ class RecoverEnv(gym.Env if gym else object):
         self.dr_draw = self.dr.draw(self.rng) if self.randomize else self.dr.nominal()
         self.servo_draw = rc.servo_params(self.servo_mode, self.rng)
         self.dr.apply(self.dr_draw, voltage=self.servo_draw["voltage"])
+        lo, hi = self.thermal_heat0                      # the rng is only touched when asked
+        self.thermal.reset(self.model, self.rng.uniform(lo, hi, 15) if hi > 0 else lo)
+        self._derate = self.thermal.derate()
         rc.refresh_constants(self.model, self.data)
         mujoco.mj_resetData(self.model, self.data)
         rc.apply_servo_params(self.servo, self.servo_draw)
@@ -346,6 +361,7 @@ class RecoverEnv(gym.Env if gym else object):
         self._hold = self._hold + CTRL_DT if standing else 0.0
         r -= W["act"] * float(np.mean(action ** 2))
         r -= W["dact"] * float(np.mean((action - self._prev_action) ** 2))
+        r -= W["thermal"] * float(self._derate.mean())
         self._prev_action = action.copy()
         terminated = False
         if self._hold >= hold_s - 1e-9:
@@ -353,7 +369,7 @@ class RecoverEnv(gym.Env if gym else object):
             terminated = True
         truncated = self._step_n >= self.max_steps
         info = dict(tilt_deg=tilt_deg, height=h, feet=nfeet, handoff=bool(hand),
-                    success=bool(terminated))
+                    success=bool(terminated), **self.thermal.info())
         return obs, float(r), terminated, truncated, info
 
     def render(self):

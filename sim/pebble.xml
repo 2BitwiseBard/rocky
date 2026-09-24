@@ -33,7 +33,7 @@
             <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
                   mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb0" pos="0.1350 0 0">
-              <joint name="claw0" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <joint name="claw0" type="hinge" axis="0 0 1" range="0 55" damping="0.0242" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -55,7 +55,7 @@
             <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
                   mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb1" pos="0.1350 0 0">
-              <joint name="claw1" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <joint name="claw1" type="hinge" axis="0 0 1" range="0 55" damping="0.0242" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -77,7 +77,7 @@
             <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
                   mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb2" pos="0.1350 0 0">
-              <joint name="claw2" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <joint name="claw2" type="hinge" axis="0 0 1" range="0 55" damping="0.0242" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -99,7 +99,7 @@
             <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
                   mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb3" pos="0.1350 0 0">
-              <joint name="claw3" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <joint name="claw3" type="hinge" axis="0 0 1" range="0 55" damping="0.0242" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -121,7 +121,7 @@
             <geom type="capsule" fromto="0.1350 0.004 0 0.1590 0.011 0" size="0.0035"
                   mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb4" pos="0.1350 0 0">
-              <joint name="claw4" type="hinge" axis="0 0 1" range="0 55" damping="0.01" armature="0.001"/>
+              <joint name="claw4" type="hinge" axis="0 0 1" range="0 55" damping="0.0242" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="0.004" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -131,25 +131,25 @@
     </body>
   </worldbody>
   <actuator>
-    <position name="yaw0" joint="yaw0" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="hip0" joint="hip0" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="knee0" joint="knee0" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="yaw1" joint="yaw1" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="hip1" joint="hip1" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="knee1" joint="knee1" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="yaw2" joint="yaw2" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="hip2" joint="hip2" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="knee2" joint="knee2" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="yaw3" joint="yaw3" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="hip3" joint="hip3" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="knee3" joint="knee3" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="yaw4" joint="yaw4" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="hip4" joint="hip4" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="knee4" joint="knee4" kp="20" kv="0.6" forcerange="-1.9110 1.9110"/>
-    <position name="claw0" joint="claw0" kp="0.5" kv="0.02" forcerange="-0.1495 0.1495"/>
-    <position name="claw1" joint="claw1" kp="0.5" kv="0.02" forcerange="-0.1495 0.1495"/>
-    <position name="claw2" joint="claw2" kp="0.5" kv="0.02" forcerange="-0.1495 0.1495"/>
-    <position name="claw3" joint="claw3" kp="0.5" kv="0.02" forcerange="-0.1495 0.1495"/>
-    <position name="claw4" joint="claw4" kp="0.5" kv="0.02" forcerange="-0.1495 0.1495"/>
+    <position name="yaw0" joint="yaw0" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="hip0" joint="hip0" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="knee0" joint="knee0" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="yaw1" joint="yaw1" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="hip1" joint="hip1" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="knee1" joint="knee1" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="yaw2" joint="yaw2" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="hip2" joint="hip2" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="knee2" joint="knee2" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="yaw3" joint="yaw3" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="hip3" joint="hip3" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="knee3" joint="knee3" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="yaw4" joint="yaw4" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="hip4" joint="hip4" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="knee4" joint="knee4" kp="20" kv="0.6" forcerange="-2.9400 2.9400"/>
+    <position name="claw0" joint="claw0" kp="0.5" kv="0.02" forcerange="-0.2300 0.2300"/>
+    <position name="claw1" joint="claw1" kp="0.5" kv="0.02" forcerange="-0.2300 0.2300"/>
+    <position name="claw2" joint="claw2" kp="0.5" kv="0.02" forcerange="-0.2300 0.2300"/>
+    <position name="claw3" joint="claw3" kp="0.5" kv="0.02" forcerange="-0.2300 0.2300"/>
+    <position name="claw4" joint="claw4" kp="0.5" kv="0.02" forcerange="-0.2300 0.2300"/>
   </actuator>
 </mujoco>

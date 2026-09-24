@@ -185,5 +185,13 @@
   ],
   "ok": true
  },
+ "limits": {
+  "joints": 20,
+  "worst_effort_vs_forcerange_nm": 0.0,
+  "worst_velocity_vs_no_load": 0.0,
+  "worst_mjcf_dc_speed_vs_no_load": 0.0041,
+  "leg_effort_nm": 2.94,
+  "leg_velocity": 4.7
+ },
  "pass": true
 }

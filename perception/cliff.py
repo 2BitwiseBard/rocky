@@ -25,6 +25,11 @@ exactly as before (the harness's in-process sim backend, the run_cliff
 experiments).
 
 CliffReaction: halt drive, retreat ~1.6 cycles, stop, await orders.
+(The harness sim backend and run_cliff use it. The playground's always-on
+guard does NOT since D052 P2: walking backwards along the void bearing lifts
+the next leg in the forward wave order while the void leg still hangs over the
+edge, so it plays the approach backwards instead, and a touchdown gate holds
+the gait on a foot that has not felt ground — sim/playground.py GATE_TICKS.)
 """
 from __future__ import annotations
 

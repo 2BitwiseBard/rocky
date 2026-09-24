@@ -8,9 +8,17 @@
 2. PHYSICS — the same stream through the servo realism layer (ServoModel:
    50 Hz bus, 20 ms latency, no-load slew (not load-derated, V2), 4096-count
    quantisation) into the D052 model (joint damping = stall / no-load,
-   forcerange = continuous torque): how far the joints lag what was asked
-   (tracking error), peak tilt, whether a planted foot let go, whether it fell.
-   Gaits: distance / yaw achieved vs commanded over the run.
+   forcerange = the servo's PEAK / stall torque since the D052 amendment):
+   how far the joints lag what was asked (tracking error), peak tilt,
+   whether a planted foot let go, whether it fell, and — the amendment —
+   each joint's RMS ELECTRICAL load over the motion (`load` column):
+   sqrt(mean(tau_e^2)) / stall with tau_e = rl_common.motor_torque =
+   actuator_force - damping x qvel (the current term; the raw force counts
+   the back-EMF voltage as heat), RMS because heat goes as tau^2 (a 50 %
+   duty of stall is 0.71 RMS, not the 0.50 a mean reports). Judged by
+   pebble_feasibility.judge_load: > 0.65 (continuous) warns
+   THERMAL_LOAD_WARN, > 0.85 (the servo's ~3 min over-temp cut) fails
+   THERMAL_LOAD. Gaits: distance / yaw achieved vs commanded.
 
 Entries: the canon gestures (pebble_gestures.CANON), GESTURES2, every
 gait/gestures/*.json, the adjacent-arm manipulation choreography and the
@@ -20,15 +28,16 @@ wave gait on a (vx, vy, wz) grid clipped by WaveGait.budget().
     python sim/audit_gestures.py --no-physics                  # kinematic only (fast)
     python sim/audit_gestures.py beckon fist_bump --json out.json
 
-Exit code = number of FAIL rows (kinematic FAIL, fell in physics, or —
-D052 V2 — a physics tracking lag past TRACK_FAIL_DEG).
+Exit code = number of FAIL rows (kinematic FAIL, fell in physics, —
+D052 V2 — a physics tracking lag past TRACK_FAIL_DEG, or — the D052
+amendment — a THERMAL_LOAD RMS load past 0.85 x stall).
 Mirrors sim/audit_righter.py's table style.
 
 D052 V2 (review): tracking is part of the verdict. The kinematic check
-allows free-leg moves up to 4.0 rad/s, but the D052 MJCF caps a free joint
-at forcerange / damping = 3.06 rad/s (test_model_consistency keeps that
-mismatch visible as a strict xfail until the owner decides), so "0 FAIL,
-nothing falls" overstated what the sim can follow. p95 lag > TRACK_WARN_DEG
+allows free-leg moves up to 4.0 rad/s, but the D052 MJCF capped a free joint
+at forcerange / damping = 3.06 rad/s, so "0 FAIL, nothing falls" overstated
+what the sim can follow. (Resolved by the D052 amendment: forcerange = stall,
+a free joint reaches 4.70 rad/s; the tracking verdict stays.) p95 lag > TRACK_WARN_DEG
 warns, > TRACK_FAIL_DEG fails. The thresholds are a first guess: 10 deg is
 about what 20 ms latency + a 50 Hz hold cost at 3-4 rad/s; 20 deg is where
 a move visibly is not the move that was authored.
@@ -45,6 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 import rocky_model as rm                                                # noqa: E402
+import rl_common as rc                                                  # noqa: E402
 import pebble_feasibility as pf                                         # noqa: E402
 from pebble_gait import WaveGait, N_LEGS                                # noqa: E402
 from pebble_gestures import CANON, CLAW_MAX                             # noqa: E402
@@ -58,6 +68,7 @@ XML = os.path.join(HERE, "pebble.xml")
 T_SETTLE, T_TAIL = 0.8, 0.8
 GAIT_RUN_S = 6.0
 TRACK_WARN_DEG, TRACK_FAIL_DEG = 10.0, 20.0     # p95 |q - asked| (V2; a first guess, see above)
+STALL = rm.stall_nm()                           # the load column's unit (x stall)
 
 
 def track_verdict(phys):
@@ -110,6 +121,7 @@ class Sim:
         self.torso = m.body("torso").id
         self.jadr = np.array([m.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS)
                               for n in rm.LEG_JOINTS])
+        self.vadr = np.array(rc.joint_addrs(m)[1])
         self.fids = [m.geom(f"foot{i}").id for i in range(N_LEGS)]
         self.DT = m.opt.timestep
 
@@ -137,6 +149,8 @@ class Sim:
         q0 = pf.planted_q(g)
         d, sm = self.reset(q0)
         err, tilt_max, breaks = [], 0.0, 0.0
+        load2 = np.zeros(15)                 # sum of (tau_e / stall)^2 while playing (D052 amendment)
+        n_play = 0
         state = np.ones(N_LEGS, bool)
         x0, yaw0, yaw_prev, yaw_acc = None, None, 0.0, 0.0
         n = int((T_SETTLE + total + T_TAIL) / self.DT)
@@ -156,6 +170,8 @@ class Sim:
                 yaw_prev = yaw0
             if T_SETTLE <= t <= T_SETTLE + total:
                 err.append(np.abs(d.qpos[self.jadr] - q.ravel()))
+                load2 += (rc.motor_torque(self.model, d, self.vadr) / STALL) ** 2
+                n_play += 1
                 tilt_max = max(tilt_max, self.tilt(d))
                 y = self.yaw(d)
                 yaw_acc += (y - yaw_prev + np.pi) % (2 * np.pi) - np.pi
@@ -169,7 +185,8 @@ class Sim:
         fell = self.tilt(d) > 25 or d.xpos[self.torso][2] < 0.05
         return dict(track_mean=float(E.mean()), track_p95=float(np.percentile(E.max(axis=1), 95)),
                     track_max=float(E.max()), tilt_max=tilt_max, breaks=breaks, fell=bool(fell),
-                    disp=disp[:2].tolist(), yaw_deg=float(np.degrees(yaw_acc)))
+                    disp=disp[:2].tolist(), yaw_deg=float(np.degrees(yaw_acc)),
+                    load_rms=np.sqrt(load2 / max(n_play, 1)).tolist())
 
 
 def _planted_legs(fn, total, g):
@@ -205,7 +222,7 @@ def main():
     head = (f"{'entry':22s} {'kind':6s} {'dur':>5s}  {'peak':>5s} {'joint':9s} {'hot%':>4s} {'lim':>3s} "
             f"{'jmp':>3s} {'sup':>3s} {'CoM':>5s} {'orig':>5s} {'acc g':>5s} {'self':>4s}")
     if not args.no_physics:
-        head += f"  {'track':>5s} {'p95':>5s} {'tilt':>5s} {'brk s':>5s}"
+        head += f"  {'track':>5s} {'p95':>5s} {'tilt':>5s} {'brk s':>5s} {'load':>4s}"
     head += "  verdict"
     print(head)
     rows, nfail = [], 0
@@ -232,7 +249,7 @@ def main():
              f"{rep.self_contacts if rep.self_contacts is not None else '-':>4}")
         if phys is not None:
             s += (f"  {phys['track_mean']:5.2f} {phys['track_p95']:5.1f} {phys['tilt_max']:5.1f} "
-                  f"{phys['breaks']:5.2f}")
+                  f"{phys['breaks']:5.2f} {max(phys['load_rms']):4.2f}")
         s += "  " + verdict
         print(s, flush=True)
         rows.append(dict(name=name, report=rep.to_json(), physics=phys, fail=bool(bad)))
@@ -243,12 +260,13 @@ def main():
         if not args.no_physics:
             planted = _planted_legs(fn, total, g) if kind == "static" else None
             phys = sim.run(fn, total, g, planted)
+            pf.judge_load(rep, phys["load_rms"])
         row(name, rep, phys)
 
     if not args.no_gait and not args.names:
         print(f"\n{'gait asked -> budget':38s} {'peak':>5s} {'joint':9s} {'hot%':>4s} {'lim':>3s} "
               f"{'sup':>3s} {'CoM':>5s}" + ("" if args.no_physics else
-                                            f"  {'track':>5s} {'p95':>5s} {'tilt':>5s} "
+                                            f"  {'track':>5s} {'p95':>5s} {'tilt':>5s} {'load':>4s} "
                                             f"{'got mm':>7s} {'want':>5s} {'got deg':>7s} {'want':>5s}")
               + "  verdict")
         for ask, cmd in gait_grid(g):
@@ -267,16 +285,19 @@ def main():
                     q, _st, _f = gg.joint_targets(t, cmd[0] * env, cmd[1] * env, cmd[2] * env)
                     return q, np.zeros(N_LEGS)
                 phys = sim.run(ramped, GAIT_RUN_S, g)
+                pf.judge_load(rep, phys["load_rms"])
                 want_mm = float(np.hypot(cmd[0], cmd[1]) * (GAIT_RUN_S - 0.3))
                 want_deg = float(np.degrees(abs(cmd[2]) * (GAIT_RUN_S - 0.3)))
                 got_mm = float(np.hypot(*phys["disp"]))
                 s += (f"  {phys['track_mean']:5.2f} {phys['track_p95']:5.1f} {phys['tilt_max']:5.1f} "
+                      f"{max(phys['load_rms']):4.2f} "
                       f"{got_mm:7.0f} {want_mm:5.0f} {abs(phys['yaw_deg']):7.1f} {want_deg:5.1f}")
                 phys.update(want_mm=want_mm, got_mm=got_mm, want_deg=want_deg)
             tv = track_verdict(phys)
             bad = (not rep.ok) or (phys is not None and phys["fell"]) or tv == "fail"
             nfail += bad
             verdict = ("PASS" if rep.ok else "FAIL " + ",".join(rep.fails)) + \
+                (" (warn " + ",".join(rep.warnings) + ")" if rep.ok and rep.warnings else "") + \
                 (" FELL" if phys and phys["fell"] else "") + \
                 {"warn": " (warn TRACK)", "fail": " FAIL TRACK"}.get(tv, "")
             print(s + "  " + verdict, flush=True)
@@ -286,12 +307,14 @@ def main():
     print(f"\n{len(rows)} rows, {nfail} FAIL | limits: loaded {V['loaded']} / free {V['free']} / "
           f"hard {V['hard']} rad/s, claw {V['claw']}, guard {pf.GUARD_DEG} deg, margin fail "
           f"{pf.MARGIN_FAIL_MM:g} / warn {pf.MARGIN_WARN_MM:g} mm, slip mu {pf.MU_SLIDE:g}, "
-          f"track p95 warn {TRACK_WARN_DEG:g} / fail {TRACK_FAIL_DEG:g} deg")
+          f"track p95 warn {TRACK_WARN_DEG:g} / fail {TRACK_FAIL_DEG:g} deg, RMS load warn "
+          f"{pf.LOAD_WARN:g} / fail {pf.LOAD_FAIL:g} x stall")
     print("columns: peak = fastest leg joint (rad/s); hot% = worst joint's share of samples above 0.6x "
           "its class limit; lim/jmp = limit codes / steps; sup = min feet down; CoM/orig = static "
           "margin (mm) from the CoM model / the old body-origin proxy; self = self-contact samples; "
           "track = mean |q - asked| (deg), p95 = 95th pct of the worst joint; brk = s a planted foot "
-          "was off the floor")
+          "was off the floor; load = the worst joint's RMS electrical torque (force - damping x qvel) "
+          "/ stall while playing")
     if args.json:
         with open(args.json, "w") as f:
             json.dump(rows, f, indent=1)

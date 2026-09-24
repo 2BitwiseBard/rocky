@@ -88,6 +88,7 @@
   <span class="chip" id="h-fp-chip" title="">robot <b id="h-fp">—</b></span>
   <span class="chip alarm" id="h-void-chip" style="display:none" title="the always-on void guard: a planted foot probed 30 mm and found no floor">VOID <b id="h-void">—</b><button class="g-clear">clear</button></span>
   <span class="chip alarm" id="h-latch-chip" style="display:none" title="3 gyro trips in 5 s latch a safe-stop; velocity is ignored until clear">LATCHED <b id="h-latch">—</b><button class="g-clear">clear</button></span>
+  <span class="chip caution" id="h-heat-chip" style="display:none" title="servo heat (D052 amendment): the hottest leg joint's share of its thermal budget — sustained load above 0.65 x stall heats it, 3 min at 0.85 trips; accounting only, the sim does not derate; a tripped joint refuses sim → robot">servo heat <b id="h-heat">—</b></span>
   <span class="chip caution" id="h-loco-chip" style="display:none" title="mirroring sim → robot: no walking until the real feet report contacts">locomotion held</span>
   <span class="chip" id="h-hw-chip" style="display:none">robot bus <b id="h-hw">—</b></span>
   <span style="flex:1"></span>
@@ -242,6 +243,7 @@
       <div id="hw-legs" class="legstrip"></div>
       <div class="row"><label>mirror</label><select id="hw-mirror"><option value="off">off (telemetry only)</option><option value="sim2real">sim → robot</option><option value="real2sim">robot → sim</option></select>
         <button id="hw-torque-on">torque on</button><button id="hw-limp" style="color:var(--bad)">LIMP</button><span id="hw-loco" class="chip caution" style="display:none">locomotion held</span></div>
+      <div id="hw-s2r-why" class="small" style="display:none; color:var(--warn)"></div>
       <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="200" style="width:120px"><span id="hw-speedv" class="small">200 c/s</span><span class="small">(counts/s cap on every goal; 0 = servo max)</span></div>
       <div class="row"><button id="hw-limits">apply limits…</button><span class="small">burn the params soft limits (+ calibration, 2° margin) into each servo's EEPROM angle limits — dry-run preview first</span></div>
       <div id="hw-limits-plan" class="small"></div>
@@ -305,7 +307,7 @@ es.onmessage = e => {
   $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
   $('#h-tilt').textContent = s.tilt + '°'; $('#h-world').textContent = s.world; $('#h-t').textContent = s.t.toFixed(1) + ' s';
   $('#h-brain').textContent = s.brain.mode + (s.brain.model ? ' · ' + s.brain.model : '');
-  renderGuards(s); renderFingerprint(s);
+  renderGuards(s); renderFingerprint(s); renderSim2realGate(s);
   const g = s.guards || {};
   const probe = (g.probe_state || []).map((p, i) => p[0] + (g.probe_dz && g.probe_dz[i] > 0.5 ? Math.round(g.probe_dz[i]) : '')).join(' ');
   let ov = `cmd (${s.cmd[0]}, ${s.cmd[1]}) mm/s wz ${s.cmd[2]}  →  gait (${s.cmd_eff[0]}, ${s.cmd_eff[1]}) wz ${s.cmd_eff[2]}\n` +
@@ -343,6 +345,10 @@ function renderGuards(s) {
   $('#h-void-chip').style.display = g.void ? '' : 'none';
   if (g.void) $('#h-void').textContent = `${Math.round(g.void.bearing_deg)}° (leg ${g.void.leg}${g.void_phase ? ', ' + g.void_phase : ''})`;
   $('#h-latch-chip').style.display = g.latched ? '' : 'none';
+  const th = g.thermal;
+  $('#h-heat-chip').style.display = th && th.heat_max > 0.5 ? '' : 'none';
+  if (th && th.heat_max > 0.5) { $('#h-heat').textContent = `${Math.round(100 * th.heat_max)}% (${th.hot})`;
+    $('#h-heat-chip').className = 'chip ' + (th.tripped.length ? 'alarm' : 'caution'); }
   if (g.latched) $('#h-latch').textContent = g.latch_reason || '';
   const held = !!(s.hw && s.hw.mirror === 'sim2real' && !s.hw.allow_locomotion);
   $('#h-loco-chip').style.display = held ? '' : 'none';
@@ -350,6 +356,26 @@ function renderGuards(s) {
     (s.hw.entry ? ' — soft entry in progress' : '') + '. Walk/teleop are disabled; gestures are allowed after the entry.' : null;
   document.querySelectorAll('.mv').forEach(b => b.disabled = !!LOCO_HELD);
   $('#teleop-held').style.display = LOCO_HELD ? '' : 'none'; $('#teleop-held').textContent = LOCO_HELD || '';
+}
+function sim2realWhy(s) {
+  // D052 V2: mirrors the server's sim2real_refusal() — a planted standstill (idle_reason)
+  // AND real-time speed (the stream is paced by the sim loop: at 8x the real legs would get
+  // targets 8x faster than the 4.7 rad/s clamp) AND not paused. The server refuses anyway.
+  if (s.idle_reason) return s.idle_reason;
+  const th = s.guards && s.guards.thermal;
+  if (th && th.tripped && th.tripped.length) return `${th.tripped.join(', ')} past the thermal budget in the sim (the real servo would be at its over-temp cut) — let it cool`;
+  if (s.speed !== 1) return `the sim runs at ${s.speed}× — set speed 1× first (the stream is paced by the sim)`;
+  if (s.paused) return 'the sim is paused';
+  return null;
+}
+function renderSim2realGate(s) {
+  const opt = $('#hw-mirror option[value="sim2real"]'), why = sim2realWhy(s);
+  const mirroring = !!(s.hw && s.hw.mirror === 'sim2real');
+  const blocked = !!(s.hw && why && !mirroring);             // only gate the switch INTO sim2real
+  opt.disabled = blocked;
+  opt.title = blocked ? 'sim → robot needs: ' + why : '';
+  $('#hw-s2r-why').style.display = blocked ? '' : 'none';
+  $('#hw-s2r-why').textContent = blocked ? 'sim → robot unavailable: ' + why : '';
 }
 function renderFingerprint(s) {
   const ck = s.ckpt_fp || {}; let worst = '', tips = [];
@@ -637,7 +663,7 @@ async function loadModel() {
   const e = m.envelope;
   $('#model-info').textContent =
     `${m.fingerprint_note}\n` +
-    `servo ${m.actuator.name}: stall ${m.actuator.stall_nm} N·m, continuous ${(+m.continuous_nm).toFixed(2)} N·m, no-load ${m.speeds.no_load} rad/s, damping ${(+m.damping_nms).toFixed(3)} N·m·s/rad\n` +
+    `servo ${m.actuator.name}: stall ${m.actuator.stall_nm} N·m (sim clip), continuous ${(+m.continuous_nm).toFixed(2)} N·m (thermal), no-load ${m.speeds.no_load} rad/s, damping ${(+m.damping_nms).toFixed(3)} N·m·s/rad\n` +
     `speed budget: loaded ${m.speeds.loaded} · free ${m.speeds.free} · hard ${m.speeds.hard} · claw ${m.speeds.claw} rad/s   bus ${m.bus.hz} Hz, ${m.bus.latency_s * 1000} ms\n` +
     `soft limits (deg): yaw ${L.yaw.join('..')} · hip ${L.hip.join('..')} · knee ${L.knee.join('..')} · claw ${m.claw_deg.join('..')}\n` +
     `gait now: T ${m.gait.T} s, h ${m.gait.h}, R0 ${m.gait.R0}, duty ${m.gait.duty}, step ${m.gait.hstep} mm  (params: ${JSON.stringify(m.gait_defaults)})\n` +

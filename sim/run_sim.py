@@ -59,7 +59,8 @@ def joint_ctrl(t_gait, cmd):
 q0 = joint_ctrl(0.0, (0, 0, 0))
 data.qpos[0:3] = [0, 0, rm.spawn_z_m(H_MM)]     # torso z: feet ~1 mm above floor (D052: was h + 14)
 data.qpos[3:7] = [1, 0, 0, 0]
-data.qpos[7:7+15] = q0
+data.qpos[[model.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS)
+           for n in ("yaw", "hip", "knee")]] = q0   # claws interleave in qpos: never qpos[7:22]
 data.ctrl[:15] = q0
 mujoco.mj_forward(model, data)
 
@@ -154,11 +155,15 @@ print(f"fell over: {'YES' if fell else 'no'}")
 # D052: the CI smoke step used to pass on a fall (it only printed). Exit non-zero on a
 # fall or on a walk that went nowhere / too far. The band is +-30% around the walk
 # measured on the D052 model (servo damping 0.6255 N.m.s/rad, forcerange 1.911 N.m on
-# the 15 leg joints): 235 mm of ~261 commanded, measured 2026-09-24 (the owner's
-# scratch run on the same derating said 240). Re-measure and move it when the model
+# the 15 leg joints; 2.94 since the D052 amendment, see below): 235 mm of ~261
+# commanded, measured 2026-09-24 (the owner's scratch run on the same derating said 240). Re-measure and move it when the model
 # changes on purpose; a drift outside the band is exactly what this should catch.
 # V2: 246 mm re-measured 2026-09-24 after the spawn moved to rocky_model.spawn_z_m (the
 # 235 was measured before that change; A's run said 231, V1's 246 — same model otherwise).
+# D052 amendment (forcerange = stall 2.94 N.m, peak; 1.911 is now a thermal budget):
+# re-measured 2026-09-24 — walk 246 mm (drift -14), turn 55.4 deg. Both inside their
+# bands, so the refs stay: this walk barely touches the clip (mean joint load 0.07-0.18 x
+# stall at 45 mm/s, measured in PebbleEnv), so peak vs continuous hardly moves it.
 WALK_REF_MM = 246.0
 WALK_BAND = (0.7 * WALK_REF_MM, 1.3 * WALK_REF_MM)
 walk_ok = WALK_BAND[0] <= walk_disp[0] <= WALK_BAND[1]

@@ -32,7 +32,7 @@
               rpy="0 0 1.5707963267948966"/>
       <axis xyz="0 0 1"/>
       <limit lower="-0.698132" upper="0.698132"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -49,7 +49,7 @@
       <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -66,7 +66,7 @@
       <origin xyz="0.0950 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-2.617994" upper="-0.349066"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -95,8 +95,8 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="0.000000" upper="0.959931"
-             effort="0.1495" velocity="9.5"/>
-      <dynamics damping="0.01"/>
+             effort="0.2300" velocity="9.5"/>
+      <dynamics damping="0.0242"/>
     </joint>
   
     <link name="coxa1">
@@ -113,7 +113,7 @@
               rpy="0 0 2.827433388230814"/>
       <axis xyz="0 0 1"/>
       <limit lower="-0.698132" upper="0.698132"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -130,7 +130,7 @@
       <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -147,7 +147,7 @@
       <origin xyz="0.0950 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-2.617994" upper="-0.349066"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -176,8 +176,8 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="0.000000" upper="0.959931"
-             effort="0.1495" velocity="9.5"/>
-      <dynamics damping="0.01"/>
+             effort="0.2300" velocity="9.5"/>
+      <dynamics damping="0.0242"/>
     </joint>
   
     <link name="coxa2">
@@ -194,7 +194,7 @@
               rpy="0 0 4.084070449666731"/>
       <axis xyz="0 0 1"/>
       <limit lower="-0.698132" upper="0.698132"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -211,7 +211,7 @@
       <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -228,7 +228,7 @@
       <origin xyz="0.0950 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-2.617994" upper="-0.349066"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -257,8 +257,8 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="0.000000" upper="0.959931"
-             effort="0.1495" velocity="9.5"/>
-      <dynamics damping="0.01"/>
+             effort="0.2300" velocity="9.5"/>
+      <dynamics damping="0.0242"/>
     </joint>
   
     <link name="coxa3">
@@ -275,7 +275,7 @@
               rpy="0 0 5.340707511102648"/>
       <axis xyz="0 0 1"/>
       <limit lower="-0.698132" upper="0.698132"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -292,7 +292,7 @@
       <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -309,7 +309,7 @@
       <origin xyz="0.0950 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-2.617994" upper="-0.349066"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -338,8 +338,8 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="0.000000" upper="0.959931"
-             effort="0.1495" velocity="9.5"/>
-      <dynamics damping="0.01"/>
+             effort="0.2300" velocity="9.5"/>
+      <dynamics damping="0.0242"/>
     </joint>
   
     <link name="coxa4">
@@ -356,7 +356,7 @@
               rpy="0 0 6.5973445725385655"/>
       <axis xyz="0 0 1"/>
       <limit lower="-0.698132" upper="0.698132"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -373,7 +373,7 @@
       <origin xyz="0.0450 0 0.0610"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-1.221730" upper="1.570796"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -390,7 +390,7 @@
       <origin xyz="0.0950 0 0"/>
       <axis xyz="0 -1 0"/>
       <limit lower="-2.617994" upper="-0.349066"
-             effort="1.9110" velocity="4.7"/>
+             effort="2.9400" velocity="4.7"/>
       <dynamics damping="0.6255"/>
     </joint>
 
@@ -419,8 +419,8 @@
       <origin xyz="0 0 0"/>
       <axis xyz="0 0 1"/>
       <limit lower="0.000000" upper="0.959931"
-             effort="0.1495" velocity="9.5"/>
-      <dynamics damping="0.01"/>
+             effort="0.2300" velocity="9.5"/>
+      <dynamics damping="0.0242"/>
     </joint>
   
 

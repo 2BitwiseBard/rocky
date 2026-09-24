@@ -8,6 +8,9 @@ then verifies:
      same body-frame position in both models AND matches the gait engine's
      closed-form leg_fk (the third witness)
   3. mass budget: total mass agrees
+  4. actuator limits (D052 amendment): every URDF <limit effort> equals the
+     MJCF actuator forcerange (both = the servo's PEAK / stall torque) and
+     every URDF velocity equals the servo's no-load speed
 
 Run after any params.yaml change:  python3 check_urdf_parity.py
 """
@@ -136,6 +139,37 @@ def main():
     print(f"total mass: urdf {mass_u:.3f} kg vs mjcf {mass_m:.3f} kg")
     if abs(mass_u - mass_m) > 0.02:
         fails.append(f"mass mismatch {mass_u:.3f} vs {mass_m:.3f}")
+
+    # -- 4. effort / velocity vs the MJCF actuators (D052 amendment) ------
+    sys.path.insert(0, os.path.join(HERE, "..", "gait"))
+    import rocky_model as rm
+    worst_eff, worst_vel, worst_dc, n_lim = 0.0, 0.0, 0.0, 0
+    for j in ET.parse(URDF).getroot().iter("joint"):
+        name = j.get("name")
+        kind = name.rstrip("0123456789")
+        if kind not in ("yaw", "hip", "knee", "claw"):
+            continue
+        L = j.find("limit")
+        fr = float(m_m.actuator_forcerange[m_m.actuator(name).id][1])
+        worst_eff = max(worst_eff, abs(float(L.get("effort")) - fr))
+        v_want = rm.no_load_rad_s("claw" if kind == "claw" else None)
+        worst_vel = max(worst_vel, abs(float(L.get("velocity")) - v_want))
+        # the MJCF's own DC line: an unloaded joint at full drive tops out at
+        # forcerange / damping, which must be the no-load speed too (review: the
+        # claws had a literal 0.01 damping -> 23 rad/s against a 9.5 no-load)
+        dof = int(m_m.jnt_dofadr[m_m.joint(name).id])
+        worst_dc = max(worst_dc, abs(fr / float(m_m.dof_damping[dof]) - v_want))
+        n_lim += 1
+    report["limits"] = dict(joints=n_lim, worst_effort_vs_forcerange_nm=round(worst_eff, 5),
+                            worst_velocity_vs_no_load=round(worst_vel, 5),
+                            worst_mjcf_dc_speed_vs_no_load=round(worst_dc, 4),
+                            leg_effort_nm=rm.stall_nm(), leg_velocity=rm.no_load_rad_s())
+    print(f"actuator limits: {n_lim} joints, URDF effort vs MJCF forcerange worst {worst_eff:.5f} N.m, "
+          f"velocity vs no-load worst {worst_vel:.5f} rad/s, MJCF forcerange/damping vs no-load worst "
+          f"{worst_dc:.4f} rad/s (leg peak {rm.stall_nm():g} N.m)")
+    if n_lim != 20 or worst_eff > 1e-3 or worst_vel > 1e-6 or worst_dc > 0.05:
+        fails.append(f"actuator limits: {n_lim} joints, effort off by {worst_eff:.4f} N.m, "
+                     f"velocity off by {worst_vel:.4f} rad/s, MJCF DC speed off by {worst_dc:.3f} rad/s")
 
     report["pass"] = not fails
     with open(os.path.join(HERE, "urdf_parity.json"), "w") as f:

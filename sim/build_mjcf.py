@@ -1,8 +1,9 @@
 """Generate pebble.xml (MuJoCo MJCF) from the shared params.yaml.
 
 Simplified dynamics model: capsule/box geoms, masses from the budget, position
-actuators clamped to the servo's CONTINUOUS torque. Joint conventions MATCH the
-gait engine exactly (femur/knee axes flipped so +q2 = up, q3 negative = knee down).
+actuators clamped to the servo's PEAK (stall) torque — D052 amendment, see
+below. Joint conventions MATCH the gait engine exactly (femur/knee axes
+flipped so +q2 = up, q3 negative = knee down).
 
 D052 — the sim stops flattering the servo. Every actuator / joint number
 comes from params.yaml through gait/rocky_model.py (no literals here):
@@ -10,14 +11,23 @@ comes from params.yaml through gait/rocky_model.py (no literals here):
     torque-speed line. With the actuator saturated, the net joint torque
     falls to zero at no-load speed (2.94 N.m clip) — or at 1.91 / 0.626 =
     3.05 rad/s with the continuous clip, which is exactly the loaded speed
-    budget in `joints.vel_rad_s`. Owner measurement 2026-09-24 (scratch):
+    budget in `joints.vel_rad_s` (rocky_model.dc_speed). Owner measurement 2026-09-24 (scratch):
     damping alone, the wave gait still walks (242 of 273 mm in 6 s at
     45 mm/s, peak joint speed 4.2 vs 7.4 rad/s ideal) and turns 145 of
     157 deg at 0.5 rad/s; adding the 1.9 N.m forcerange, walk 240 mm, turn
     103 deg, walk+turn (45, 0, 0.35) yaws 74 of 103 deg. The turn envelope
     shrinks — the right answer, the old sim was lying about it.
-  * leg forcerange = continuous_frac x stall (1.91 N.m). Stall stays
-    available (rocky_model.stall_nm) for bodyweight quotes, not as a budget.
+  * leg forcerange = STALL (2.94 N.m, peak) since the D052 amendment
+    (owner, 2026-09-24): a position servo's instantaneous torque is its
+    stall torque; continuous_frac (0.65 -> 1.91 N.m) is a THERMAL budget.
+    With the continuous clip an unloaded joint capped at 1.911 / 0.626 =
+    3.06 rad/s, below the servo's real 4.7 no-load speed and the 4.0
+    free-leg budget. Now: an unloaded saturated joint reaches 2.94 / 0.626 =
+    4.70 rad/s, one whose motor is held to the continuous torque 3.05
+    (rocky_model.dc_speed). The sustained budget is enforced where time
+    matters: rl_common.ThermalProxy (derates a hot joint's forcerange toward
+    continuous) and pebble_feasibility's THERMAL_LOAD verdict (audit physics).
+  * claws likewise: forcerange = SCS0009 stall (0.23 N.m, VERIFY), not 0.65 x.
   * foot/floor friction 0.8 (was 1.2; TPU on tile is 0.5-0.8); feet are
     condim 4 with torsional friction so a pad twisting in place costs torque.
   * the 40 g claw double-count is gone: mass_audit already puts the hand
@@ -47,15 +57,16 @@ RB = P["body"]["circumradius"] * MM
 Z_HIP = P["leg"]["hip_axis_z"] * MM   # params SSOT (D047)
 
 # ---- actuator physics (D052: all derived, see the module docstring)
-STALL = rm.stall_nm()                  # N*m @12V — NOT used as the clamp any more
-F_CONT = rm.continuous_nm()            # N*m: the leg actuators' forcerange
+F_PEAK = rm.stall_nm()                 # N*m @12V: the leg actuators' forcerange (D052 amendment: peak)
+F_CONT = rm.continuous_nm()            # N*m: thermal budget — NOT the clamp (rl_common.ThermalProxy)
 DAMP = rm.damping_nms()                # N*m*s/rad on the 15 leg joints
 LIM = rm.joint_limits_deg()
-# claws: SCS0009, every number VERIFY. Clip = its continuous budget too (was
-# a literal 0.2 here vs 0.23 in the URDF); the prongs don't collide, so this
-# changes nothing in the world. Claw damping stays a small literal: the hand
-# v0.3 drive is not modelled yet.
-CLAW_FR = rm.continuous_nm("claw")
+# claws: SCS0009, every number VERIFY. Clip = its stall (peak) torque like the
+# legs; the prongs don't collide, so this changes nothing in the world. Claw
+# damping stays a small literal: the hand v0.3 drive is not modelled yet.
+CLAW_FR = rm.stall_nm("claw")
+CLAW_DAMP = rm.damping_nms("claw")     # 0.23 / 9.5 = 0.0242: the claw's own DC line (review: was a literal
+#                                        0.01, which let an unloaded claw run ~23 rad/s vs its 9.5 no-load)
 
 # ---- foot contact (D052)
 FOOT = P["leg"]["foot"]
@@ -108,7 +119,7 @@ def leg_xml(i):
             <geom type="capsule" fromto="{L3:.4f} 0.004 0 {L3+0.024:.4f} 0.011 0" size="0.0035"
                   mass="{M_PRONG}" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             <body name="clawb{i}" pos="{L3:.4f} 0 0">
-              <joint name="claw{i}" type="hinge" axis="0 0 1" range="{rng['claw']}" damping="0.01" armature="0.001"/>
+              <joint name="claw{i}" type="hinge" axis="0 0 1" range="{rng['claw']}" damping="{CLAW_DAMP:.4f}" armature="0.001"/>
               <geom type="capsule" fromto="0 -0.004 0 0.024 -0.011 0" size="0.0035"
                     mass="{M_PRONG}" rgba="0.72 0.62 0.88 1" contype="0" conaffinity="0"/>
             </body>
@@ -122,7 +133,7 @@ def actuators_xml():
     for i in range(5):
         for j in ("yaw", "hip", "knee"):
             out.append(f'    <position name="{j}{i}" joint="{j}{i}" kp="20" kv="0.6" '
-                       f'forcerange="-{F_CONT:.4f} {F_CONT:.4f}"/>')
+                       f'forcerange="-{F_PEAK:.4f} {F_PEAK:.4f}"/>')
     for i in range(5):
         out.append(f'    <position name="claw{i}" joint="claw{i}" kp="0.5" kv="0.02" '
                    f'forcerange="-{CLAW_FR:.4f} {CLAW_FR:.4f}"/>')
@@ -168,7 +179,9 @@ def main():
         f.write(build_xml())
     print("wrote", path, "| masses:", MASS_SOURCE,
           f"torso {M_TORSO:.3f} coxa {M_COXA:.3f} femur {M_FEMUR:.3f} tibia {M_TIBIA:.3f} kg"
-          f" | leg servo: forcerange {F_CONT:.3f} N.m, damping {DAMP:.3f} N.m.s/rad"
+          f" | leg servo: forcerange {F_PEAK:.3f} N.m (peak; continuous {F_CONT:.3f} is thermal),"
+          f" damping {DAMP:.3f} N.m.s/rad -> {rm.dc_speed():.2f} rad/s free,"
+          f" {rm.dc_speed(F_CONT):.2f} at continuous"
           f" | foot r {R_FOOT*1000:.1f} mm, mu {MU:g}")
 
 
