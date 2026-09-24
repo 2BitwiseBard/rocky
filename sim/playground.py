@@ -85,6 +85,10 @@ def find_player():
     return None
 
 
+PROBE_RATE = 120.0     # mm/s a contactless planted foot is lowered (D050 contact-seeking stance)
+PROBE_MAX = 30.0       # mm: probed this far with nothing under it = the ground is not there
+
+
 class Playground:
     def __init__(self, cliff=False, model=None, z0=0.0):
         if model is not None:                       # D049: the cockpit's world builder
@@ -116,6 +120,10 @@ class Playground:
         self.cmd_v = np.zeros(3)              # vx, vy, wz
         self.gesture = None                   # (fn, total, t0)
         self.push = None                      # shove.Shove or None
+        self.residual = None                  # (15,) rad added to the joint targets (D050 walk policy)
+        self.probe_on = True                  # D050: planted feet without contact seek the ground
+        self.probe_dz = np.zeros(N_LEGS)      # mm each foot is currently lowered below its target
+        self.probe_out = np.zeros(N_LEGS, bool)   # probed PROBE_MAX with no contact (the void signal)
         self.righter_note = self._install_righter()
         self.t = 0.0
         self.player = find_player()
@@ -171,7 +179,11 @@ class Playground:
             q, state = self.sup.step(self.t, v[0], v[1], v[2], gxy,
                                      contacts=con, gyro_vec=w_body[:2],
                                      tilt_deg=tilt_deg, height=height)
+            if self.probe_on and state in ("NORMAL", "RECOVER") and self.sup._last_feet is not None:
+                q = self._probe(q, self.sup._last_feet, con)
             self.data.ctrl[:15] = q.flatten()
+            if self.residual is not None and state == "NORMAL":
+                self.data.ctrl[:15] += self.residual
         if push is not None:
             if not push.apply(self.model, self.data, self.torso, self.t):
                 with self.lock:               # over: wrench already zeroed
@@ -188,6 +200,28 @@ class Playground:
             self._cam.lookat[:] = self.data.xpos[self.torso]
             self._renderer.update_scene(self.data, self._cam)
             self._frames.append(self._renderer.render())
+
+    def _probe(self, q, feet, con):
+        """D050 contact-seeking stance: a foot the gait believes is planted but
+        that reports no contact is lowered at PROBE_RATE, up to PROBE_MAX,
+        until it finds ground; the offset relaxes as soon as contact is back.
+        Rough ground and steps stop being 'missed footfalls'; a real void is
+        a foot that ran out of probe — `probe_out` — which is what the cliff
+        detector is given. (What a real robot does with a foot switch and no
+        depth sensor: it feels for the floor.)"""
+        q = q.copy()
+        for i in range(N_LEGS):
+            planted = feet[i, 2] <= -self.gait.h + 6.0          # commanded at the ground plane
+            if planted and not con[i]:
+                self.probe_dz[i] = min(self.probe_dz[i] + PROBE_RATE * self.DT, PROBE_MAX)
+            else:
+                self.probe_dz[i] = max(self.probe_dz[i] - 2 * PROBE_RATE * self.DT, 0.0)
+            if self.probe_dz[i] > 0:
+                qi = leg_ik(body_to_leg(i, feet[i] - np.array([0.0, 0.0, self.probe_dz[i]])))
+                if not np.isnan(qi).any():
+                    q[i] = qi
+        self.probe_out = self.probe_dz >= PROBE_MAX - 1e-6
+        return q
 
     # ------------------------------------------------------------ HUD
     STATE_RGBA = {"NORMAL": (0.2, 0.85, 0.3, 0.9), "PLANT": (0.95, 0.8, 0.2, 0.9),

@@ -14,6 +14,16 @@ On rubble this same signal fires on bridged/late feet — there it feeds the
 stuck-watchdog; on commanded-flat ground it means the world ends. The
 arbitration lives in the caller (SENSING_PLAN.md §reflex-arbitration).
 
+Terrain-aware option (D050): on rough ground or an obstacle course the
+same timing signal fires on bridged feet, bumps and blocked swings — none
+of them a void. The fix is the one a robot with a foot switch and no
+depth sensor has: FEEL for the floor. The caller lowers a contactless
+planted foot step by step (sim/playground.py `_probe`, PROBE_MAX mm) and
+passes `probed_out[i]` = "this foot ran out of probe and still touched
+nothing"; a void then requires it too. Without it the detector behaves
+exactly as before (the harness's in-process sim backend, the run_cliff
+experiments).
+
 CliffReaction: halt drive, retreat ~1.6 cycles, stop, await orders.
 """
 from __future__ import annotations
@@ -30,10 +40,13 @@ class CliffDetector:
         self._open_since = [None] * n_legs
         self.events: list[tuple[float, int]] = []
 
-    def update(self, t, stance_cmd, contact) -> list[int]:
+    def update(self, t, stance_cmd, contact, probed_out=None) -> list[int]:
         fired = []
         for i in range(self.n):
-            if stance_cmd[i] and not contact[i]:
+            suspect = stance_cmd[i] and not contact[i]
+            if suspect and probed_out is not None and not probed_out[i]:
+                suspect = False                  # still feeling for the floor: not a void (yet)
+            if suspect:
                 if self._open_since[i] is None:
                     self._open_since[i] = t
                 elif t - self._open_since[i] >= self.confirm_s:

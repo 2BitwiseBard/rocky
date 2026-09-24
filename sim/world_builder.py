@@ -216,6 +216,56 @@ PRESETS = {
 }
 
 
+WORLDS_DIR = os.path.join(HERE, "worlds")
+
+
+def random_course(seed=0, n=8, base="flat", r_min=0.45, r_max=1.6):
+    """A seeded scatter of obstacles in an annulus around the origin (the
+    robot spawns at the centre on clear floor): the RL-curriculum world."""
+    rng = np.random.default_rng(int(seed))
+    kinds = ["box", "box", "wall", "ramp", "stairs", "ball", "rubble"]
+    objs = []
+    for _ in range(int(n)):
+        k = kinds[rng.integers(len(kinds))]
+        r = rng.uniform(r_min, r_max)
+        a = rng.uniform(0, 2 * np.pi)
+        o = {"kind": k, "pos": [round(float(r * np.cos(a)), 2), round(float(r * np.sin(a)), 2)],
+             "yaw_deg": round(float(rng.uniform(0, 180)), 0)}
+        if k == "box":
+            o["size"] = [round(float(rng.uniform(0.08, 0.25)), 2), round(float(rng.uniform(0.08, 0.25)), 2),
+                         round(float(rng.uniform(0.02, 0.08)), 3)]
+        elif k == "wall":
+            o["len_m"] = round(float(rng.uniform(0.4, 1.0)), 2)
+        elif k == "rubble":
+            o.update(radius_m=0.3, n=12, size_m=0.03, seed=int(rng.integers(1000)))
+        elif k == "stairs":
+            o.update(steps=3, rise_m=0.015)
+        objs.append(o)
+    return {"base": base, "objects": objs, "friction": round(float(rng.uniform(0.6, 1.4)), 2)}
+
+
+def saved_worlds():
+    if not os.path.isdir(WORLDS_DIR):
+        return []
+    return sorted(f[:-5] for f in os.listdir(WORLDS_DIR) if f.endswith(".json"))
+
+
+def save_world(name, spec):
+    import json
+    import re
+    os.makedirs(WORLDS_DIR, exist_ok=True)
+    name = re.sub(r"[^A-Za-z0-9_. -]", "", name).strip() or "world"
+    with open(os.path.join(WORLDS_DIR, name + ".json"), "w") as f:
+        json.dump(spec, f, indent=1)
+    return name
+
+
+def load_world(name):
+    import json
+    with open(os.path.join(WORLDS_DIR, name + ".json")) as f:
+        return json.load(f)
+
+
 if __name__ == "__main__":
     for name, spec in PRESETS.items():
         m, z = build(spec)

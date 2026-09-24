@@ -1,0 +1,64 @@
+{
+ "base": "flat",
+ "objects": [
+  {
+   "kind": "ball",
+   "pos": [
+    0.23,
+    -0.69
+   ],
+   "yaw_deg": 105.0
+  },
+  {
+   "kind": "box",
+   "pos": [
+    -0.51,
+    0.23
+   ],
+   "yaw_deg": 86.0,
+   "size": [
+    0.11,
+    0.2,
+    0.027
+   ]
+  },
+  {
+   "kind": "ramp",
+   "pos": [
+    -0.95,
+    0.44
+   ],
+   "yaw_deg": 106.0
+  },
+  {
+   "kind": "wall",
+   "pos": [
+    1.25,
+    -0.35
+   ],
+   "yaw_deg": 51.0,
+   "len_m": 0.79
+  },
+  {
+   "kind": "stairs",
+   "pos": [
+    0.79,
+    0.01
+   ],
+   "yaw_deg": 175.0,
+   "steps": 3,
+   "rise_m": 0.015
+  },
+  {
+   "kind": "stairs",
+   "pos": [
+    -0.31,
+    0.73
+   ],
+   "yaw_deg": 161.0,
+   "steps": 3,
+   "rise_m": 0.015
+  }
+ ],
+ "friction": 1.07
+}

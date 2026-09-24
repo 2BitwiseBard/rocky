@@ -8,6 +8,36 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-23 · Session 9d (laptop) — cockpit round two: feet that feel for the floor, recordings, worlds on disk, the walker, voice (D050)
+
+Asked for: all six follow-ups, plus how to start/stop the cockpit.
+
+- **Contact-seeking stance** (`Playground._probe`): a planted foot with no
+  contact is lowered up to 30 mm at 120 mm/s; a void = a foot that ran out
+  of probe (`CliffDetector.update(..., probed_out=)`). Goto results from
+  the origin: cliff → `cliff` at 0.15 m; flat 0.8 m, rough terrain 1.5 m,
+  rubble 1.2 m, stairs (4 × 15 mm) 1.0 m → `arrived`; 6 cm box → `stuck`.
+  Two wrong rules before it (foot-below-ground: never fires with position
+  servos, walked off the cliff; foot-above-ground: still fired on bumps) —
+  the cliff preset re-test after every change is what caught them.
+- goto `stuck` (no 2 cm of progress in 6 s) and `timeout` (40 s) outcomes:
+  the first obstacle goto had hung a tool call for 3 minutes.
+- Recordings (`/api/record`, `/api/replay`): chase frames + every command
+  (console, teleop, tool calls) → `sim/out/recordings/NAME/{clip.mp4,
+  clip.gif, run.json}`; replay reloads the world and re-runs the commands.
+  test1: 68 frames, 3 commands, replayed clean.
+- Worlds on disk (`sim/worlds/*.json`, save/load) and `random_course(seed,
+  n)`; the walker (`/api/rl/walk`: `robust_fwd2` residual on the analytic
+  gait via `Playground.residual`, 0.16 m in 4 s); voice (`/api/voice`:
+  browser blob → ffmpeg → whisper-server :8082 → chat); `/api/quit` + the
+  page's ⏻ button, `rocky.sh cockpit-stop`, `cockpit` restarts a running
+  one; a phone layout under 900 px.
+- Bug: `set_world` compared the new name with itself → always respawned in
+  place, so a preset switch from x = 1.2 m rebuilt the world around a robot
+  standing inside a wall (that was the "cliff everywhere" I chased first).
+- Tests 97 fast (+ terrain/random-course tests). Docs: SIM_GUIDE §3b, D050,
+  B31, README.
+
 ## 2026-09-23 · Session 9c (laptop) — the cockpit: a browser playground on one running sim (D049)
 
 Asked for: an in-app guide, brain/mode toggles, model switching, a chat

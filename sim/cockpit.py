@@ -46,8 +46,9 @@ for sub in ("gait", "perception", "sim"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 sys.path.insert(0, ROOT)
 
-from playground import Playground, GESTURES, TELEOP_HELP, HELP_RL      # noqa: E402
-from world_builder import build as build_world, PRESETS, KINDS         # noqa: E402
+from playground import Playground, GESTURES, TELEOP_HELP, HELP_RL, PROBE_MAX   # noqa: E402
+from world_builder import (build as build_world, PRESETS, KINDS, random_course,   # noqa: E402
+                           saved_worlds, save_world, load_world)
 from pebble_reflex import ReflexSupervisor                             # noqa: E402
 from cliff import CliffDetector, CliffReaction                         # noqa: E402
 from sim_lidar import scan as lidar_scan, RANGE_MAX                    # noqa: E402
@@ -57,6 +58,8 @@ from harness.intent import plan as intent_plan, execute as intent_execute   # no
 from harness.local_brain import TOOLS as BRAIN_TOOLS, SYSTEM as BRAIN_SYSTEM, OpenAIChat   # noqa: E402
 
 V_GOTO = 45.0
+GOTO_CAP_S = 40.0            # a goto that has not ended by then ends as "timeout"
+GOTO_STUCK_S = 6.0           # no 2 cm of progress toward the target for this long -> "stuck" (obstacle)
 LOOK_TOOL = {"type": "function", "function": {
     "name": "look",
     "description": "Look through the robot's eye camera: a vision model describes what "
@@ -111,6 +114,10 @@ class CockpitSim(Playground):
         self.last = dict(con=np.zeros(5, bool), tilt=0.0, height=0.0, gxy=0.0)
         self.chat_hist = {}
         self.brain = dict(mode="talk", model=None, vision_model=None)
+        self.rec = None                     # recording: dict(frames, t0, cmds, world)
+        self.cmd_log = []                   # (sim t, line) — everything that drove the robot
+        self.walk = None                    # residual walking policy: dict(policy, name, t_next, res)
+        self.walk_note = "gait: analytic wave gait"
         self.llm_base = os.environ.get("ROCKY_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
         self.llm_key = _local_ai_key()
         self._llm = None
@@ -119,6 +126,12 @@ class CockpitSim(Playground):
     # ---------------------------------------------------------- plumbing
     def log(self, line):
         self.console.append((round(self.t, 2), str(line)))
+
+    def note_cmd(self, line):
+        """Everything that moved the robot goes here (recordings replay it)."""
+        self.cmd_log.append((round(self.t, 3), line))
+        if self.rec is not None:
+            self.rec["cmds"].append((round(self.t - self.rec["t0"], 3), line))
 
     async def call(self, fn):
         """Run fn() in the sim thread; await its result."""
@@ -166,11 +179,73 @@ class CockpitSim(Playground):
         gs = self.goto_state
         if gs is not None:
             self._goto_pre(gs)
+        if self.walk is not None:
+            self._walk_residual()               # sets self.residual for this step's targets
         super().step()
         if gs is not None and self.goto_state is gs:
             self._goto_post(gs)
         if self._k % self.render_every == 0:
             self._render()
+
+    # ------------------------------------------------- residual walker
+    def _walk_residual(self):
+        """D050: the PPO residual gait policy (rocky_env.PebbleEnv's contract:
+        50 Hz, obs = gravity, gyro, qpos, qvel, gait phase, command/[60,60,0.6],
+        action = ±0.25 rad added to the analytic targets) on top of the
+        supervisor's output while the reflex state is NORMAL."""
+        w = self.walk
+        if self.sup.state != "NORMAL" or self.gesture is not None:
+            self.residual = None
+            return
+        if self.t >= w["t_next"]:
+            w["t_next"] = self.t + 0.02
+            d = self.data
+            R = d.xmat[self.torso].reshape(3, 3)
+            grav = R.T @ np.array([0, 0, -1.0])
+            gyro = R.T @ d.cvel[self.torso][0:3]
+            ph = 2 * np.pi * ((self.sup.t_gait / self.gait.T) % 1.0)
+            with self.lock:
+                v = self.cmd_v.copy()
+            obs = np.concatenate([grav, gyro, d.qpos[w["jadr"]], d.qvel[w["vadr"]],
+                                  [np.sin(ph), np.cos(ph)], v / np.array([60.0, 60.0, 0.6])]).astype(np.float32)
+            a = np.clip(w["policy"](obs), -1, 1)
+            w["res"] = 0.25 * a
+        self.residual = w["res"]
+
+    def set_walk(self, name):
+        """Sim thread. name: 'off' or a runs/NAME with a gait checkpoint."""
+        self.residual = None
+        if name in (None, "", "off", "analytic"):
+            self.walk = None
+            self.walk_note = "gait: analytic wave gait"
+            return self.walk_note
+        path = os.path.join(HERE, "runs", name, "latest.pt")
+        if not os.path.exists(path):
+            return f"no runs/{name}/latest.pt"
+        try:
+            import torch
+            from train_ppo import Agent, RunningMeanStd
+            ck = torch.load(path, map_location="cpu", weights_only=False)
+            if ck.get("obs_dim", 41) != 41:
+                return f"{name} is not a gait checkpoint (obs {ck.get('obs_dim')})"
+            agent = Agent(41, ck.get("act_dim", 15))
+            agent.load_state_dict(ck["model"])
+            agent.eval()
+            rms = RunningMeanStd((41,))
+            rms.load_state_dict(ck["obs_rms"])
+
+            def policy(obs):
+                on = (obs - rms.mean) / np.sqrt(rms.var + 1e-8)
+                with torch.no_grad():
+                    return agent.actor(torch.as_tensor(np.clip(on, -10, 10), dtype=torch.float32)
+                                       .unsqueeze(0)).squeeze(0).numpy()
+        except Exception as e:
+            return f"walk policy {name}: {e}"
+        self.walk = dict(policy=policy, name=name, t_next=self.t, res=np.zeros(15),
+                         jadr=[self.model.joint(f"{n}{i}").qposadr[0] for i in range(5) for n in ("yaw", "hip", "knee")],
+                         vadr=[self.model.joint(f"{n}{i}").dofadr[0] for i in range(5) for n in ("yaw", "hip", "knee")])
+        self.walk_note = f"gait: analytic + residual policy {name} ({ck.get('global_step', 0):,} steps)"
+        return self.walk_note
 
     # ------------------------------------------------------------- goto
     def _goto_pre(self, gs):
@@ -181,6 +256,16 @@ class CockpitSim(Playground):
         if gs["outcome"] is None and dist < 0.025:
             gs["outcome"] = ("arrived", tw)
             self.sup.request_stop()
+        if gs["outcome"] is None:
+            if dist < gs["best"] - 0.02:
+                gs["best"], gs["best_t"] = dist, tw
+            elif tw - gs["best_t"] > GOTO_STUCK_S and tw > 2.0:
+                gs["outcome"] = ("stuck", tw)          # D050: blocked, not a void
+                self.sup.request_stop()
+                self.log(f"goto stuck {dist*100:.0f} cm short (no progress for {GOTO_STUCK_S:.0f} s)")
+            elif tw > GOTO_CAP_S:
+                gs["outcome"] = ("timeout", tw)
+                self.sup.request_stop()
         if self._stop_req and gs["outcome"] is None:
             gs["outcome"] = ("user", tw)
             self.sup.request_stop()
@@ -209,10 +294,12 @@ class CockpitSim(Playground):
             g = self.gait
             ph = [(self.sup.t_gait / g.T + g.phase_off[i]) % 1.0 for i in range(5)]
             settled = [ph[i] < g.duty and 0.12 < ph[i] / g.duty < 0.95 for i in range(5)]
-            if gs["det"].update(tw, settled, self.last["con"]):
+            # D050: a void needs the leg to have PROBED all the way down and found nothing
+            fired = gs["det"].update(tw, settled, self.last["con"], probed_out=self.probe_out)
+            if fired:
                 gs["react"].on_void(tw)
                 self.events.append(("void", round(float(self.data.xpos[self.torso][0]), 3)))
-                self.log("VOID detected — retreating")
+                self.log(f"VOID detected (leg {fired} probed {PROBE_MAX:.0f} mm down, nothing there) — retreating")
         if gs["outcome"] is None and self.last["tilt"] > 60:
             gs["outcome"] = ("FELL", tw)
         if gs["outcome"] is not None and tw > gs["outcome"][1] + 1.5:
@@ -222,6 +309,8 @@ class CockpitSim(Playground):
                 res["detail"] = "VOID detected by the real detector; PLANT->BRACE halt"
             if reason == "FELL":
                 res["detail"] = "the robot fell during the goto; the righter takes over"
+            if reason == "stuck":
+                res["detail"] = "no progress toward the target: something is in the way (not a void)"
             self.mode = "idle" if reason == "arrived" else "safe_stop"
             self.goto_state = None
             with self.lock:
@@ -238,7 +327,8 @@ class CockpitSim(Playground):
         if self.goto_state is not None:
             self._resolve(self.goto_state, {"ok": False, "stopped": "preempted", "pose": self.pose()})
         self.goto_state = dict(tx=float(tx), ty=float(ty), t0=self.t, det=CliffDetector(),
-                               react=CliffReaction(self.gait), outcome=None, fut=fut, loop=loop)
+                               react=CliffReaction(self.gait), outcome=None, fut=fut, loop=loop,
+                               best=float("inf"), best_t=0.0)
         self.mode = "walking"
         self.events.append(("goto", (round(float(tx), 3), round(float(ty), 3))))
         self.log(f"goto ({tx:.2f}, {ty:.2f})")
@@ -306,6 +396,8 @@ class CockpitSim(Playground):
         Image.fromarray(rgb).save(buf, format="JPEG", quality=72)
         n = self.frames[name][0] + 1
         self.frames[name] = (n, buf.getvalue())
+        if name == "chase" and self.rec is not None and len(self.rec["frames"]) < 15 * 300:
+            self.rec["frames"].append(rgb.copy())
 
     # ------------------------------------------------------- world swaps
     def set_world(self, spec, name="custom"):
@@ -315,6 +407,7 @@ class CockpitSim(Playground):
         old = self.data
         p_xy = old.xpos[self.torso][:2].copy()
         yaw = float(np.arctan2(old.xmat[self.torso].reshape(3, 3)[1, 0], old.xmat[self.torso].reshape(3, 3)[0, 0]))
+        same_world = (name == self.world_name)
         self.model, self.z0 = model, z0
         self.world_spec, self.world_name = dict(spec), name
         self.data = mujoco.MjData(model)
@@ -325,8 +418,10 @@ class CockpitSim(Playground):
         self.gesture = None
         self.push = None
         ck = getattr(getattr(self.sup, "righter", None), "ckpt", None)   # keep the chosen righter
-        self._respawn(p_xy if name == self.world_name else np.zeros(2), yaw)
+        self._respawn(p_xy if same_world else np.zeros(2), yaw)
         self.righter_note = self._install_righter(ck)
+        if self.walk is not None:
+            self.set_walk(self.walk["name"])
         self.log(f"world: {name} ({model.ngeom} geoms) | {self.righter_note}")
 
     def _respawn(self, xy=(0.0, 0.0), yaw=0.0):
@@ -373,6 +468,7 @@ class CockpitSim(Playground):
                     height=round(self.last["height"] * 1000), contacts=[bool(c) for c in self.last["con"]],
                     gyro=round(self.last["gxy"], 2), world=self.world_name, righter=self.righter_note,
                     speed=self.speed, paused=self.paused, trips=self.sup.trip_count, falls=self.sup.fall_count,
+                    recording=self.rec is not None, walk=self.walk_note,
                     goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture is not None,
                     events=list(self.events)[-12:], console=list(self.console)[-40:],
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
@@ -487,6 +583,8 @@ class CockpitSim(Playground):
     async def tool(self, name, args):
         if name not in self.TOOL_NAMES:
             return {"ok": False, "error": f"no such tool {name}"}
+        if name in ("goto", "gesture", "say", "stop"):
+            self.note_cmd(f"tool {name} {json.dumps(args or {})}")
         try:
             return await getattr(self, "tool_" + name)(**(args or {}))
         except TypeError as e:
@@ -685,7 +783,8 @@ def make_app(sim: CockpitSim):
         body = await request.json()
         line = str(body.get("line", "")).strip()
         if not line or line.split()[0].lower() == "quit":
-            return JSONResponse({"reply": "(use the browser's close button; quit is not a cockpit command)"})
+            return JSONResponse({"reply": "(the header's quit button stops the server; quit is not a console command here)"})
+        sim.note_cmd(line)
         r = await sim.call(lambda: sim.do(line))
         sim.log(f"> {line}")
         if r:
@@ -695,6 +794,7 @@ def make_app(sim: CockpitSim):
 
     async def teleop(request):
         body = await request.json()
+        sim.note_cmd("teleop " + str(body.get("key", "")))
         r = sim.teleop(str(body.get("key", "")))
         if r:
             sim.log(r)
@@ -842,6 +942,161 @@ def make_app(sim: CockpitSim):
     async def favicon(_):
         return Response(b"", status_code=204)
 
+    REC_DIR = os.path.join(HERE, "out", "recordings")
+
+    async def record(request):
+        body = await request.json()
+        action = body.get("action", "start")
+        if action == "start":
+            if sim.rec is not None:
+                return JSONResponse({"ok": False, "error": "already recording"})
+            sim.rec = dict(frames=[], t0=sim.t, cmds=[], world=sim.world_name, spec=json.loads(json.dumps(sim.world_spec)))
+            sim.log("● recording")
+            return JSONResponse({"ok": True, "recording": True})
+        rec, sim.rec = sim.rec, None
+        if rec is None:
+            return JSONResponse({"ok": False, "error": "not recording"})
+        name = body.get("name") or time.strftime("rec_%Y%m%d_%H%M%S")
+        name = "".join(c for c in name if c.isalnum() or c in "_-.")
+        d = os.path.join(REC_DIR, name)
+        os.makedirs(d, exist_ok=True)
+        meta = dict(name=name, world=rec["world"], spec=rec["spec"], t0=rec["t0"],
+                    duration_s=round(sim.t - rec["t0"], 2), cmds=rec["cmds"], frames=len(rec["frames"]))
+
+        def write():
+            import imageio
+            with open(os.path.join(d, "run.json"), "w") as f:
+                json.dump(meta, f, indent=1)
+            if rec["frames"]:
+                imageio.mimsave(os.path.join(d, "clip.mp4"), rec["frames"], fps=15, codec="libx264", quality=7)
+                import shutil
+                import subprocess
+                if shutil.which("ffmpeg"):
+                    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", os.path.join(d, "clip.mp4"),
+                                    "-vf", "fps=10,scale=420:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64[p];[b][p]paletteuse=dither=bayer:bayer_scale=5",
+                                    os.path.join(d, "clip.gif")], check=False)
+            return meta
+        await asyncio.to_thread(write)
+        sim.log(f"■ saved recording {name} ({meta['frames']} frames, {len(meta['cmds'])} commands, {meta['duration_s']} s)")
+        return JSONResponse({"ok": True, "recording": False, "meta": meta})
+
+    async def recordings(_):
+        out = []
+        if os.path.isdir(REC_DIR):
+            for name in sorted(os.listdir(REC_DIR), reverse=True):
+                rj = os.path.join(REC_DIR, name, "run.json")
+                if os.path.exists(rj):
+                    m = json.load(open(rj))
+                    m["files"] = [f for f in os.listdir(os.path.join(REC_DIR, name)) if f != "run.json"]
+                    out.append(m)
+        return JSONResponse({"recordings": out})
+
+    async def rec_file(request):
+        from starlette.responses import FileResponse
+        name, fn = request.path_params["name"], request.path_params["file"]
+        path = os.path.join(REC_DIR, os.path.basename(name), os.path.basename(fn))
+        if not os.path.exists(path):
+            return Response("not found", status_code=404)
+        return FileResponse(path)
+
+    replay_state = {"task": None}
+
+    async def replay(request):
+        body = await request.json()
+        rj = os.path.join(REC_DIR, os.path.basename(body.get("name", "")), "run.json")
+        if not os.path.exists(rj):
+            return JSONResponse({"ok": False, "error": "no such recording"})
+        m = json.load(open(rj))
+        if replay_state["task"] is not None and not replay_state["task"].done():
+            replay_state["task"].cancel()
+        await sim.call(lambda: sim.set_world(m["spec"], m["world"]))
+        await sim.call(sim.reset)
+        t_start = sim.t
+        sim.log(f"▶ replaying {m['name']}: {len(m['cmds'])} commands over {m['duration_s']} s")
+
+        async def run():
+            for t_rel, line in m["cmds"]:
+                while sim.t - t_start < t_rel:
+                    await asyncio.sleep(0.02)
+                if line.startswith("tool "):
+                    _, name, args = line.split(" ", 2)
+                    asyncio.ensure_future(sim.tool(name, json.loads(args)))
+                elif line.startswith("teleop "):
+                    sim.teleop(line[7:])
+                else:
+                    await sim.call(lambda l=line: sim.do(l))
+            sim.log("▶ replay done")
+        replay_state["task"] = asyncio.ensure_future(run())
+        return JSONResponse({"ok": True, "cmds": len(m["cmds"])})
+
+    async def world_saved(_):
+        return JSONResponse({"saved": saved_worlds()})
+
+    async def world_save(request):
+        body = await request.json()
+        name = save_world(body.get("name", "world"), sim.world_spec)
+        return JSONResponse({"ok": True, "name": name, "saved": saved_worlds()})
+
+    async def world_load(request):
+        body = await request.json()
+        spec = load_world(os.path.basename(body["name"]))
+        await sim.call(lambda: sim.set_world(spec, body["name"]))
+        return JSONResponse({"ok": True, "spec": spec})
+
+    async def world_random(request):
+        body = await request.json()
+        spec = random_course(int(body.get("seed", 0)), int(body.get("n", 8)))
+        name = f"random #{int(body.get('seed', 0))}"
+        await sim.call(lambda: sim.set_world(spec, name))
+        return JSONResponse({"ok": True, "name": name, "spec": spec})
+
+    async def rl_walk(request):
+        body = await request.json()
+        r = await sim.call(lambda: sim.set_walk(body.get("name", "off")))
+        sim.log(r)
+        return JSONResponse({"reply": r})
+
+    async def voice(request):
+        """Browser audio blob -> ffmpeg -> whisper-server -> text."""
+        import shutil
+        import subprocess
+        import tempfile
+        form = await request.form()
+        up = form.get("audio")
+        if up is None:
+            return JSONResponse({"ok": False, "error": "no audio"})
+        raw = await up.read()
+        if not shutil.which("ffmpeg"):
+            return JSONResponse({"ok": False, "error": "ffmpeg not installed"})
+        with tempfile.TemporaryDirectory() as td:
+            src = os.path.join(td, "in.webm")
+            wav = os.path.join(td, "in.wav")
+            open(src, "wb").write(raw)
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-ar", "16000", "-ac", "1", wav], check=False)
+            if not os.path.exists(wav):
+                return JSONResponse({"ok": False, "error": "could not decode the audio"})
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=60) as c:
+                    r = await c.post(os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082") + "/v1/audio/transcriptions",
+                                     files={"file": ("in.wav", open(wav, "rb"), "audio/wav")},
+                                     data={"response_format": "text", "temperature": "0.0"})
+                text = r.text.strip()
+            except Exception as e:
+                return JSONResponse({"ok": False, "error": f"whisper-server: {e}"})
+        sim.log(f"🎤 {text}")
+        return JSONResponse({"ok": True, "text": text})
+
+    async def quit_(_):
+        sim.log("quit requested from the page")
+        sim.alive = False
+
+        def bye():
+            time.sleep(0.4)
+            os._exit(0)
+        threading.Thread(target=bye, daemon=True).start()
+        return JSONResponse({"ok": True})
+
     async def help_(_):
         return JSONResponse({"teleop": TELEOP_HELP, "rl": HELP_RL,
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
@@ -860,6 +1115,12 @@ def make_app(sim: CockpitSim):
         Route("/api/reset", reset, methods=["POST"]), Route("/api/speed", speed, methods=["POST"]),
         Route("/api/camera", camera, methods=["POST"]), Route("/api/scan", scan), Route("/api/tool/{name}", tool, methods=["POST"]),
         Route("/api/help", help_), Route("/favicon.ico", favicon),
+        Route("/api/record", record, methods=["POST"]), Route("/api/recordings", recordings),
+        Route("/recordings/{name}/{file}", rec_file), Route("/api/replay", replay, methods=["POST"]),
+        Route("/api/world/saved", world_saved), Route("/api/world/save", world_save, methods=["POST"]),
+        Route("/api/world/load", world_load, methods=["POST"]), Route("/api/world/random", world_random, methods=["POST"]),
+        Route("/api/rl/walk", rl_walk, methods=["POST"]), Route("/api/voice", voice, methods=["POST"]),
+        Route("/api/quit", quit_, methods=["POST"]),
     ]
     return Starlette(routes=routes)
 

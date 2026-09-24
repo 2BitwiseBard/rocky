@@ -42,6 +42,16 @@
   table { border-collapse:collapse; width:100%; font-size:12px; } td, th { padding:3px 4px; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; }
   .small { font-size:12px; color:var(--muted); }
   #curves { width:100%; border:1px solid var(--line); border-radius:6px; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; grid-template-rows: auto auto; overflow:auto; }
+    main.nosidebar { grid-template-columns: 1fr; }
+    #stage { min-height:40vh; }
+    #eye { width:140px; }
+    #console { height:120px; }
+    #side { border-left:none; border-top:1px solid var(--line); }
+    .grid3 { width:100%; } .grid3 button { padding:14px 0; font-size:18px; }
+    header h1 { font-size:14px; } .chip { font-size:11px; }
+  }
   kbd { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
 </style>
 </head>
@@ -59,7 +69,9 @@
   <button id="pause">⏸ pause</button>
   <label class="small">speed <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" style="width:90px"> <span id="speedv">1×</span></label>
   <button id="reset">reset</button>
+  <button id="record">⏺ record</button>
   <button id="toggle-side">☰ panels</button>
+  <button id="quit" title="stop the cockpit server">⏻ quit</button>
 </header>
 <main>
   <section id="view">
@@ -89,7 +101,7 @@
       <div class="row"><label>model</label><select id="model" style="flex:1"></select></div>
       <div class="row"><label>vision</label><select id="vmodel" style="flex:1"></select><button id="look">👁 look</button></div>
       <div id="chat"></div>
-      <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="chat-clear" title="forget the conversation">clear</button></div>
+      <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk (whisper-server)">🎤</button><button id="chat-clear" title="forget the conversation">clear</button></div>
       <div class="small" id="claude-note"></div>
     </div></details>
     <details open><summary>Teleop</summary><div class="body">
@@ -120,11 +132,15 @@
       <div class="row"><label>friction</label><input id="fric" type="range" min="0.2" max="2" step="0.05" value="1.2" style="width:120px"><span id="fricv">1.20</span></div>
       <div class="row"><label>slope</label><input id="slope" type="range" min="0" max="15" step="1" value="0" style="width:120px"><span id="slopev">0°</span><button id="cond-apply">apply</button></div>
       <div class="row"><label>terrain</label><button id="terrain-add">rough patch ahead</button><span class="small">objects are lidar-visible; the eye sees everything</span></div>
+      <div class="row"><label>random</label><input id="rseed" type="number" value="1" style="width:64px" title="seed"><input id="rn" type="number" value="8" style="width:56px" title="objects"><button id="random-go">random course</button></div>
+      <div class="row"><label>save as</label><input id="wname" placeholder="my course" style="width:120px"><button id="wsave">save</button><select id="wsaved" style="flex:1"></select><button id="wload">load</button></div>
       <pre id="spec" class="small" style="max-height:120px; overflow:auto; margin:0"></pre>
     </div></details>
     <details><summary>RL</summary><div class="body">
       <div class="small">Righter = the policy that runs while FALLEN. Pick one, then shove 40 N to compare on the same fall. Red marker = FALLEN, purple = the ramp.</div>
       <div class="row"><label>righter</label><select id="righter" style="flex:1"></select><button id="righter-go">load</button><button id="righter-off">off</button></div>
+      <div class="row"><label>walking</label><select id="walk" style="flex:1"><option value="off">analytic wave gait</option></select><button id="walk-go">use</button><span id="walk-note" class="small"></span></div>
+      <div class="small">Walking = the PPO residual gait policy (±0.25 rad on the analytic targets, 50 Hz) while NORMAL. Compare with `walk 45` on the same world; the analytic gait wins on clean floor (D031).</div>
       <div class="row"><label>stall s</label><input id="stall" type="range" min="1" max="10" step="0.5" value="3" style="width:100px"><span id="stallv">3</span>
         <label>deadline</label><input id="deadline" type="range" min="3" max="20" step="1" value="10" style="width:80px"><span id="deadlinev">10</span></div>
       <div id="rl-runs"></div>
@@ -137,6 +153,10 @@
       <div class="row"><label>step h</label><input id="ghs" type="range" min="10" max="60" step="2" value="32" style="width:120px"><span id="ghsv">32</span></div>
       <div class="row"><label>trip</label><input id="trip" type="range" min="0.8" max="4" step="0.1" value="1.8" style="width:120px"><span id="tripv">1.8</span></div>
       <div class="small">Sim-only until it goes into params.yaml (write keepers in NOTES_INBOX.md).</div>
+    </div></details>
+    <details><summary>Recordings</summary><div class="body">
+      <div class="small">⏺ in the header records the chase camera plus every command; stop writes clip.mp4, clip.gif and run.json (world + commands). Replay reloads that world and re-runs the commands.</div>
+      <div id="recs"></div>
     </div></details>
     <details><summary>Events</summary><div class="body"><div id="events" class="small" style="font-family:ui-monospace,monospace; white-space:pre-wrap"></div></div></details>
     <details><summary>Help</summary><div class="body"><pre id="help" class="small" style="white-space:pre-wrap; margin:0"></pre></div></details>
@@ -166,6 +186,8 @@ es.onmessage = e => {
   }
   $('#events').textContent = s.events.map(e => JSON.stringify(e)).join('\n');
   $('#pause').textContent = s.paused ? '▶ resume' : '⏸ pause';
+  $('#record').textContent = s.recording ? '■ stop rec' : '⏺ record'; $('#record').style.color = s.recording ? 'var(--bad)' : '';
+  $('#walk-note').textContent = s.walk;
 };
 function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
@@ -187,6 +209,39 @@ document.querySelectorAll('[data-shove]').forEach(b => b.onclick = () => { const
 $('#pause').onclick = () => post('/api/speed', {paused: $('#pause').textContent.includes('pause')});
 $('#speed').oninput = () => { $('#speedv').textContent = $('#speed').value + '×'; post('/api/speed', {speed: +$('#speed').value}); };
 $('#reset').onclick = () => post('/api/reset');
+$('#quit').onclick = () => { if (confirm('Stop the cockpit server?')) post('/api/quit'); };
+$('#record').onclick = async () => {
+  const on = $('#record').textContent.includes('stop');
+  if (!on) { post('/api/record', {action: 'start'}); return; }
+  const name = prompt('name this recording', 'rec_' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')) || '';
+  await post('/api/record', {action: 'stop', name}); loadRecs();
+};
+async function loadRecs() {
+  const r = await fetch('/api/recordings').then(x => x.json());
+  $('#recs').innerHTML = r.recordings.length ? r.recordings.map(m => `<div class="row" style="margin:4px 0"><b>${m.name}</b> <span class="small">${m.world} · ${m.duration_s}s · ${m.cmds.length} cmds</span>
+    <button data-replay="${m.name}">▶ replay</button> ${m.files.map(f => `<a href="/recordings/${m.name}/${f}" target="_blank" class="small">${f}</a>`).join(' ')}</div>`).join('') : '<span class="small">none yet</span>';
+  document.querySelectorAll('[data-replay]').forEach(b => b.onclick = () => post('/api/replay', {name: b.dataset.replay}));
+}
+loadRecs();
+// ---- voice (hold to talk)
+let mediaRec = null, chunks = [];
+$('#mic').onmousedown = $('#mic').ontouchstart = async e => {
+  e.preventDefault();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    chunks = []; mediaRec = new MediaRecorder(stream); mediaRec.ondataavailable = ev => chunks.push(ev.data);
+    mediaRec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const fd = new FormData(); fd.append('audio', new Blob(chunks, {type: mediaRec.mimeType}), 'in.webm');
+      addChat('t', 'transcribing…');
+      const r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json());
+      $('#chat').lastChild.remove();
+      if (r.ok && r.text) { $('#chat-in').value = r.text; $('#chat-send').click(); } else addChat('t', 'voice: ' + (r.error || 'nothing heard'));
+    };
+    mediaRec.start(); $('#mic').style.color = 'var(--bad)';
+  } catch (err) { addChat('t', 'mic: ' + err.message); }
+};
+$('#mic').onmouseup = $('#mic').onmouseleave = $('#mic').ontouchend = () => { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); $('#mic').style.color = ''; };
 $('#toggle-side').onclick = () => document.querySelector('main').classList.toggle('nosidebar');
 $('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === '0.15' ? '1' : '0.15';
 for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
@@ -237,12 +292,19 @@ $('#obj-clear').onclick = async () => { await post('/api/world/add', {clear: tru
 $('#fric').oninput = () => $('#fricv').textContent = (+$('#fric').value).toFixed(2);
 $('#slope').oninput = () => $('#slopev').textContent = $('#slope').value + '°';
 $('#cond-apply').onclick = async () => { await post('/api/world/add', {friction: +$('#fric').value, gravity_tilt_deg: +$('#slope').value}); loadWorld(); };
+$('#random-go').onclick = async () => { $('#world-msg').textContent = 'building…'; const r = await post('/api/world/random', {seed: +$('#rseed').value, n: +$('#rn').value}); $('#world-msg').textContent = 'loaded ' + r.name; post('/api/camera', {view: 'wide'}); loadWorld(); };
+async function loadSaved() { const r = await fetch('/api/world/saved').then(x => x.json()); $('#wsaved').innerHTML = r.saved.map(n => `<option>${n}</option>`).join('') || '<option value="">(none saved)</option>'; }
+loadSaved();
+$('#wsave').onclick = async () => { const r = await post('/api/world/save', {name: $('#wname').value || 'world'}); $('#world-msg').textContent = 'saved ' + r.name; loadSaved(); };
+$('#wload').onclick = async () => { if (!$('#wsaved').value) return; await post('/api/world/load', {name: $('#wsaved').value}); $('#world-msg').textContent = 'loaded ' + $('#wsaved').value; post('/api/camera', {view: 'wide'}); loadWorld(); };
 $('#terrain-add').onclick = async () => { await post('/api/world/add', {terrain: {kind: 'rough', amp_m: 0.02, size_m: 1.6, pos: [1.3, 0], seed: 1}}); loadWorld(); };
 
 // ---- RL
 async function loadRL() {
   const r = await fetch('/api/rl/runs').then(x => x.json());
   const rec = r.runs.filter(x => x.env === 'recover' && x.ckpt);
+  const walk = r.runs.filter(x => x.env === 'gait' && x.ckpt);
+  $('#walk').innerHTML = '<option value="off">analytic wave gait</option>' + walk.map(x => `<option>${x.run}</option>`).join('');
   $('#righter').innerHTML = rec.map(x => `<option>${x.run}</option>`).join('');
   if (rec.some(x => x.run === 'recover1')) $('#righter').value = 'recover1';
   $('#rl-runs').innerHTML = '<table><tr><th>run</th><th>env</th><th>rew</th><th>rate</th><th>steps</th><th>ret</th><th>ent</th><th>eval</th></tr>' +
@@ -251,6 +313,7 @@ async function loadRL() {
 loadRL();
 $('#righter-go').onclick = () => post('/api/rl/righter', {name: $('#righter').value});
 $('#righter-off').onclick = () => post('/api/rl/righter', {name: 'off'});
+$('#walk-go').onclick = () => post('/api/rl/walk', {name: $('#walk').value});
 $('#stall').oninput = () => { $('#stallv').textContent = $('#stall').value; post('/api/cmd', {line: 'set reflex.stall_s ' + $('#stall').value}); };
 $('#deadline').oninput = () => { $('#deadlinev').textContent = $('#deadline').value; post('/api/cmd', {line: 'set reflex.fallen_max_s ' + $('#deadline').value}); };
 for (const [id, p] of [['gT','gait.T'],['gh','gait.h'],['ghs','gait.hstep'],['trip','reflex.trip']])

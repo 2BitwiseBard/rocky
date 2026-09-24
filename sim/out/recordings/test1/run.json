@@ -1,0 +1,24 @@
+{
+ "name": "test1",
+ "world": "flat",
+ "spec": {
+  "base": "flat"
+ },
+ "t0": 51.49800000001697,
+ "duration_s": 4.52,
+ "cmds": [
+  [
+   0.0,
+   "walk 45"
+  ],
+  [
+   2.002,
+   "tool say {\"word\": \"greeting\"}"
+  ],
+  [
+   2.004,
+   "stop"
+  ]
+ ],
+ "frames": 68
+}

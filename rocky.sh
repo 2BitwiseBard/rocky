@@ -6,7 +6,10 @@
 #
 #   rocky.sh play [--cliff]        live MuJoCo window + REPL + arrow-key/SPACE teleop (terminal)
   rocky.sh cockpit [--world W]   browser cockpit at http://127.0.0.1:8765 (cameras, chat
-                                 with talk/local/Claude brains, vision, world editor, RL)
+                                 with talk/local/Claude brains, vision, world editor, RL);
+                                 Ctrl-C, the page's quit button or `cockpit-stop` end it;
+                                 --host 0.0.0.0 to reach it from the phone over the tailnet
+  rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background)
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it
@@ -46,7 +49,11 @@ case "$cmd" in
     # shellcheck disable=SC1090
     source "$HOME/.config/environment.d/local-ai.conf" 2>/dev/null || true
     cd "$ROCKY_REPO"
+    for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p"; done   # one cockpit at a time
     LOCAL_AI_KEY="${LOCAL_AI_KEY:-}" MUJOCO_GL=egl exec "$PY" sim/cockpit.py "$@" ;;
+
+  cockpit-stop)
+    for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p" && echo "stopped $p"; done ;;
 
   chat)
     cd "$ROCKY_REPO" && exec claude "$@" ;;

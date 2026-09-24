@@ -196,6 +196,42 @@ everything the terminal playground has and the parts that need a screen:
 - **Gait tuning** sliders, an **Events** feed and a **Help** panel; every
   section collapses, the sidebar toggles, speed 0.25–4× and pause.
 
+- **Recordings**: ⏺ in the header records the chase camera and every
+  command (console, teleop, tool calls from any brain); stop writes
+  `clip.mp4`, `clip.gif` and `run.json` (world spec + timed commands) under
+  `sim/out/recordings/NAME/`; ▶ replay reloads that world and re-runs the
+  commands on the live sim.
+- **Worlds on disk**: save the current spec as `sim/worlds/NAME.json`,
+  load it back, or generate a seeded **random course** (obstacles in an
+  annulus around a clear spawn) for curriculum runs.
+- **Walking policy**: pick a gait checkpoint (`robust_fwd2`,
+  `cmd_sample3`) in the RL panel and the PPO residual (±0.25 rad at 50 Hz,
+  `rocky_env.PebbleEnv`'s contract) rides on the analytic gait while the
+  reflex state is NORMAL; "analytic wave gait" switches it off.
+- **Voice**: hold 🎤 in the chat to record; the clip goes through ffmpeg to
+  `whisper-server` (:8082) and the text is sent to the current brain.
+- **Stop it**: Ctrl-C in its terminal, the page's ⏻ quit button, or
+  `./rocky.sh cockpit-stop`; `./rocky.sh cockpit` restarts a running one.
+  `--host 0.0.0.0` serves it on the tailnet for a phone (the layout stacks
+  under 900 px).
+
+**Obstacles, rough ground and voids (D050).** The cliff detector works
+on contact timing, so on an obstacle course or rubble every bridged foot,
+bump and blocked swing read as a missed footfall and a goto came back
+`stopped: cliff`. The fix is what a robot with a foot switch and no depth
+sensor actually does: **feel for the floor**. In the playground and the
+cockpit a foot the gait believes is planted but that reports no contact
+is lowered at 120 mm/s, up to 30 mm, until it finds ground, and relaxes
+as soon as contact is back (`Playground._probe`). A void is a foot that
+ran out of probe and still touched nothing (`CliffDetector.update(...,
+probed_out=)`); everything else is terrain. Measured on 2026-09-23 from
+the origin: cliff world → `cliff` at x = 0.15 (edge at 0.35); rough
+terrain, rubble field and the 4 × 15 mm stairs → `arrived`; the 6 cm box
+→ `stuck` (no 2 cm of progress for 6 s ends a goto as `stuck`; 40 s as
+`timeout`). The open-loop gait still cannot climb a 6 cm box. The
+harness's in-process sim backend and the `run_cliff` experiments keep the
+timing-only detector, so their recorded numbers stand.
+
 The state feed is server-sent events at 10 Hz; the cameras are MJPEG
 streams, so nothing to install beyond the `sim` extra (`starlette` and
 `uvicorn` come with `mcp`). The HTTP API under `/api/` is what the MCP
