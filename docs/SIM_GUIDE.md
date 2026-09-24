@@ -75,17 +75,25 @@ One process runs physics with the real gait and reflex supervisor; you
 type commands at the `pebble>` prompt while it runs, and the window
 accepts keys.
 
-**Keyboard teleop (window focused).** Taps nudge the velocity command;
-releases are not reported by the viewer, so the command persists until you
-change it.
+**Keyboard teleop (in the terminal, at an empty prompt).** Taps nudge the
+velocity command; there are no key-release events, so the command
+persists until you change it. Type commands as usual; the single keys
+only fire when the line is empty.
 
 | key | effect |
 |---|---|
-| `W` / `S` (or ↑ / ↓) | forward / backward velocity ±15 mm/s per tap (max 60) |
-| `A` / `D` (or ← / →) | strafe left / right ±15 mm/s per tap |
-| `Q` / `E` | turn left / right ±0.12 rad/s per tap (max 0.5) |
+| `↑` / `↓` (or `Shift+W` / `Shift+S`) | forward / backward velocity ±15 mm/s per tap (max 60) |
+| `←` / `→` (or `Shift+A` / `Shift+D`) | strafe left / right ±15 mm/s per tap |
+| `Shift+Q` / `Shift+E` | turn left / right ±0.12 rad/s per tap (max 0.5) |
 | `SPACE` | safe-stop: zero the command and run PLANT → BRACE → planted idle (D034) |
-| `G` | wave hello (from a standstill) |
+| `Shift+G` | wave hello (from a standstill) |
+
+In the viewer window only the **arrow keys** drive. Every letter there is
+one of MuJoCo's own render toggles (W wireframe, S shadows, A auto-connect,
+D static bodies, G fog, Q camera frames, E equality constraints) and SPACE
+pauses the viewer, and those bindings fire alongside ours, which is what
+"WASD changes the lighting" was (D048). Mouse in the window rotates and
+zooms the camera; Backspace there resets the physics state, so avoid it.
 
 **REPL commands** (also usable headless via `--script "a; b; c"`):
 
@@ -95,10 +103,13 @@ change it.
 | `stop` | the D034 safe-stop |
 | `gesture NAME` | `wave bow look_around shake sit turn_in_place sidestep jazz_hands fist_bump beckon` (from planted idle) |
 | `say WORD` | play a chord-speak sample (`aplay`/`ffplay`) or print it |
-| `set PARAM VALUE` | live-tune `gait.T gait.h gait.R0 gait.duty gait.hstep reflex.trip`; phase-continuous, so feet don't teleport |
+| `set PARAM VALUE` | live-tune `gait.T gait.h gait.R0 gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s`; phase-continuous, so feet don't teleport |
 | `show` | current gait params, reflex state, pose, sim time |
 | `push FX FY [DUR]` | shove the shell rim: peak N, N, half-sine over DUR s (default 0.4); it prints the impulse in N·s and bodyweights. `push 20 0` sways and braces; `push 40 0` tips it over and the righter takes it from there |
 | `record on` / `record off` | capture an offscreen clip to `sim/playground_clip.mp4` |
+| `help` / `help rl` | the command list and teleop keys / the RL hooks below |
+| `rl` | every checkpoint in `sim/runs/`: env, reward version, rate limit, steps, last return, length, entropy, recorded eval |
+| `righter NAME` / `righter off` | hot-swap the self-righting policy (`runs/NAME/latest.pt`) or run with the analytic stall/deadline ramp only |
 | `wait S` | (scripts) let S sim-seconds pass |
 | `quit` | exit |
 
@@ -129,6 +140,19 @@ When a shove does tip it, the playground now feeds tilt and height to the
 supervisor and installs the learned righter (torch + a checkpoint in
 `sim/runs/`; it says so at start-up), so a fall ends in FALLEN → RIGHTED →
 NORMAL instead of an upside-down standing pose.
+
+**HUD (viewer window).** A marker above the torso shows the reflex state
+(green NORMAL, yellow PLANT, orange BRACE, blue RECOVER, red FALLEN,
+purple RIGHTED) and an arrow shows the velocity command (length = 2 s of
+travel; a short tangential arrow for turn rate).
+
+**Watching the RL in the loop.** `rl` lists the checkpoints with their
+recorded scores; `righter recover5_v3_warm` swaps the policy that runs
+when the robot is FALLEN; `push 40 0` tips it over so you can compare
+righters on the same fall (the HUD turns red, then purple for the ramp);
+`set reflex.stall_s 2` changes how long a stalled policy gets before the
+analytic ramp takes over. `python sim/rl_dashboard.py` draws the training
+curves of every run into `sim/out/rl_curves.png`.
 
 **Keepers.** Anything you tune with `set` is sim-only until it goes into
 `params.yaml` and the tree is regenerated; write keepers in

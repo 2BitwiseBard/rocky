@@ -65,7 +65,7 @@ python3 -m venv .venv && . .venv/bin/activate        # or: uv venv && . .venv/bi
 pip install -e ".[sim,harness,dev]"                  # + ".[rl]" for torch, ".[cad]" for build123d
 python -m pytest driver/tests gait harness -m "not slow" -q     # 89 passed (+3 in sim/tests after build_mjcf)
 MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, headless
-MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + WASD teleop
+MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + arrow-key teleop
 ```
 
 `./rocky.sh help` lists the laptop shortcuts (they assume `.venv` in the

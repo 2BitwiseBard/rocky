@@ -4,7 +4,7 @@
 # speakers on. Everything it calls is documented in docs/SIM_GUIDE.md and
 # docs/RL_GUIDE.md.
 #
-#   rocky.sh play [--cliff]        live MuJoCo window + REPL + WASD/QE/SPACE teleop
+#   rocky.sh play [--cliff]        live MuJoCo window + REPL + arrow-key/SPACE teleop (terminal)
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it

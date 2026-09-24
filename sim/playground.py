@@ -14,16 +14,28 @@ Commands (REPL or --script, ';'-separated):
     stop                safe-stop: PLANT -> BRACE -> planted idle (D034)
     gesture NAME        jazz_hands | fist_bump | beckon | wave | bow | look_around |
                         shake | sit | turn_in_place | sidestep (from planted idle)
-    (with --viewer)     KEYBOARD TELEOP in the window: W/S/A/D nudge velocity,
-                        Q/E turn, SPACE = safe-stop, G = wave
+    TELEOP (keys)       in the TERMINAL, at an empty prompt: arrow keys or
+                        Shift+W/S/A/D nudge velocity, Shift+Q/E turn,
+                        SPACE = safe-stop, Shift+G = wave. In the viewer
+                        window only the ARROW keys drive — every letter
+                        there is one of MuJoCo's own render toggles
+                        (W wireframe, S shadows, A auto-connect, D static
+                        bodies, G fog, Q camera, E equality) and SPACE
+                        pauses the viewer: use the terminal (D048).
     say WORD            chord-speak word (plays the v2 sample if a player
                         exists: aplay/afplay/ffplay; else prints)
     set PARAM VALUE     live-tune: gait.T gait.h gait.R0 gait.duty
-                        gait.hstep reflex.trip  (phase-continuous: changing
+                        gait.hstep reflex.trip reflex.stall_s
+                        reflex.fallen_max_s  (phase-continuous: changing
                         T rescales the clock so feet don't teleport)
     show                current params + robot state
     push FX FY [DUR]    shove the shell rim: peak N, N, half-sine over DUR s (0.4)
     record on|off       capture an offscreen mp4 clip (playground_clip.mp4)
+    help [rl]           this list (help rl: the RL hooks below)
+    rl                  the RL runs table: every checkpoint, its reward
+                        version, rate limit, steps, last return, eval note
+    righter NAME|off    hot-swap the self-righting policy (runs/NAME) or
+                        run without one (stall/deadline ramp only)
     wait S              (scripts) let S sim-seconds pass
     quit                exit
 
@@ -111,14 +123,14 @@ class Playground:
         self._k = 0
         self.alive = True
 
-    def _install_righter(self):
+    def _install_righter(self, ckpt=None):
         """D048: the learned righter rides along when torch + a checkpoint
         are available, so a tip-over in the playground ends in a recovery
         instead of an upside-down standing pose. Optional: without torch the
-        supervisor still declares FALLEN and uses its deadline ramp."""
+        supervisor still declares FALLEN and uses its stall/deadline ramp."""
         try:
             from righter import PolicyRighter, default_ckpt
-            ckpt = default_ckpt()
+            ckpt = ckpt or default_ckpt()
             if ckpt is None:
                 return "no righter (no checkpoint in sim/runs/)"
             fids = [self.model.geom(f"foot{i}").id for i in range(N_LEGS)]
@@ -173,45 +185,97 @@ class Playground:
             self._renderer.update_scene(self.data, self._cam)
             self._frames.append(self._renderer.render())
 
+    # ------------------------------------------------------------ HUD
+    STATE_RGBA = {"NORMAL": (0.2, 0.85, 0.3, 0.9), "PLANT": (0.95, 0.8, 0.2, 0.9),
+                  "BRACE": (0.95, 0.55, 0.1, 0.9), "RECOVER": (0.3, 0.7, 0.95, 0.9),
+                  "FALLEN": (0.9, 0.15, 0.15, 0.9), "RIGHTED": (0.6, 0.3, 0.9, 0.9)}
+
+    def draw_hud(self, scn):
+        """D048: an in-window HUD in the viewer's user scene — a marker
+        above the torso coloured by the reflex state and an arrow for the
+        velocity command (length = 2 s of travel; a curved tick for turn).
+        scn: viewer.user_scn (or any MjvScene with spare geoms)."""
+        scn.ngeom = 0
+        p = self.data.xpos[self.torso]
+        R = self.data.xmat[self.torso].reshape(3, 3)
+        rgba = self.STATE_RGBA.get(self.sup.state, (1, 1, 1, 0.9))
+        top = p + np.array([0, 0, 0.13])
+        if scn.ngeom < scn.maxgeom:
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_SPHERE, np.array([0.012, 0, 0]),
+                                top, np.eye(3).flatten(), np.array(rgba, dtype=np.float32))
+            scn.ngeom += 1
+        with self.lock:
+            v = self.cmd_v.copy()
+        if (abs(v[0]) + abs(v[1])) > 0 and scn.ngeom < scn.maxgeom:
+            d = R @ np.array([v[0], v[1], 0.0]) / 1000.0 * 2.0
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_ARROW, np.zeros(3), np.zeros(3),
+                                np.eye(3).flatten(), np.array(rgba, dtype=np.float32))
+            mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_ARROW, 0.006, top, top + d)
+            scn.ngeom += 1
+        if abs(v[2]) > 0 and scn.ngeom < scn.maxgeom:
+            a = np.sign(v[2]) * min(abs(v[2]) / 0.5, 1.0) * np.pi / 2
+            r0 = R @ np.array([0.0, 0.10, 0.0])
+            r1 = R @ np.array([-0.10 * np.sin(a), 0.10 * np.cos(a), 0.0])
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_ARROW, np.zeros(3), np.zeros(3),
+                                np.eye(3).flatten(), np.array(rgba, dtype=np.float32))
+            mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_ARROW, 0.004, top + r0, top + r1)
+            scn.ngeom += 1
+
     # ------------------------------------------------------------ teleop
-    # Keyboard drive (session 8c): the MuJoCo viewer delivers key PRESSES
-    # (no releases), so teleop is incremental: taps nudge the velocity
-    # command, space is the D034 safe-stop. Works alongside the REPL.
-    TELEOP_KEYS = {
-        87: ("vx", +15.0), 265: ("vx", +15.0),   # W / Up
-        83: ("vx", -15.0), 264: ("vx", -15.0),   # S / Down
-        65: ("vy", +15.0), 263: ("vy", +15.0),   # A / Left  (+y = leftward)
-        68: ("vy", -15.0), 262: ("vy", -15.0),   # D / Right
-        81: ("wz", +0.12),                        # Q  turn left
-        69: ("wz", -0.12),                        # E  turn right
+    # Keyboard drive (session 8c, reworked D048): taps nudge the velocity
+    # command (no key-release events anywhere, so teleop is incremental).
+    # Keys arrive from two places: the TERMINAL reader (single keys at an
+    # empty prompt: arrows, Shift+WASD/QE, SPACE, Shift+G) and the viewer
+    # window, where ONLY the arrow keys are ours — the MuJoCo viewer binds
+    # every letter to a render toggle and SPACE to pause, and its bindings
+    # fire alongside key_callback, which is what "W changes the lighting"
+    # was (W = wireframe, S = shadows, A = auto-connect, D = static bodies).
+    TELEOP = {
+        "up": ("vx", +15.0), "down": ("vx", -15.0),
+        "left": ("vy", +15.0), "right": ("vy", -15.0),    # +y = leftward
+        "W": ("vx", +15.0), "S": ("vx", -15.0),
+        "A": ("vy", +15.0), "D": ("vy", -15.0),
+        "Q": ("wz", +0.12), "E": ("wz", -0.12),
     }
+    GLFW_ARROWS = {265: "up", 264: "down", 263: "left", 262: "right"}
     V_MAX = np.array([60.0, 60.0, 0.5])
 
-    def on_key(self, keycode):
-        if keycode == 32:                          # SPACE: stop everything
+    def teleop(self, key):
+        """key: 'up'/'down'/'left'/'right', 'W'.. 'E', ' ' (stop), 'G' (wave).
+        Returns a one-line status or None if the key is not a teleop key."""
+        if key == " ":                             # SPACE: stop everything
             with self.lock:
                 self.cmd_v[:] = 0
             self.sup.request_stop()
-            print("\n[teleop] SAFE-STOP", flush=True)
-            return
-        if keycode in (71,):                       # G: quick wave hello
+            return "[teleop] SAFE-STOP"
+        if key == "G":                             # quick wave hello
             if "wave" in GESTURES and np.abs(self.cmd_v).sum() == 0:
                 fn, total = GESTURES["wave"]
                 with self.lock:
                     self.gesture = (fn, total, self.t)
-                print("\n[teleop] wave", flush=True)
-            return
-        hit = self.TELEOP_KEYS.get(int(keycode))
+                return "[teleop] wave"
+            return "[teleop] wave needs a standstill (SPACE first)"
+        hit = self.TELEOP.get(key)
         if hit is None:
-            return
+            return None
         axis, dv = hit
         i = {"vx": 0, "vy": 1, "wz": 2}[axis]
         with self.lock:
             self.cmd_v[i] = float(np.clip(self.cmd_v[i] + dv,
                                           -self.V_MAX[i], self.V_MAX[i]))
             v = self.cmd_v.copy()
-        print(f"\n[teleop] v=({v[0]:.0f}, {v[1]:.0f}) mm/s  wz={v[2]:.2f}",
-              flush=True)
+        return f"[teleop] v=({v[0]:.0f}, {v[1]:.0f}) mm/s  wz={v[2]:.2f}"
+
+    def on_key(self, keycode):
+        """Viewer window key_callback: arrows only (see TELEOP note)."""
+        name = self.GLFW_ARROWS.get(int(keycode))
+        if name is not None:
+            r = self.teleop(name)
+            if r:
+                print("\n" + r, flush=True)
 
     # ----------------------------------------------------------- commands
     def do(self, line):
@@ -223,6 +287,28 @@ class Playground:
         if c == "quit":
             self.alive = False
             return ""
+        if c in ("help", "?"):
+            if args and args[0] == "rl":
+                return HELP_RL
+            return __doc__.split("Commands")[1].split("HONESTY")[0].rstrip() + "\n" + TELEOP_HELP
+        if c == "rl":
+            from rl_dashboard import summarize_runs, table
+            return table(summarize_runs()) + "\n(`righter NAME` loads one; " \
+                   "python rl_dashboard.py draws the curves)"
+        if c == "righter":
+            if not args:
+                return f"righter: {self.righter_note}  (righter NAME | off)"
+            if args[0] == "off":
+                self.sup.set_righter(None)
+                self.righter_note = "no righter (stall/deadline ramp only)"
+                return self.righter_note
+            path = os.path.join(HERE, "runs", args[0], "latest.pt")
+            if not os.path.exists(path):
+                have = sorted(d for d in os.listdir(os.path.join(HERE, "runs"))
+                              if os.path.exists(os.path.join(HERE, "runs", d, "latest.pt")))
+                return f"no runs/{args[0]}/latest.pt — have: {', '.join(have)}"
+            self.righter_note = self._install_righter(path)
+            return self.righter_note
         if c == "walk":
             v = [float(a) for a in args[:3]] + [0.0] * (3 - len(args[:3]))
             with self.lock:
@@ -261,7 +347,7 @@ class Playground:
         if c == "set":
             if len(args) != 2:
                 return "set PARAM VALUE — params: gait.T gait.h gait.R0 "\
-                       "gait.duty gait.hstep reflex.trip"
+                       "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s"
             p, val = args[0], float(args[1])
             g = self.gait
             with self.lock:
@@ -280,6 +366,10 @@ class Playground:
                                         -g.h * np.ones(N_LEGS)], axis=1)
                 elif p == "reflex.trip":
                     self.sup.gyro_trip = val
+                elif p == "reflex.stall_s":
+                    self.sup.stall_s = val
+                elif p == "reflex.fallen_max_s":
+                    self.sup.fallen_max_s = val
                 else:
                     return f"unknown param {p}"
             return f"{p} = {val}  (sim-only until params.yaml + regen — "\
@@ -337,29 +427,107 @@ def run_headless(pg, script):
     print("clean exit, no NaNs")
 
 
-def run_interactive(pg, use_viewer):
-    q = queue.Queue()
+HELP_RL = """RL hooks in the playground (D048):
+  rl                  table of runs/ checkpoints (reward version, rate limit, steps,
+                      last return/length/entropy, recorded eval)
+  righter NAME        hot-swap the self-righting policy, e.g. righter recover5_v3_warm
+  righter off         no policy: FALLEN -> stall/deadline ramp only (the analytic path)
+  push 40 0           tip it over and watch FALLEN -> RIGHTED -> NORMAL with that righter
+  set reflex.stall_s 2     ramp sooner/later when the righter makes no progress
+  set reflex.fallen_max_s 10   the hard deadline
+  HUD marker above the torso: green NORMAL, yellow PLANT, orange BRACE, blue RECOVER,
+  red FALLEN, purple RIGHTED; the arrow is the velocity command.
+Outside: python rl_dashboard.py (curves), audit_righter.py CKPT (jitter numbers),
+eval_recover.py CKPT (20-fall eval), docs/RL_GUIDE.md (train/eval/resume)."""
 
-    def reader():
+TELEOP_HELP = ("teleop (terminal, empty prompt): arrows or Shift+W/S/A/D drive, "
+               "Shift+Q/E turn, SPACE safe-stop, Shift+G wave; type commands as usual. "
+               "Viewer window: arrows only (letters there are MuJoCo's render toggles).")
+
+
+def _terminal_reader(pg, q):
+    """Raw-key terminal reader: single teleop keys act immediately when the
+    line is empty; anything else is line-edited (backspace, Enter) into a
+    REPL command. Falls back to input() when stdin is not a tty."""
+    if not sys.stdin.isatty():
         while pg.alive:
             try:
                 q.put(input("pebble> "))
             except EOFError:
                 q.put("quit")
                 return
+        return
+    import termios
+    import tty
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    tty.setcbreak(fd)
+    out = sys.stdout
+    buf = ""
 
-    threading.Thread(target=reader, daemon=True).start()
+    def prompt():
+        out.write("pebble> " + buf)
+        out.flush()
+
+    prompt()
+    try:
+        while pg.alive:
+            ch = sys.stdin.read(1)
+            if not ch:
+                q.put("quit")
+                return
+            if ch == "\x1b":                          # escape sequence: arrows
+                seq = sys.stdin.read(2)
+                name = {"[A": "up", "[B": "down", "[D": "left", "[C": "right"}.get(seq)
+                if name and not buf:
+                    r = pg.teleop(name)
+                    out.write("\r\033[K" + (r or "") + "\n")
+                    prompt()
+                continue
+            if not buf and (ch in pg.TELEOP or ch in (" ", "G")):
+                r = pg.teleop(ch)
+                out.write("\r\033[K" + (r or "") + "\n")
+                prompt()
+                continue
+            if ch in ("\n", "\r"):
+                out.write("\n")
+                q.put(buf)
+                buf = ""
+                prompt()
+            elif ch in ("\x7f", "\b"):
+                if buf:
+                    buf = buf[:-1]
+                    out.write("\b \b")
+                    out.flush()
+            elif ch in ("\x03", "\x04"):               # Ctrl-C / Ctrl-D
+                out.write("\n")
+                q.put("quit")
+                return
+            else:
+                buf += ch
+                out.write(ch)
+                out.flush()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def run_interactive(pg, use_viewer):
+    q = queue.Queue()
+    threading.Thread(target=_terminal_reader, args=(pg, q), daemon=True).start()
     viewer_ctx = None
     if use_viewer:
         import mujoco.viewer
         viewer_ctx = mujoco.viewer.launch_passive(pg.model, pg.data,
                                                   key_callback=pg.on_key)
-        print("teleop: W/S fwd-back  A/D strafe  Q/E turn  SPACE safe-stop  "
-              "G wave  (taps nudge the command; REPL still works)")
+    print(TELEOP_HELP)
+    print("type `help` for the command list, `help rl` for the RL hooks", flush=True)
     t_wall = time.monotonic()
     while pg.alive:
         pg.step()
         if viewer_ctx is not None:
+            if pg._k % 8 == 0:                    # HUD at ~60 Hz is plenty
+                with viewer_ctx.lock():
+                    pg.draw_hud(viewer_ctx.user_scn)
             viewer_ctx.sync()
             if not viewer_ctx.is_running():
                 break
@@ -376,7 +544,7 @@ def run_interactive(pg, use_viewer):
         try:
             r = pg.do(q.get_nowait())
             if r:
-                print(r)
+                print("\r\033[K" + r + "\npebble> ", end="", flush=True)
         except queue.Empty:
             pass
     if viewer_ctx is not None:

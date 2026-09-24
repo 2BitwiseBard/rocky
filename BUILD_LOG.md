@@ -50,6 +50,18 @@ GIF "fly and jitter". Both true, neither a physics bug.
   dynamics. Two runs: `recover5_v3` (scratch, 3 M, 8 envs) and
   `recover5_v3_warm` (from recover1, +3 M, 4 envs), both `--log-std-max
   -0.5`, CPU, ~3.1k and ~1.7k sps. **Both negative on the handoff**: scratch 2/20, warm 4/20 vs recover1's 7/20 (re-measured today on the current model with the old and the new evaluator — the 10/20 in yesterday's table predates the D047 `pebble.xml` regen). Warm is the smoothest righter yet (58 % pinned, 6.5 reversals/s, 2.1°/tick vs 73 %, 9.8/s, 4.4°) — the trade exists, not yet won at this budget; recover1 stays shipped (B30 lists the next moves). What actually rights the robot from its BACK — where the rim shove lands it every time — is the planted-stance ramp, 5/5, not any policy (0/5 by handoff); so the supervisor now ramps after 3 s without a 10° improvement in tilt (stall rule, `right_reason` = handoff/stall/deadline, 2 tests) and the demo's righting takes ~5–6 s instead of the 10 s deadline. README GIF regenerated from `run_reflex_fallen.py --video` (seed 0: shove at 3.0 s, FALLEN 4.4, RIGHTED 9.2 by stall, walks 0.54 m).
+- **Teleop moved to the terminal.** WASD in the viewer window "changed the
+  lighting": the MuJoCo viewer binds every letter to a render toggle (W
+  wireframe, S shadows, A auto-connect, D static bodies, G fog, Q camera,
+  E equality) and SPACE to pause, and those fire alongside `key_callback`.
+  Now: arrows / Shift+WASD / Shift+QE / SPACE / Shift+G as single keys at
+  an empty `pebble>` prompt (raw-tty reader with line editing), arrows only
+  in the window. Plus `help` / `help rl`, `rl` (checkpoint table from the
+  new `sim/rl_dashboard.py`, which also draws `out/rl_curves.png`),
+  `righter NAME|off` hot-swap, `set reflex.stall_s|fallen_max_s`, and a
+  HUD in the viewer's user scene (state-coloured marker + command arrow).
+- Drove it over MCP from this session: `gesture wave` (5.4 s, rendered in
+  physics), `goto 0.3 0` → arrived at x = 0.274.
 - Tests: 89 fast + 3 sim (`sim/tests/test_shove.py`, in CI after the MJCF
   build) + the airborne-hold reflex test. Docs: SIM_GUIDE (what a shove is,
   push command), RL_GUIDE (v3, the audit), D048, B29/B30.

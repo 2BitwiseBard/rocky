@@ -63,7 +63,10 @@ analytic stack; both are gated by it.
 | `train_log.jsonl` | one JSON line per update: `step`, `ep_return`, `ep_len`, policy/value/entropy losses, `kl`, `kl_stop`, `lr`, `sps` |
 | `train.out` | stdout, if you redirected it (the launcher does) |
 
-Reading the log: `ep_return` rising is good; `ep_len` on the recover env
+Reading the log: `python sim/rl_dashboard.py` prints a table of every
+run (env, reward, rate limit, steps, last return/length/entropy, recorded
+eval) and draws the curves to `sim/out/rl_curves.png`; the playground's
+`rl` command prints the same table live. `ep_return` rising is good; `ep_len` on the recover env
 dropping below the 300-step ceiling means episodes are ending in success;
 `ent` (entropy) climbing without bound is the D045 failure (sigma inflating
 into bang-bang control) — cap it with `--log-std-max -0.5`.
@@ -159,8 +162,8 @@ action parameterisation (see the ladder).
 
 From `docs/RL_TOUR.md` §8, in order, each teaching one thing:
 
-1. Evaluate `robust_fwd2` with `--compare-zero`; read the log with
-   `plot_results.py`.
+1. Evaluate `robust_fwd2` with `--compare-zero`; read the curves with
+   `rl_dashboard.py`.
 2. Change one reward weight in `rocky_env.py`, retrain the smoke config,
    watch what moves.
 3. Turn DR off (`--no-randomize`) and compare the eval on the clean task —
@@ -180,7 +183,16 @@ From `docs/RL_TOUR.md` §8, in order, each teaching one thing:
    or the v3 cost with a 10 M budget. The bar is recover1's 7/20 with the
    warm run's smoothness numbers.
 
-## 6. Gotchas
+## 6. In the playground
+
+`./rocky.sh play`, then `help rl`: `rl` lists the checkpoints, `righter
+NAME` hot-swaps the self-righting policy (or `righter off` for the
+analytic ramp alone), `push 40 0` tips the robot so two righters can be
+compared on the same fall, and `set reflex.stall_s` / `reflex.fallen_max_s`
+tune the handoff. The HUD marker turns red in FALLEN and purple during
+the ramp.
+
+## 7. Gotchas
 
 - `MUJOCO_GL` must be set for anything that renders offscreen (`egl` on a
   Linux box with a GPU, `osmesa` without one).
