@@ -69,8 +69,10 @@
     #console { height:120px; }
     #side { border-left:none; border-top:1px solid var(--line); }
     .grid3 { width:100%; } .grid3 button { padding:14px 0; font-size:18px; }
+    #mic { min-width:64px; min-height:48px; font-size:20px; }
     header h1 { font-size:14px; } .chip { font-size:11px; }
   }
+  #mic { touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   kbd { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
 </style>
 </head>
@@ -500,29 +502,52 @@ $('#chat-send').onclick = () => {
 $('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
 $('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; };
 $('#look').onclick = async () => { const w = addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); w.remove(); addChat('b', r.ok ? `eye (${r.model}${r.fallback ? ', fallback' : ''}): ${r.description}` : 'look failed: ' + r.error); };
-// voice: hold to talk -> transcript in the box; auto-send only when no motion gate applies
-let mediaRec = null, chunks = [];
-$('#mic').onmousedown = $('#mic').ontouchstart = async e => {
-  e.preventDefault();
+// voice: hold to talk, or tap to start / tap to stop (phones lose a long press to the
+// callout, a scroll or a synthetic mouse event — pointer capture + toggle mode survive that).
+let mediaRec = null, chunks = [], recT0 = 0, recTimer = null, recStream = null;
+const micBtn = $('#mic');
+micBtn.oncontextmenu = e => e.preventDefault();
+function recNote(t) { const n = $('#voice-note'); if (n) n.textContent = t; }
+async function recStart() {
+  if (mediaRec && mediaRec.state === 'recording') return;
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-    chunks = []; mediaRec = new MediaRecorder(stream); mediaRec.ondataavailable = ev => chunks.push(ev.data);
+    recStream = await navigator.mediaDevices.getUserMedia({audio: true});
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', ''].find(m => !m || (window.MediaRecorder && MediaRecorder.isTypeSupported(m)));
+    chunks = []; mediaRec = mime ? new MediaRecorder(recStream, {mimeType: mime}) : new MediaRecorder(recStream);
+    mediaRec.ondataavailable = ev => { if (ev.data && ev.data.size) chunks.push(ev.data); };
     mediaRec.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      const fd = new FormData(); fd.append('audio', new Blob(chunks, {type: mediaRec.mimeType}), 'in.webm'); fd.append('mode', $('#mode').value);
-      const w = addChat('t', 'transcribing…');
-      const r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json());
+      recStream.getTracks().forEach(t => t.stop());
+      clearInterval(recTimer); micBtn.style.color = ''; micBtn.textContent = '🎤';
+      const secs = (Date.now() - recT0) / 1000;
+      const blob = new Blob(chunks, {type: mediaRec.mimeType || 'audio/webm'});
+      if (secs < 0.4 || blob.size < 1200) { recNote(`recording too short (${secs.toFixed(1)} s, ${blob.size} bytes) — hold, or tap to start and tap again to stop`); return; }
+      const fd = new FormData(); fd.append('audio', blob, 'in.webm'); fd.append('mode', $('#mode').value); fd.append('duration_s', secs.toFixed(2));
+      const w = addChat('t', `transcribing ${secs.toFixed(1)} s…`);
+      let r; try { r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json()); } catch (e) { w.remove(); addChat('n', 'voice: ' + e.message); return; }
       w.remove();
-      if (!r.ok) { addChat('n', 'voice: ' + (r.error || 'failed')); return; }
+      if (!r.ok) { addChat('n', 'voice: ' + (r.error || 'failed')); recNote(r.error || ''); return; }
       $('#chat-in').value = r.text || '';
-      if (!r.text) { addChat('n', 'nothing heard' + (r.dropped && r.dropped.length ? ' (dropped: ' + r.dropped.join('; ') + ')' : '')); return; }
+      if (!r.text) { addChat('n', `nothing heard in ${r.audio_s ?? secs.toFixed(1)} s of audio` + (r.dropped && r.dropped.length ? ' (dropped: ' + r.dropped.join('; ') + ')' : '')); recNote('whisper heard nothing — speak closer to the phone, a little longer'); return; }
+      recNote('');
       if (!r.motion_blocked) { $('#chat-in').value = ''; sendChat(r.text, 'voice', false); }
-      else { pendingVoice = r.text; $('#voice-note').textContent = "needs the wake word 'pebble, …' — press Enter to send it as a command"; $('#chat-in').focus(); }
+      else { pendingVoice = r.text; recNote("needs the wake word 'pebble, …' — press Enter to send it as a command"); $('#chat-in').focus(); }
     };
-    mediaRec.start(); $('#mic').style.color = 'var(--bad)';
-  } catch (err) { addChat('n', 'mic: ' + err.message); }
-};
-$('#mic').onmouseup = $('#mic').onmouseleave = $('#mic').ontouchend = () => { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); $('#mic').style.color = ''; };
+    mediaRec.start(200); recT0 = Date.now();
+    micBtn.style.color = 'var(--bad)';
+    recTimer = setInterval(() => { micBtn.textContent = '● ' + ((Date.now() - recT0) / 1000).toFixed(1) + 's'; }, 100);
+    recNote('recording — release to send, or tap again to stop');
+  } catch (err) { addChat('n', 'mic: ' + err.message); recNote('mic: ' + err.message); }
+}
+function recStop() { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); }
+let micDownAt = 0;
+micBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); try { micBtn.setPointerCapture(e.pointerId); } catch (_) {}   // keeps the release even if the finger drifts
+  if (mediaRec && mediaRec.state === 'recording') { recStop(); micDownAt = 0; return; }   // tap-to-stop
+  micDownAt = Date.now(); recStart();
+});
+micBtn.addEventListener('pointerup', e => { e.preventDefault(); if (micDownAt && Date.now() - micDownAt > 350) recStop(); });   // held = release sends; a tap keeps recording
+micBtn.addEventListener('pointercancel', () => recStop());
+document.addEventListener('keydown', e => { if (e.key === 'Escape') recStop(); });
 
 // ---- world
 async function loadWorld() {

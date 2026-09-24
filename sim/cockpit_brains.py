@@ -81,6 +81,8 @@ from harness.backend import SIGNED                                              
 
 DEFAULT_BASE = "http://127.0.0.1:8080/v1"
 WHISPER_URL = os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082")
+MIN_VOICE_BYTES = 1200      # a webm/opus container with no audio is ~200-900 bytes
+MIN_VOICE_S = 0.4           # shorter than a word: the hold was lost, not the speech
 CONF_PATH = os.environ.get("ROCKY_COCKPIT_CONF", os.path.expanduser("~/.config/rocky/cockpit.json"))
 MODES = ("talk", "local", "multimodal", "claude")
 QUARANTINED = frozenset({"gpt-oss-20b", "glm-flash-reap"})   # GPU faults (workstation CLAUDE.md)
@@ -815,8 +817,13 @@ class Brains:
     async def transcribe(self, raw, mode=None):
         """Browser audio blob -> ffmpeg 16 kHz mono -> whisper verbose_json ->
         cleaned text. Returns {ok, text, motion_blocked, wake, dropped}."""
-        if not raw:
-            return {"ok": False, "error": "no audio"}
+        # A phone that lost the hold (long-press callout, a scroll, a synthetic
+        # mouse event) sends a container with no audio in it; say so with the
+        # size instead of a misleading "nothing heard" (D052 phone test).
+        if not raw or len(raw) < MIN_VOICE_BYTES:
+            return {"ok": False, "error": f"recording too short ({len(raw) if raw else 0} bytes) — "
+                                          "hold the button while you speak, or tap once to start and "
+                                          "tap again to stop"}
         if not shutil.which("ffmpeg"):
             return {"ok": False, "error": "ffmpeg not installed"}
         with tempfile.TemporaryDirectory() as td:
@@ -827,6 +834,12 @@ class Brains:
                                                      "-ar", "16000", "-ac", "1", wav], check=False)
             if not os.path.exists(wav):
                 return {"ok": False, "error": "could not decode the audio"}
+            audio_s = max(os.path.getsize(wav) - 44, 0) / 32000.0        # 16 kHz mono int16
+            if audio_s < MIN_VOICE_S:
+                self._log(f"voice: {audio_s:.2f} s of audio in {len(raw)} bytes — too short")
+                return {"ok": False, "audio_s": round(audio_s, 2),
+                        "error": f"recording too short ({audio_s:.1f} s) — hold the button while you speak, "
+                                 "or tap once to start and tap again to stop"}
             import httpx
             try:
                 async with httpx.AsyncClient(timeout=60) as c:
@@ -834,13 +847,22 @@ class Brains:
                         r = await c.post(f"{WHISPER_URL}/v1/audio/transcriptions",
                                          files={"file": ("in.wav", fw, "audio/wav")},
                                          data={"response_format": "verbose_json", "temperature": "0.0"})
+                if r.status_code != 200:
+                    return {"ok": False, "audio_s": round(audio_s, 2),
+                            "error": f"whisper-server HTTP {r.status_code}: {r.text[:160]}"}
                 try:
                     data = r.json()
                 except ValueError:
-                    data = r.text
+                    return {"ok": False, "audio_s": round(audio_s, 2),
+                            "error": f"whisper-server answered non-JSON: {r.text[:160]}"}
             except Exception as e:
                 return {"ok": False, "error": f"whisper-server: {e}"}
-        return self.voice_result(data, mode)
+        out = self.voice_result(data, mode)
+        out["audio_s"] = round(audio_s, 2)
+        if not out.get("text"):
+            self._log(f"voice: {audio_s:.1f} s of audio, whisper heard nothing"
+                      + (f" (dropped: {'; '.join(out['dropped'])})" if out.get("dropped") else ""))
+        return out
 
     def voice_result(self, data, mode=None):
         """whisper output -> the /api/voice JSON (pure apart from remembering
