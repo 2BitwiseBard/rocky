@@ -468,7 +468,7 @@ class CockpitSim(Playground):
                     height=round(self.last["height"] * 1000), contacts=[bool(c) for c in self.last["con"]],
                     gyro=round(self.last["gxy"], 2), world=self.world_name, righter=self.righter_note,
                     speed=self.speed, paused=self.paused, trips=self.sup.trip_count, falls=self.sup.fall_count,
-                    recording=self.rec is not None, walk=self.walk_note,
+                    recording=self.rec is not None, walk=self.walk_note, frame=self.frames["chase"][0],
                     goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture is not None,
                     events=list(self.events)[-12:], console=list(self.console)[-40:],
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,

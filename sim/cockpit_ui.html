@@ -169,10 +169,16 @@ const GESTURES = ['wave','bow','look_around','shake','sit','turn_in_place','side
 const WORDS = ['greeting','acknowledge','yes','no','curious_question','amaze','found_it','discovery','thinking','confused','determined','error','alarm_help','sleepy','low_battery','startup'];
 let lastLogLen = 0;
 
-// ---- state feed
+// ---- state feed (+ camera stream watchdog: an <img> MJPEG stream never reconnects by itself,
+// so after a server restart or a dropped connection the page would sit on its last frame)
 const es = new EventSource('/api/events');
+let lastFrame = -1, lastFrameAt = Date.now();
+function reconnectStreams() { for (const id of ['chase', 'eye']) $('#' + id).src = '/video/' + id + '.mjpg?t=' + Date.now(); lastFrameAt = Date.now(); }
+es.onopen = () => reconnectStreams();
+setInterval(() => { if (Date.now() - lastFrameAt > 3000) reconnectStreams(); }, 1500);
 es.onmessage = e => {
   const s = JSON.parse(e.data);
+  if (s.frame !== lastFrame) { lastFrame = s.frame; lastFrameAt = Date.now(); }
   $('#h-state').textContent = s.state; $('#h-state').className = 'state-' + s.state;
   $('#h-mode').textContent = s.mode + (s.gesture ? ' (gesture)' : '');
   $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
