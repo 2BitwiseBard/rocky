@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pebble Cockpit</title>
+<style>
+  :root { --bg:#14121a; --panel:#1e1b27; --panel2:#262233; --ink:#e8e4f0; --muted:#9a94ab; --line:#332e42;
+          --accent:#a78bfa; --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --blue:#60a5fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font: 14px/1.4 system-ui, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:14px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0 8px 0 0; letter-spacing:.04em; }
+  .chip { padding:2px 8px; border-radius:999px; background:var(--panel2); font-size:12px; color:var(--muted); }
+  .chip b { color:var(--ink); }
+  .state-NORMAL{color:var(--ok)} .state-PLANT{color:var(--warn)} .state-BRACE{color:#fb923c} .state-RECOVER{color:var(--blue)} .state-FALLEN{color:var(--bad)} .state-RIGHTED{color:var(--accent)}
+  main { flex:1; display:grid; grid-template-columns: 1fr 380px; min-height:0; }
+  main.nosidebar { grid-template-columns: 1fr 0; }
+  #view { display:flex; flex-direction:column; min-width:0; }
+  #stage { position:relative; background:#000; flex:1; min-height:240px; display:flex; align-items:center; justify-content:center; }
+  #chase { width:100%; height:100%; object-fit:contain; }
+  #eye { position:absolute; right:10px; bottom:10px; width:240px; border:1px solid var(--line); background:#000; }
+  #overlay { position:absolute; left:10px; top:10px; font: 12px/1.5 ui-monospace, monospace; background:rgba(0,0,0,.55); padding:6px 8px; border-radius:6px; }
+  #console { height:160px; background:var(--panel); border-top:1px solid var(--line); display:flex; flex-direction:column; }
+  #log { flex:1; overflow:auto; padding:6px 10px; font: 12px/1.45 ui-monospace, monospace; white-space:pre-wrap; color:var(--muted); }
+  #log .cmd { color:var(--ink); }
+  #cmdrow { display:flex; gap:6px; padding:6px 10px; border-top:1px solid var(--line); }
+  input, select, button, textarea { font: inherit; color:var(--ink); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  input[type=range] { padding:0; }
+  button { cursor:pointer; } button:hover { border-color:var(--accent); } button.primary { background:var(--accent); color:#1a1030; border-color:var(--accent); }
+  #side { overflow:auto; background:var(--panel); border-left:1px solid var(--line); }
+  details { border-bottom:1px solid var(--line); }
+  summary { cursor:pointer; padding:8px 12px; font-weight:600; background:var(--panel2); list-style:none; display:flex; justify-content:space-between; }
+  summary::after { content:"▾"; color:var(--muted); } details:not([open]) summary::after { content:"▸"; }
+  .body { padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+  .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .row label { color:var(--muted); font-size:12px; min-width:64px; }
+  .grid3 { display:grid; grid-template-columns: repeat(3, 1fr); gap:4px; width:180px; }
+  .grid3 button { padding:8px 0; }
+  #chat { height:220px; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:13px; }
+  #chat .u { color:var(--ink); margin-top:6px; } #chat .b { color:var(--accent); } #chat .t { color:var(--muted); font: 11px/1.4 ui-monospace, monospace; white-space:pre-wrap; }
+  table { border-collapse:collapse; width:100%; font-size:12px; } td, th { padding:3px 4px; border-bottom:1px solid var(--line); text-align:left; } th { color:var(--muted); font-weight:500; }
+  .small { font-size:12px; color:var(--muted); }
+  #curves { width:100%; border:1px solid var(--line); border-radius:6px; }
+  kbd { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PEBBLE COCKPIT</h1>
+  <span class="chip">state <b id="h-state">—</b></span>
+  <span class="chip">mode <b id="h-mode">—</b></span>
+  <span class="chip">pose <b id="h-pose">—</b></span>
+  <span class="chip">tilt <b id="h-tilt">—</b></span>
+  <span class="chip">world <b id="h-world">—</b></span>
+  <span class="chip">t <b id="h-t">—</b></span>
+  <span class="chip">brain <b id="h-brain">—</b></span>
+  <span style="flex:1"></span>
+  <button id="pause">⏸ pause</button>
+  <label class="small">speed <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" style="width:90px"> <span id="speedv">1×</span></label>
+  <button id="reset">reset</button>
+  <button id="toggle-side">☰ panels</button>
+</header>
+<main>
+  <section id="view">
+    <div id="stage">
+      <img id="chase" src="/video/chase.mjpg" alt="chase camera">
+      <img id="eye" src="/video/eye.mjpg" alt="robot eye" title="the robot's eye (click: hide/show)">
+      <div id="overlay">—</div>
+    </div>
+    <div id="console">
+      <div id="log"></div>
+      <div id="cmdrow">
+        <input id="cmd" placeholder="console: walk 45 · stop · gesture wave · push 40 0 · set gait.T 1.2 · help" style="flex:1">
+        <button id="send" class="primary">run</button>
+      </div>
+    </div>
+  </section>
+  <aside id="side">
+    <details open><summary>Brain &amp; chat</summary><div class="body">
+      <div class="row">
+        <label>mode</label>
+        <select id="mode">
+          <option value="talk">Talk (regex intent, no model)</option>
+          <option value="local">Local model (llama-swap)</option>
+          <option value="claude">Claude (API key)</option>
+        </select>
+      </div>
+      <div class="row"><label>model</label><select id="model" style="flex:1"></select></div>
+      <div class="row"><label>vision</label><select id="vmodel" style="flex:1"></select><button id="look">👁 look</button></div>
+      <div id="chat"></div>
+      <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="chat-clear" title="forget the conversation">clear</button></div>
+      <div class="small" id="claude-note"></div>
+    </div></details>
+    <details open><summary>Teleop</summary><div class="body">
+      <div class="row">
+        <div class="grid3">
+          <button data-k="Q">↺ Q</button><button data-k="up">▲</button><button data-k="E">↻ E</button>
+          <button data-k="left">◀</button><button data-k=" " style="color:var(--bad)">STOP</button><button data-k="right">▶</button>
+          <span></span><button data-k="down">▼</button><span></span>
+        </div>
+        <div class="small" style="flex:1">Keys work on the page too when no text box has focus: arrows, <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Q</kbd><kbd>E</kbd> turn, <kbd>space</kbd> stop, <kbd>G</kbd> wave. Taps add 15 mm/s.</div>
+      </div>
+      <div class="row"><label>gesture</label><select id="gesture"></select><button id="gesture-go">do</button><label>say</label><select id="word"></select><button id="say-go">say</button></div>
+      <div class="row"><label>shove</label>
+        <button data-shove="20,0">20 N →</button><button data-shove="40,0">40 N →</button><button data-shove="0,40">40 N ↑</button><button data-shove="60,0">60 N →</button>
+        <span class="small">half-sine at the shell rim, 0.4 s</span></div>
+      <div class="row"><label>camera</label><input id="cam-az" type="range" min="0" max="360" value="135" style="width:110px"> <input id="cam-el" type="range" min="-80" max="-2" value="-18" style="width:80px"> <input id="cam-d" type="range" min="0.4" max="2.5" step="0.05" value="0.9" style="width:80px"></div>
+    </div></details>
+    <details><summary>World</summary><div class="body">
+      <div class="row"><label>preset</label><select id="preset" style="flex:1"></select><button id="preset-go">load</button></div>
+      <div class="row"><label>add</label>
+        <select id="obj-kind"></select>
+        <input id="obj-x" type="number" step="0.1" value="0.6" style="width:64px" title="x (m)">
+        <input id="obj-y" type="number" step="0.1" value="0" style="width:64px" title="y (m)">
+        <button id="obj-add">add</button><button id="obj-clear">clear all</button></div>
+      <div class="row"><label>friction</label><input id="fric" type="range" min="0.2" max="2" step="0.05" value="1.2" style="width:120px"><span id="fricv">1.20</span></div>
+      <div class="row"><label>slope</label><input id="slope" type="range" min="0" max="15" step="1" value="0" style="width:120px"><span id="slopev">0°</span><button id="cond-apply">apply</button></div>
+      <div class="row"><label>terrain</label><button id="terrain-add">rough patch ahead</button><span class="small">objects are lidar-visible; the eye sees everything</span></div>
+      <pre id="spec" class="small" style="max-height:120px; overflow:auto; margin:0"></pre>
+    </div></details>
+    <details><summary>RL</summary><div class="body">
+      <div class="small">Righter = the policy that runs while FALLEN. Pick one, then shove 40 N to compare on the same fall. Red marker = FALLEN, purple = the ramp.</div>
+      <div class="row"><label>righter</label><select id="righter" style="flex:1"></select><button id="righter-go">load</button><button id="righter-off">off</button></div>
+      <div class="row"><label>stall s</label><input id="stall" type="range" min="1" max="10" step="0.5" value="3" style="width:100px"><span id="stallv">3</span>
+        <label>deadline</label><input id="deadline" type="range" min="3" max="20" step="1" value="10" style="width:80px"><span id="deadlinev">10</span></div>
+      <div id="rl-runs"></div>
+      <img id="curves" src="/api/rl/curves.png" alt="training curves" loading="lazy">
+      <div class="small">Retrain: <code>./rocky.sh train-recover NAME --reward v3 --rate-limit 3</code>; audit: <code>python sim/audit_righter.py runs/NAME/latest.pt</code></div>
+    </div></details>
+    <details><summary>Gait tuning</summary><div class="body">
+      <div class="row"><label>period T</label><input id="gT" type="range" min="0.8" max="3" step="0.1" value="1.6" style="width:120px"><span id="gTv">1.6</span></div>
+      <div class="row"><label>height h</label><input id="gh" type="range" min="80" max="150" step="2" value="118" style="width:120px"><span id="ghv">118</span></div>
+      <div class="row"><label>step h</label><input id="ghs" type="range" min="10" max="60" step="2" value="32" style="width:120px"><span id="ghsv">32</span></div>
+      <div class="row"><label>trip</label><input id="trip" type="range" min="0.8" max="4" step="0.1" value="1.8" style="width:120px"><span id="tripv">1.8</span></div>
+      <div class="small">Sim-only until it goes into params.yaml (write keepers in NOTES_INBOX.md).</div>
+    </div></details>
+    <details><summary>Events</summary><div class="body"><div id="events" class="small" style="font-family:ui-monospace,monospace; white-space:pre-wrap"></div></div></details>
+    <details><summary>Help</summary><div class="body"><pre id="help" class="small" style="white-space:pre-wrap; margin:0"></pre></div></details>
+  </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b||{})}).then(r => r.json());
+const GESTURES = ['wave','bow','look_around','shake','sit','turn_in_place','sidestep','jazz_hands','fist_bump','beckon'];
+const WORDS = ['greeting','acknowledge','yes','no','curious_question','amaze','found_it','discovery','thinking','confused','determined','error','alarm_help','sleepy','low_battery','startup'];
+let lastLogLen = 0;
+
+// ---- state feed
+const es = new EventSource('/api/events');
+es.onmessage = e => {
+  const s = JSON.parse(e.data);
+  $('#h-state').textContent = s.state; $('#h-state').className = 'state-' + s.state;
+  $('#h-mode').textContent = s.mode + (s.gesture ? ' (gesture)' : '');
+  $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
+  $('#h-tilt').textContent = s.tilt + '°'; $('#h-world').textContent = s.world; $('#h-t').textContent = s.t.toFixed(1) + ' s';
+  $('#h-brain').textContent = s.brain.mode + (s.brain.model ? ' · ' + s.brain.model : '');
+  $('#overlay').textContent = `cmd v=(${s.cmd[0]}, ${s.cmd[1]}) mm/s  wz=${s.cmd[2]}\nfeet ${s.contacts.map(c => c ? '●' : '○').join('')}  h ${s.height} mm  gyro ${s.gyro}\n${s.goto ? 'goto → (' + s.goto[0].toFixed(2) + ', ' + s.goto[1].toFixed(2) + ')' : ''}${s.paused ? '  PAUSED' : ''}  trips ${s.trips} falls ${s.falls}\n${s.righter}`;
+  if (s.console.length !== lastLogLen || (s.console.length && s.console[s.console.length-1][1] !== window._lastLine)) {
+    lastLogLen = s.console.length; window._lastLine = s.console.length ? s.console[s.console.length-1][1] : '';
+    $('#log').innerHTML = s.console.map(([t, l]) => `<div class="${l.startsWith('>') ? 'cmd' : ''}">[${t.toFixed(1)}] ${esc(l)}</div>`).join('');
+    $('#log').scrollTop = $('#log').scrollHeight;
+  }
+  $('#events').textContent = s.events.map(e => JSON.stringify(e)).join('\n');
+  $('#pause').textContent = s.paused ? '▶ resume' : '⏸ pause';
+};
+function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+// ---- console + teleop
+$('#send').onclick = () => { const l = $('#cmd').value.trim(); if (!l) return; post('/api/cmd', {line: l}); $('#cmd').value = ''; };
+$('#cmd').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
+document.querySelectorAll('[data-k]').forEach(b => b.onclick = () => post('/api/teleop', {key: b.dataset.k}));
+const KEYMAP = {ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right', w:'W', s:'S', a:'A', d:'D', q:'Q', e:'E', g:'G', ' ':' '};
+document.addEventListener('keydown', e => {
+  if (['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (k) { e.preventDefault(); post('/api/teleop', {key: k}); }
+});
+$('#gesture').innerHTML = GESTURES.map(g => `<option>${g}</option>`).join('');
+$('#word').innerHTML = WORDS.map(w => `<option>${w}</option>`).join('');
+$('#gesture-go').onclick = () => post('/api/cmd', {line: 'gesture ' + $('#gesture').value});
+$('#say-go').onclick = () => post('/api/cmd', {line: 'say ' + $('#word').value});
+document.querySelectorAll('[data-shove]').forEach(b => b.onclick = () => { const [fx, fy] = b.dataset.shove.split(',').map(Number); post('/api/shove', {fx, fy}); });
+$('#pause').onclick = () => post('/api/speed', {paused: $('#pause').textContent.includes('pause')});
+$('#speed').oninput = () => { $('#speedv').textContent = $('#speed').value + '×'; post('/api/speed', {speed: +$('#speed').value}); };
+$('#reset').onclick = () => post('/api/reset');
+$('#toggle-side').onclick = () => document.querySelector('main').classList.toggle('nosidebar');
+$('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === '0.15' ? '1' : '0.15';
+for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
+
+// ---- brain & chat
+async function loadModels() {
+  const m = await fetch('/api/models').then(r => r.json());
+  $('#model').innerHTML = m.models.map(x => `<option>${x}</option>`).join('') || '<option>(llama-swap not reachable)</option>';
+  const pick = m.models.includes('qwen3.6-35b-a3b') ? 'qwen3.6-35b-a3b' : m.models[0]; if (pick) $('#model').value = m.brain.model || pick;
+  const vis = m.vision_models.length ? m.vision_models : m.models;
+  $('#vmodel').innerHTML = vis.map(x => `<option>${x}</option>`).join('');
+  if (m.models.includes('vision-model')) $('#vmodel').value = 'vision-model'; else if (vis.includes('lfm2.5-vl')) $('#vmodel').value = 'lfm2.5-vl';
+  $('#mode').value = m.brain.mode;
+  $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
+  post('/api/brain', {model: $('#model').value, vision_model: $('#vmodel').value});
+}
+loadModels();
+$('#mode').onchange = () => post('/api/brain', {mode: $('#mode').value});
+$('#model').onchange = () => post('/api/brain', {model: $('#model').value});
+$('#vmodel').onchange = () => post('/api/brain', {vision_model: $('#vmodel').value});
+function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight; }
+$('#chat-send').onclick = async () => {
+  const t = $('#chat-in').value.trim(); if (!t) return; $('#chat-in').value = '';
+  addChat('u', 'you: ' + t); addChat('t', '…');
+  const r = await post('/api/chat', {text: t, mode: $('#mode').value, model: $('#model').value});
+  $('#chat').lastChild.remove();
+  for (const c of r.trace) addChat('t', `${c.tool}(${JSON.stringify(c.args || {})}) → ${JSON.stringify(c.result).slice(0, 300)}`);
+  addChat('b', `pebble-brain [${r.mode}${r.model ? ' · ' + r.model : ''}]: ${r.reply || '(no text)'}`);
+};
+$('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
+$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; };
+$('#look').onclick = async () => { addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); $('#chat').lastChild.remove(); addChat('b', r.ok ? `eye (${r.model}): ${r.description}` : 'look failed: ' + r.error); };
+
+// ---- world
+async function loadWorld() {
+  const w = await fetch('/api/world').then(r => r.json());
+  $('#preset').innerHTML = w.presets.map(p => `<option>${p}</option>`).join(''); $('#preset').value = w.presets.includes(w.name) ? w.name : w.presets[0];
+  $('#obj-kind').innerHTML = w.kinds.map(k => `<option>${k}</option>`).join('');
+  $('#spec').textContent = JSON.stringify(w.spec, null, 1);
+  $('#fric').value = w.spec.friction || 1.2; $('#fricv').textContent = (+$('#fric').value).toFixed(2);
+  $('#slope').value = w.spec.gravity_tilt_deg || 0; $('#slopev').textContent = $('#slope').value + '°';
+}
+loadWorld();
+$('#preset-go').onclick = async () => { await post('/api/world', {preset: $('#preset').value}); loadWorld(); };
+$('#obj-add').onclick = async () => { await post('/api/world/add', {object: {kind: $('#obj-kind').value, pos: [+$('#obj-x').value, +$('#obj-y').value]}}); loadWorld(); };
+$('#obj-clear').onclick = async () => { await post('/api/world/add', {clear: true}); loadWorld(); };
+$('#fric').oninput = () => $('#fricv').textContent = (+$('#fric').value).toFixed(2);
+$('#slope').oninput = () => $('#slopev').textContent = $('#slope').value + '°';
+$('#cond-apply').onclick = async () => { await post('/api/world/add', {friction: +$('#fric').value, gravity_tilt_deg: +$('#slope').value}); loadWorld(); };
+$('#terrain-add').onclick = async () => { await post('/api/world/add', {terrain: {kind: 'rough', amp_m: 0.02, size_m: 1.6, pos: [1.3, 0], seed: 1}}); loadWorld(); };
+
+// ---- RL
+async function loadRL() {
+  const r = await fetch('/api/rl/runs').then(x => x.json());
+  const rec = r.runs.filter(x => x.env === 'recover' && x.ckpt);
+  $('#righter').innerHTML = rec.map(x => `<option>${x.run}</option>`).join('');
+  if (rec.some(x => x.run === 'recover1')) $('#righter').value = 'recover1';
+  $('#rl-runs').innerHTML = '<table><tr><th>run</th><th>env</th><th>rew</th><th>rate</th><th>steps</th><th>ret</th><th>ent</th><th>eval</th></tr>' +
+    r.runs.map(x => `<tr><td>${x.run}</td><td>${x.env}</td><td>${x.reward}</td><td>${x.rate ?? ''}</td><td>${(x.steps/1e6).toFixed(1)}M</td><td>${x.ret?.toFixed(0) ?? ''}</td><td>${x.ent?.toFixed(1) ?? ''}</td><td>${x.note}</td></tr>`).join('') + '</table>';
+}
+loadRL();
+$('#righter-go').onclick = () => post('/api/rl/righter', {name: $('#righter').value});
+$('#righter-off').onclick = () => post('/api/rl/righter', {name: 'off'});
+$('#stall').oninput = () => { $('#stallv').textContent = $('#stall').value; post('/api/cmd', {line: 'set reflex.stall_s ' + $('#stall').value}); };
+$('#deadline').oninput = () => { $('#deadlinev').textContent = $('#deadline').value; post('/api/cmd', {line: 'set reflex.fallen_max_s ' + $('#deadline').value}); };
+for (const [id, p] of [['gT','gait.T'],['gh','gait.h'],['ghs','gait.hstep'],['trip','reflex.trip']])
+  $('#' + id).oninput = () => { $('#' + id + 'v').textContent = $('#' + id).value; post('/api/cmd', {line: 'set ' + p + ' ' + $('#' + id).value}); };
+fetch('/api/help').then(r => r.json()).then(h => $('#help').textContent = h.commands + '\n' + h.teleop + '\n\n' + h.rl);
+</script>
+</body>
+</html>

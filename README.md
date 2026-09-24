@@ -27,7 +27,8 @@ claim from "it works on hardware".
 | **Physical build** | nothing assembled; the first prints (pre-D047) did not fit and are retired; servos not yet ordered | `media/2026-09-22_first_prints.jpg`, `docs/PRINT_PLAN_2026-09-22.md`, `bom/SHOPPING_LIST_2026-09-22.md` |
 | **Sim + control** | the analytic wave gait walks (264 mm in 8 s, 1° tilt); the reflex supervisor safe-stops, braces and hands off to a righter; self-righting is a **hybrid** (RL rights the body from a side landing, an analytic ramp stands it, and from the back the ramp does the righting: 7/20 stood on this machine, 12/20 in the cloud run, pure-RL 0/20); four retrains scored worse and are recorded as negatives, the latest pair (D048) traded handoffs for a smoother policy | `docs/SIM_GUIDE.md`, `docs/RL_GUIDE.md`, `docs/RL_TOUR.md` |
 | **Tests** | driver 58, harness 22, gait 9, intent 14, sim 3 → 92 fast tests in ~3 s; URDF ≡ MJCF ≡ analytic FK | GitHub Actions `ci.yml` |
-| **Harness** | six-tool MCP server on a mock and on MuJoCo; a local LLM (llama-swap / Ollama) or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
+| **Harness** | six-tool MCP server on a mock and on MuJoCo (+ `look` where an eye exists); a local LLM (llama-swap / Ollama) or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
+| **Cockpit** | browser playground on one running sim: chase + eye cameras, chat with a switchable brain (regex / local model / Claude), a vision model behind `look`, world editor (obstacles, terrain, friction, slopes), RL panel | `docs/SIM_GUIDE.md` §3b, `sim/cockpit.py` |
 | **Review** | full project review with dispositions | `docs/REVIEW_2026-09-22.md` |
 
 ## Layout
@@ -35,7 +36,7 @@ claim from "it works on hardware".
 ```
 rocky/
 ├── README.md, BUILD_LOG.md, NOTES_INBOX.md   this file · the notebook (newest first) · the raw inbox
-├── rocky.sh             launcher: play / chat / brain / voice / test / train-* / eval-* / cad-check
+├── rocky.sh             launcher: cockpit / play / chat / brain / voice / test / train-* / eval-* / cad-check
 ├── pyproject.toml       pip-installable core (gait modules + bus driver) and the extras
 ├── cad/                 build123d parametric parts; params.yaml is the single source of truth;
 │   ├── run_all_checks.py   the CAD CI: 23 modules incl. check_assembly (joints) + check_printability
@@ -45,7 +46,8 @@ rocky/
 ├── gait/                pure-numpy control: wave gait + IK, reflex supervisor, watchdog, gestures
 ├── sim/                 MuJoCo: build_mjcf.py (from params + CAD masses), playground.py,
 │                        rocky_env.py + rocky_recover_env.py (gymnasium), train_ppo.py, eval_*.py,
-│                        run_*.py experiments, runs/ (checkpoints, git-lfs)
+│                        run_*.py experiments, runs/ (checkpoints, git-lfs),
+│                        cockpit.py + cockpit_ui.html (browser playground), world_builder.py
 ├── harness/             MCP tool server (say/gesture/goto/stop/scan_summary/status), sim + mock
 │                        backends, local_brain.py (LLM), intent.py (regex brain + voice pipe)
 ├── driver/              rocky_driver: dual-protocol Feetech bus driver, byte-faithful mock, 58 tests
@@ -66,6 +68,7 @@ pip install -e ".[sim,harness,dev]"                  # + ".[rl]" for torch, ".[c
 python -m pytest driver/tests gait harness -m "not slow" -q     # 89 passed (+3 in sim/tests after build_mjcf)
 MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, headless
 MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + arrow-key teleop
+./rocky.sh cockpit                                   # browser playground: http://127.0.0.1:8765
 ```
 
 `./rocky.sh help` lists the laptop shortcuts (they assume `.venv` in the
@@ -74,8 +77,9 @@ repo root and, for `brain`/`voice`, a local llama-swap and whisper-server).
 ## Driving it
 
 - **Simulation** — `docs/SIM_GUIDE.md`: how the sim is built from the CAD,
-  the playground (controls, commands, live tuning), the experiment scripts,
-  worlds, videos, and the MCP/LLM driving loop.
+  the playground (controls, commands, live tuning), the browser cockpit
+  (cameras, brains, vision, world editor), the experiment scripts, worlds,
+  videos, and the MCP/LLM driving loop.
 - **Reinforcement learning** — `docs/RL_GUIDE.md`: the two environments,
   what a run produces, training/evaluation step by step, resuming, reading
   the logs, the honest results table, and the experiment ladder

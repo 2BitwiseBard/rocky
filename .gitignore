@@ -26,3 +26,6 @@ sim/runs/smoke_*/
 sim/pebble_gesture_*.mp4
 sim/pebble_gestures2.mp4
 sim/playground_clip.mp4
+
+# playwright MCP scratch (screenshots, snapshots)
+.playwright-mcp/

@@ -18,6 +18,8 @@ sim = ["mujoco>=3.1", "gymnasium", "imageio", "imageio-ffmpeg", "matplotlib", "s
 rl = ["torch"]
 # the six-tool MCP server, local-LLM and text brains
 harness = ["mcp<2", "pytest-asyncio", "openai", "httpx"]
+# the browser cockpit (sim/cockpit.py): starlette + uvicorn come with mcp, listed for clarity
+cockpit = ["starlette", "uvicorn", "openai", "httpx", "pillow"]
 # real servo bus
 hw = ["pyserial"]
 # parametric CAD + the check suite + print pack

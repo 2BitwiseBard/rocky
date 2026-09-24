@@ -3,7 +3,7 @@
     "rocky": {
       "command": "python3",
       "args": ["-m", "harness.server"],
-      "env": {"ROCKY_BACKEND": "sim"},
+      "env": {"ROCKY_BACKEND": "auto"},
       "cwd": "REPLACE_WITH_ABSOLUTE_PATH_TO/rocky"
     }
   }

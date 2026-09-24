@@ -158,6 +158,51 @@ curves of every run into `sim/out/rl_curves.png`.
 `params.yaml` and the tree is regenerated; write keepers in
 `NOTES_INBOX.md`.
 
+## 3b. The cockpit: the playground in a browser
+
+```bash
+./rocky.sh cockpit                      # http://127.0.0.1:8765
+./rocky.sh cockpit --world "rubble field"
+```
+
+One continuously running sim, rendered offscreen to two camera streams
+(a chase camera you can orbit, and the robot's **eye** on the torso), with
+everything the terminal playground has and the parts that need a screen:
+
+- **Console** at the bottom: every playground command (`walk`, `stop`,
+  `gesture`, `push`, `set`, `rl`, `righter`, `help`).
+- **Brain & chat** (sidebar): a mode switch — *Talk* (the regex intent
+  parser, no model), *Local model* (any llama-swap model, tool-calling
+  over the six harness tools plus `look`), *Claude* (the Anthropic API if
+  `anthropic` is installed and `ANTHROPIC_API_KEY` is set; otherwise run
+  `./rocky.sh chat` in a terminal, and Claude Code drives this same sim
+  over MCP while you watch — the MCP server picks a running cockpit
+  automatically with `ROCKY_BACKEND=auto`). Tool calls and results are
+  shown under each reply.
+- **Vision**: `look` sends the eye camera's frame to a local vision model
+  (`vision-model` alias, `lfm2.5-vl`, or a gemma) and returns its
+  description; the brains get it as a tool, so "what do you see?" works.
+- **Teleop**: arrow buttons or the keyboard (page focused, no text box
+  active), gestures and chord-speak from dropdowns, shove buttons.
+- **World**: presets (flat, room, cliff, obstacle course, rubble field,
+  rough terrain, stairs, slope, icy floor), add boxes / walls / ramps /
+  stairs / rubble / a pushable ball at (x, y), floor friction, a gravity
+  tilt (a slope without rebuilding the floor), a rough-terrain heightfield.
+  The world rebuilds in place; the robot respawns upright where it stood.
+  Added objects are lidar-visible (group 3), so `scan_summary` reports
+  them; the eye sees everything.
+- **RL**: the checkpoint table, righter hot-swap, stall and deadline
+  sliders, the training curves.
+- **Gait tuning** sliders, an **Events** feed and a **Help** panel; every
+  section collapses, the sidebar toggles, speed 0.25–4× and pause.
+
+The state feed is server-sent events at 10 Hz; the cameras are MJPEG
+streams, so nothing to install beyond the `sim` extra (`starlette` and
+`uvicorn` come with `mcp`). The HTTP API under `/api/` is what the MCP
+proxy (`harness/cockpit_backend.py`) and any script can use:
+`POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/cmd {"line": "walk 45"}`,
+`/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`.
+
 ## 4. The experiment scripts
 
 Every `sim/run_*.py` is a self-contained experiment that prints a verdict

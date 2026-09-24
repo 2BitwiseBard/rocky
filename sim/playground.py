@@ -86,8 +86,10 @@ def find_player():
 
 
 class Playground:
-    def __init__(self, cliff=False):
-        if cliff:
+    def __init__(self, cliff=False, model=None, z0=0.0):
+        if model is not None:                       # D049: the cockpit's world builder
+            self.model = model
+        elif cliff:
             from run_cliff import build_world, PLAT_H
             self.model = build_world()
             z0 = PLAT_H
@@ -95,6 +97,7 @@ class Playground:
             with open(os.path.join(HERE, "pebble.xml")) as f:
                 self.model = mujoco.MjModel.from_xml_string(f.read())
             z0 = 0.0
+        self.z0 = z0
         self.gait = WaveGait()
         self.sup = ReflexSupervisor(self.gait)
         self.data = mujoco.MjData(self.model)
@@ -152,6 +155,7 @@ class Playground:
         con = foot_contacts(self.model, self.data)
         tilt_deg = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
         height = float(self.data.xpos[self.torso][2])
+        self.last = dict(con=con, tilt=tilt_deg, height=height, gxy=gxy)   # for the cockpit's feeds
         if ges is not None:
             fn, total, t0 = ges
             tg = self.t - t0

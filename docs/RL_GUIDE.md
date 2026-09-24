@@ -183,7 +183,11 @@ From `docs/RL_TOUR.md` §8, in order, each teaching one thing:
    or the v3 cost with a 10 M budget. The bar is recover1's 7/20 with the
    warm run's smoothness numbers.
 
-## 6. In the playground
+## 6. In the playground and the cockpit
+
+`./rocky.sh cockpit` has an RL panel: the checkpoint table, a righter
+picker, stall/deadline sliders and the training curves, next to the shove
+buttons, so a righter comparison is two clicks and a watch.
 
 `./rocky.sh play`, then `help rl`: `rl` lists the checkpoints, `righter
 NAME` hot-swaps the self-righting policy (or `righter off` for the

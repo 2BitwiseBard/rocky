@@ -8,6 +8,41 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-23 · Session 9c (laptop) — the cockpit: a browser playground on one running sim (D049)
+
+Asked for: an in-app guide, brain/mode toggles, model switching, a chat
+tab, collapsible panels, environmental conditions, obstacles, rough
+terrain, and a way for the model to "see".
+
+- `sim/cockpit.py` + `sim/cockpit_ui.html` (`./rocky.sh cockpit`,
+  http://127.0.0.1:8765): one sim thread (Playground loop + the harness
+  goto controller and cliff detector, real-time paced, speed 0.25–4×,
+  pause), chase camera + torso eye camera as MJPEG, SSE state feed, a job
+  queue so nothing else touches MjData. Panels: brain & chat (Talk / Local
+  model / Claude, model picker, vision-model picker, tool trace), teleop
+  (buttons + keys), gestures/chord-speak, shove buttons, orbit camera,
+  world editor, RL, gait tuning, events, help; every panel collapses, the
+  sidebar toggles.
+- `sim/world_builder.py`: worlds from a JSON spec at runtime — presets
+  (flat, room, cliff, obstacle course, rubble field, rough terrain,
+  stairs, slope 8°, icy floor), objects (box, wall, ramp, stairs, rubble,
+  pushable ball), floor friction, gravity tilt, a smoothed-noise
+  heightfield; added geoms are lidar group 3; the robot gets an `eye`
+  camera. The sim swaps models in place and respawns the robot upright.
+- Vision: `look` = eye frame → local vision model (`vision-model` alias,
+  lfm2.5-vl or gemma) → text. The local brain gets it as a tool; the MCP
+  server exposes it where the backend has an eye.
+- One sim for every driver: `harness/cockpit_backend.py` proxies the MCP
+  contract to a running cockpit; `ROCKY_BACKEND=auto` (now in
+  `.mcp.json.example` and my `.mcp.json`) picks it when it answers, else
+  the in-process sim. So `./rocky.sh chat` drives what the browser shows.
+- Verified: talk chat, local brain (qwen3.6-35b-a3b → say + look; the
+  vision model read the obstacle course correctly enough), world swaps and
+  edits, righter hot-swap (kept across reset/world change — a bug found
+  and fixed), speed/pause, a 40 N shove with the full FALLEN → NORMAL
+  cycle inside the cockpit, reset, the MCP proxy. 7 sim tests (world
+  builder + shove). Docs: SIM_GUIDE §3b, README, RL_GUIDE, D049, B31.
+
 ## 2026-09-23 · Session 9b (laptop) — "the push flies and jitters": the shove model, two jitter sources, a righter retrain (D048)
 
 **Report:** the push and the reflex correction in the playground / README

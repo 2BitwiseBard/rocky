@@ -5,6 +5,8 @@
 # docs/RL_GUIDE.md.
 #
 #   rocky.sh play [--cliff]        live MuJoCo window + REPL + arrow-key/SPACE teleop (terminal)
+  rocky.sh cockpit [--world W]   browser cockpit at http://127.0.0.1:8765 (cameras, chat
+                                 with talk/local/Claude brains, vision, world editor, RL)
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it
@@ -37,6 +39,14 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   play)
     cd "$ROCKY_REPO/sim" && exec "$PY" playground.py --viewer "$@" ;;
+
+  cockpit)
+    # D049: the browser playground — cameras, chat with a switchable brain,
+    # world editor, RL panel — on one running sim; `chat` drives it too
+    # shellcheck disable=SC1090
+    source "$HOME/.config/environment.d/local-ai.conf" 2>/dev/null || true
+    cd "$ROCKY_REPO"
+    LOCAL_AI_KEY="${LOCAL_AI_KEY:-}" MUJOCO_GL=egl exec "$PY" sim/cockpit.py "$@" ;;
 
   chat)
     cd "$ROCKY_REPO" && exec claude "$@" ;;

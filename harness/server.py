@@ -9,6 +9,7 @@ Run against the mock (default) or the MuJoCo sim:
 
     python3 -m harness.server                 # mock backend
     ROCKY_BACKEND=sim python3 -m harness.server   # MuJoCo cliff world
+    ROCKY_BACKEND=auto python3 -m harness.server  # a running cockpit if any, else sim (D049)
 
 Wire into a client (e.g. Claude Code .mcp.json):
     {"rocky": {"command": "python3", "args": ["-m", "harness.server"],
@@ -83,11 +84,27 @@ def build_server(backend=None) -> FastMCP:
         voltage (mocked until hardware), recent events."""
         return await be.status()
 
+    if hasattr(be, "look"):                      # D049: only where an eye exists
+        @mcp.tool(annotations={"readOnlyHint": True})
+        async def look() -> dict:
+            """Look through the robot's eye camera: a vision model describes
+            what is in front of the robot (obstacles, objects, open floor)."""
+            return await be.look()
+
     return mcp
 
 
 def _pick_backend():
-    if os.environ.get("ROCKY_BACKEND", "mock") == "sim":
+    kind = os.environ.get("ROCKY_BACKEND", "mock")
+    if kind in ("cockpit", "auto"):
+        from harness.cockpit_backend import CockpitBackend, cockpit_alive, DEFAULT_URL
+        if cockpit_alive():
+            return CockpitBackend()
+        if kind == "cockpit":
+            raise SystemExit(f"ROCKY_BACKEND=cockpit but nothing answers at {DEFAULT_URL} "
+                             "(start ./rocky.sh cockpit first)")
+        kind = "sim"                              # auto: fall back to the in-process sim
+    if kind == "sim":
         from harness.sim_backend import SimBackend
         return SimBackend()
     return MockBackend()
