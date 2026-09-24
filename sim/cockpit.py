@@ -1387,19 +1387,21 @@ def main(argv=None):
     ap.add_argument("--world", default=os.environ.get("ROCKY_WORLD", "flat"))
     ap.add_argument("--brain", default="talk", choices=["talk", "local", "claude"])
     args = ap.parse_args(argv)
-    import signal
     import uvicorn
-    # uvicorn's graceful shutdown waits for open connections, and this server's
-    # connections are endless streams (MJPEG, SSE): a Ctrl-C or `cockpit-stop`
-    # would hang and stale instances pile up. Exit immediately instead.
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(sig, lambda *_: os._exit(0))
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
     sim.brain["mode"] = args.brain
     threading.Thread(target=sim.run_forever, daemon=True).start()
     app = make_app(sim)
     print(f"cockpit: http://{args.host}:{args.port}  (world {sim.world_name}; {sim.righter_note})", flush=True)
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    # uvicorn's graceful shutdown waits for open connections, and this server's
+    # connections are endless streams (MJPEG, SSE): a Ctrl-C or `cockpit-stop`
+    # would hang and stale instances pile up. uvicorn installs its OWN
+    # SIGINT/SIGTERM handlers when it starts (Server.capture_signals), so a
+    # handler set before uvicorn.run() is silently replaced; the exit has to be
+    # the server's handle_exit itself.
+    server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning"))
+    server.handle_exit = lambda *_: (sim.hw_disconnect() if sim.hw is not None else None, os._exit(0))
+    server.run()
 
 
 if __name__ == "__main__":

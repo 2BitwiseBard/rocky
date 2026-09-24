@@ -36,7 +36,10 @@ so I'm ready to use it with the robot one leg at a time?"
 
 **Broken and fixed:** `rocky.sh` failed to parse since f830ed4 (five help lines
 had lost their `#`); `./rocky.sh cockpit` from the last session's notes would
-have printed a syntax error.
+have printed a syntax error. The 9c0416f SIGTERM fix never took: uvicorn
+replaces signal handlers set before `uvicorn.run()` (`Server.capture_signals`),
+so stale instances kept surviving `cockpit-stop`; the exit is now the server's
+own `handle_exit`, verified with a camera stream open.
 
 **Verified:** 4 new tests (`sim/tests/test_d051.py`), the full fast suite, a
 Playwright pass through every new panel on the mock bus with zero console errors.
