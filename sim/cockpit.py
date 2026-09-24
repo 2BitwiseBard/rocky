@@ -1132,7 +1132,13 @@ def main(argv=None):
     ap.add_argument("--world", default=os.environ.get("ROCKY_WORLD", "flat"))
     ap.add_argument("--brain", default="talk", choices=["talk", "local", "claude"])
     args = ap.parse_args(argv)
+    import signal
     import uvicorn
+    # uvicorn's graceful shutdown waits for open connections, and this server's
+    # connections are endless streams (MJPEG, SSE): a Ctrl-C or `cockpit-stop`
+    # would hang and stale instances pile up. Exit immediately instead.
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: os._exit(0))
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
     sim.brain["mode"] = args.brain
     threading.Thread(target=sim.run_forever, daemon=True).start()
