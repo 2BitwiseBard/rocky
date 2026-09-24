@@ -174,7 +174,9 @@ def world_xml(spec):
     if assets:
         xml = xml.replace("<asset>", "<asset>\n    " + "\n    ".join(assets), 1)
     if body:
-        xml = xml.replace("<worldbody>", "<worldbody>\n    " + "\n    ".join(body), 1)
+        # AFTER the torso: every sim entry point addresses the robot's free
+        # joint as qpos[0:7], so no world body may come before it
+        xml = xml.replace("</worldbody>", "    " + "\n    ".join(body) + "\n  </worldbody>", 1)
     tilt = float(spec.get("gravity_tilt_deg", 0.0))
     if abs(tilt) > 1e-6:
         d = np.radians(float(spec.get("gravity_tilt_dir_deg", 0.0)))

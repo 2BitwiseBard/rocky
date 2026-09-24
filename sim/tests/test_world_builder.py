@@ -30,6 +30,10 @@ def test_every_object_kind_builds_and_is_lidar_visible():
     extra = [g for g in range(m.ngeom) if m.geom_group[g] == 3]
     assert len(extra) == m.ngeom - base.ngeom          # every added geom is group 3
     assert m.nbody == base.nbody + 1                   # the ball is a free body
+    # the robot's free joint stays first in qpos (every sim entry point assumes it)
+    assert m.jnt_qposadr[m.body("torso").jntadr[0]] == 0
+    ball = m.body("obj5")
+    assert m.jnt_qposadr[ball.jntadr[0]] == 7 + 20     # after the torso's 7 + 15 joints + 5 claws
 
 
 def test_terrain_heightfield_and_conditions():
