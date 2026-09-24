@@ -5,11 +5,15 @@
 # docs/RL_GUIDE.md.
 #
 #   rocky.sh play [--cliff]        live MuJoCo window + REPL + arrow-key/SPACE teleop (terminal)
-  rocky.sh cockpit [--world W]   browser cockpit at http://127.0.0.1:8765 (cameras, chat
-                                 with talk/local/Claude brains, vision, world editor, RL);
-                                 Ctrl-C, the page's quit button or `cockpit-stop` end it;
-                                 --host 0.0.0.0 to reach it from the phone over the tailnet
-  rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background)
+#   rocky.sh cockpit [--world W]   browser cockpit at http://127.0.0.1:8765 (cameras, chat
+#                                  with talk/local/Claude brains, vision, world editor, RL);
+#                                  Ctrl-C, the page's quit button or `cockpit-stop` end it;
+#                                  --host 0.0.0.0 to reach it from the phone over the tailnet
+#   rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background)
+#   rocky.sh tailnet [PORT]        publish the cockpit on the tailnet over HTTPS via
+#                                  `tailscale serve` (default https port 9445) — the phone
+#                                  gets the cameras, the mic button and chord audio;
+#                                  `tailnet off` removes it. Needs `sudo tailscale up` once.
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it
@@ -54,6 +58,22 @@ case "$cmd" in
 
   cockpit-stop)
     for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p" && echo "stopped $p"; done ;;
+
+  tailnet)
+    # D051: the cockpit stays bound to 127.0.0.1; tailscale serve terminates HTTPS with a
+    # tailnet cert and proxies to it. HTTPS matters: the browser only allows the mic
+    # (getUserMedia) on a secure origin, so plain http://laptop:8765 has no voice button.
+    TS_PORT="${1:-9445}"
+    if [[ "${1:-}" == "off" ]]; then
+      tailscale serve --https="${2:-9445}" off && echo "tailnet: cockpit unpublished"; exit 0
+    fi
+    if ! tailscale status >/dev/null 2>&1; then
+      echo "tailscale is not up on this machine — run:  sudo tailscale up   (then re-run this)"; exit 1
+    fi
+    tailscale serve --bg --https="$TS_PORT" "http://127.0.0.1:${ROCKY_COCKPIT_PORT:-8765}" || exit 1
+    HOSTDNS=$(tailscale status --json 2>/dev/null | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null)
+    echo "tailnet: https://${HOSTDNS:-<this-machine>.tail54f481.ts.net}:${TS_PORT}  (tailnet only; run ./rocky.sh cockpit if it is not up)"
+    tailscale serve status ;;
 
   chat)
     cd "$ROCKY_REPO" && exec claude "$@" ;;

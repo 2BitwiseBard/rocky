@@ -46,14 +46,18 @@ for sub in ("gait", "perception", "sim"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 sys.path.insert(0, ROOT)
 
-from playground import Playground, GESTURES, TELEOP_HELP, HELP_RL, PROBE_MAX   # noqa: E402
+from playground import (Playground, TELEOP_HELP, HELP_RL, PROBE_MAX,          # noqa: E402
+                        all_gestures, lexicon, chord_wav, CHORD_CUSTOM_DIR)
+from pebble_keyframes import (KeyframeGesture, save_keyframe_gesture,           # noqa: E402
+                              delete_keyframe_gesture, load_keyframe_gestures, GESTURE_DIR)
+from hw_bridge import HardwareBridge, serial_ports, MIRRORS                     # noqa: E402
 from world_builder import (build as build_world, PRESETS, KINDS, random_course,   # noqa: E402
                            saved_worlds, save_world, load_world)
 from pebble_reflex import ReflexSupervisor                             # noqa: E402
 from cliff import CliffDetector, CliffReaction                         # noqa: E402
 from sim_lidar import scan as lidar_scan, RANGE_MAX                    # noqa: E402
 from shove import Shove                                                # noqa: E402
-from harness.backend import CHORD_WORDS, GESTURES as GESTURE_NAMES     # noqa: E402
+from harness.backend import CHORD_WORDS                                # noqa: E402
 from harness.intent import plan as intent_plan, execute as intent_execute   # noqa: E402
 from harness.local_brain import TOOLS as BRAIN_TOOLS, SYSTEM as BRAIN_SYSTEM, OpenAIChat   # noqa: E402
 
@@ -66,6 +70,8 @@ LOOK_TOOL = {"type": "function", "function": {
                    "is in front of the robot (obstacles, open space, objects).",
     "parameters": {"type": "object", "properties": {}}}}
 TOOLS = BRAIN_TOOLS + [LOOK_TOOL]
+AUDIO_DIR = os.path.join(ROOT, "audio")
+CHORD_SPEC_DIR = os.path.join(AUDIO_DIR, "custom")          # D051: chord words designed in the cockpit
 SYSTEM = BRAIN_SYSTEM + ("\nYou also have `look`: the robot's eye camera described by a vision "
                          "model. Use it when asked what you see, before walking toward "
                          "something, or when a goto was vetoed.")
@@ -121,7 +127,49 @@ class CockpitSim(Playground):
         self.llm_base = os.environ.get("ROCKY_LLM_BASE_URL", "http://127.0.0.1:8080/v1")
         self.llm_key = _local_ai_key()
         self._llm = None
+        self.browser_audio = True           # D051: chord words play in the browser (phone too), not on the server
+        self.lexicon = lexicon()
+        self.gesture_names = sorted(self.gestures)
         self.log(f"world: {self.world_name} | {self.righter_note}")
+
+    def reload_library(self):
+        """Any thread: re-read keyframe gestures + chord words from disk."""
+        self.gestures = all_gestures()
+        self.gesture_names = sorted(self.gestures)
+        self.lexicon = lexicon()
+
+    # ------------------------------------------------------ D051: hardware
+    def hw_connect(self, port):
+        """Any thread. Open the bus (or the mock); the sim thread mirrors from the next step."""
+        self.hw_disconnect()
+        hw = HardwareBridge(port, on_event=lambda k, m: (self.events.append(("hw:" + k, m)), self.log(f"hw {k}: {m}")))
+        self.hw = hw
+        return hw.status()
+
+    def hw_disconnect(self):
+        hw, self.hw = self.hw, None
+        if hw is not None:
+            hw.close()
+            self.log(f"hw: disconnected {hw.port}")
+        return hw is not None
+
+    # ------------------------------------------------------ D051: gesture studio
+    def preview_pose(self, spec, t=None):
+        """Sim thread: hold the keyframe gesture's pose at time t (None = whole
+        gesture's last frame) until preview_off / a gesture / a walk."""
+        kg = KeyframeGesture(spec)
+        tt = kg.total if t is None else float(t)
+        fn = lambda g, _t, kg=kg, tt=tt: kg(g, tt)            # noqa: E731
+        with self.lock:
+            self.gesture = (fn, float("inf"), self.t)
+            self.cmd_v[:] = 0
+        self.mode = "posing"
+        return kg.total
+
+    def preview_off(self):
+        with self.lock:
+            self.gesture = None
+        self.mode = "idle"
 
     # ---------------------------------------------------------- plumbing
     def log(self, line):
@@ -469,26 +517,31 @@ class CockpitSim(Playground):
                     gyro=round(self.last["gxy"], 2), world=self.world_name, righter=self.righter_note,
                     speed=self.speed, paused=self.paused, trips=self.sup.trip_count, falls=self.sup.fall_count,
                     recording=self.rec is not None, walk=self.walk_note, frame=self.frames["chase"][0],
+                    said=list(self.said), servo=dict(self.servo.p), browser_audio=self.browser_audio,
+                    hw=None if self.hw is None else dict(port=self.hw.port, mirror=self.hw.mirror,
+                                                         legs=[bool(x) for x in self.hw.legs_present],
+                                                         n=len(self.hw.present), errors=self.hw.errors),
                     goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture is not None,
                     events=list(self.events)[-12:], console=list(self.console)[-40:],
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
-                                                duty=self.gait.duty, hstep=self.gait.hstep),
+                                                duty=self.gait.duty, hstep=self.gait.hstep,
+                                                phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)),
                     reflex=dict(trip=self.sup.gyro_trip, stall_s=self.sup.stall_s,
                                 fallen_max_s=self.sup.fallen_max_s))
 
     async def tool_say(self, word):
-        if word not in CHORD_WORDS:
-            return {"ok": False, "error": f"unknown chord word {word!r}", "hint": f"lexicon: {', '.join(CHORD_WORDS)}"}
+        if chord_wav(word) is None:
+            return {"ok": False, "error": f"unknown chord word {word!r}", "hint": f"lexicon: {', '.join(self.lexicon)}"}
         self.events.append(("say", word))
         r = await self.call(lambda: self.do(f"say {word}"))
         return {"ok": True, "word": word, "note": r}
 
     async def tool_gesture(self, name):
-        if name not in GESTURE_NAMES or name not in GESTURES:
-            return {"ok": False, "error": f"unknown gesture {name!r}", "hint": f"available: {', '.join(GESTURE_NAMES)}"}
+        if name not in self.gestures:
+            return {"ok": False, "error": f"unknown gesture {name!r}", "hint": f"available: {', '.join(self.gesture_names)}"}
         if self.goto_state is not None or float(np.abs(self.cmd_v).sum()) > 0:
             return {"ok": False, "error": "busy", "hint": "walking; stop() first"}
-        fn, total = GESTURES[name]
+        fn, total = self.gestures[name]
         self.events.append(("gesture", name))
 
         def start():
@@ -519,6 +572,8 @@ class CockpitSim(Playground):
                 self.sup.request_stop()
                 self.mode = "safe_stop"
         await self.call(do_stop)
+        if self.hw is not None and self.hw.mirror == "sim2real":
+            self.hw.set_mirror("off")           # the real legs stop streaming; torque stays (they hold)
         self.events.append(("stop", None))
         return {"ok": True, "mode": self.mode}
 
@@ -1097,6 +1152,198 @@ def make_app(sim: CockpitSim):
         threading.Thread(target=bye, daemon=True).start()
         return JSONResponse({"ok": True})
 
+    # ---------------------------------------------------------- D051: audio in the browser
+    async def audio_file(request):
+        wav = chord_wav(request.path_params["word"])
+        if wav is None:
+            return JSONResponse({"error": "no such word"}, status_code=404)
+        return Response(open(wav, "rb").read(), media_type="audio/wav", headers={"Cache-Control": "max-age=60"})
+
+    async def audio_mode(request):
+        body = await request.json()
+        sim.browser_audio = bool(body.get("browser", True))
+        return JSONResponse({"browser": sim.browser_audio, "player": sim.player})
+
+    def _chord_mod():
+        sys.path.insert(0, AUDIO_DIR)
+        import chordspeak2
+        return chordspeak2
+
+    def _wav_bytes(buf):
+        import wave
+        bio = io.BytesIO()
+        with wave.open(bio, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(_chord_mod().SR)
+            w.writeframes((np.clip(buf, -1, 1) * 32767).astype(np.int16).tobytes())
+        return bio.getvalue()
+
+    def _render_spec(spec):
+        cs = _chord_mod()
+        syls = []
+        for sy in spec.get("syllables", []):
+            d = {k: (float(v) if k not in ("ratios",) else [float(x) for x in v]) for k, v in sy.items()
+                 if k in ("dur", "gap", "ratios", "root_mul", "amp", "rough", "breath", "bend_cents",
+                          "detune_cents", "wobble", "attack", "tail", "tilt")}
+            d.setdefault("dur", 0.2)
+            d.setdefault("ratios", [1.0, 1.5, 2.0])
+            d["dur"] = float(np.clip(d["dur"], 0.03, 2.0))
+            syls.append(d)
+        if not syls:
+            syls = [dict(dur=0.2, ratios=[1.0, 1.5, 2.0])]
+        return cs.word(syls, root_hz=float(np.clip(spec.get("root", 120.0), 40.0, 400.0)))
+
+    async def chord_list(_):
+        cs = _chord_mod()
+        canon = {k: {"root": v[0], "syllables": v[1]} for k, v in cs.vocabulary().items()}
+        custom = {}
+        if os.path.isdir(CHORD_SPEC_DIR):
+            for fn in sorted(os.listdir(CHORD_SPEC_DIR)):
+                if fn.endswith(".json"):
+                    custom[fn[:-5]] = json.load(open(os.path.join(CHORD_SPEC_DIR, fn)))
+        return JSONResponse({"canon": canon, "custom": custom, "lexicon": sim.lexicon})
+
+    async def chord_render(request):
+        spec = await request.json()
+        buf = await asyncio.get_running_loop().run_in_executor(None, _render_spec, spec)
+        return Response(_wav_bytes(buf), media_type="audio/wav")
+
+    async def chord_save(request):
+        body = await request.json()
+        name = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(body.get("name", "")).strip())[:32]
+        if not name or name in CHORD_WORDS:
+            return JSONResponse({"ok": False, "error": "need a new name (canon words are read-only)"})
+        spec = body.get("spec") or {}
+        buf = await asyncio.get_running_loop().run_in_executor(None, _render_spec, spec)
+        os.makedirs(CHORD_SPEC_DIR, exist_ok=True)
+        os.makedirs(CHORD_CUSTOM_DIR, exist_ok=True)
+        with open(os.path.join(CHORD_SPEC_DIR, f"{name}.json"), "w") as f:
+            json.dump(spec, f, indent=1)
+        with open(os.path.join(CHORD_CUSTOM_DIR, f"{name}.wav"), "wb") as f:
+            f.write(_wav_bytes(buf))
+        sim.reload_library()
+        sim.log(f"chord word saved: {name} ({len(buf) / _chord_mod().SR:.2f} s)")
+        return JSONResponse({"ok": True, "name": name, "lexicon": sim.lexicon})
+
+    async def chord_delete(request):
+        body = await request.json()
+        name = str(body.get("name", ""))
+        n = 0
+        for p in (os.path.join(CHORD_SPEC_DIR, f"{name}.json"), os.path.join(CHORD_CUSTOM_DIR, f"{name}.wav")):
+            if name and name not in CHORD_WORDS and os.path.exists(p):
+                os.remove(p)
+                n += 1
+        sim.reload_library()
+        return JSONResponse({"ok": n > 0, "lexicon": sim.lexicon})
+
+    # ---------------------------------------------------------- D051: gesture studio
+    async def gesture_list(_):
+        kf = {k: kg.spec for k, kg in load_keyframe_gestures().items()}
+        return JSONResponse({"code": [g for g in sim.gesture_names if g not in kf], "keyframe": kf,
+                             "all": sim.gesture_names, "dir": os.path.relpath(GESTURE_DIR, ROOT)})
+
+    async def gesture_save(request):
+        spec = await request.json()
+        try:
+            path = save_keyframe_gesture(spec)
+        except (ValueError, KeyError) as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+        sim.reload_library()
+        sim.log(f"gesture saved: {os.path.relpath(path, ROOT)}")
+        return JSONResponse({"ok": True, "name": os.path.basename(path)[:-5], "all": sim.gesture_names})
+
+    async def gesture_delete(request):
+        body = await request.json()
+        ok = delete_keyframe_gesture(str(body.get("name", "")))
+        sim.reload_library()
+        return JSONResponse({"ok": ok, "all": sim.gesture_names})
+
+    async def gesture_preview(request):
+        body = await request.json()
+        if body.get("off"):
+            await sim.call(sim.preview_off)
+            return JSONResponse({"ok": True})
+        spec = body.get("spec") or {}
+        try:
+            total = await sim.call(lambda: sim.preview_pose(spec, body.get("t")))
+        except (ValueError, KeyError) as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+        return JSONResponse({"ok": True, "total": total})
+
+    async def gesture_play(request):
+        """Play an UNSAVED keyframe spec once (the studio's ▶)."""
+        spec = await request.json()
+        try:
+            kg = KeyframeGesture(spec)
+        except (ValueError, KeyError) as e:
+            return JSONResponse({"ok": False, "error": str(e)})
+
+        def start():
+            with sim.lock:
+                sim.gesture = (kg, kg.total, sim.t)
+                sim.cmd_v[:] = 0
+            sim.mode = "gesturing"
+        await sim.call(start)
+        for t_cue, w in kg.cues:                       # chord cues fire on their frame
+            asyncio.get_running_loop().call_later(t_cue / max(sim.speed, 0.05), lambda w=w: asyncio.ensure_future(sim.tool_say(w)))
+        return JSONResponse({"ok": True, "total": kg.total})
+
+    # ---------------------------------------------------------- D051: servo realism
+    async def servo_set(request):
+        body = await request.json()
+        p = await sim.call(lambda: sim.servo.set(**body))
+        sim.log(sim.servo.describe())
+        return JSONResponse({"servo": p, "note": sim.servo.describe()})
+
+    # ---------------------------------------------------------- D051: hardware
+    def _hw_or_err():
+        return sim.hw
+
+    async def hw_status(_):
+        hw = _hw_or_err()
+        return JSONResponse({"connected": hw is not None, "ports": serial_ports(), "mirrors": list(MIRRORS),
+                             "status": None if hw is None else hw.status()})
+
+    async def hw_action(request):
+        body = await request.json()
+        act = str(body.get("action", ""))
+        loop = asyncio.get_running_loop()
+        try:
+            if act == "connect":
+                st = await loop.run_in_executor(None, sim.hw_connect, str(body.get("port", "mock")))
+                return JSONResponse({"ok": True, "status": st})
+            if act == "disconnect":
+                return JSONResponse({"ok": await loop.run_in_executor(None, sim.hw_disconnect)})
+            hw = _hw_or_err()
+            if hw is None:
+                return JSONResponse({"ok": False, "error": "not connected"})
+            if act == "scan":
+                found = await loop.run_in_executor(None, hw.scan)
+                return JSONResponse({"ok": True, "found": {str(k): v for k, v in found.items()}, "status": hw.status()})
+            if act == "mirror":
+                return JSONResponse({"ok": True, "mirror": hw.set_mirror(str(body.get("mode", "off")))})
+            if act == "torque":
+                ids = body.get("ids")
+                return JSONResponse({"ok": True, "ids": hw.torque(bool(body.get("on", True)), ids)})
+            if act == "limp":
+                return JSONResponse({"ok": True, "ids": hw.limp()})
+            if act == "jog":
+                return JSONResponse({"ok": True, "deg": hw.jog(int(body["id"]), float(body["deg"]), int(body.get("speed", 200)))})
+            if act == "set_id":
+                return JSONResponse({"ok": True, "id": hw.set_id(int(body["old"]), int(body["new"]))})
+            if act == "center":
+                return JSONResponse({"ok": True, **hw.center(str(body["key"]), body.get("jig_deg"))})
+            if act == "dir":
+                return JSONResponse({"ok": True, "dir": hw.set_dir(str(body["key"]), int(body.get("dir", 1)))})
+            if act == "speed":
+                hw.speed_cps = int(body.get("speed_cps", 0))
+                return JSONResponse({"ok": True, "speed_cps": hw.speed_cps})
+            return JSONResponse({"ok": False, "error": f"unknown action {act}"})
+        except Exception as e:                          # a bus error is an answer, not a 500
+            sim.log(f"hw {act}: {type(e).__name__}: {e}")
+            return JSONResponse({"ok": False, "error": f"{type(e).__name__}: {e}"})
+
     async def help_(_):
         return JSONResponse({"teleop": TELEOP_HELP, "rl": HELP_RL,
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
@@ -1121,6 +1368,14 @@ def make_app(sim: CockpitSim):
         Route("/api/world/load", world_load, methods=["POST"]), Route("/api/world/random", world_random, methods=["POST"]),
         Route("/api/rl/walk", rl_walk, methods=["POST"]), Route("/api/voice", voice, methods=["POST"]),
         Route("/api/quit", quit_, methods=["POST"]),
+        Route("/audio/{word}.wav", audio_file), Route("/api/audio", audio_mode, methods=["POST"]),
+        Route("/api/chord/list", chord_list), Route("/api/chord/render", chord_render, methods=["POST"]),
+        Route("/api/chord/save", chord_save, methods=["POST"]), Route("/api/chord/delete", chord_delete, methods=["POST"]),
+        Route("/api/gesture/list", gesture_list), Route("/api/gesture/save", gesture_save, methods=["POST"]),
+        Route("/api/gesture/delete", gesture_delete, methods=["POST"]), Route("/api/gesture/preview", gesture_preview, methods=["POST"]),
+        Route("/api/gesture/play", gesture_play, methods=["POST"]),
+        Route("/api/servo", servo_set, methods=["POST"]),
+        Route("/api/hw", hw_status), Route("/api/hw", hw_action, methods=["POST"]),
     ]
     return Starlette(routes=routes)
 

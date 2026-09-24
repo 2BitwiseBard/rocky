@@ -71,11 +71,38 @@ from run_odom import foot_contacts                                    # noqa: E4
 from shove import Shove                                               # noqa: E402
 
 from pebble_gestures2 import GESTURES2                              # noqa: E402
+from pebble_keyframes import load_keyframe_gestures                 # noqa: E402
+from servo_model import ServoModel                                   # noqa: E402
 GESTURES = {"jazz_hands": (jazz_hands, JAZZ_TOTAL),
             "fist_bump": (fist_bump, BUMP_TOTAL),
             "beckon": (beckon, BECKON_TOTAL)}
 GESTURES.update({k: (fn, total) for k, (fn, total, _ev) in GESTURES2.items()})  # session 8: v2 library
 CHORD_DIR = os.path.join(HERE, "..", "audio", "samples_v2")
+CHORD_CUSTOM_DIR = os.path.join(HERE, "..", "audio", "samples_custom")   # D051: words made in the cockpit
+
+
+def all_gestures():
+    """Code gestures + the keyframe gestures on disk (gait/gestures/*.json, D051)."""
+    g = dict(GESTURES)
+    g.update({k: (kg, kg.total) for k, kg in load_keyframe_gestures().items()})
+    return g
+
+
+def chord_wav(word):
+    """Path of a chord-speak word's wav (canon lexicon first, then custom), or None."""
+    for d in (CHORD_DIR, CHORD_CUSTOM_DIR):
+        p = os.path.join(d, f"{word}.wav")
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def lexicon():
+    words = []
+    for d in (CHORD_DIR, CHORD_CUSTOM_DIR):
+        if os.path.isdir(d):
+            words += sorted(x[:-4] for x in os.listdir(d) if x.endswith(".wav") and not x.startswith("demo_reel"))
+    return words
 
 
 def find_player():
@@ -125,6 +152,10 @@ class Playground:
         self.probe_dz = np.zeros(N_LEGS)      # mm each foot is currently lowered below its target
         self.probe_out = np.zeros(N_LEGS, bool)   # probed PROBE_MAX with no contact (the void signal)
         self.righter_note = self._install_righter()
+        self.gestures = all_gestures()          # D051: includes keyframe gestures from gait/gestures/
+        self.servo = ServoModel()               # D051: bus-rate hold, latency, slew (off by default)
+        self.hw = None                          # D051: HardwareBridge when the real bus is connected
+        self.said = (0, None)                   # (count, word) — the cockpit plays it in the browser
         self.t = 0.0
         self.player = find_player()
         self.recording = False
@@ -184,6 +215,15 @@ class Playground:
             self.data.ctrl[:15] = q.flatten()
             if self.residual is not None and state == "NORMAL":
                 self.data.ctrl[:15] += self.residual
+        hw = self.hw
+        if hw is not None:                    # D051: the real bus beside the sim
+            if hw.mirror == "real2sim":
+                q_real, legs = hw.real_pose()
+                for i in range(N_LEGS):
+                    if legs[i]:
+                        self.data.ctrl[3 * i:3 * i + 3] = q_real[i]
+            hw.push_targets(self.data.ctrl[:15])
+        self.data.ctrl[:15] = self.servo.filter(self.data.ctrl[:15], self.DT)
         if push is not None:
             if not push.apply(self.model, self.data, self.torso, self.t):
                 with self.lock:               # over: wrench already zeroed
@@ -358,22 +398,23 @@ class Playground:
             self.sup.request_stop()
             return "safe-stop requested (PLANT->BRACE)"
         if c == "gesture":
-            if not args or args[0] not in GESTURES:
-                return f"gestures: {', '.join(GESTURES)}"
+            if not args or args[0] not in self.gestures:
+                return f"gestures: {', '.join(self.gestures)}"
             if np.abs(self.cmd_v).sum() > 0:
                 return "busy walking — stop first (the MCP server enforces "\
                        "the same rule)"
-            fn, total = GESTURES[args[0]]
+            fn, total = self.gestures[args[0]]
             with self.lock:
                 self.gesture = (fn, total, self.t)
             return f"{args[0]} ({total:.1f} s)"
         if c == "say":
             w = args[0] if args else ""
-            wav = os.path.join(CHORD_DIR, f"{w}.wav")
-            if not os.path.exists(wav):
-                have = sorted(x[:-4] for x in os.listdir(CHORD_DIR)
-                              if x.endswith(".wav"))
-                return f"unknown word; lexicon: {', '.join(have)}"
+            wav = chord_wav(w)
+            if wav is None:
+                return f"unknown word; lexicon: {', '.join(lexicon())}"
+            self.said = (self.said[0] + 1, w)
+            if getattr(self, "browser_audio", False):
+                return f"*{w}* (chord, in the browser)"
             if self.player:
                 cmd = {"ffplay": ["ffplay", "-nodisp", "-autoexit",
                                   "-loglevel", "quiet", wav]}.get(
@@ -385,10 +426,17 @@ class Playground:
         if c == "set":
             if len(args) != 2:
                 return "set PARAM VALUE — params: gait.T gait.h gait.R0 "\
-                       "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s"
+                       "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s "\
+                       "servo.on servo.hold_hz servo.latency_s servo.rate_rad_s servo.quant"
             p, val = args[0], float(args[1])
             g = self.gait
             with self.lock:
+                if p.startswith("servo."):
+                    k = p.split(".", 1)[1]
+                    if k not in self.servo.p:
+                        return f"unknown param {p}"
+                    self.servo.set(**{k: val})
+                    return self.servo.describe()
                 if p == "gait.T":
                     ph = (self.sup.t_gait / g.T) % 1.0    # phase continuity
                     g.T = val

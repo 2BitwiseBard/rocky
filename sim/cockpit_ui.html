@@ -65,6 +65,7 @@
   <span class="chip">world <b id="h-world">—</b></span>
   <span class="chip">t <b id="h-t">—</b></span>
   <span class="chip">brain <b id="h-brain">—</b></span>
+  <span class="chip" id="h-hw-chip" style="display:none">robot <b id="h-hw">—</b></span>
   <span style="flex:1"></span>
   <button id="pause">⏸ pause</button>
   <label class="small">speed <input id="speed" type="range" min="0.25" max="4" step="0.25" value="1" style="width:90px"> <span id="speedv">1×</span></label>
@@ -147,12 +148,60 @@
       <img id="curves" src="/api/rl/curves.png" alt="training curves" loading="lazy">
       <div class="small">Retrain: <code>./rocky.sh train-recover NAME --reward v3 --rate-limit 3</code>; audit: <code>python sim/audit_righter.py runs/NAME/latest.pt</code></div>
     </div></details>
-    <details><summary>Gait tuning</summary><div class="body">
+    <details><summary>Gait lab &amp; realism</summary><div class="body">
+      <canvas id="footfall" width="356" height="70" style="width:100%; background:#0d0c12; border:1px solid var(--line); border-radius:6px"></canvas>
+      <div class="small">Footfall diagram: one row per leg (0 north, then counter-clockwise), filled while the foot touches the ground; the white tick is the gait phase. A wave gait at duty 0.8 keeps four rows filled at any time.</div>
       <div class="row"><label>period T</label><input id="gT" type="range" min="0.8" max="3" step="0.1" value="1.6" style="width:120px"><span id="gTv">1.6</span></div>
+      <div class="row"><label>duty</label><input id="gduty" type="range" min="0.5" max="0.9" step="0.05" value="0.8" style="width:120px"><span id="gdutyv">0.8</span></div>
       <div class="row"><label>height h</label><input id="gh" type="range" min="80" max="150" step="2" value="118" style="width:120px"><span id="ghv">118</span></div>
+      <div class="row"><label>stance R0</label><input id="gR0" type="range" min="150" max="220" step="5" value="185" style="width:120px"><span id="gR0v">185</span></div>
       <div class="row"><label>step h</label><input id="ghs" type="range" min="10" max="60" step="2" value="32" style="width:120px"><span id="ghsv">32</span></div>
       <div class="row"><label>trip</label><input id="trip" type="range" min="0.8" max="4" step="0.1" value="1.8" style="width:120px"><span id="tripv">1.8</span></div>
       <div class="small">Sim-only until it goes into params.yaml (write keepers in NOTES_INBOX.md).</div>
+      <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label>servo model</label><input id="sv-on" type="checkbox"> <span class="small">bus-rate hold, latency, slew limit, 4096-count quantisation — what an ST3215 on the bus does to a target that the ideal sim actuator does not</span></div>
+      <div class="row"><label>bus rate</label><input id="sv-hold" type="range" min="10" max="100" step="5" value="50" style="width:100px"><span id="sv-holdv">50 Hz</span>
+        <label>latency</label><input id="sv-lat" type="range" min="0" max="120" step="5" value="20" style="width:80px"><span id="sv-latv">20 ms</span></div>
+      <div class="row"><label>max speed</label><input id="sv-rate" type="range" min="1" max="8" step="0.1" value="4.7" style="width:100px"><span id="sv-ratev">4.7 rad/s</span>
+        <label>quantise</label><input id="sv-quant" type="checkbox" checked></div>
+      <div class="small" id="sv-note">off</div>
+    </div></details>
+    <details><summary>Gesture studio</summary><div class="body">
+      <div class="row"><label>gesture</label><select id="gs-list" style="flex:1"></select><button id="gs-play-saved">▶</button><button id="gs-edit">edit</button><button id="gs-del">delete</button></div>
+      <div class="small">Keyframe gestures are JSON in <code>gait/gestures/</code>: pose the robot with the sliders (it holds the pose live), set a time, <b>snap</b> a frame, repeat, ▶ to play, save. Code gestures (wave, bow…) can be played but not edited here.</div>
+      <div class="row"><label>name</label><input id="gs-name" placeholder="peek" style="width:110px"><label>loop</label><input id="gs-loop" type="checkbox"><label>frame t</label><input id="gs-t" type="number" step="0.1" min="0" value="0.8" style="width:64px"> s</div>
+      <div class="row"><label>body x/y/z</label><input id="gs-bx" type="range" min="-40" max="40" value="0" style="width:70px"><input id="gs-by" type="range" min="-40" max="40" value="0" style="width:70px"><input id="gs-bz" type="range" min="-45" max="25" value="0" style="width:70px"><span id="gs-bv" class="small">0 0 0 mm</span></div>
+      <div class="row"><label>yaw</label><input id="gs-yaw" type="range" min="-25" max="25" value="0" style="width:120px"><span id="gs-yawv" class="small">0°</span></div>
+      <div class="row"><label>corner dz</label><input id="gs-dz0" type="number" value="0" style="width:46px" title="leg 0 lower by (mm)"><input id="gs-dz1" type="number" value="0" style="width:46px"><input id="gs-dz2" type="number" value="0" style="width:46px"><input id="gs-dz3" type="number" value="0" style="width:46px"><input id="gs-dz4" type="number" value="0" style="width:46px"><span class="small">mm</span></div>
+      <div class="row"><label>arm</label><select id="gs-arm"><option value="0">leg 0</option><option value="1">leg 1</option><option value="2">leg 2</option><option value="3">leg 3</option><option value="4">leg 4</option></select><input id="gs-arm-on" type="checkbox" title="raise this leg as an arm">
+        <input id="gs-a0" type="range" min="-40" max="40" value="0" style="width:60px" title="yaw"><input id="gs-a1" type="range" min="-70" max="90" value="60" style="width:60px" title="hip"><input id="gs-a2" type="range" min="-150" max="-20" value="-50" style="width:60px" title="knee"><span id="gs-av" class="small">0 60 -50°</span></div>
+      <div class="row"><label>claw</label><select id="gs-claw"><option value="0">hand 0</option><option value="1">hand 1</option><option value="2">hand 2</option><option value="3">hand 3</option><option value="4">hand 4</option></select><input id="gs-claw-v" type="range" min="0" max="1" step="0.05" value="0" style="width:90px"><span id="gs-clawv" class="small">closed</span>
+        <label>say</label><select id="gs-say"><option value="">—</option></select><label>ease</label><select id="gs-ease"><option>smooth</option><option>linear</option><option>hold</option></select></div>
+      <div class="row"><button id="gs-snap" class="primary">snap frame</button><button id="gs-frame-del">remove frame</button><button id="gs-clear">new</button><button id="gs-hold-off">release pose</button></div>
+      <div id="gs-frames" class="small" style="font-family:ui-monospace,monospace"></div>
+      <div class="row"><label>scrub</label><input id="gs-scrub" type="range" min="0" max="1" step="0.01" value="0" style="flex:1"><span id="gs-scrubv" class="small">0.0 s</span></div>
+      <div class="row"><button id="gs-play" class="primary">▶ play</button><button id="gs-save">save</button><span id="gs-msg" class="small"></span></div>
+    </div></details>
+    <details><summary>Voice &amp; sounds</summary><div class="body">
+      <div class="row"><label>audio</label><input id="au-browser" type="checkbox" checked> <span class="small">play chord-speak in this browser (works over the tailnet on a phone); unchecked = the server's speakers</span></div>
+      <div id="au-lex" class="row"></div>
+      <div class="small" style="border-top:1px solid var(--line); padding-top:8px">Chord designer: a word is 1–4 syllables, each a stack of just-intonation ratios on a low root through the same throat. Load a canon word to see how it is built, change it, ▶ hear it, save under a new name — it joins the lexicon for say, the brains and the MCP tool.</div>
+      <div class="row"><label>load</label><select id="cd-load" style="flex:1"></select><button id="cd-load-go">load</button><label>name</label><input id="cd-name" placeholder="hello2" style="width:90px"></div>
+      <div class="row"><label>root Hz</label><input id="cd-root" type="range" min="60" max="240" value="120" style="width:120px"><span id="cd-rootv">120</span></div>
+      <div id="cd-syls"></div>
+      <div class="row"><button id="cd-add">+ syllable</button><button id="cd-play" class="primary">▶ hear</button><button id="cd-save">save word</button><button id="cd-del">delete custom</button><span id="cd-msg" class="small"></span></div>
+    </div></details>
+    <details><summary>Hardware (real servos)</summary><div class="body">
+      <div class="small">The Feetech bus beside the sim. Connect the adapter, <b>scan</b>, and every leg whose three servos answered becomes a real leg: <b>sim → robot</b> streams the sim's joint targets to it (gait, gestures, reflexes), <b>robot → sim</b> makes the sim leg follow the real one (hold it in your hand; the sim shows what the software thinks the pose is). Legs not on the bus stay simulated. <code>mock</code> is the byte-level servo simulator the bench scripts rehearse on.</div>
+      <div class="row"><label>port</label><select id="hw-port" style="flex:1"></select><button id="hw-connect" class="primary">connect</button><button id="hw-disconnect">disconnect</button></div>
+      <div class="row"><button id="hw-scan">scan bus</button><span id="hw-legs" class="small">—</span></div>
+      <div class="row"><label>mirror</label><select id="hw-mirror"><option value="off">off (telemetry only)</option><option value="sim2real">sim → robot</option><option value="real2sim">robot → sim</option></select>
+        <button id="hw-torque-on">torque on</button><button id="hw-limp" style="color:var(--bad)">LIMP</button></div>
+      <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="0" style="width:120px"><span id="hw-speedv" class="small">servo max</span><span class="small">(counts/s cap on every goal; 200 = gentle first moves)</span></div>
+      <div id="hw-tel" class="small">not connected</div>
+      <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label>calibrate</label><select id="hw-key"></select><input id="hw-jig" type="number" value="0" style="width:60px" title="jig angle (deg) the joint is held at; knee comb = -90"><button id="hw-center">center here</button><button id="hw-dir-p">dir +</button><button id="hw-dir-m">dir −</button></div>
+      <div class="small">Center: torque off on that joint, hold it at the jig pose (bench/BENCH_RUNBOOK.md §5), click — writes bench/calibration.yaml like calibrate_centers.py does. Dir flips the joint's sign if it moves the wrong way.</div>
+      <div class="row"><label>set id</label><input id="hw-old" type="number" value="1" style="width:56px"><span>→</span><input id="hw-new" type="number" value="1" style="width:56px"><button id="hw-setid">write</button><span class="small">one servo on the bus at a time</span></div>
+      <div id="hw-msg" class="small"></div>
     </div></details>
     <details><summary>Recordings</summary><div class="body">
       <div class="small">⏺ in the header records the chase camera plus every command; stop writes clip.mp4, clip.gif and run.json (world + commands). Replay reloads that world and re-runs the commands.</div>
@@ -165,8 +214,8 @@
 <script>
 const $ = s => document.querySelector(s);
 const post = (u, b) => fetch(u, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(b||{})}).then(r => r.json());
-const GESTURES = ['wave','bow','look_around','shake','sit','turn_in_place','sidestep','jazz_hands','fist_bump','beckon'];
-const WORDS = ['greeting','acknowledge','yes','no','curious_question','amaze','found_it','discovery','thinking','confused','determined','error','alarm_help','sleepy','low_battery','startup'];
+let GESTURES = ['wave','bow','look_around','shake','sit','turn_in_place','sidestep','jazz_hands','fist_bump','beckon'];
+let WORDS = ['greeting','acknowledge','yes','no','curious_question','amaze','found_it','discovery','thinking','confused','determined','error','alarm_help','sleepy','low_battery','startup'];
 let lastLogLen = 0;
 
 // ---- state feed (+ camera stream watchdog: an <img> MJPEG stream never reconnects by itself,
@@ -194,7 +243,13 @@ es.onmessage = e => {
   $('#pause').textContent = s.paused ? '▶ resume' : '⏸ pause';
   $('#record').textContent = s.recording ? '■ stop rec' : '⏺ record'; $('#record').style.color = s.recording ? 'var(--bad)' : '';
   $('#walk-note').textContent = s.walk;
+  if (s.said && s.said[0] !== lastSaid) { lastSaid = s.said[0]; if (s.browser_audio && s.said[1]) playWord(s.said[1]); }
+  if (s.hw) { $('#h-hw-chip').style.display = ''; $('#h-hw').textContent = `${s.hw.port} · ${s.hw.mirror} · legs ${s.hw.legs.map((l, i) => l ? i : '').join('')}${s.hw.errors ? ' · ' + s.hw.errors + ' err' : ''}`; }
+  else $('#h-hw-chip').style.display = 'none';
+  pushFootfall(s.contacts, s.gait.phase);
 };
+let lastSaid = 0;
+function playWord(w) { try { const a = new Audio('/audio/' + w + '.wav'); a.play().catch(() => {}); } catch (e) {} }
 function esc(s) { return s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 // ---- console + teleop
@@ -362,6 +417,137 @@ es.addEventListener('message', e => { lastState = JSON.parse(e.data); });
 const _loadWorld = loadWorld; loadWorld = async () => { await _loadWorld(); worldSpec = await fetch('/api/world').then(r => r.json()).then(w => w.spec); };
 loadWorld();
 fetch('/api/help').then(r => r.json()).then(h => $('#help').textContent = h.commands + '\n' + h.teleop + '\n\n' + h.rl);
+
+// ---- gait lab: footfall diagram + servo realism
+const FF = {cols: 356, rows: 5, buf: []};
+function pushFootfall(con, phase) { FF.buf.push({con, phase}); if (FF.buf.length > FF.cols) FF.buf.shift(); }
+setInterval(() => {
+  const c = $('#footfall'), g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  const rh = c.height / FF.rows, x0 = c.width - FF.buf.length;
+  FF.buf.forEach((s, i) => {
+    s.con.forEach((on, r) => { if (on) { g.fillStyle = ['#a78bfa','#60a5fa','#4ade80','#fbbf24','#f87171'][r]; g.fillRect(x0 + i, r * rh + 2, 1, rh - 4); } });
+    if (i > 0 && s.phase < FF.buf[i - 1].phase) { g.fillStyle = '#fff'; g.fillRect(x0 + i, 0, 1, c.height); }
+  });
+  g.fillStyle = '#9a94ab'; g.font = '10px system-ui'; for (let r = 0; r < FF.rows; r++) g.fillText(r, 3, r * rh + 11);
+}, 200);
+for (const [id, p] of [['gduty','gait.duty'],['gR0','gait.R0']])
+  $('#' + id).oninput = () => { $('#' + id + 'v').textContent = $('#' + id).value; post('/api/cmd', {line: 'set ' + p + ' ' + $('#' + id).value}); };
+function servoSend() {
+  post('/api/servo', {on: $('#sv-on').checked, hold_hz: +$('#sv-hold').value, latency_s: $('#sv-lat').value / 1000, rate_rad_s: +$('#sv-rate').value, quant: $('#sv-quant').checked}).then(r => $('#sv-note').textContent = r.note);
+}
+$('#sv-on').onchange = $('#sv-quant').onchange = servoSend;
+$('#sv-hold').oninput = () => { $('#sv-holdv').textContent = $('#sv-hold').value + ' Hz'; servoSend(); };
+$('#sv-lat').oninput = () => { $('#sv-latv').textContent = $('#sv-lat').value + ' ms'; servoSend(); };
+$('#sv-rate').oninput = () => { $('#sv-ratev').textContent = $('#sv-rate').value + ' rad/s'; servoSend(); };
+fetch('/api/state').then(r => r.json()).then(s => { const p = s.servo; $('#sv-on').checked = p.on; $('#sv-hold').value = p.hold_hz; $('#sv-holdv').textContent = p.hold_hz + ' Hz'; $('#sv-lat').value = p.latency_s * 1000; $('#sv-latv').textContent = Math.round(p.latency_s * 1000) + ' ms'; $('#sv-rate').value = p.rate_rad_s; $('#sv-ratev').textContent = p.rate_rad_s + ' rad/s'; $('#sv-quant').checked = p.quant; $('#au-browser').checked = s.browser_audio; });
+
+// ---- gesture studio
+let GS = {name: '', loop: false, keyframes: []}, gsKF = {};
+function gsFrame() {
+  const f = {t: +$('#gs-t').value, body: [+$('#gs-bx').value, +$('#gs-by').value, +$('#gs-bz').value], yaw: +$('#gs-yaw').value,
+    dz: [0,1,2,3,4].map(i => +$('#gs-dz' + i).value), claw: [0,0,0,0,0], ease: $('#gs-ease').value};
+  f.claw[+$('#gs-claw').value] = +$('#gs-claw-v').value;
+  if ($('#gs-arm-on').checked) f.arm = {[$('#gs-arm').value]: [+$('#gs-a0').value, +$('#gs-a1').value, +$('#gs-a2').value]};
+  if ($('#gs-say').value) f.say = $('#gs-say').value;
+  return f;
+}
+function gsLoadFrame(f) {
+  $('#gs-t').value = f.t; const b = f.body || [0,0,0]; $('#gs-bx').value = b[0]; $('#gs-by').value = b[1]; $('#gs-bz').value = b[2]; $('#gs-yaw').value = f.yaw || 0;
+  (f.dz || [0,0,0,0,0]).forEach((v, i) => $('#gs-dz' + i).value = v);
+  const arm = f.arm ? Object.entries(f.arm)[0] : null; $('#gs-arm-on').checked = !!arm; if (arm) { $('#gs-arm').value = arm[0]; [0,1,2].forEach(i => $('#gs-a' + i).value = arm[1][i]); }
+  const cl = f.claw || [0,0,0,0,0]; const ci = Math.max(0, cl.findIndex(v => v > 0)); $('#gs-claw').value = ci; $('#gs-claw-v').value = cl[ci] || 0;
+  $('#gs-say').value = f.say || ''; $('#gs-ease').value = f.ease || 'smooth'; gsLabels();
+}
+function gsLabels() {
+  $('#gs-bv').textContent = `${$('#gs-bx').value} ${$('#gs-by').value} ${$('#gs-bz').value} mm`; $('#gs-yawv').textContent = $('#gs-yaw').value + '°';
+  $('#gs-av').textContent = `${$('#gs-a0').value} ${$('#gs-a1').value} ${$('#gs-a2').value}°`; $('#gs-clawv').textContent = +$('#gs-claw-v').value === 0 ? 'closed' : Math.round($('#gs-claw-v').value * 100) + '% open';
+}
+let gsTimer = null;
+function gsPreview() { clearTimeout(gsTimer); gsTimer = setTimeout(() => post('/api/gesture/preview', {spec: {keyframes: [Object.assign(gsFrame(), {t: 0})]}, t: 0}), 80); }
+for (const id of ['gs-bx','gs-by','gs-bz','gs-yaw','gs-a0','gs-a1','gs-a2','gs-claw-v']) $('#' + id).oninput = () => { gsLabels(); gsPreview(); };
+for (const id of ['gs-dz0','gs-dz1','gs-dz2','gs-dz3','gs-dz4','gs-arm','gs-arm-on','gs-claw']) $('#' + id).onchange = gsPreview;
+function gsRender() {
+  GS.keyframes.sort((a, b) => a.t - b.t);
+  $('#gs-frames').innerHTML = GS.keyframes.length ? GS.keyframes.map((f, i) => `<div><a href="#" data-kf="${i}">t=${f.t.toFixed(1)}s</a> body ${(f.body||[0,0,0]).join('/')} yaw ${f.yaw||0}${f.arm ? ' arm' + Object.keys(f.arm)[0] : ''}${f.say ? ' say:' + f.say : ''} ${f.ease && f.ease !== 'smooth' ? f.ease : ''}</div>`).join('') : '(no frames yet — pose, then snap)';
+  document.querySelectorAll('[data-kf]').forEach(a => a.onclick = e => { e.preventDefault(); gsLoadFrame(GS.keyframes[+a.dataset.kf]); gsPreview(); });
+  const total = GS.keyframes.length ? GS.keyframes[GS.keyframes.length - 1].t : 0; $('#gs-scrub').max = Math.max(total, 0.1);
+}
+$('#gs-snap').onclick = () => { const f = gsFrame(); GS.keyframes = GS.keyframes.filter(k => Math.abs(k.t - f.t) > 0.049); GS.keyframes.push(f); gsRender(); $('#gs-t').value = (+$('#gs-t').value + 0.8).toFixed(1); };
+$('#gs-frame-del').onclick = () => { const t = +$('#gs-t').value; GS.keyframes = GS.keyframes.filter(k => Math.abs(k.t - t) > 0.049); gsRender(); };
+$('#gs-clear').onclick = () => { GS = {name: '', loop: false, keyframes: []}; $('#gs-name').value = ''; gsLoadFrame({t: 0.8}); gsRender(); };
+$('#gs-hold-off').onclick = () => post('/api/gesture/preview', {off: true});
+$('#gs-scrub').oninput = () => { $('#gs-scrubv').textContent = (+$('#gs-scrub').value).toFixed(1) + ' s'; clearTimeout(gsTimer); gsTimer = setTimeout(() => post('/api/gesture/preview', {spec: gsSpec(), t: +$('#gs-scrub').value}), 60); };
+function gsSpec() { return {name: $('#gs-name').value || 'untitled', loop: $('#gs-loop').checked, keyframes: GS.keyframes}; }
+$('#gs-play').onclick = async () => { if (!GS.keyframes.length) return; const r = await post('/api/gesture/play', gsSpec()); $('#gs-msg').textContent = r.ok ? `playing ${r.total.toFixed(1)} s` : r.error; };
+$('#gs-save').onclick = async () => { const r = await post('/api/gesture/save', gsSpec()); $('#gs-msg').textContent = r.ok ? 'saved ' + r.name : r.error; if (r.ok) loadGestures(); };
+$('#gs-play-saved').onclick = () => post('/api/cmd', {line: 'gesture ' + $('#gs-list').value});
+$('#gs-edit').onclick = () => { const n = $('#gs-list').value; if (!gsKF[n]) { $('#gs-msg').textContent = n + ' is a code gesture (gait/pebble_gestures*.py)'; return; } GS = JSON.parse(JSON.stringify(gsKF[n])); $('#gs-name').value = n; $('#gs-loop').checked = !!GS.loop; gsRender(); if (GS.keyframes.length) gsLoadFrame(GS.keyframes[GS.keyframes.length - 1]); $('#gs-msg').textContent = 'editing ' + n; };
+$('#gs-del').onclick = async () => { const n = $('#gs-list').value; if (!gsKF[n] || !confirm('delete gesture ' + n + '?')) return; await post('/api/gesture/delete', {name: n}); loadGestures(); };
+async function loadGestures() {
+  const r = await fetch('/api/gesture/list').then(x => x.json()); gsKF = r.keyframe; GESTURES = r.all;
+  $('#gs-list').innerHTML = r.all.map(g => `<option value="${g}">${g}${gsKF[g] ? ' (keyframe)' : ''}</option>`).join('');
+  $('#gesture').innerHTML = r.all.map(g => `<option>${g}</option>`).join('');
+}
+loadGestures(); gsLabels();
+
+// ---- voice & sounds
+$('#au-browser').onchange = () => post('/api/audio', {browser: $('#au-browser').checked});
+let CD = {root: 120, syllables: [{dur: 0.2, ratios: [1, 1.5, 2], amp: 0.6, bend_cents: 10}]}, cdCanon = {}, cdCustom = {};
+const SYL_FIELDS = [['dur','dur s',0.03,1.5,0.01],['gap','gap s',0,0.5,0.01],['root_mul','root ×',0.5,2,0.01],['amp','amp',0.1,0.9,0.01],['rough','rough',0,0.5,0.01],['breath','breath',0,0.4,0.01],['bend_cents','bend ¢',-60,60,1],['detune_cents','detune ¢',0,20,1],['wobble','wobble ¢',0,40,1]];
+function cdRender() {
+  $('#cd-root').value = CD.root; $('#cd-rootv').textContent = CD.root;
+  $('#cd-syls').innerHTML = CD.syllables.map((s, i) => `<div class="row" style="border-top:1px dashed var(--line); padding-top:4px"><label>syl ${i + 1}</label><label>ratios</label><input data-cd="${i}" data-f="ratios" value="${(s.ratios || [1]).map(r => +(+r).toFixed(3)).join(' ')}" style="width:110px" title="just-intonation multipliers of the root, e.g. 1 1.5 2  or  1 7/6 7/4"><button data-cdrm="${i}">×</button>
+    ${SYL_FIELDS.map(([k, lab, lo, hi, st]) => `<label>${lab}</label><input data-cd="${i}" data-f="${k}" type="number" min="${lo}" max="${hi}" step="${st}" value="${s[k] ?? (k === 'root_mul' ? 1 : k === 'amp' ? 0.6 : k === 'gap' ? (i ? 0.05 : 0) : 0)}" style="width:62px">`).join('')}</div>`).join('');
+  document.querySelectorAll('[data-cd]').forEach(el => el.onchange = () => { const s = CD.syllables[+el.dataset.cd]; if (el.dataset.f === 'ratios') s.ratios = el.value.split(/[\s,]+/).filter(Boolean).map(x => x.includes('/') ? x.split('/').reduce((a, b) => +a / +b) : +x); else s[el.dataset.f] = +el.value; });
+  document.querySelectorAll('[data-cdrm]').forEach(b => b.onclick = () => { CD.syllables.splice(+b.dataset.cdrm, 1); if (!CD.syllables.length) CD.syllables.push({dur: 0.2, ratios: [1, 1.5, 2]}); cdRender(); });
+}
+$('#cd-root').oninput = () => { CD.root = +$('#cd-root').value; $('#cd-rootv').textContent = CD.root; };
+$('#cd-add').onclick = () => { CD.syllables.push({dur: 0.2, gap: 0.05, ratios: [1, 1.5, 2], amp: 0.6}); cdRender(); };
+$('#cd-play').onclick = async () => { $('#cd-msg').textContent = 'rendering…'; const b = await fetch('/api/chord/render', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(CD)}).then(r => r.blob()); new Audio(URL.createObjectURL(b)).play(); $('#cd-msg').textContent = ''; };
+$('#cd-save').onclick = async () => { const r = await post('/api/chord/save', {name: $('#cd-name').value, spec: CD}); $('#cd-msg').textContent = r.ok ? 'saved ' + r.name : r.error; if (r.ok) loadChords(); };
+$('#cd-del').onclick = async () => { const n = $('#cd-load').value; if (!cdCustom[n] || !confirm('delete word ' + n + '?')) return; await post('/api/chord/delete', {name: n}); loadChords(); };
+$('#cd-load-go').onclick = () => { const n = $('#cd-load').value, src = cdCanon[n] || cdCustom[n]; if (!src) return; CD = JSON.parse(JSON.stringify(src)); $('#cd-name').value = cdCustom[n] ? n : n + '2'; cdRender(); };
+async function loadChords() {
+  const r = await fetch('/api/chord/list').then(x => x.json()); cdCanon = r.canon; cdCustom = r.custom; WORDS = r.lexicon;
+  $('#cd-load').innerHTML = Object.keys(cdCanon).map(w => `<option>${w}</option>`).join('') + Object.keys(cdCustom).map(w => `<option value="${w}">${w} (custom)</option>`).join('');
+  $('#word').innerHTML = WORDS.map(w => `<option>${w}</option>`).join(''); $('#gs-say').innerHTML = '<option value="">—</option>' + WORDS.map(w => `<option>${w}</option>`).join('');
+  $('#au-lex').innerHTML = WORDS.map(w => `<button data-say="${w}" style="padding:3px 7px; font-size:12px">${w}</button>`).join('');
+  document.querySelectorAll('[data-say]').forEach(b => b.onclick = () => post('/api/cmd', {line: 'say ' + b.dataset.say}));
+}
+loadChords(); cdRender();
+
+// ---- hardware
+const HW_KEYS = [0,1,2,3,4].flatMap(l => ['yaw','hip','knee'].map(j => `leg${l}_${j}`));
+$('#hw-key').innerHTML = HW_KEYS.map(k => `<option>${k}</option>`).join('');
+$('#hw-key').onchange = () => $('#hw-jig').value = $('#hw-key').value.endsWith('knee') ? -90 : 0;
+async function hwPost(body) { const r = await post('/api/hw', body); $('#hw-msg').textContent = r.ok ? '' : ('hw: ' + r.error); return r; }
+async function loadHW() {
+  const r = await fetch('/api/hw').then(x => x.json());
+  $('#hw-port').innerHTML = ['mock', ...r.ports].map(p => `<option>${p}</option>`).join(''); if (r.ports.length) $('#hw-port').value = r.ports[0];
+  hwRender(r.status);
+}
+function hwRender(st) {
+  if (!st) { $('#hw-tel').textContent = 'not connected'; $('#hw-legs').textContent = '—'; return; }
+  $('#hw-mirror').value = st.mirror; $('#hw-speed').value = st.speed_cps; $('#hw-speedv').textContent = st.speed_cps ? st.speed_cps + ' c/s' : 'servo max';
+  $('#hw-legs').innerHTML = st.legs.map((l, i) => `<span class="chip" style="color:${l ? 'var(--ok)' : 'var(--muted)'}">leg ${i}${l ? ' ●' : ' ○'}</span>`).join(' ') + ` <span>${st.n_present} servos${st.tripped.length ? ', CUT: ' + st.tripped.join(',') : ''}${st.errors ? ', ' + st.errors + ' bus errors (' + st.last_error + ')' : ''}</span>`;
+  const rows = st.tel.map(t => `<tr><td>${t.id}</td><td>${t.label}</td><td>${t.pos_deg}°</td><td>${t.q_deg ?? ''}°</td><td>${t.load}%</td><td>${t.volt}</td><td style="color:${t.temp >= 60 ? 'var(--bad)' : ''}">${t.temp}°</td><td>${t.torque ? 'on' : 'off'}${t.faults.length ? ' ⚠' + t.faults.join(',') : ''}</td>
+    <td><input type="number" value="0" step="5" style="width:56px" data-jog="${t.id}" title="center-relative degrees"><button data-jogbtn="${t.id}">jog</button></td></tr>`).join('');
+  $('#hw-tel').innerHTML = rows ? `<table><tr><th>id</th><th>joint</th><th>servo</th><th>q</th><th>load</th><th>V</th><th>°C</th><th>torque</th><th>jog</th></tr>${rows}</table>` : 'connected — scan the bus';
+  document.querySelectorAll('[data-jogbtn]').forEach(b => b.onclick = () => hwPost({action: 'jog', id: +b.dataset.jogbtn, deg: +document.querySelector(`[data-jog="${b.dataset.jogbtn}"]`).value}));
+}
+$('#hw-connect').onclick = async () => { $('#hw-msg').textContent = 'connecting…'; const r = await hwPost({action: 'connect', port: $('#hw-port').value}); if (r.ok) { hwRender(r.status); const s = await hwPost({action: 'scan'}); if (s.ok) hwRender(s.status); } };
+$('#hw-disconnect').onclick = async () => { await hwPost({action: 'disconnect'}); hwRender(null); };
+$('#hw-scan').onclick = async () => { $('#hw-msg').textContent = 'scanning…'; const s = await hwPost({action: 'scan'}); if (s.ok) hwRender(s.status); };
+$('#hw-mirror').onchange = () => hwPost({action: 'mirror', mode: $('#hw-mirror').value});
+$('#hw-torque-on').onclick = () => hwPost({action: 'torque', on: true});
+$('#hw-limp').onclick = () => hwPost({action: 'limp'});
+$('#hw-speed').oninput = () => { $('#hw-speedv').textContent = +$('#hw-speed').value ? $('#hw-speed').value + ' c/s' : 'servo max'; hwPost({action: 'speed', speed_cps: +$('#hw-speed').value}); };
+$('#hw-center').onclick = async () => { const r = await hwPost({action: 'center', key: $('#hw-key').value, jig_deg: +$('#hw-jig').value}); if (r.ok) $('#hw-msg').textContent = `${r.key}: offset ${r.offset} counts (${r.offset_deg}°) written to bench/calibration.yaml`; };
+$('#hw-dir-p').onclick = () => hwPost({action: 'dir', key: $('#hw-key').value, dir: 1});
+$('#hw-dir-m').onclick = () => hwPost({action: 'dir', key: $('#hw-key').value, dir: -1});
+$('#hw-setid').onclick = async () => { if (!confirm(`write servo ID ${$('#hw-old').value} → ${$('#hw-new').value}?`)) return; const r = await hwPost({action: 'set_id', old: +$('#hw-old').value, new: +$('#hw-new').value}); if (r.ok) $('#hw-scan').click(); };
+setInterval(async () => { if (document.querySelector('#hw-tel table') || $('#hw-tel').textContent.startsWith('connected')) { const r = await fetch('/api/hw').then(x => x.json()); if (r.status && !document.activeElement.dataset?.jog) { const vals = {}; document.querySelectorAll('[data-jog]').forEach(i => vals[i.dataset.jog] = i.value); hwRender(r.status); document.querySelectorAll('[data-jog]').forEach(i => { if (vals[i.dataset.jog] !== undefined) i.value = vals[i.dataset.jog]; }); } } }, 1000);
+loadHW();
 </script>
 </body>
 </html>

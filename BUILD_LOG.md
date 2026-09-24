@@ -8,7 +8,41 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
-## 2026-09-23 · Session 9d (laptop) — cockpit round two: feet that feel for the floor, recordings, worlds on disk, the walker, voice (D050)
+## 2026-09-24 · Session 9e (laptop) — toward the real robot: gesture studio, chord designer, servo realism, the hardware bridge, tailnet (D051)
+
+**Ask:** "how do we get it set up with tailscale?" and "what else makes it
+ready for playing with — gaits, gestures, sounds, better realism, more tools —
+so I'm ready to use it with the robot one leg at a time?"
+
+**Shipped (all in the cockpit, `./rocky.sh cockpit`):**
+- **Gesture studio** — gestures as keyframe JSON (`gait/gestures/`), posed live
+  in physics, snapped, scrubbed, played, saved; they join every gesture list
+  (teleop, console, brains, MCP). `gait/pebble_keyframes.py` is the player and
+  returns the same `(q, claw)` stream the code gestures do.
+- **Voice & sounds** — chord-speak plays in the browser (phone included); a
+  chord designer over `chordspeak2.py`'s syllable model, load a canon word,
+  edit, hear, save as a new lexicon word (`audio/custom/`, `audio/samples_custom/`).
+- **Gait lab & realism** — a footfall diagram, duty and stance-radius sliders,
+  and a servo model (`sim/servo_model.py`): 50 Hz hold, 20 ms latency, 4.7 rad/s
+  slew, 4096-count quantisation, off by default.
+- **Hardware** — `sim/hw_bridge.py`: open the Feetech bus (or the mock), scan,
+  legs present = legs whose three servos answered; sim → robot streams the
+  sim's targets to those legs (25 Hz, counts/s cap), robot → sim makes the sim
+  follow the real leg; telemetry table with jog, torque/LIMP, SafetyMonitor
+  events, center + dir calibration into `bench/calibration.yaml`, set-ID.
+- **`rocky.sh tailnet [PORT]`** — `tailscale serve` HTTPS in front of the
+  cockpit (mic needs a secure origin); `tailnet off`. Tailscale was logged out on
+  the laptop, so this is written but not exercised end to end.
+
+**Broken and fixed:** `rocky.sh` failed to parse since f830ed4 (five help lines
+had lost their `#`); `./rocky.sh cockpit` from the last session's notes would
+have printed a syntax error.
+
+**Verified:** 4 new tests (`sim/tests/test_d051.py`), the full fast suite, a
+Playwright pass through every new panel on the mock bus with zero console errors.
+**Not verified:** a real servo — none has been on this bus yet (B32 is the runbook).
+
+ — cockpit round two: feet that feel for the floor, recordings, worlds on disk, the walker, voice (D050)
 
 Asked for: all six follow-ups, plus how to start/stop the cockpit.
 

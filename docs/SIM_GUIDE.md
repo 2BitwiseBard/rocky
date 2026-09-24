@@ -212,8 +212,13 @@ everything the terminal playground has and the parts that need a screen:
   `whisper-server` (:8082) and the text is sent to the current brain.
 - **Stop it**: Ctrl-C in its terminal, the page's ⏻ quit button, or
   `./rocky.sh cockpit-stop`; `./rocky.sh cockpit` restarts a running one.
-  `--host 0.0.0.0` serves it on the tailnet for a phone (the layout stacks
-  under 900 px).
+  For the phone: `./rocky.sh tailnet` publishes it on the tailnet over
+  HTTPS (`tailscale serve`, port 9445 by default; `tailnet off` removes
+  it). HTTPS is what makes the mic button work there, since browsers
+  only allow the microphone on a secure origin; chord-speak plays in the
+  phone's browser too. The server itself stays bound to 127.0.0.1. It
+  needs `sudo tailscale up` once on the laptop (the layout stacks under
+  900 px).
 
 **Obstacles, rough ground and voids (D050).** The cliff detector works
 on contact timing, so on an obstacle course or rubble every bridged foot,
@@ -238,6 +243,63 @@ streams, so nothing to install beyond the `sim` extra (`starlette` and
 proxy (`harness/cockpit_backend.py`) and any script can use:
 `POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/cmd {"line": "walk 45"}`,
 `/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`.
+
+## 3c. Toward the real robot: gesture studio, voice, realism, hardware (D051)
+
+Four panels added on 2026-09-24 so the cockpit is the place where gaits,
+gestures and sounds are made, and where the real servos plug in one leg
+at a time.
+
+- **Gesture studio.** Gestures as data: `gait/gestures/NAME.json` is a
+  list of keyframes (time, body offset, yaw, per-corner crouch, a raised
+  leg as an "arm" with explicit joint angles, claw opening, a chord cue,
+  an easing). Pose the robot with the sliders and it holds the pose live
+  in physics; **snap** a frame, move the time, pose the next one; scrub
+  the timeline; ▶ plays it once (cues fire their chords); save. A saved
+  gesture appears in every gesture list: the teleop dropdown, the
+  console's `gesture NAME`, the brains' `gesture` tool and the MCP tool
+  through the cockpit backend. The player (`gait/pebble_keyframes.py`)
+  returns the same `(q[5,3], claw[5])` stream as the code gestures, so
+  the same file drives the servo bus later. The code gestures (wave, bow,
+  jazz hands…) play from the same list but are edited in Python.
+- **Voice & sounds.** Chord-speak now plays in the browser (a phone on
+  the tailnet hears the robot; untick to use the server's speakers). The
+  **chord designer** exposes the v0.2 voice model (`audio/chordspeak2.py`):
+  a word is one to four syllables, each a stack of just-intonation ratios
+  on a low root through one fixed throat, with amplitude, growl, breath,
+  pitch bend, detune and wobble per syllable. Load a canon word to see how
+  it is built, change it, ▶ hear it, save it under a new name: the spec
+  goes to `audio/custom/NAME.json`, the render to
+  `audio/samples_custom/NAME.wav`, and the lexicon (`say`, the brains, the
+  MCP tool) picks it up at once. Canon words are read-only.
+- **Gait lab & realism.** A scrolling **footfall diagram** (one row per
+  leg, filled while in contact, a tick per gait cycle) under the gait
+  sliders, which now include duty and stance radius. Below it the **servo
+  model** (`sim/servo_model.py`): what the bus does to a target that the
+  ideal sim actuator does not — a zero-order hold at the bus rate (50 Hz),
+  a latency (20 ms), a slew limit (4.7 rad/s, the ST3215's no-load speed
+  at 12 V) and 4096-count quantisation. Off by default so every recorded
+  number stands; on, a gesture that depends on the sim servo teleporting
+  shows it here rather than on the bench. Console: `set servo.on 1`,
+  `set servo.rate_rad_s 3`.
+- **Hardware.** The Feetech bus beside the sim (`sim/hw_bridge.py` over
+  `driver/rocky_driver`). Pick the adapter port (or `mock`, the byte-level
+  servo simulator the bench scripts rehearse on), **scan**, and every leg
+  whose three servos answered is a real leg. **sim → robot** streams the
+  sim's joint targets to those legs at 25 Hz — gait, gestures, reflexes,
+  whatever the sim is doing — with a counts-per-second cap for gentle
+  first moves; **robot → sim** makes the sim leg follow the real one
+  (hold it in your hand and check the IK frame, the calibration and the
+  limits on screen). Legs not on the bus stay simulated, so one built leg
+  is a robot with one real leg and four simulated ones. The panel also
+  has the telemetry table (position, load, volts, temperature, faults,
+  torque) with a per-servo jog, torque on / **LIMP**, the SafetyMonitor
+  (temperature and fault torque-cut at 2 Hz, events in the feed), center
+  calibration and direction per joint (writes `bench/calibration.yaml`
+  exactly as `bench/calibrate_centers.py` does) and ID assignment. The
+  cockpit's stop also stops the stream to the real legs. Everything in
+  this panel was verified on the mock only: no servo has been on this
+  laptop's bus yet.
 
 ## 4. The experiment scripts
 

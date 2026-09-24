@@ -28,7 +28,7 @@ claim from "it works on hardware".
 | **Sim + control** | the analytic wave gait walks (264 mm in 8 s, 1° tilt); the reflex supervisor safe-stops, braces and hands off to a righter; self-righting is a **hybrid** (RL rights the body from a side landing, an analytic ramp stands it, and from the back the ramp does the righting: 7/20 stood on this machine, 12/20 in the cloud run, pure-RL 0/20); four retrains scored worse and are recorded as negatives, the latest pair (D048) traded handoffs for a smoother policy | `docs/SIM_GUIDE.md`, `docs/RL_GUIDE.md`, `docs/RL_TOUR.md` |
 | **Tests** | driver 58, harness 22, gait 9, intent 14, sim 3 → 92 fast tests in ~3 s; URDF ≡ MJCF ≡ analytic FK | GitHub Actions `ci.yml` |
 | **Harness** | six-tool MCP server on a mock and on MuJoCo (+ `look` where an eye exists); a local LLM (llama-swap / Ollama) or Claude drives it; no hardware backend yet | `harness/`, `docs/MCP_CONTRACT_v0.md` |
-| **Cockpit** | browser playground on one running sim: chase + eye cameras, top-down map, chat with a switchable brain (regex / local model / Claude) and voice, a vision model behind `look`, world editor (presets, obstacles, terrain, friction, slopes, saved and random courses), recordings with replay, RL panel (righter and walker hot-swap); feet feel for the floor, so rubble, rough ground and small stairs are crossed and a table edge still stops it (D050) | `docs/SIM_GUIDE.md` §3b, `sim/cockpit.py` |
+| **Cockpit** | browser playground on one running sim: chase + eye cameras, top-down map, chat with a switchable brain (regex / local model / Claude) and voice, a vision model behind `look`, world editor (presets, obstacles, terrain, friction, slopes, saved and random courses), recordings with replay, RL panel (righter and walker hot-swap); feet feel for the floor, so rubble, rough ground and small stairs are crossed and a table edge still stops it (D050). D051: a keyframe **gesture studio**, a **chord designer** for new words (audio plays in the browser), a footfall diagram + a **servo realism** model, and a **hardware panel** that mirrors the sim to real legs as they come onto the bus (mock-verified); `rocky.sh tailnet` puts it on the phone over HTTPS | `docs/SIM_GUIDE.md` §3b–3c, `sim/cockpit.py`, `sim/hw_bridge.py` |
 | **Review** | full project review with dispositions | `docs/REVIEW_2026-09-22.md` |
 
 ## Layout
@@ -36,7 +36,7 @@ claim from "it works on hardware".
 ```
 rocky/
 ├── README.md, BUILD_LOG.md, NOTES_INBOX.md   this file · the notebook (newest first) · the raw inbox
-├── rocky.sh             launcher: cockpit / play / chat / brain / voice / test / train-* / eval-* / cad-check
+├── rocky.sh             launcher: cockpit / tailnet / play / chat / brain / voice / test / train-* / eval-* / cad-check
 ├── pyproject.toml       pip-installable core (gait modules + bus driver) and the extras
 ├── cad/                 build123d parametric parts; params.yaml is the single source of truth;
 │   ├── run_all_checks.py   the CAD CI: 23 modules incl. check_assembly (joints) + check_printability
