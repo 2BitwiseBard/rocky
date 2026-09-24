@@ -81,6 +81,7 @@ from harness.backend import SIGNED                                              
 
 DEFAULT_BASE = "http://127.0.0.1:8080/v1"
 WHISPER_URL = os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082")
+WHISPER_PROMPT = ("Pebble, walk forward thirty centimeters. Pebble, stop. Wave. Bow. Sit. Shake. Turn left. Turn right. What do you see? Say hello.")   # vocabulary hint for the small model
 MIN_VOICE_BYTES = 1200      # a webm/opus container with no audio is ~200-900 bytes
 MIN_VOICE_S = 0.4           # shorter than a word: the hold was lost, not the speech
 CONF_PATH = os.environ.get("ROCKY_COCKPIT_CONF", os.path.expanduser("~/.config/rocky/cockpit.json"))
@@ -814,7 +815,7 @@ class Brains:
                 (": " + "; ".join(tried) if tried else ""), "tried": tried}
 
     # ------------------------------------------------------------------ voice
-    async def transcribe(self, raw, mode=None):
+    async def transcribe(self, raw, mode=None, trusted=False):
         """Browser audio blob -> ffmpeg 16 kHz mono -> whisper verbose_json ->
         cleaned text. Returns {ok, text, motion_blocked, wake, dropped}."""
         # A phone that lost the hold (long-press callout, a scroll, a synthetic
@@ -846,7 +847,8 @@ class Brains:
                     with open(wav, "rb") as fw:
                         r = await c.post(f"{WHISPER_URL}/v1/audio/transcriptions",
                                          files={"file": ("in.wav", fw, "audio/wav")},
-                                         data={"response_format": "verbose_json", "temperature": "0.0"})
+                                         data={"response_format": "verbose_json", "temperature": "0.0",
+                                               "language": "en", "prompt": WHISPER_PROMPT})
                 if r.status_code != 200:
                     return {"ok": False, "audio_s": round(audio_s, 2),
                             "error": f"whisper-server HTTP {r.status_code}: {r.text[:160]}"}
@@ -859,6 +861,9 @@ class Brains:
                 return {"ok": False, "error": f"whisper-server: {e}"}
         out = self.voice_result(data, mode)
         out["audio_s"] = round(audio_s, 2)
+        if trusted and out.get("text"):            # hands-free: the operator opted out of the wake word
+            out["motion_blocked"] = False
+            out["trusted"] = True
         if not out.get("text"):
             self._log(f"voice: {audio_s:.1f} s of audio, whisper heard nothing"
                       + (f" (dropped: {'; '.join(out['dropped'])})" if out.get("dropped") else ""))

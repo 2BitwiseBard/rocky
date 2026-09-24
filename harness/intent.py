@@ -74,7 +74,7 @@ _DIRS = {"forward": (1, 0), "forwards": (1, 0), "ahead": (1, 0),
          "back": (-1, 0), "backward": (-1, 0), "backwards": (-1, 0),
          "left": (0, 1), "right": (0, -1)}
 MOTION_TOOLS = ("goto", "gesture", "compose_gesture")   # stop is NEVER gated
-WAKE_WORDS = ("pebble", "rocky")
+WAKE_WORDS = ("pebble", "pebbles", "peble", "pebbly", "rocky", "rockie", "rocket")   # D052 voice: the fast whisper (base.en) mishears the name; accept its usual guesses
 UNITLESS_MAX = 3.0        # a bare number below this is meters; at/above it we ask
 
 _ONES = {w: i for i, w in enumerate(
@@ -115,8 +115,13 @@ def _fuzzy_word(w: str):
 
 
 def has_wake_word(text: str) -> bool:
-    """'pebble, forward 30 cm' / 'hey rocky stop' — the voice gate (D052)."""
-    return bool(re.search(rf"\b({'|'.join(WAKE_WORDS)})\b", text.lower()))
+    """'pebble, forward 30 cm' / 'hey rocky stop' — the voice gate (D052).
+    Fuzzy: whisper's misspellings of the name (edit distance 1 on a 5-6 letter
+    word) count, so 'pebbel stop' still passes; 'people' does not (cutoff 0.8)."""
+    low = text.lower()
+    if re.search(rf"\b({'|'.join(WAKE_WORDS)})\b", low):
+        return True
+    return any(difflib.get_close_matches(w, ("pebble", "rocky"), n=1, cutoff=0.8) for w in re.findall(r"[a-z]+", low)[:4])
 
 
 def strip_wake_word(text: str) -> str:

@@ -136,7 +136,7 @@
       <div class="note-warn" id="brain-pair"></div>
       <div class="note-bad" id="brain-err"></div>
       <div id="chat"></div>
-      <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk (whisper-server)">🎤</button><button id="chat-clear" title="forget the conversation">clear</button></div>
+      <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk, or tap to start / tap to stop">🎤</button><label class="small" title="listen continuously: speak, pause, and it goes — no button, no wake word (talk mode answers instantly; local mode: pick lfm2.5-vl for ~0.3 s)"><input id="handsfree" type="checkbox"> hands-free</label><button id="chat-clear" title="forget the conversation">clear</button></div>
       <div class="note-warn" id="voice-note"></div>
       <div class="small" id="claude-note"></div>
     </div></details>
@@ -521,7 +521,7 @@ async function recStart() {
       const secs = (Date.now() - recT0) / 1000;
       const blob = new Blob(chunks, {type: mediaRec.mimeType || 'audio/webm'});
       if (secs < 0.4 || blob.size < 1200) { recNote(`recording too short (${secs.toFixed(1)} s, ${blob.size} bytes) — hold, or tap to start and tap again to stop`); return; }
-      const fd = new FormData(); fd.append('audio', blob, 'in.webm'); fd.append('mode', $('#mode').value); fd.append('duration_s', secs.toFixed(2));
+      const fd = new FormData(); fd.append('audio', blob, 'in.webm'); fd.append('mode', $('#mode').value); fd.append('duration_s', secs.toFixed(2)); fd.append('trusted', HF.on ? '1' : '0');
       const w = addChat('t', `transcribing ${secs.toFixed(1)} s…`);
       let r; try { r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json()); } catch (e) { w.remove(); addChat('n', 'voice: ' + e.message); return; }
       w.remove();
@@ -529,7 +529,7 @@ async function recStart() {
       $('#chat-in').value = r.text || '';
       if (!r.text) { addChat('n', `nothing heard in ${r.audio_s ?? secs.toFixed(1)} s of audio` + (r.dropped && r.dropped.length ? ' (dropped: ' + r.dropped.join('; ') + ')' : '')); recNote('whisper heard nothing — speak closer to the phone, a little longer'); return; }
       recNote('');
-      if (!r.motion_blocked) { $('#chat-in').value = ''; sendChat(r.text, 'voice', false); }
+      if (!r.motion_blocked) { $('#chat-in').value = ''; sendChat(r.text, 'voice', !!r.trusted); }
       else { pendingVoice = r.text; recNote("needs the wake word 'pebble, …' — press Enter to send it as a command"); $('#chat-in').focus(); }
     };
     mediaRec.start(200); recT0 = Date.now();
@@ -539,6 +539,70 @@ async function recStart() {
   } catch (err) { addChat('n', 'mic: ' + err.message); recNote('mic: ' + err.message); }
 }
 function recStop() { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); }
+
+// hands-free: one open mic, a level meter decides where the utterances are. The recorder
+// runs all the time so the first syllable is never clipped; a segment is sent when 0.7 s of
+// silence follows speech; a segment with no speech is discarded and the recorder restarted
+// (fresh container header) every 4 s. Sent with trusted=1: the operator chose to skip the
+// wake word for this session.
+const HF = {on: false, stream: null, ctx: null, an: null, rec: null, chunks: [], t0: 0, speaking: false, lastVoice: 0, above: 0, timer: null, level: 0};
+const HF_THRESH = 0.02, HF_SILENCE_MS = 700, HF_IDLE_MS = 4000, HF_MAX_MS = 12000;
+function hfNewRec() {
+  if (!HF.stream) return;
+  HF.chunks = []; HF.speaking = false; HF.t0 = Date.now();
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', ''].find(m => !m || (window.MediaRecorder && MediaRecorder.isTypeSupported(m)));
+  HF.rec = mime ? new MediaRecorder(HF.stream, {mimeType: mime}) : new MediaRecorder(HF.stream);
+  HF.rec.ondataavailable = ev => { if (ev.data && ev.data.size) HF.chunks.push(ev.data); };
+  HF.rec.onstop = () => {
+    const blob = new Blob(HF.chunks, {type: HF.rec.mimeType || 'audio/webm'}), spoke = HF.speaking, secs = (Date.now() - HF.t0) / 1000;
+    if (HF.on) hfNewRec();                         // keep listening while this one transcribes
+    if (!spoke || blob.size < 1200) return;
+    hfSend(blob, secs);
+  };
+  HF.rec.start(200);
+}
+async function hfSend(blob, secs) {
+  const fd = new FormData(); fd.append('audio', blob, 'in.webm'); fd.append('mode', $('#mode').value); fd.append('duration_s', secs.toFixed(2)); fd.append('trusted', '1');
+  recNote(`heard ${secs.toFixed(1)} s — transcribing…`);
+  let r; try { r = await fetch('/api/voice', {method: 'POST', body: fd}).then(x => x.json()); } catch (e) { recNote('voice: ' + e.message); return; }
+  if (!r.ok) { recNote('voice: ' + (r.error || 'failed')); return; }
+  if (!r.text) { recNote('hands-free: nothing understood in that ' + (r.audio_s ?? secs.toFixed(1)) + ' s — listening'); return; }
+  recNote('🎤 ' + r.text + ' — listening');
+  sendChat(r.text, 'voice', true);
+}
+function hfTick() {
+  if (!HF.on || !HF.an) return;
+  const buf = new Uint8Array(HF.an.fftSize); HF.an.getByteTimeDomainData(buf);
+  let sum = 0; for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+  HF.level = Math.sqrt(sum / buf.length);
+  const now = Date.now();
+  if (HF.level > HF_THRESH) { HF.above++; if (HF.above >= 3 && !HF.speaking) { HF.speaking = true; recNote('● hearing you…'); } if (HF.speaking) HF.lastVoice = now; }
+  else HF.above = 0;
+  if (HF.rec && HF.rec.state === 'recording') {
+    if (HF.speaking && now - HF.lastVoice > HF_SILENCE_MS) HF.rec.stop();                 // utterance ended
+    else if (HF.speaking && now - HF.t0 > HF_MAX_MS) HF.rec.stop();                       // cap a monologue
+    else if (!HF.speaking && now - HF.t0 > HF_IDLE_MS) HF.rec.stop();                     // silence: restart quietly
+  }
+  HF.timer = requestAnimationFrame(hfTick);
+}
+async function hfStart() {
+  try {
+    HF.stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}});
+    HF.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = HF.ctx.createMediaStreamSource(HF.stream); HF.an = HF.ctx.createAnalyser(); HF.an.fftSize = 1024; src.connect(HF.an);
+    HF.on = true; hfNewRec(); micBtn.disabled = true; micBtn.style.color = 'var(--ok)'; micBtn.textContent = '👂';
+    recNote('hands-free: listening — speak, pause, and it goes (no wake word needed)');
+    hfTick();
+  } catch (err) { $('#handsfree').checked = false; recNote('mic: ' + err.message); }
+}
+function hfStop() {
+  HF.on = false; cancelAnimationFrame(HF.timer);
+  if (HF.rec && HF.rec.state === 'recording') { HF.speaking = false; HF.rec.stop(); }
+  if (HF.stream) HF.stream.getTracks().forEach(t => t.stop());
+  if (HF.ctx) HF.ctx.close().catch(() => {});
+  HF.stream = HF.ctx = HF.an = HF.rec = null; micBtn.disabled = false; micBtn.style.color = ''; micBtn.textContent = '🎤'; recNote('');
+}
+$('#handsfree').onchange = () => $('#handsfree').checked ? hfStart() : hfStop();
 let micDownAt = 0;
 micBtn.addEventListener('pointerdown', e => {
   e.preventDefault(); try { micBtn.setPointerCapture(e.pointerId); } catch (_) {}   // keeps the release even if the finger drifts

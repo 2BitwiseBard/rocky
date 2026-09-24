@@ -61,6 +61,11 @@ case "$cmd" in
     source "$HOME/.config/environment.d/local-ai.conf" 2>/dev/null || true
     cd "$ROCKY_REPO"
     for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p"; done   # one cockpit at a time
+    # D052 voice: the fast whisper (base.en, CPU greedy, ~1 s per command) on :8086 when it is
+    # up (whisper-fast.service), else the large-v3-turbo on :8082 (18-20 s per command on 6 CPU threads)
+    if [[ -z "${ROCKY_WHISPER_URL:-}" ]] && curl -s -m 1 -o /dev/null http://127.0.0.1:8086/ 2>/dev/null; then
+      export ROCKY_WHISPER_URL="http://127.0.0.1:8086"
+    fi
     LOCAL_AI_KEY="${LOCAL_AI_KEY:-}" MUJOCO_GL=egl exec "$PY" sim/cockpit.py "$@" ;;
 
   cockpit-stop)

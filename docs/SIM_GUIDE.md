@@ -323,10 +323,20 @@ everything the terminal playground has and the parts that need a screen:
   refusals (text-only model as vision, quarantined model) are printed.
   Replies show fallback notes and the tool trace; a `compose_gesture`
   result has **save gesture** / **open in studio** buttons.
-- **Voice**: hold 🎤. The transcript always lands in the input box; with
-  the wake word ("pebble, …") or no motion in it, it is sent at once;
-  otherwise the page says "needs the wake word — press Enter" and only
-  your Enter sends it as a (trusted) command.
+- **Voice**: hold 🎤 to talk, or tap once to start and tap again to stop
+  (phones lose a long press). The transcript lands in the input box; with
+  the wake word ("pebble, …" — the fast model's misspellings count) or no
+  motion in it, it is sent at once; otherwise the page says "needs the
+  wake word — press Enter" and only your Enter sends it as a (trusted)
+  command. **Hands-free** (checkbox next to the mic) keeps the mic open: a
+  level meter cuts the utterances, each one is sent as trusted and goes
+  straight to the robot, no wake word. `./rocky.sh cockpit` uses the fast
+  whisper (`whisper-fast.service`, base.en on the CPU, ~1 s per command)
+  when it is up and the large model on :8082 (18–20 s per command on 6 CPU
+  threads) otherwise; `ROCKY_WHISPER_URL` overrides. For voice use the
+  Talk brain (instant) or the local brain with `lfm2.5-vl` (0.2–0.5 s per
+  command, tool calls included, already resident beside the 35B driver);
+  the 35B driver itself adds several seconds per turn.
 - **Teleop**: arrow buttons or the keyboard (page focused, no text box
   active), gestures and chord-speak from dropdowns, shove buttons. The
   movement buttons are disabled, with the reason, while locomotion is held.

@@ -1654,7 +1654,8 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         up = form.get("audio")
         if up is None:
             return JSONResponse({"ok": False, "error": "no audio"})
-        r = await sim.brains.transcribe(await up.read(), mode=form.get("mode"))
+        r = await sim.brains.transcribe(await up.read(), mode=form.get("mode"),
+                                        trusted=str(form.get("trusted", "")).lower() in ("1", "true", "yes"))
         if r.get("text"):
             sim.log(f"🎤 {r['text']}")
         elif r.get("dropped"):

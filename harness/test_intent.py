@@ -255,3 +255,10 @@ if __name__ == "__main__":
         fn()
         print(f"  ok  {fn.__name__}")
     print(f"{len(fns)}/{len(fns)} intent tests green")
+
+
+def test_wake_word_tolerates_whisper_misspellings():
+    """D052 voice: base.en hears 'Pebbel' / 'Peble' for the name; 'people' must not pass."""
+    from harness.intent import has_wake_word
+    assert has_wake_word("Pebbel, stop") and has_wake_word("Peble bow") and has_wake_word("hey rocky sit")
+    assert not has_wake_word("people walk forward") and not has_wake_word("walk forward thirty centimeters")

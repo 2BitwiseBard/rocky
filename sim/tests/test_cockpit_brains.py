@@ -433,3 +433,17 @@ def test_unknown_mode_and_empty_text(mode):
     b = brains(Script(tool_model=[answer("x")]))
     assert run(b.chat("", mode=mode))["reply"] == ""
     assert "unknown mode" in run(b.chat("hi", mode="psychic"))["reply"]
+
+
+def test_voice_result_trusted_skips_the_wake_word(monkeypatch):
+    """Hands-free sends trusted=1: the transcript may move the robot without 'pebble'."""
+    import asyncio
+    import cockpit_brains as cb
+    b = cb.Brains.__new__(cb.Brains)
+    b.state = {"mode": "talk"}; b._voice_last = (0.0, ""); b._log = lambda *a, **k: None
+    data = {"text": "walk forward thirty centimeters", "segments": [{"text": "walk forward thirty centimeters", "no_speech_prob": 0.1, "avg_logprob": -0.3}]}
+    r = b.voice_result(data, "talk")
+    assert r["text"] and r["motion_blocked"] is True                      # no wake word: blocked
+    monkeypatch.setattr(cb, "WHISPER_URL", "http://127.0.0.1:1")           # unreachable: transcribe must fail early on size, not on the network
+    out = asyncio.run(b.transcribe(b"x" * 10, mode="talk", trusted=True))
+    assert out["ok"] is False and "too short" in out["error"]

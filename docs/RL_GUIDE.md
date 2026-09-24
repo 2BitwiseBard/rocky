@@ -323,6 +323,7 @@ ramp, 14 s, on `handoff_ok`), with the no-righter row in brackets.
 | `recover3_scratch` | recover v2 capped, scratch | 3 M | — | — / 3/20 | 0/20 | not re-measured | never rights from the back |
 | `recover5_v3` | recover v3 capped, 3 rad/s, scratch | 3 M | 215 | — / 2/20 | 2/20 | not re-measured | D048 negative: smoothness cost, lower rate limit; back 0/6, side 0/7 |
 | `recover5_v3_warm` | recover1 → v3 capped, 3 rad/s | 5 M | 483 | — / 4/20 | 4/20 | stood **3/20** legacy · **0/20** hw · 0/20 servo · 0/20 rand · pure-RL **0/20** · system 20/20 (no righter 11/20), output line-for-line identical to recover1's · jitter (servo): 55 % pinned, 3.9 rev/s, 2.0°/tick, ctrl rev/s 4.7 | legacy. D048 negative on the handoff (4 < 7) but the smoothest righter so far (pre-D052: 58 % pinned, 7 reversals/s, 2.1°/tick); on D052 its pure-RL 4/20 is gone |
+| `recover6_d052` | recover v2, obs v2, servo random, 4.0 rad/s | 3 M | 421 (nominal eval mean) | — / **0/20** (hardware handoff) | 0/20 | B34 first attempt (2026-09-24, CPU, 25 min): trained on the D052 contract (servo model in the loop, IMU/encoder/switch noise, no torso height). End tilt median 11.8° (recover1: 16.6°) but no handoff; under the supervisor 11/20 with the policy = 11/20 without, vs recover1's 20/20 — a fresh 3 M policy is marginal, as D048 found. NEGATIVE; recover1 stays shipped. Next: warm start is impossible (obs 39 → 57), so try 10 M, the Δaction weight sweep, or a side→back curriculum. |
 
 A "not re-measured" cell is not a zero; those runs were not re-evaluated
 in D052.
