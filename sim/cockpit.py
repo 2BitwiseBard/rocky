@@ -53,10 +53,23 @@ cameras re-render on the next loop turn, paused or not), so neither the next
 situation line nor the next look describes a world that is gone; the state feed's `event_seq` counts
 every event ever appended (EventLog), so a client sees a new event even
 when the 12-event window looks the same.
+
+Capabilities (D056): GET /api/capabilities is what this cockpit can do right
+now, from the one tool registry (harness/capabilities.py): the live gesture
+and chord-word lists, every tool it runs with its schema and whether a spoken
+line needs the wake word for it, the live gait envelope and the robot, plus a
+`version` (12 hex of a sha256 over all of it). Built on demand and cached by
+its inputs; saving or deleting a gesture or a chord word, or a gait change,
+makes a new version. The state feed (/api/state, /api/events) carries it as
+`caps_version`, with `caps_seq` counting the changes since start, and the
+console logs each change. It is NOT an entry on the events feed: the `status`
+tool hands every model that feed's last five entries, and a tool the models
+already call must not answer differently because a list or the gait moved.
 """
 from __future__ import annotations
 import argparse
 import asyncio
+import copy
 import hashlib
 import io
 import ipaddress
@@ -99,10 +112,12 @@ import pebble_feasibility as pf                                        # noqa: E
 import rl_common as rc                                                 # noqa: E402
 from model_fingerprint import robot_fingerprint, fingerprint_note      # noqa: E402
 from shove import Shove                                                # noqa: E402
-from harness.backend import CHORD_WORDS                                # noqa: E402
+from harness.backend import CHORD_WORDS, SIGNED                        # noqa: E402
+import harness.capabilities as tool_registry                           # noqa: E402
 # D052: the brains (roles, fallbacks, histories, voice, look) live in cockpit_brains
 from cockpit_brains import (Brains, TOOLS, SYSTEM, VISION_PROMPT, TOOL_NAMES,   # noqa: E402,F401
-                            validate_goto, goto_range_error, local_ai_key as _local_ai_key)
+                            validate_goto, goto_range_error, local_ai_key as _local_ai_key,
+                            cockpit_flags)
 # scene memory + situational awareness (the owner's "memory" and "awareness" asks)
 from scene_memory import SceneMemory, DEFAULT_DIR as MEMORY_DIR, fmt_age      # noqa: E402
 
@@ -301,6 +316,10 @@ class CockpitSim(Playground):
         self.refusal = None                 # (wall time, text): the last command a guard refused (overlay)
         self.teach = None                   # the studio's pose-stream recorder (dict) while recording
         self.fingerprint = robot_fingerprint(self.model)
+        self._caps_lock = threading.Lock()
+        self._caps = None                   # D056: (inputs, capabilities snapshot), built on demand
+        self._caps_seq = 0                  # version changes since start (the state feed's caps_seq)
+        self._caps_refresh()                # the baseline version: a later change counts
         self.log(f"world: {self.world_name} | {self.righter_note} | robot {self.fingerprint}")
 
     def note(self, kind, msg):
@@ -419,10 +438,91 @@ class CockpitSim(Playground):
         return self.brains.base
 
     def reload_library(self):
-        """Any thread: re-read keyframe gestures + chord words from disk."""
+        """Any thread: re-read keyframe gestures + chord words from disk (D056: a
+        changed list is a new capabilities version: the state feed's caps_version)."""
         self.gestures = all_gestures()
         self.gesture_names = sorted(self.gestures)
         self.lexicon = lexicon()
+        self._caps_refresh()
+
+    def apply_gait(self, **kw):
+        """Playground.apply_gait; then (D056) a new envelope is a new capabilities version."""
+        out = super().apply_gait(**kw)
+        if getattr(self, "_caps_lock", None) is not None:
+            self._caps_refresh()
+        return out
+
+    # ------------------------------------------------------ D056: capabilities
+    def _caps_envelope(self):
+        """The registry's envelope with THIS cockpit's live gait in it (a gait preset
+        or a walker's training gait changes the speed, the turn rate and the step);
+        the registry's own numbers when the gait cannot say. Never raises, never warns
+        (the state feed reads the version, so a bad gait that slipped past validation,
+        T = 0, is rebuilt here: its non-finite numbers are refused below, not printed)."""
+        env = tool_registry.default_envelope()
+        try:
+            g = self.gait
+            with np.errstate(all="ignore"):
+                mc = g.max_command()
+            v, wz, hstep = float(mc["v"]), float(mc["wz"]), float(g.hstep)
+            if not np.isfinite([v, wz, hstep]).all():
+                raise ValueError(f"non-finite envelope v={v} wz={wz} hstep={hstep}")
+            env.update(source="the cockpit's live gait: sim.gait.max_command() (WaveGait budget, "
+                              "cad/params.yaml)",
+                       goto_timeout_s=GOTO_CAP_S, goto_speed_m_s=round(min(V_GOTO, v) / 1000.0, 4),
+                       speed_m_s=round(v / 1000.0, 4), turn_rad_s=round(wz, 3), step_height_mm=round(hstep, 1))
+        except Exception:                                       # noqa: BLE001 — keep the registry's numbers
+            pass
+        return env
+
+    def _caps_current(self):
+        """Any thread. The cached capabilities snapshot (never mutate it: capabilities()
+        hands out copies), rebuilt when an input changed — the gesture or chord-word
+        list, the gait, the eye or the memory. A rebuild with a new version bumps
+        _caps_seq and logs one console line, once per change — never an events-feed
+        entry (the status tool returns that feed's tail to the models)."""
+        g = self.gait
+        flags = cockpit_flags(self)
+        key = (tuple(self.gesture_names), tuple(self.lexicon), tuple(SIGNED),
+               tuple(float(getattr(g, k)) for k in GAIT_KEYS), tuple(sorted(flags.items())))
+        with self._caps_lock:
+            last = self._caps
+            if last is not None and last[0] == key:
+                return last[1]
+            caps = tool_registry.build(list(key[0]), list(key[1]), list(SIGNED),
+                                       envelope=self._caps_envelope(), **flags)
+            self._caps = (key, caps)
+            if last is not None and last[1]["version"] != caps["version"]:
+                self._caps_seq += 1
+                self.log(f"capabilities: {last[1]['version']} -> {caps['version']}")
+            return caps
+
+    def _caps_refresh(self):
+        """_caps_current for its count; never raises (a gesture save must not fail over it)."""
+        try:
+            self._caps_current()
+        except Exception as e:                                  # noqa: BLE001
+            self.log(f"capabilities: not rebuilt ({type(e).__name__}: {e})")
+
+    def _caps_brief(self):
+        """Any thread. (caps_seq, caps_version) for the state feed: the version GET
+        /api/capabilities answers now and how many times it changed since start, read
+        together. Never raises and never logs (it runs on every state read, up to
+        10 Hz per feed; reload_library / apply_gait log a failed rebuild): the last
+        built version when a rebuild fails, None before the first."""
+        try:
+            self._caps_current()
+        except Exception:                                       # noqa: BLE001 — the feed must not die
+            pass
+        with self._caps_lock:
+            last = self._caps
+            return self._caps_seq, (None if last is None else last[1]["version"])
+
+    def capabilities(self):
+        """Any thread. What this cockpit can do right now (GET /api/capabilities), as
+        harness.capabilities.build makes it: {format, version, capabilities, gestures,
+        signed, lexicon, envelope, robot, tools} — a copy."""
+        return copy.deepcopy(self._caps_current())
 
     # ------------------------------------------------------ D051: hardware
     def hw_connect(self, port):
@@ -1414,6 +1514,10 @@ class CockpitSim(Playground):
             out["events"] = _jsonable(ev)
         except Exception:                                # noqa: BLE001
             pass
+        try:
+            out["caps_seq"], out["caps_version"] = self._caps_brief()
+        except Exception:                                # noqa: BLE001
+            out["caps_seq"], out["caps_version"] = None, None
         return out
 
     def _snapshot(self):
@@ -1424,6 +1528,7 @@ class CockpitSim(Playground):
         ref = self.refusal if (self.refusal and time.time() - self.refusal[0] < 6.0) else None
         tr = self.teach
         seq, ev = self.events.tail(12)       # event_seq moves even when the 12-event window looks the same
+        caps_seq, caps_version = self._caps_brief()     # D056: the tool surface's version (not an event)
         return dict(t=round(self.t, 2), pose=self.pose(), state=self.sup.state, mode=self.mode,
                     cmd=[round(float(x), 2) for x in v], cmd_eff=[round(float(x), 2) for x in self.cmd_eff],
                     tilt=round(self.last["tilt"], 1),
@@ -1437,6 +1542,7 @@ class CockpitSim(Playground):
                     goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture_busy,
                     gesture_phase=self.gesture_phase,
                     events=_jsonable(ev), event_seq=seq, console=list(self.console)[-40:],
+                    caps_version=caps_version, caps_seq=caps_seq,
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
                                                 duty=self.gait.duty, hstep=self.gait.hstep,
                                                 phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)
@@ -2577,6 +2683,11 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         sit = await sim.situation_now() if body.get("refresh") else sim.situation
         return JSONResponse(_jsonable({"ok": True, "awareness": a, "situation": sit}))
 
+    async def capabilities_(_):
+        """D056: what this cockpit can do right now (harness.capabilities); `version`
+        changes when a gesture or chord word is saved or deleted or the gait changes."""
+        return JSONResponse(sim._caps_current())
+
     async def help_(_):
         return JSONResponse({"teleop": TELEOP_HELP, "rl": HELP_RL,
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
@@ -2594,7 +2705,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/look", look, methods=["POST"]), Route("/api/shove", shove, methods=["POST"]),
         Route("/api/reset", reset, methods=["POST"]), Route("/api/speed", speed, methods=["POST"]),
         Route("/api/camera", camera, methods=["POST"]), Route("/api/scan", scan), Route("/api/tool/{name}", tool, methods=["POST"]),
-        Route("/api/help", help_), Route("/favicon.ico", favicon),
+        Route("/api/help", help_), Route("/favicon.ico", favicon), Route("/api/capabilities", capabilities_),
         Route("/api/record", record, methods=["POST"]), Route("/api/recordings", recordings),
         Route("/recordings/{name}/{file}", rec_file), Route("/api/replay", replay, methods=["POST"]),
         Route("/api/world/saved", world_saved), Route("/api/world/save", world_save, methods=["POST"]),

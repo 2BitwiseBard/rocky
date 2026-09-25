@@ -345,6 +345,42 @@ async def test_local_brain_call_tool_runs_move_on_a_backend_without_one(backend)
 
 
 @pytest.mark.asyncio
+async def test_local_brain_call_tool_runs_only_registry_tools():
+    """D056 review: call_tool used to getattr ANY name a model sent, so the backends' new
+    capabilities() / fetch_capabilities() (and the older live_lists) answered a made-up
+    tool name with a misleading 'bad arguments' (or a blocking GET). A name outside the
+    registry now gets the refusal an unknown name always got, and nothing on the backend
+    runs; every registry tool still reaches the backend as before."""
+    import harness.capabilities as C
+    from harness.local_brain import call_tool
+    ran = []
+
+    class Nosy(MockBackend):
+        def capabilities(self):
+            ran.append("capabilities")
+            return set()
+
+        def fetch_capabilities(self):
+            ran.append("fetch_capabilities")
+
+        def live_lists(self):
+            ran.append("live_lists")
+            return [], []
+
+    be = Nosy()
+    for name in ("capabilities", "fetch_capabilities", "live_lists", "__init__", "_tool", "events", ""):
+        assert await call_tool(be, name, {}) == {"ok": False, "error": f"no such tool {name}"}
+    assert await call_tool(be, None, {}) == {"ok": False, "error": "no such tool None"}
+    assert ran == [] and be.events == []
+    # registry names: the same answers as before — run when the backend has them, refused when not
+    assert (await call_tool(be, "status", {}))["ok"] is True
+    assert (await call_tool(be, "say", {"word": "yes"}))["ok"] is True and be.events[-1] == ("say", "yes")
+    for name in ("compose_gesture", "turn", "remember"):                   # not on a MockBackend
+        assert name in C.BY_NAME and not hasattr(be, name)
+        assert await call_tool(be, name, {}) == {"ok": False, "error": f"no such tool {name}"}
+
+
+@pytest.mark.asyncio
 async def test_move_and_goto_refuse_a_boolean_distance(server, backend):
     """Review 2026-09-25: pydantic's lax mode made move(forward_m=true) a 1 m walk
     (the cockpit refuses a boolean); the schema stays 'number'."""
@@ -422,6 +458,97 @@ async def test_auto_backend_moves_one_robot():
     async with client_session(srv._mcp_server) as cs:
         r = await _call(cs, "move", {"forward_m": 0.1, "left_m": 0.05})
     assert r["backend"] == "cockpit" and sent[-1] == ("move", {"forward_m": 0.1, "left_m": 0.05})
+
+
+
+# ------------------------- D056: build_tools is a view of the tool registry
+# build_tools' output on 2026-09-25, BEFORE harness/capabilities.py existed: the sha256 of
+# its canonical JSON (sort_keys, compact) for every variant the code base calls, taken
+# from the registry task's snapshot files. They pin today's lists with no file needed.
+_REP_GESTURES = ["wave", "sit", "turn_in_place", "sidestep", "look_around", "bow", "shake", "point_there"]
+_REP_LEXICON = ["greeting", "yes", "no", "acknowledge", "found_it", "thinking", "error"]
+_BUILD_TOOLS_BEFORE = {
+    "local_brain.TOOLS": "7efe2065850cf00fe3cf5ae52b47f95cba80c79e36a89848be3aaee7a60629a1",
+    "cockpit_brains.TOOLS": "f932d346fe16bbc9274d9a1fd1501b0837c96aa797c1eed2972d44eb0660c4eb",
+    "rep look extra": "469a6144f7308046c82e4007d205fe0b7caa5d9b47d6656bb758c4e451833fd8",
+    "rep no-look extra": "0f6585445b0ec3f5df6c003c0b1a9074904f5550e477628d63c25c0c7e20734f",
+    "rep look": "b9dc26d6eb986597da7cd6087d34ab5dd44968222480d2ff23367fcbca9032c2",
+    "rep signed sidestep": "2e3bd9f251125fd2e01433ccb7470867564a4ccc1ea18129d64e762a560566ad",
+}
+# the snapshot file's key for each (the file is a one-off record; the test skips without it)
+_SNAPSHOT_KEYS = {
+    "local_brain.TOOLS": "local_brain.TOOLS (build_tools(GESTURES, CHORD_WORDS))",
+    "cockpit_brains.TOOLS": "cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))",
+    "rep no-look extra": "build_tools(GESTURES_rep, LEXICON_rep, look=False, extra=EXTRA_TOOLS)",
+    "rep look": "build_tools(GESTURES_rep, LEXICON_rep, look=True)",
+    "rep signed sidestep": "build_tools(signed=('sidestep',)) rep",
+}
+_SNAP_DIR = os.environ.get(
+    "ROCKY_D056_SNAPSHOTS",
+    "/tmp/claude-1000/-home-bitwisebard-Development-rocky/"
+    "617aee55-a110-4e95-989e-f8423ee0b4fa/scratchpad/d056")
+
+
+def _canon_sha(obj):
+    import hashlib
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _build_tools_variants():
+    import harness.local_brain as lb
+    import sim.cockpit_brains as cb
+    from harness.backend import SIGNED
+    g, w = _REP_GESTURES, _REP_LEXICON
+    return {
+        "local_brain.TOOLS": lb.TOOLS,
+        "cockpit_brains.TOOLS": cb.TOOLS,
+        "rep look extra": lb.build_tools(g, w, signed=SIGNED, look=True, extra=cb.EXTRA_TOOLS),
+        "rep no-look extra": lb.build_tools(g, w, look=False, extra=cb.EXTRA_TOOLS),
+        "rep look": lb.build_tools(g, w, look=True),
+        "rep signed sidestep": lb.build_tools(g, w, signed=("sidestep",)),
+    }
+
+
+def test_build_tools_is_unchanged_by_the_registry():
+    got = _build_tools_variants()
+    assert set(got) == set(_BUILD_TOOLS_BEFORE)
+    for k, sha in _BUILD_TOOLS_BEFORE.items():
+        assert _canon_sha(got[k]) == sha, k
+
+
+def test_build_tools_equals_the_pre_registry_snapshot_byte_for_byte():
+    path = os.path.join(_SNAP_DIR, "snapshot_openai_tools_variants.json")
+    if not os.path.exists(path):
+        pytest.skip(f"no D056 snapshot at {path} (the hashes above still pin it)")
+    with open(path, encoding="utf-8") as f:
+        before = json.load(f)
+    got = _build_tools_variants()
+    for k, key in _SNAPSHOT_KEYS.items():
+        assert json.dumps(got[k]) == json.dumps(before[key]), k        # key order too
+    with open(os.path.join(_SNAP_DIR, "snapshot_openai_tools.json"), encoding="utf-8") as f:
+        assert json.dumps(got["rep look extra"]) == json.dumps(json.load(f)["tools"])
+
+
+def test_build_tools_keeps_its_signature_and_the_texts_stay_importable():
+    import inspect
+    import harness.capabilities as C
+    import harness.local_brain as lb
+    sig = inspect.signature(lb.build_tools)
+    assert [(p.name, p.default) for p in sig.parameters.values()] == [
+        ("gestures", None), ("lexicon", None), ("signed", ("turn_in_place", "sidestep")),
+        ("look", False), ("extra", ())]
+    assert (lb.GOTO_DOC, lb.MOVE_DOC, lb.GOTO_REACH_M, lb.MOVE_MAX_M) == \
+        (C.GOTO_DOC, C.MOVE_DOC, C.GOTO_REACH_M, C.MOVE_MAX_M)
+    # build_tools makes the tools every backend has (+ look); `extra` is appended as given
+    marker = {"type": "function", "function": {"name": "x_extra", "description": "d", "parameters": {}}}
+    tools = lb.build_tools(["wave"], ["yes"], look=True, extra=[marker])
+    assert [t["function"]["name"] for t in tools] == list(lb.base_tool_names(look=True)) + ["x_extra"]
+    assert tools[-1] is marker
+    assert lb.base_tool_names() == ("say", "gesture", "move", "goto", "stop", "scan_summary", "status",
+                                    "list_gestures")
+    # the local brain's list is the registry's OpenAI surface for a plain backend
+    assert lb.build_tools(["wave"], ["yes"]) == C.to_openai_tools(C.build(["wave"], ["yes"]))
 
 
 # --------------------------------------- the physics proof (slow, honest)

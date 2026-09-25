@@ -27,6 +27,8 @@ LLAMA_SWAP = [
     {"id": "embedding", "name": "Qwen3-Embedding-0.6B", "description": "639 MB."},
     {"id": "gemma-4-26b-a4b", "name": "Gemma 4 26B-A4B MoE (UD-Q5_K_XL) — vision",
      "description": "21 GB, partial CPU offload. 64k ctx. Multimodal."},
+    {"id": "qwen3.5-9b", "name": "Qwen3.5-9B MoE (UD-Q5_K_XL) — vision",
+     "description": "21 GB, partial CPU offload. 64k ctx. Multimodal."},
     {"id": "gemma-4-31b", "name": "Gemma 4 31B (UD-Q4_K_XL) — dense Gemma",
      "description": "19 GB, partial CPU offload. 64k ctx. Text-only."},
     {"id": "glm-flash-reap", "name": "GLM-4.7-Flash REAP-23B-A3B — ⚠ QUARANTINED (faults ~29%/spawn)",
@@ -247,6 +249,98 @@ def test_tools_are_built_with_live_enums():
     assert "point_there" in b.system_for()
 
 
+
+# ------------------------------------------------------------ D056: the tool registry
+# EXTRA_TOOLS and GATED as they were on 2026-09-25, BEFORE harness/capabilities.py existed
+# (the registry task's snapshot: cockpit_brains.TOOLS after `look`, and GATED as a set).
+# The sha256 is over EXTRA_TOOLS' canonical JSON (sort_keys, compact): no file needed.
+EXTRA_BEFORE = ("compose_gesture", "check_gesture", "save_gesture", "find_object", "remember",
+                "where_is", "recall", "go_back_to", "forget")
+EXTRA_BEFORE_SHA = "5c53a90ca8083e8679fd70ca2170cf0c67a786e7ffb49eff43710e342333d4e4"
+GATED_BEFORE = frozenset({"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn", "move"})
+REGISTRY_SNAPSHOTS = os.environ.get(
+    "ROCKY_D056_SNAPSHOTS",
+    "/tmp/claude-1000/-home-bitwisebard-Development-rocky/"
+    "617aee55-a110-4e95-989e-f8423ee0b4fa/scratchpad/d056")
+
+
+def _canon_sha(obj):
+    import hashlib
+    return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"),
+                                     ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def test_extra_tools_and_gated_are_registry_views_equal_to_before():
+    import harness.capabilities as C
+    from harness.intent import MOTION_TOOLS
+    assert isinstance(cb.EXTRA_TOOLS, list)
+    assert tuple(t["function"]["name"] for t in cb.EXTRA_TOOLS) == EXTRA_BEFORE
+    assert _canon_sha(cb.EXTRA_TOOLS) == EXTRA_BEFORE_SHA
+    assert cb.GATED == GATED_BEFORE == C.GATED_NAMES
+    assert set(MOTION_TOOLS) <= cb.GATED and "stop" not in cb.GATED     # talk mode's motion stays gated
+    assert cb.MEMORY_TOOLS == C.MEMORY_NAMES == ("remember", "where_is", "recall", "go_back_to", "forget")
+    for name in ("COMPOSE_DOC", "FIND_DOC", "REMEMBER_DOC", "WHERE_IS_DOC", "RECALL_DOC", "GO_BACK_DOC",
+                 "FORGET_DOC", "FIND_MAX_STEPS", "FIND_MAX_STEPS_CAP"):
+        assert getattr(cb, name) == getattr(C, name), name          # still importable from here
+    # the cockpit's model list (build_tools' own + EXTRA_TOOLS) is the registry's, every capability on
+    b = brains()
+    want = C.to_openai_tools(C.build(b.sim.gesture_names, b.sim.lexicon, list(cb.SIGNED),
+                                     has_eye=True, has_memory=True, is_cockpit=True))
+    assert json.dumps(b.tools_for(look=True)) == json.dumps(want)
+
+
+def test_extra_tools_and_gated_equal_the_pre_registry_snapshot():
+    path = os.path.join(REGISTRY_SNAPSHOTS, "snapshot_openai_tools_variants.json")
+    if not os.path.exists(path):
+        pytest.skip(f"no D056 snapshot at {path} (the hashes above still pin it)")
+    with open(path, encoding="utf-8") as f:
+        before = json.load(f)["cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))"]
+    assert json.dumps(cb.TOOLS) == json.dumps(before)                                  # key order too
+    assert json.dumps(cb.EXTRA_TOOLS) == json.dumps(
+        [t for t in before if t["function"]["name"] in EXTRA_BEFORE])
+    with open(os.path.join(REGISTRY_SNAPSHOTS, "snapshot_sets.json"), encoding="utf-8") as f:
+        sets = json.load(f)
+    assert cb.GATED == frozenset(sets["GATED_raw"]) == frozenset(sets["GATED"])
+    assert list(cb.TOOL_NAMES) == sets["cockpit_dispatch (CockpitSim.tool -> Brains.tool accepts TOOL_NAMES)"]
+    assert list(cb.NOTED) == sets["NOTED"] and list(cb.MEMORY_TOOLS) == sets["MEMORY_TOOLS"]
+
+
+def test_every_registry_tool_this_cockpit_has_is_dispatchable():
+    """The registry check (a test, not a startup assertion): every registry tool whose
+    `requires` this cockpit has is in Brains.tool's dispatch set with a route, and every
+    name it dispatches is a registry tool."""
+    b = brains()
+    assert cb.cockpit_flags(b.sim) == {"has_eye": True, "has_memory": False, "is_cockpit": True}
+    assert cb.registry_problems(b) == []
+    assert cb.registry_problems(b, {"has_eye": True, "has_memory": True, "is_cockpit": True}) == []
+    b.sim.memory = SimpleNamespace()                        # a scene memory: the memory tools are required
+    assert cb.cockpit_flags(b.sim)["has_memory"] is True and cb.registry_problems(b) == []
+    # the routes are the callables the executor always called
+    assert b._route("gesture") == b._gesture and b._route("list_gestures") == b.list_gestures
+    assert b._route("move") == b.move and b._route("turn") == b.turn and b._route("look") == b.look
+    assert b._route("remember") == b.mem_remember and b._route("go_back_to") == b.mem_go_back_to
+    assert b._route("say") == b.sim.tool_say and b._route("goto") == b.sim.tool_goto
+
+
+def test_the_registry_check_catches_a_drift(monkeypatch):
+    b = brains()
+    monkeypatch.setattr(cb, "OWN_ROUTES", {k: v for k, v in cb.OWN_ROUTES.items() if k != "move"})
+    assert any(p.startswith("move: Brains.tool accepts it but has no route") for p in cb.registry_problems(b))
+    monkeypatch.undo()
+    monkeypatch.setattr(cb, "TOOL_NAMES", tuple(n for n in cb.TOOL_NAMES if n != "stop") + ("dance",))
+    probs = cb.registry_problems(b)
+    assert "stop: a registry tool this cockpit has, but Brains.tool refuses it" in probs
+    assert "dance: Brains.tool runs it, but the tool registry does not know it" in probs
+
+
+def test_a_sim_without_the_tool_is_an_error_result_as_before(monkeypatch):
+    b = brains()
+    monkeypatch.delattr(FakeSim, "tool_status")
+    r = run(b.tool("status"))
+    assert r["ok"] is False and r["error"].startswith("status failed: AttributeError")
+    assert run(b.tool("list_gestures"))["ok"] is True       # the one plain (not awaited) route
+
+
 # --------------------------------------------------------------------- chat
 def test_failing_tool_and_bad_arguments_keep_the_transcript_valid():
     s = Script(tool_model=[
@@ -328,11 +422,11 @@ def test_concurrent_messages_do_not_interleave():
 
 
 def test_multimodal_sends_the_eye_and_strips_it_for_a_text_fallback():
-    s = Script(gemma_4_26b_a4b=[RuntimeError("HTTP 503")], tool_model=[answer("text brain here")])
+    s = Script(qwen3_5_9b=[RuntimeError("HTTP 503")], tool_model=[answer("text brain here")])   # D055 chain
     b = brains(s)
     r = run(b.chat("what do you see?", mode="multimodal"))
     first = s.calls[0][1][-1]["content"]
-    assert s.calls[0][0] == "gemma-4-26b-a4b"
+    assert s.calls[0][0] == "qwen3.5-9b"
     assert isinstance(first, list) and first[1]["type"] == "image_url"
     fallback_user = s.calls[1][1][-1]["content"]
     assert isinstance(fallback_user, str) and "call look" in fallback_user
@@ -344,10 +438,12 @@ def test_look_skips_empty_descriptions_and_strips_thinking():
                gemma_4_26b_a4b=[answer("A red box half a meter ahead; open floor to the left.")])
     b = brains(s)
     r = run(b.look())
-    assert r["ok"] and r["model"] == "gemma-4-26b-a4b" and "empty" in r["fallback"][0]
+    assert r["ok"] and r["model"] == "gemma-4-26b-a4b"
+    assert any("empty" in f for f in r["fallback"])          # the vision-model's empty answer
     b = brains(Script(vision_model=[answer("")], gemma_4_26b_a4b=[answer("  ")]))
     r = run(b.look())
-    assert r["ok"] is False and len(r["tried"]) == 2
+    # two empty answers plus the unlisted 12B's skip note (D055 vision chain)
+    assert r["ok"] is False and sum("empty" in x for x in r["tried"]) == 2 and len(r["tried"]) == 3
     b = brains(Script())
     b.sim.frames["eye"] = (0, b"")
     assert run(b.look())["ok"] is False
@@ -585,7 +681,7 @@ def test_spoken_stop_without_the_wake_word_still_stops(mode):
 @pytest.mark.parametrize("mode", ["local", "multimodal"])
 @pytest.mark.parametrize("line", NOT_STOPS)
 def test_not_a_stop_reaches_the_model(line, mode):
-    s = Script(tool_model=[answer("carrying on")], gemma_4_26b_a4b=[answer("carrying on")])
+    s = Script(tool_model=[answer("carrying on")], qwen3_5_9b=[answer("carrying on")])   # D055 multimodal chain
     b = brains(s)
     r = run(b.chat(line, mode=mode, source="typed"))
     assert len(s.calls) == 1 and r["reply"].endswith("carrying on") and "stop_first" not in r

@@ -64,34 +64,12 @@ GOTO_OUTCOMES = ("arrived", "cliff", "stuck", "blocked", "timeout", "user",
 # The goto envelope: ~0.045 m/s against goto's 40 s cap is ~1.8 m of flat floor, so a
 # target within ~1.5 m is what reliably arrives (the cockpit's hard argument cap,
 # cockpit_brains.GOTO_MAX_M = 3 m, is only the refusal for nonsense). `move` refuses
-# anything farther than this.
-GOTO_REACH_M = 1.5
-GOTO_DOC = ("Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) "
-            "facing +x; +y is its left) — a point the operator gives as coordinates or "
-            "a remembered position; for a move relative to the robot ('forward 30 cm') "
-            "use move instead. Blocks until it ends and returns "
-            "stopped= arrived | cliff (the void reflex vetoed it: do NOT retry "
-            "toward it) | blocked (EITHER the lidar saw an obstacle in the way "
-            "and 2 detours — a 45 deg veer, then a sidestep — did not get past "
-            "it: the result's obstacle has range_m and bearing_deg, body frame, "
-            "0 = ahead, + = left; pick a target that avoids that side — OR a "
-            "guard refused to start: read detail) | stuck (no progress for 3 s: "
-            "something the lidar cannot see, lower than the puck, is in the way "
-            "— look, then pick a different target; never re-send the same "
-            "one) | timeout "
-            f"(too far: ~0.045 m/s, 40 s cap, keep targets within ~{GOTO_REACH_M:g} m) | user "
-            "(stop was called) | preempted (a newer goto took over) | FELL. "
-            "A veto is a NORMAL result: report it.")
-MOVE_MAX_M = GOTO_REACH_M
+# anything farther than this. D056: the numbers and the tool texts live in the one tool
+# registry, harness/capabilities.py; these names are re-exported from it (server.py and
+# the tests import GOTO_DOC / MOVE_DOC / GOTO_REACH_M / MOVE_MAX_M from here).
+from harness import capabilities as _caps                                   # noqa: E402
+from harness.capabilities import GOTO_REACH_M, GOTO_DOC, MOVE_MAX_M, MOVE_DOC   # noqa: E402,F401
 MOVE_MIN_M = 0.01         # below this a move is no move (a model calling move for a turn)
-MOVE_DOC = ("Relative move in the robot's OWN frame, in METERS: forward_m + ahead / - back, "
-            "left_m + left / - right (default 0). 'forward 30 cm' = move(forward_m=0.3); "
-            "'back up 20 cm' = move(forward_m=-0.2); 'half a meter to your left' = "
-            "move(forward_m=0, left_m=0.5). It reads the robot's pose and heading itself (no "
-            "status call, no trigonometry) and walks there as a goto: every guard applies and it "
-            "ends the same way, stopped= arrived | cliff | stuck | blocked | timeout | user | "
-            f"preempted | FELL (a veto is a NORMAL result: report it, do not retry). At most "
-            f"{MOVE_MAX_M:g} m. goto is for MAP coordinates.")
 
 
 def validate_move(forward_m, left_m=0.0, max_m=MOVE_MAX_M):
@@ -187,74 +165,29 @@ async def move_via(backend, forward_m, left_m=0.0):
     return done(out)
 
 
+# build_tools' own tools: the registry's tools every backend has (no `requires`, offered
+# to models), in registry order, plus `look` with look=True. Everything else the cockpit
+# offers (gesture authoring, find_object, the memory tools) comes in through `extra`:
+# cockpit_brains.EXTRA_TOOLS, itself a view of the same registry.
+BASE_TOOL_NAMES = tuple(t.name for t in _caps.REGISTRY if not t.requires and "openai" in t.surfaces)
+LOOK_TOOL = "look"
+
+
+def base_tool_names(look=False):
+    """The names build_tools makes itself (the rest is `extra`), in registry order."""
+    return BASE_TOOL_NAMES + ((LOOK_TOOL,) if look else ())
+
+
 def build_tools(gestures=None, lexicon=None, signed=("turn_in_place", "sidestep"),
                 look=False, extra=()):
     """The OpenAI tool list with the CURRENT gesture names and chord words as
     enums (D052: a free-text 'name' let models invent gestures like 'dance'
-    and burn a hop on the refusal). Built per request by the cockpit."""
-    gestures = list(gestures or [])
-    lexicon = list(lexicon or [])
-    word = {"type": "string", "description": "a chord-speak word"}
-    if lexicon:
-        word["enum"] = lexicon
-    gname = {"type": "string", "description": "gesture name"}
-    if gestures:
-        gname["enum"] = gestures
-    tools = [
-        {"type": "function", "function": {
-            "name": "say",
-            "description": "Speak one chord-speak word through the speakers (the robot's "
-                           "only voice — it never speaks human words).",
-            "parameters": {"type": "object", "properties": {"word": word},
-                           "required": ["word"]}}},
-        {"type": "function", "function": {
-            "name": "gesture",
-            "description": "Perform one gesture and wait for it to finish. Refused with "
-                           "error='busy' while walking: stop first. direction left|right "
-                           f"applies to {' and '.join(signed)} only (turn_in_place turns "
-                           "on the spot for ~5 s; left = counter-clockwise).",
-            "parameters": {"type": "object", "properties": {
-                "name": gname,
-                "direction": {"type": "string", "enum": ["left", "right"]}},
-                "required": ["name"]}}},
-        {"type": "function", "function": {
-            "name": "move", "description": MOVE_DOC,
-            "parameters": {"type": "object", "properties": {
-                "forward_m": {"type": "number",
-                              "description": "meters, + ahead / - back (0.3 = 30 cm)"},
-                "left_m": {"type": "number",
-                           "description": "meters, + left / - right (default 0)"}},
-                "required": ["forward_m"]}}},
-        {"type": "function", "function": {
-            "name": "goto", "description": GOTO_DOC,
-            "parameters": {"type": "object", "properties": {
-                "x": {"type": "number"}, "y": {"type": "number"}},
-                "required": ["x", "y"]}}},
-        {"type": "function", "function": {
-            "name": "stop",
-            "description": "Safe-stop immediately (PLANT->BRACE). Always accepted.",
-            "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {
-            "name": "scan_summary",
-            "description": "What the lidar sees: nearest obstacles by direction (walls "
-                           "and objects yes; holes in the floor no).",
-            "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {
-            "name": "status",
-            "description": "Robot status: pose (x, y m; yaw deg), mode, reflex state.",
-            "parameters": {"type": "object", "properties": {}}}},
-        {"type": "function", "function": {
-            "name": "list_gestures",
-            "description": "The gestures this robot knows right now (saved ones included).",
-            "parameters": {"type": "object", "properties": {}}}},
-    ]
-    if look:
-        tools.append({"type": "function", "function": {
-            "name": "look",
-            "description": "Look through the robot's eye camera: a vision model describes "
-                           "what is in front of the robot (obstacles, open floor, objects).",
-            "parameters": {"type": "object", "properties": {}}}})
-    return tools + list(extra)
+    and burn a hop on the refusal). Built per request by the cockpit.
+    D056: generated from the tool registry (harness.capabilities) — the same list,
+    byte for byte, as before it existed; `extra` is appended as given."""
+    caps = _caps.build(gestures, lexicon, signed, has_eye=bool(look))
+    keep = set(base_tool_names(bool(look)))
+    return [t for t in _caps.to_openai_tools(caps) if t["function"]["name"] in keep] + list(extra)
 
 
 MOVE_RULE = (
@@ -348,6 +281,11 @@ def make_backend(kind):
 
 
 async def call_tool(backend, name, args):
+    # D056: only a registry tool is a tool. A model naming any other backend attribute
+    # (capabilities, fetch_capabilities, live_lists, close, a dunder...) gets the refusal
+    # an unknown name always got, and nothing on the backend runs.
+    if not isinstance(name, str) or name not in _caps.BY_NAME:
+        return {"ok": False, "error": f"no such tool {name}"}
     fn = getattr(backend, name, None)
     if fn is None and name == "move":             # the harness backends have status + goto
         fn = functools.partial(move_via, backend)

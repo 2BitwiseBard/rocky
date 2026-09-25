@@ -33,6 +33,11 @@ jobs:
         run: |
           git diff --exit-code sim/pebble.xml \
             ros2/rocky_description/urdf/pebble.urdf ros2/rocky_description/urdf/pebble.urdf.xacro
+      - name: committed tools page is current (D056)
+        # docs/TOOLS.md is generated from the tool registry (harness/capabilities.py) and the
+        # envelope in params.yaml; a registry or params change without the regenerated page
+        # fails here (regenerate: python -m harness.capabilities --md --out docs/TOOLS.md)
+        run: python -m harness.capabilities --check docs/TOOLS.md
       - name: "sim smoke: the bare wave gait walks (no GL on the runner, physics + metrics only)"
         # run_sim.py exits 1 on a fall or a walk outside its calibrated band (D052);
         # pipefail carries that exit code through tail

@@ -86,6 +86,9 @@ tailnet); the cockpit itself stays on 127.0.0.1.
   the playground (controls, commands, live tuning), the browser cockpit
   (cameras, brains, vision, world editor), the experiment scripts, worlds,
   videos, and the MCP/LLM driving loop.
+- **Tools** — `docs/TOOLS.md` (generated from `harness/capabilities.py`,
+  D056): every tool a brain or an MCP client can call, its arguments,
+  whether it needs the wake word, and the envelope its descriptions quote.
 - **Reinforcement learning** — `docs/RL_GUIDE.md`: the two environments,
   what a run produces, training/evaluation step by step, resuming, reading
   the logs, the honest results table, and the experiment ladder

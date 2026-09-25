@@ -47,7 +47,8 @@ USER turn — not the system prompt, which would re-prefill the tool list
 every turn on llama.cpp.
 
 FALLBACK: brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision
-lfm2.5-vl -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> gemma -> the text brain chain
+lfm2.5-vl -> gemma-4-12b -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> qwen3.5-4b ->
+gemma-4-12b -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
 and the reply SAYS which model answered and why the earlier ones did not.
 Quarantined models (gpt-oss-20b, glm-flash-reap: GPU faults) are never
@@ -140,9 +141,16 @@ for _p in (ROOT, os.path.join(ROOT, "gait"), HERE):
         sys.path.insert(0, _p)
 
 from harness.intent import (plan as intent_plan, execute as intent_execute,        # noqa: E402
-                            has_wake_word, moves, clean_transcript, MOTION_TOOLS)
+                            has_wake_word, moves, clean_transcript)
 from harness.local_brain import (build_tools, build_system, parse_args_json,          # noqa: E402
-                                 MAX_HOPS, MAX_TURNS, CALL_TIMEOUT_S, validate_move, move_target)
+                                 MAX_HOPS, MAX_TURNS, CALL_TIMEOUT_S, validate_move, move_target,
+                                 base_tool_names)
+# D056: every tool text and schema lives in ONE registry, harness/capabilities.py; the
+# cockpit's EXTRA_TOOLS / MEMORY_TOOLS / GATED below are views of it, and these names are
+# re-exported from it (harness/server.py and the tests import them from here)
+import harness.capabilities as tool_registry                                          # noqa: E402
+from harness.capabilities import (COMPOSE_DOC, FIND_DOC, REMEMBER_DOC, WHERE_IS_DOC,   # noqa: E402,F401
+                                  RECALL_DOC, GO_BACK_DOC, FORGET_DOC, FIND_MAX_STEPS, FIND_MAX_STEPS_CAP)
 from harness.backend import SIGNED                                                    # noqa: E402
 from scene_memory import (objects_from_description, parse_note, fmt_age,               # noqa: E402
                           direction_words, forget_scope, GO_MIN_CONF, WORLD_MAX_M, SPAWN_NAME)
@@ -161,9 +169,12 @@ ROLE_KEYS = {"brain": "model", "vision": "vision_model", "multimodal": "multimod
 ROLE_DEFAULTS = {"model": "tool-model", "vision_model": "vision-model",
                  "multimodal_model": "qwen3.5-9b", "claude_model": "claude-sonnet-5",
                  "stt_model": "whisper"}
+# D055 (2026-09-25, brain_bench, docs/BRAIN_MODELS_2026-09-24.md §Status): multimodal = the 9B (17/20, no
+# missed stop, 0.9 s first action) then the 4B (16/20, 5.8 GB) then Gemma 12B (17/20, slowest, 11.3 GB);
+# vision = the 3B eye (0.9°, 0.4 s) then Gemma 12B (0.7°, 1.7 s) then the 26B (0.6°, 2.8 s, 15 GB).
 FALLBACK = {"brain": ["qwen3.6-35b-a3b", "qwen3.8-27b-iq4"],
-            "vision": ["lfm2.5-vl", "gemma-4-26b-a4b"],
-            "multimodal": ["qwen3.5-9b", "gemma-4-26b-a4b"]}   # qwen3.5-9b: measured 2026-09-24, 7.2 GB, 58 t/s, tools + vision
+            "vision": ["lfm2.5-vl", "gemma-4-12b", "gemma-4-26b-a4b"],
+            "multimodal": ["qwen3.5-9b", "qwen3.5-4b", "gemma-4-12b"]}
 GOTO_MAX_M = 3.0          # a goto target farther than this from the robot is an argument error
 LOOK_MAX_TOKENS = 160
 REPLY_MAX_TOKENS = 512
@@ -194,56 +205,6 @@ COMPOSE_NOTE = ("To create a new gesture from a description, call compose_gestur
                 "until the operator says save (then call save_gesture). If the check fails, fix "
                 "the FAIL lines and compose again.")
 
-COMPOSE_DOC = (
-    "Create a NEW gesture from keyframes (the owner describes it; you write the frames). It is "
-    "checked against the robot's real limits (joint range, servo speed, balance, self-contact); "
-    "when feasible it is previewed once on the robot and kept as a draft until save_gesture. "
-    "Frame fields (all optional except t; missing = standing): t seconds from start (first frame "
-    "{\"t\": 0} = standing); body [dx, dy, dz] mm body shift, feet planted (z < 0 crouches; "
-    "+-30 mm is a lot); yaw deg body twist (+-15); dz [5] mm extra crouch per leg; arm "
-    "{\"leg\": [yaw, hip, knee] deg} lifts that leg as an arm (yaw -40..40, hip -70..90 (up), "
-    "knee -150..-20); claw [5] 0..1 open; say a chord word cue; ease smooth|linear|hold. Legs: "
-    "0 = left (+y), then counter-clockwise: 1 rear-left, 2 rear-right, 3 front-right, 4 "
-    "front-left. Keep >= 4 feet down (raise ONE leg; shift the body away from it first, "
-    "body [0, -15, 0] for leg 0), give each move >= 0.6 s. Example wave with leg 0: "
-    "[{\"t\":0},{\"t\":1.0,\"body\":[0,-15,0]},{\"t\":1.8,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
-    "{\"t\":2.6,\"body\":[0,-15,0],\"arm\":{\"0\":[25,70,-60]}},{\"t\":3.4,\"body\":[0,-15,0],"
-    "\"arm\":{\"0\":[-25,70,-60]}},{\"t\":4.2,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
-    "{\"t\":5.0,\"body\":[0,-15,0]},{\"t\":5.8}]")
-_FRAME_SCHEMA = {"type": "object", "properties": {
-    "t": {"type": "number"},
-    "body": {"type": "array", "items": {"type": "number"}},
-    "yaw": {"type": "number"},
-    "dz": {"type": "array", "items": {"type": "number"}},
-    "arm": {"type": "object"},
-    "claw": {"type": "array", "items": {"type": "number"}},
-    "say": {"type": "string"},
-    "ease": {"type": "string", "enum": ["smooth", "linear", "hold"]}},
-    "required": ["t"]}
-EXTRA_TOOLS = [
-    {"type": "function", "function": {
-        "name": "compose_gesture", "description": COMPOSE_DOC,
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "short snake_case name"},
-            "description": {"type": "string", "description": "what the gesture should look like"},
-            "keyframes": {"type": "array", "items": _FRAME_SCHEMA},
-            "loop": {"type": "boolean"}},
-            "required": ["name", "keyframes"]}}},
-    {"type": "function", "function": {
-        "name": "check_gesture",
-        "description": "Check a keyframe gesture spec {name, keyframes, loop?, end?} against the "
-                       "robot's limits WITHOUT moving; returns the report lines.",
-        "parameters": {"type": "object", "properties": {"spec": {"type": "object"}},
-                       "required": ["spec"]}}},
-    {"type": "function", "function": {
-        "name": "save_gesture",
-        "description": "Save the last composed (previewed) gesture so it can be played by name. "
-                       "Only when the operator asked to keep it.",
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "optional new name"},
-            "overwrite": {"type": "boolean"}}}}},
-]
-
 # ------------------------------------------------------------ find_object (vision-driven)
 # The eye (world_builder.EYE_CAM): 320x240, fovy 70 (-> ~86 deg wide), pitched 15 deg
 # down, 0.10 m ahead of the torso centre. MEASURED in the flat world standing at the
@@ -255,8 +216,8 @@ EYE_PITCH_DEG = 15.0
 EYE_HEIGHT_M = 0.2126
 EYE_FWD_M = 0.10
 EYE_HFOV_DEG = round(math.degrees(2 * math.atan(math.tan(math.radians(EYE_FOVY_DEG / 2)) * EYE_W_PX / EYE_H_PX)), 1)
-FIND_MAX_STEPS = 6          # looks per find_object call (each look may be followed by one move)
-FIND_MAX_STEPS_CAP = 16
+# FIND_MAX_STEPS (6 looks per find_object call, each may be followed by one move) and
+# FIND_MAX_STEPS_CAP (16) come from the registry: find_object's max_steps text quotes them
 FIND_NEAR_M = 0.25          # the object's near edge is this close to the camera (or closer): found
 FIND_STEP_MIN_M = 0.10      # a step toward it is distance - FIND_NEAR_M, clamped to [min, max]
 FIND_STEP_MAX_M = 0.40      # (min 0.10, not 0.25: a 0.25 m step from 0.30 m away would ram it)
@@ -296,21 +257,6 @@ FIND_ESTIMATE_PROMPT = (
     'image, 0 = centre, 43 = right edge, "distance_m": distance from the camera in meters, '
     '"confidence": 0 to 1, "what": "a few words"}}. If there is no {name}, reply '
     '{{"seen": false, "confidence": 1, "what": "what you see instead"}}.')
-FIND_DOC = (
-    "Find an object by name with the eye and walk up to it (e.g. 'find the ball', 'go to the "
-    "box'). It loops by itself: look (a vision model boxes the object; its bearing and distance "
-    "come from the camera geometry), then walk 0.1-0.4 m toward it (an ordinary goto: every "
-    "guard applies), or turn 30 deg to scan when it is not seen or the sighting is unsure; it "
-    "ends found (within ~0.25 m) | not found | stopped (a goto came back cliff / blocked / "
-    "stuck: report it, do not retry blindly). Takes up to ~1-2 minutes.")
-EXTRA_TOOLS.append(
-    {"type": "function", "function": {
-        "name": "find_object", "description": FIND_DOC,
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "what to find, in plain words: 'ball', 'box'"},
-            "max_steps": {"type": "integer", "description": f"looks before giving up (default "
-                                                            f"{FIND_MAX_STEPS}, max {FIND_MAX_STEPS_CAP})"}},
-            "required": ["name"]}}})
 
 # ------------------------------------------------------------ scene memory tools
 # (sim/scene_memory.py; the cockpit owns one SceneMemory per world — sim.memory)
@@ -318,57 +264,6 @@ GO_BACK_STANDOFF_M = FIND_NEAR_M + EYE_FWD_M   # 0.35 m torso-to-near-edge: wher
 GO_BACK_LEG_M = 1.2         # one goto leg (goto's 40 s cap is ~1.8 m at 45 mm/s)
 GO_BACK_MAX_LEGS = 4
 GO_BACK_DEFAULT_SIZE_M = 0.10
-REMEMBER_DOC = ("Remember a fact the operator states, in their words ('the charger is by the door'). "
-                "'the X is here' / 'this spot is X' / 'call this spot X' pins X at the robot's current "
-                "position; 'the X is at (1.0, 0.2)' pins map meters (the floor is +-6 m); anything else "
-                "is kept as a note that recall finds by its words. Only for what the operator tells you "
-                "— sightings are remembered automatically.")
-WHERE_IS_DOC = ("Where is a named object, from memory (no looking, no walking): its map position "
-                "(meters), how long ago it was seen, confidence and source (find = the eye's box "
-                "geometry; user = the operator pinned it; look = a vague description). stale=true: "
-                "seen over 10 min ago or before the last reset, so it may have moved — find_object "
-                "re-checks. known=false when it was never located — then call find_object.")
-RECALL_DOC = ("Search the robot's memory of this world — what it saw, found, was told, and which "
-              "guards fired — for a query ('ball', 'charger', 'cliff'); returns the most relevant "
-              "entries with their age. An empty query returns recent entries, the operator's notes "
-              "and things near the robot first.")
-GO_BACK_DOC = ("Walk back to a remembered object or place ('go back to the ball', 'go back to the "
-               f"{SPAWN_NAME}' = where the robot spawned): ordinary gotos toward its remembered "
-               "position (every guard applies), stopping ~0.4 m short of it (a place the operator "
-               "pinned with 'X is here': onto it). Refused when it is not remembered, only vaguely, or "
-               "only from before the last reset — then call find_object. A stale sighting (> 10 min) "
-               "is walked to but flagged. It does NOT re-check with the eye: call look or "
-               "find_object afterwards if the object may have moved.")
-FORGET_DOC = ("Forget one named object (and every memory that mentions it), or everything with name "
-              "'all'. A pronoun ('that', 'it') forgets nothing: name the thing. Only when the "
-              "operator asks.")
-EXTRA_TOOLS += [
-    {"type": "function", "function": {
-        "name": "remember", "description": REMEMBER_DOC,
-        "parameters": {"type": "object", "properties": {
-            "note": {"type": "string", "description": "the fact, in the operator's words"}},
-            "required": ["note"]}}},
-    {"type": "function", "function": {
-        "name": "where_is", "description": WHERE_IS_DOC,
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "the object, in plain words: 'ball'"}},
-            "required": ["name"]}}},
-    {"type": "function", "function": {
-        "name": "recall", "description": RECALL_DOC,
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string"},
-            "k": {"type": "integer", "description": "how many entries (default 5, max 20)"}}}}},
-    {"type": "function", "function": {
-        "name": "go_back_to", "description": GO_BACK_DOC,
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "the remembered object: 'ball'"}},
-            "required": ["name"]}}},
-    {"type": "function", "function": {
-        "name": "forget", "description": FORGET_DOC,
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string", "description": "the object, or 'all'"}},
-            "required": ["name"]}}},
-]
 MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the robot's own awareness "
                "(pose, guards, what the lidar sees nearby, remembered objects, the last look; servo "
                "heat and the servo bus only when they matter), written by the cockpit, not by the "
@@ -378,15 +273,68 @@ MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the ro
                "moved); go_back_to walks to a remembered object, and to "
                f"'{SPAWN_NAME}' (the spawn point); remember keeps what the operator tells you; "
                "find_object and look are remembered automatically.")
-MEMORY_TOOLS = ("remember", "where_is", "recall", "go_back_to", "forget")
 
+# ------------------------------------------------------------ the cockpit's tools (D056)
+# Views of the tool registry (harness/capabilities.py) with every capability on — this
+# executor runs them all. EXTRA_TOOLS: the registry tools offered to models that
+# build_tools does not make itself (gesture authoring, find_object, the memory tools), in
+# registry order (the cockpit appends them to build_tools' list). GATED: the tools a
+# spoken line runs only with the wake word (a frozenset; `stop` is never in it).
+_STATIC_CAPS = tool_registry.build(None, None, has_eye=True, has_memory=True, is_cockpit=True)
+EXTRA_TOOLS = [t for t in tool_registry.to_openai_tools(_STATIC_CAPS)
+               if t["function"]["name"] not in base_tool_names(look=True)]
+MEMORY_TOOLS = tool_registry.MEMORY_NAMES           # Brains.mem_<name> runs each
+
+# Brains.tool's dispatch set. Every name is a registry tool and every registry tool this
+# cockpit has is here, with a route (registry_problems; test_cockpit_brains checks it). The
+# order is the 'no such tool' hint's. turn: internal (find_object's scan; replays), not
+# offered to models.
 TOOL_NAMES = ("say", "gesture", "move", "goto", "stop", "scan_summary", "status", "look",
               "list_gestures", "compose_gesture", "check_gesture", "save_gesture",
-              "find_object", "turn") + MEMORY_TOOLS   # turn: internal (find_object's scan; replays), not offered to models
+              "find_object", "turn") + MEMORY_TOOLS
 NOTED = ("goto", "gesture", "say", "stop", "compose_gesture", "turn")     # recordings replay these
 # find_object / go_back_to / move are not NOTED: the gotos and turns they make are, so a
 # replay repeats the motion without asking a vision model (or the memory, or the pose) again
-GATED = tuple(MOTION_TOOLS) + ("find_object", "turn", "go_back_to", "move")   # a spoken line needs the wake word
+GATED = tool_registry.gated_names(_STATIC_CAPS)     # a spoken line needs the wake word
+# Brains.tool's routes: a Brains method for these, Brains.mem_<name> for a memory tool,
+# and the sim's own tool_<name> (CockpitSim.tool_say, ...) for the rest
+OWN_ROUTES = {"look": "look", "gesture": "_gesture", "list_gestures": "list_gestures",
+              "compose_gesture": "compose_gesture", "check_gesture": "check_gesture",
+              "save_gesture": "save_gesture", "find_object": "find_object", "turn": "turn",
+              "move": "move"}
+SYNC_ROUTES = frozenset({"list_gestures"})          # a plain method (not awaited)
+
+
+def cockpit_flags(sim):
+    """harness.capabilities.build's capability flags for the cockpit `sim`: always a
+    cockpit (this executor), the eye with an eye camera, memory with a scene memory."""
+    return {"has_eye": "eye" in (getattr(sim, "frames", None) or {}),
+            "has_memory": getattr(sim, "memory", None) is not None,
+            "is_cockpit": True}
+
+
+def registry_problems(brains, flags=None):
+    """[] when Brains.tool and the tool registry agree, else one line per mismatch:
+    a registry tool this cockpit has (its `requires` are all in `flags`, default
+    cockpit_flags(brains.sim)) that Brains.tool refuses or cannot route, or a name
+    Brains.tool runs that the registry does not know."""
+    flags = cockpit_flags(brains.sim) if flags is None else flags
+    have = {f for f, key in (("cockpit", "is_cockpit"), ("eye", "has_eye"), ("memory", "has_memory"))
+            if flags.get(key)}
+    out = []
+    for spec in tool_registry.REGISTRY:
+        if not spec.requires <= have:
+            continue
+        if spec.name not in TOOL_NAMES:
+            out.append(f"{spec.name}: a registry tool this cockpit has, but Brains.tool refuses it")
+            continue
+        try:
+            brains._route(spec.name)
+        except AttributeError as e:
+            out.append(f"{spec.name}: Brains.tool accepts it but has no route ({e})")
+    out += [f"{n}: Brains.tool runs it, but the tool registry does not know it"
+            for n in TOOL_NAMES if n not in tool_registry.BY_NAME]
+    return out
 
 # STOP FIRST (see the module doc). harness.intent decides what a stop is: plan() checks
 # its stop words before anything else in a line. These uses of a stop word are not an
@@ -1214,30 +1162,24 @@ class Brains:
         try:
             if name == "look":
                 return await self.look(args.get("model") or look_model)
-            if name == "gesture":
-                return await self._gesture(**args)
-            if name == "list_gestures":
-                return self.list_gestures(**args)
-            if name == "compose_gesture":
-                return await self.compose_gesture(**args)
-            if name == "check_gesture":
-                return await self.check_gesture(**args)
-            if name == "save_gesture":
-                return await self.save_gesture(**args)
-            if name == "find_object":
-                return await self.find_object(**args)
-            if name == "turn":
-                return await self.turn(**args)
-            if name == "move":
-                return await self.move(**args)
-            if name in MEMORY_TOOLS:
-                return await getattr(self, "mem_" + name)(**args)
-            return await getattr(self.sim, "tool_" + name)(**args)
+            fn = self._route(name)
+            return fn(**args) if name in SYNC_ROUTES else await fn(**args)
         except TypeError as e:
             return {"ok": False, "error": f"bad arguments for {name}: {e}"}
         except Exception as e:
             self._log(f"tool {name} failed: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{name} failed: {type(e).__name__}: {e}"}
+
+    def _route(self, name):
+        """The callable Brains.tool runs for `name` (OWN_ROUTES, else mem_<name> for a
+        memory tool, else the sim's tool_<name>). AttributeError when there is none —
+        inside tool()'s try, that is the tool's error result, as it always was."""
+        own = OWN_ROUTES.get(name)
+        if own is not None:
+            return getattr(self, own)
+        if name in MEMORY_TOOLS:
+            return getattr(self, "mem_" + name)
+        return getattr(self.sim, "tool_" + name)
 
     def list_gestures(self):
         g = getattr(self.sim, "gestures", {}) or {}

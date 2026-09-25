@@ -24,6 +24,17 @@ by the event loop, not the sim thread; /api/state for an older cockpit), a
 5xx other than 503 counts as alive-but-degraded, and once a cockpit has been
 seen, stop goes to IT (with a retry) — the fallback gets it only in
 addition, never instead. Every motion result names the backend it ran on.
+
+D056 — the tool list follows the robot. `capabilities()` says which registry
+tools (harness/capabilities.py `requires`) a backend can run: a cockpit has
+the eye, the scene memory and its own executor ({"cockpit", "eye", "memory"});
+AutoBackend has them too, because any call may land on a cockpit and its
+methods answer honestly when none does. `fetch_capabilities()` reads the
+cockpit's current snapshot (GET /api/capabilities: gestures, chord words,
+signed gestures, version) — or, from a cockpit older than D056, the same lists
+from /api/gesture/list + /api/chord/list — and returns None when nothing
+usable answers, so the MCP server (harness/server.py LiveTools) keeps the list
+it had.
 """
 from __future__ import annotations
 import asyncio
@@ -35,6 +46,8 @@ import httpx
 
 DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
 AUTO_TTL_S = 3.0
+CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities (and the two list routes): event-loop routes, no sim thread
+COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capabilities.CAPABILITY_FLAGS
 FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
 GO_BACK_TIMEOUT_S = 200.0  # go_back_to: up to 4 goto legs of <= 40 s each
 
@@ -62,6 +75,7 @@ class CockpitBackend:
     def __init__(self, url=DEFAULT_URL):
         self.url = url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0))
+        self.last_capabilities = None     # the last snapshot GET /api/capabilities answered (D056)
 
     async def _tool(self, tool, /, **args):
         # positional-only: gesture's own argument is called `name` (D052 — with
@@ -74,16 +88,54 @@ class CockpitBackend:
         except Exception as e:
             return {"ok": False, "error": f"cockpit unreachable: {e}"}
 
-    def live_lists(self):
-        """(gesture names, chord words) from the running cockpit, for the MCP
-        tool docs; None where the cockpit does not answer."""
+    def capabilities(self) -> set:
+        """D056: every registry capability — the cockpit has the eye (camera + vision
+        model), the scene memory and its own executor (/api/tool/<name>)."""
+        return set(COCKPIT_CAPABILITIES)
+
+    def fetch_capabilities(self, timeout: float = CAPS_TIMEOUT_S) -> dict | None:
+        """The cockpit's capabilities snapshot, GET /api/capabilities (D056):
+        {version, gestures, lexicon, signed, capabilities, ...}. A cockpit from
+        before D056 (404), or one whose /api/capabilities answers something
+        unusable (5xx, not a snapshot) -> {"gestures", "lexicon", "source"} from
+        the two list routes, as before D056. None when nothing usable answers
+        (unreachable, the list routes failing too): the caller keeps what it had.
+        Sync (the MCP server runs it in a thread)."""
+        try:
+            r = httpx.get(f"{self.url}/api/capabilities", timeout=timeout)
+        except Exception:
+            return None                                   # nothing answers: keep the last list
+        if r.status_code == 200:
+            try:
+                snap = r.json()
+            except Exception:
+                snap = None
+            if isinstance(snap, dict) and (isinstance(snap.get("gestures"), list)
+                                           or isinstance(snap.get("lexicon"), list)):
+                self.last_capabilities = snap
+                return snap
+        g, w = self._list_routes(timeout)
+        if g is None and w is None:
+            return None
+        return {"gestures": g, "lexicon": w, "source": "/api/gesture/list + /api/chord/list"}
+
+    def _list_routes(self, timeout: float = CAPS_TIMEOUT_S):
+        """(gesture names, chord words) from the pre-D056 routes; None where they do not answer."""
         g = w = None
         try:
-            g = httpx.get(f"{self.url}/api/gesture/list", timeout=2.0).json().get("all")
-            w = httpx.get(f"{self.url}/api/chord/list", timeout=2.0).json().get("lexicon")
+            g = httpx.get(f"{self.url}/api/gesture/list", timeout=timeout).json().get("all")
+            w = httpx.get(f"{self.url}/api/chord/list", timeout=timeout).json().get("lexicon")
         except Exception:
             pass
         return g, w
+
+    def live_lists(self):
+        """(gesture names, chord words) from the running cockpit; None where the
+        cockpit does not answer. D056: through fetch_capabilities."""
+        snap = self.fetch_capabilities()
+        if not isinstance(snap, dict):
+            return None, None
+        return snap.get("gestures"), snap.get("lexicon")
 
     async def say(self, word: str) -> dict:
         return await self._tool("say", word=word)
@@ -192,6 +244,19 @@ class AutoBackend:
                                          " (in-process MuJoCo: no cockpit answers at " + self.url + ")"))
             self.current = kind
         return self.cockpit if alive else self._fb()
+
+    def capabilities(self) -> set:
+        """D056: every registry capability, whether or not a cockpit answers right now
+        (any call may land on one; without one, look / find_object / the memory tools
+        answer that they need the cockpit) — the MCP list is the same 15 tools as
+        before D056."""
+        return set(COCKPIT_CAPABILITIES)
+
+    def fetch_capabilities(self, timeout: float = CAPS_TIMEOUT_S) -> dict | None:
+        """The cockpit's snapshot while one answers, else None (keep the last list)."""
+        if not self._alive(self.url):
+            return None
+        return self.cockpit.fetch_capabilities(timeout)
 
     def live_lists(self):
         if self._alive(self.url):

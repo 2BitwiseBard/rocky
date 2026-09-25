@@ -52,6 +52,22 @@ SAFE_MARGIN = 0.18     # the detector historically stops ~185 mm short
 SPEED = 0.045          # m/s, the gait's V_X
 
 
+def derived_capabilities(be) -> set:
+    """D056: the capability flags (harness.capabilities.CAPABILITY_FLAGS) a backend's
+    methods show: 'eye' = it can look or find_object, 'memory' = it has the scene
+    memory (where_is), 'cockpit' = it is a cockpit proxy (a callable _tool that
+    POSTs /api/tool/<name>). The MCP server offers a registry tool only where its
+    `requires` are all here (absent tool > lying tool)."""
+    caps = set()
+    if callable(getattr(be, "look", None)) or callable(getattr(be, "find_object", None)):
+        caps.add("eye")
+    if callable(getattr(be, "where_is", None)):
+        caps.add("memory")
+    if callable(getattr(be, "_tool", None)):
+        caps.add("cockpit")
+    return caps
+
+
 @dataclass
 class MockBackend:
     """Kinematic mock with the contract's observable behavior."""
@@ -63,6 +79,11 @@ class MockBackend:
     _preempt_evt: asyncio.Event = field(default_factory=asyncio.Event)
     _motion_task: object = None        # the in-flight goto, if any
     battery_v: float = 11.9            # mocked telemetry (sim mocks it too)
+
+    # ------------------------------------------------------- capabilities
+    def capabilities(self) -> set:
+        """None of its own (no eye, no memory, no cockpit): only what a subclass adds."""
+        return derived_capabilities(self)
 
     # ---------------------------------------------------------------- say
     async def say(self, word: str) -> dict:

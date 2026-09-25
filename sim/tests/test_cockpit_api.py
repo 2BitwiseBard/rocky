@@ -502,6 +502,185 @@ def test_event_log_sees_a_new_event_the_window_hides():
     assert big.seq == 8000 and len(big) == 10
 
 
+# ------------------------------------------------------------------ D056: capabilities
+CAPS_KEYS = {"format", "version", "capabilities", "gestures", "signed", "lexicon", "envelope", "robot",
+             "tools"}
+
+
+def _caps(c):
+    return c.get("/api/capabilities").json()
+
+
+def _new_events(sim, seq0):
+    """The events appended since sim.events.seq was seq0 (all of them, not the 12-window)."""
+    seq, ev = sim.events.tail(sim.events.seq)
+    return ev[len(ev) - (seq - seq0):] if seq > seq0 else []
+
+
+def _caps_events(sim, seq0):
+    """Capabilities entries on the events feed since seq0: there must never be any (the
+    status tool hands every model that feed's last five entries; D056 review)."""
+    return [e for e in _new_events(sim, seq0) if e[0] == "capabilities"]
+
+
+def _caps_state(c):
+    """(caps_version, caps_seq) as the state feed (/api/state, /api/events) carries them."""
+    s = c.get("/api/state").json()
+    return s["caps_version"], s["caps_seq"]
+
+
+def test_capabilities_endpoint_shape_and_a_stable_version(cockpit_client):
+    import cockpit
+    import cockpit_brains as cb
+    import harness.capabilities as C
+    from harness.backend import SIGNED
+    sim, c = cockpit_client
+    a, b = _caps(c), _caps(c)
+    assert a == b and set(a) == CAPS_KEYS and a["format"] == C.FORMAT
+    assert len(a["version"]) == 12 and a["version"] == C.snapshot_version(a)
+    assert a["capabilities"] == ["cockpit", "eye", "memory"]
+    assert a["gestures"] == sim.gesture_names and a["lexicon"] == sim.lexicon and a["signed"] == list(SIGNED)
+    tools = {t["name"]: t for t in a["tools"]}
+    assert list(tools) == list(C.TOOL_NAMES) and set(tools) == set(cb.TOOL_NAMES)   # it runs every tool
+    assert {n for n, t in tools.items() if t["gated"]} == set(cb.GATED)
+    assert tools["gesture"]["parameters"]["properties"]["name"]["enum"] == sim.gesture_names
+    assert tools["say"]["parameters"]["properties"]["word"]["enum"] == sim.lexicon
+    assert tools["turn"]["surfaces"] == ["internal"]
+    # what its models are offered is the same registry view
+    assert C.to_openai_tools(a) == sim.brains.tools_for(look=True)
+    env, mc = a["envelope"], sim.gait.max_command()
+    assert env["source"].startswith("the cockpit's live gait")
+    assert env["speed_m_s"] == pytest.approx(mc["v"] / 1000.0, abs=1e-4)
+    assert env["turn_rad_s"] == pytest.approx(mc["wz"], abs=1e-3)
+    assert env["step_height_mm"] == pytest.approx(sim.gait.hstep, abs=0.05)
+    assert (env["goto_reach_m"], env["goto_timeout_s"]) == (C.GOTO_REACH_M, cockpit.GOTO_CAP_S)
+    assert a["robot"]["legs"] == 5 and a["robot"]["joint_names"] == ["yaw", "hip", "knee"]
+    assert sim.capabilities() == a                             # the method the route serves (a copy)
+    assert cb.registry_problems(sim.brains) == []              # the real cockpit routes every tool
+
+
+def test_capabilities_version_follows_a_gesture_save_and_delete(cockpit_client, tmp_path, monkeypatch):
+    import cockpit
+    import pebble_keyframes as pk
+    import playground
+    sim, c = cockpit_client
+    real_load = pk.load_keyframe_gestures
+    # the save and the delete go to tmp_path; the library reads it beside gait/gestures/ (never written)
+    monkeypatch.setattr(cockpit, "GESTURE_DIR", str(tmp_path))
+    monkeypatch.setattr(playground, "load_keyframe_gestures",
+                        lambda: {**real_load(), **real_load(str(tmp_path))})
+    monkeypatch.setattr(cockpit, "delete_keyframe_gesture",
+                        lambda name: pk.delete_keyframe_gesture(name, str(tmp_path)))
+    name = "t_caps_d056"
+    try:
+        v0 = _caps(c)["version"]
+        seq0 = sim.events.seq
+        assert _caps_state(c)[0] == v0
+        n0 = _caps_state(c)[1]
+        r = c.post("/api/gesture/save", json=dict(GOOD, name=name)).json()
+        assert r["ok"] is True and name in r["all"], r
+        a = _caps(c)
+        assert a["version"] != v0 and name in a["gestures"]
+        gesture = next(t for t in a["tools"] if t["name"] == "gesture")
+        assert name in gesture["parameters"]["properties"]["name"]["enum"]
+        # the state feed (and so /api/events) carries the new version, counted once
+        assert _caps_state(c) == (a["version"], n0 + 1)
+        assert _caps(c)["version"] == a["version"]                                      # stable again
+        r = c.post("/api/gesture/delete", json={"name": name}).json()
+        assert r["ok"] is True and name not in r["all"]
+        b = _caps(c)
+        assert b["version"] == v0 and name not in b["gestures"]
+        assert _caps_state(c) == (v0, n0 + 2)
+        assert _caps_events(sim, seq0) == []                  # never an entry on the events feed
+    finally:
+        monkeypatch.undo()
+        sim.reload_library()
+    assert not os.path.exists(os.path.join(ROOT, "gait", "gestures", name + ".json"))
+
+
+def test_capabilities_version_follows_a_chord_word_save_and_delete(cockpit_client, tmp_path, monkeypatch):
+    import cockpit
+    import playground
+    sim, c = cockpit_client
+    spec_dir, wav_dir = str(tmp_path / "spec"), str(tmp_path / "wav")
+    # custom words go to tmp_path, never audio/: the lexicon reads the canon dir + this one
+    monkeypatch.setattr(cockpit, "CHORD_SPEC_DIR", spec_dir)
+    monkeypatch.setattr(cockpit, "CHORD_CUSTOM_DIR", wav_dir)
+    monkeypatch.setattr(playground, "CHORD_CUSTOM_DIR", wav_dir)
+    word = "t_caps_word"
+    try:
+        sim.reload_library()
+        v0 = _caps(c)["version"]
+        seq0 = sim.events.seq
+        n0 = _caps_state(c)[1]
+        r = c.post("/api/chord/save", json={"name": word, "spec": {
+            "root": 120, "syllables": [{"dur": 0.1, "ratios": [1.0, 1.5]}]}}).json()
+        assert r["ok"] is True and word in r["lexicon"], r
+        a = _caps(c)
+        assert a["version"] != v0 and word in a["lexicon"]
+        say = next(t for t in a["tools"] if t["name"] == "say")
+        assert word in say["parameters"]["properties"]["word"]["enum"]
+        assert _caps_state(c) == (a["version"], n0 + 1)
+        r = c.post("/api/chord/delete", json={"name": word}).json()
+        assert r["ok"] is True and word not in r["lexicon"]
+        assert _caps(c)["version"] == v0 and _caps_state(c) == (v0, n0 + 2)
+        assert _caps_events(sim, seq0) == []
+    finally:
+        monkeypatch.undo()
+        sim.reload_library()
+    for d in (cockpit.CHORD_SPEC_DIR, cockpit.CHORD_CUSTOM_DIR):
+        assert not any(f.startswith(word + ".") for f in (os.listdir(d) if os.path.isdir(d) else []))
+
+
+def test_capabilities_follow_the_live_gait(cockpit_client):
+    sim, c = cockpit_client
+    a = _caps(c)
+    t0 = float(sim.gait.T)
+    seq0 = sim.events.seq
+    n0 = _caps_state(c)[1]
+    try:
+        r = c.post("/api/cmd", json={"line": f"set gait.T {t0 * 1.1:.4f}"}).json()
+        assert "refused" not in str(r.get("reply")), r
+        b = _caps(c)
+        assert b["version"] != a["version"] and b["envelope"]["speed_m_s"] != a["envelope"]["speed_m_s"]
+        assert _caps_state(c) == (b["version"], n0 + 1)
+        # the console says so (the operator's trace); the events feed does not
+        line = f"capabilities: {a['version']} -> {b['version']}"
+        assert any(line in str(e[1]) for e in c.get("/api/state").json()["console"])
+        assert _caps_events(sim, seq0) == []
+    finally:
+        c.post("/api/cmd", json={"line": f"set gait.T {t0!r}"})
+    assert float(sim.gait.T) == t0 and _caps(c)["version"] == a["version"]
+
+
+def test_a_capabilities_change_leaves_the_status_tool_alone(cockpit_client):
+    """D056 review: the status tool returns the events feed's last five entries to every
+    model (local brains, Claude mode, MCP through /api/tool/status). A gait tweak or a
+    gesture / chord-word save is a new capabilities version on the STATE feed, never an
+    entry on the events feed, so status answers as it did before D056 (the review saw
+    ["capabilities", <hash>] push real events out of last_events)."""
+    sim, c = cockpit_client
+    assert _idle(c)
+    assert c.post("/api/tool/say", json={"word": "yes"}).json().get("ok") is True
+    assert c.post("/api/tool/stop", json={}).json().get("ok") is True
+    assert _idle(c)
+    before = c.post("/api/tool/status", json={}).json()["last_events"]
+    seq0, (v0, n0) = sim.events.seq, _caps_state(c)
+    t0 = float(sim.gait.T)
+    try:
+        for t in (t0 + 0.1, t0):                              # a new version, then the old one again
+            r = c.post("/api/cmd", json={"line": f"set gait.T {t!r}"}).json()
+            assert "refused" not in str(r.get("reply")), r
+        after = c.post("/api/tool/status", json={}).json()["last_events"]
+    finally:
+        c.post("/api/cmd", json={"line": f"set gait.T {t0!r}"})
+    assert _caps_state(c) == (v0, n0 + 2)                     # both changes happened and were counted
+    new = _new_events(sim, seq0)
+    assert [e for e in new if e[0] == "capabilities"] == []
+    assert [e for e in after if e[0] == "capabilities"] == []
+    assert after == before or new, (before, after)     # unchanged unless the robot itself acted
+
+
 def test_start_cockpit_installs_the_parent_death_hook(monkeypatch, tmp_path):
     """Review item: a SIGKILLed bench left its cockpit running, holding the port."""
     import vision_bench as vb
@@ -569,7 +748,10 @@ def test_a_sigkilled_parent_takes_its_child_along():
     code = (f"import subprocess, sys, time; sys.path.insert(0, {sim_dir!r}); import vision_bench as vb; "
             "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], "
             "preexec_fn=vb.parent_death_hook()); print(p.pid, flush=True); time.sleep(60)")
-    mid = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    # MUJOCO_GL=disable: the middle process imports vision_bench -> mujoco, and the pytest process
+    # carries MUJOCO_GL=egl (cockpit.py sets it at import) which has no libEGL on the CI runner
+    mid = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True,
+                           env=dict(os.environ, MUJOCO_GL="disable"))
     child = None
     try:
         child = int(mid.stdout.readline())

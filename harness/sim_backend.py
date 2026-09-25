@@ -52,7 +52,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 for sub in ("gait", "perception", "sim"):
     sys.path.insert(0, os.path.join(HERE, "..", sub))
 
-from harness.backend import CHORD_WORDS, GESTURES                     # noqa: E402
+from harness.backend import CHORD_WORDS, GESTURES, derived_capabilities   # noqa: E402
 
 
 class SimBackend:
@@ -137,6 +137,11 @@ class SimBackend:
         return self._q_cmd
 
     # ------------------------------------------------------------- tools
+    def capabilities(self) -> set:
+        """D056: none (no eye, no scene memory, not a cockpit): the MCP server offers the
+        eight base tools on it."""
+        return derived_capabilities(self)
+
     async def say(self, word: str) -> dict:
         if word not in CHORD_WORDS:
             return {"ok": False, "error": f"unknown chord word {word!r}",

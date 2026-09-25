@@ -705,7 +705,8 @@ The six-tool contract (`docs/MCP_CONTRACT_v0.md`): `say`, `gesture`,
 robot, see *Move* in §3b). Vetoes come back
 as ordinary results (`{"stopped": "cliff"}`), never exceptions, and the
 reflex supervisor and cliff guard run inside `goto` regardless of who is
-calling.
+calling. Every tool, the model-facing extras included, is listed in
+`docs/TOOLS.md`, generated from one registry (*One registry* below).
 
 ```bash
 # text brain, no LLM (regex intent parser), on the mock or the sim
@@ -751,6 +752,34 @@ With the in-process sim only: `ROCKY_WORLD=flat|room|cliff` (default
 `cliff`), `ROCKY_VIEWER=1` (open the passive window and pace to real
 time), `ROCKY_AUDIO=1` (play chord-speak samples), `MUJOCO_GL=glfw` for the
 window. With the cockpit these belong to the cockpit, not to the MCP server.
+
+**One registry (D056).** Every tool is defined once, in
+`harness/capabilities.py` (`REGISTRY`): its name, kind, parameters, the
+text each surface shows, whether it is gated (a spoken line needs the wake
+word) and what it requires (`eye`, `memory`, `cockpit`; a backend without
+it does not offer the tool). Three things come from it:
+
+- the local brains' OpenAI tool schema (`harness/local_brain.py`, and the
+  cockpit's list in `sim/cockpit_brains.py`, which Claude mode converts
+  to Anthropic tools), live gesture and chord-word enums included;
+- the MCP server's tool list (`harness/server.py`). It is live: it follows
+  the backend's current gestures, chord words and capabilities instead of
+  the lists read once at start, so a gesture saved in the cockpit's studio
+  reaches Claude Code without restarting the server;
+- `docs/TOOLS.md`, the reference page: all 19 tools (18 offered to models
+  plus the executor-only `turn`), which surface offers each, their
+  arguments and descriptions (the local-brain and MCP texts side by side
+  where they differ), the envelope and the robot.
+
+`docs/TOOLS.md` is generated and committed; CI fails when it is stale.
+After a registry change (or a `params.yaml` change that moves the
+envelope), regenerate it:
+
+```bash
+python -m harness.capabilities --md --out docs/TOOLS.md   # write the page
+python -m harness.capabilities --check docs/TOOLS.md      # what CI runs: exit 1 + a diff when stale
+python -m harness.capabilities --json                     # the capabilities snapshot, with its version hash
+```
 
 ## 6. Regenerating after a CAD change
 
