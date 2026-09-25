@@ -19,6 +19,13 @@
 #   rocky.sh chat                  Claude Code from the repo root: chat-drives the
 #                                  robot over MCP with the window + speakers on
 #   rocky.sh brain [-- args]       local fleet (qwen3.6-35b-a3b via llama-swap) drives it
+#   rocky.sh brain-install [files|flags]  downloaded brain GGUFs (default: every complete
+#                                  ~/Downloads/*.gguf) -> /mnt/models/<id>/ + its mmproj + the
+#                                  restore manifest + an UNMEASURED llama-swap stanza, then
+#                                  restarts llama-swap (unloads EVERY model); --dry-run shows the
+#                                  plan and touches nothing, --no-restart skips the restart
+#   rocky.sh brain-bench --models ID[,ID]  bench brain models on the robot's jobs
+#                                  (sim/brain_bench.py: its own cockpit, never :8765)
 #   rocky.sh talk                  plain-text brain, no LLM (harness.intent REPL)
 #   rocky.sh voice [--backend mock]  push-to-talk: mic -> whisper-server -> intent (no wake
 #                                  word: pressing Enter is the operator's confirmation, D052 V2)
@@ -96,6 +103,22 @@ case "$cmd" in
     cd "$ROCKY_REPO"
     ROCKY_LLM_API_KEY="$LOCAL_AI_KEY" exec "$PY" -m harness.local_brain \
       --base-url http://127.0.0.1:8080/v1 --model "${ROCKY_LLM_MODEL:-qwen3.6-35b-a3b}" "$@" ;;
+
+  brain-install)
+    # sim/brain_install.py (conventions in its docstring); the key is for the /v1/models
+    # poll after the llama-swap restart. No cd: a relative FILE (e.g. run from ~/Downloads)
+    # means the caller's directory — the script itself has no cwd dependence
+    # shellcheck disable=SC1090
+    source "$HOME/.config/environment.d/local-ai.conf" 2>/dev/null || true
+    LOCAL_AI_KEY="${LOCAL_AI_KEY:-}" exec "$PY" "$ROCKY_REPO/sim/brain_install.py" "$@" ;;
+
+  brain-bench)
+    # sim/brain_bench.py: loads models one at a time through llama-swap (bench etiquette).
+    # No cd, so a relative --out lands where the caller is, not in the repo root (its own
+    # cockpit is started with cwd = the repo by vision_bench.start_cockpit)
+    # shellcheck disable=SC1090
+    source "$HOME/.config/environment.d/local-ai.conf" 2>/dev/null || true
+    LOCAL_AI_KEY="${LOCAL_AI_KEY:-}" MUJOCO_GL=egl exec "$PY" "$ROCKY_REPO/sim/brain_bench.py" "$@" ;;
 
   talk)
     cd "$ROCKY_REPO" && exec "$PY" -m harness.intent "$@" ;;

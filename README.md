@@ -51,6 +51,7 @@ rocky/
 │                        rocky_env.py + rocky_recover_env.py (gymnasium), train_ppo.py, eval_*.py,
 │                        run_*.py experiments, runs/ (checkpoints, git-lfs),
 │                        cockpit.py + cockpit_ui.html (browser playground), world_builder.py
+│                        brain_install.py + brain_bench.py (rocky.sh brain-install / brain-bench: add a model, measure it)
 ├── harness/             MCP tool server (say/gesture/goto/stop/scan_summary/status), sim + mock
 │                        backends, local_brain.py (LLM), intent.py (regex brain + voice pipe)
 ├── driver/              rocky_driver: dual-protocol Feetech bus driver, byte-faithful mock, 69 tests

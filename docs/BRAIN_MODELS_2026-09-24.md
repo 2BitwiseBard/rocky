@@ -2,6 +2,71 @@
 
 *Written by an Opus research workflow (3 sweeps, 22 candidates, each adversarially verified against the Hugging Face page and the pinned llama.cpp build 36b10154). Nothing here was downloaded or measured on this machine when written; see the 'could not verify' section. Kept as the record behind the model choice.*
 
+## Status 2026-09-25
+
+The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 2026-09-24 and is now the default multimodal role. On 2026-09-25 three more files finished downloading into `~/Downloads`: `Qwen3.5-4B-Q8_0.gguf` (4,482,403,488 B), `gemma-4-12b-it-UD-Q6_K_XL.gguf` (10,685,012,800 B) and `Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,756,929,760 B). A brain-install dry run on copies of the config and manifest planned the ids `qwen3.5-4b`, `gemma-4-12b` and `qwen3.5-9b-q6k`. The 4B's and the 12B's mmproj files were already in their folders under `/mnt/models`; the 9B Q6 file gets a hard link of the 9B's mmproj. The installer and the bench below are how each one gets into llama-swap and gets its row. A pending row stays "not measured yet" until the bench has run on this machine.
+
+### Measured
+
+| model id | files | measured | VRAM (MiB) | first answer (s) | t/s | commands ok /20 | stop missed | unsafe | latency per command (s) | describe | vision (`--vision`) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `qwen3.5-9b` | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-24, by hand | 7,190 at 16k context | 6.5 (cold load + first answer) | 57.7 (prefill included) | not benched | not benched | not benched | 0.2–1.5 tool-call time (range, by hand; no median / p95; compare with the bench's first action, not its wall latency) | `look` works (not scored) | not benched with this model |
+| `qwen3.5-4b` | Qwen3.5-4B-Q8_0 (4.5 GB) + mmproj-Qwen3.5-4B-F16 (0.7 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
+| `gemma-4-12b` | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
+| `qwen3.5-9b-q6k` | Qwen3.5-9B-UD-Q6_K_XL (8.8 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB, a hard link of the 9B's) | not measured yet | — | — | — | — | — | — | — | — | — |
+
+Notes on the table:
+
+- **The 9B row was measured by hand, not by the bench.** The commands, stop, unsafe and describe columns stay empty until `brain-bench --models qwen3.5-9b` runs. Its 57.7 t/s includes prefill; the bench's `decode_tps` comes from llama-server's own timings, so the two are not directly comparable.
+- **The find numbers from the same day are not the 9B's.** 3/3 finds, 0.7° median bearing error and 3 cm distance error were measured with lfm2.5-vl and gemma-4-26b-a4b as the vision role (`docs/SIM_GUIDE.md`, the vision bench table). The 9B's `--vision` row has not been measured.
+- **Known quirk (9B):** it read "thirty centimeters" as x = 30 until the system prompt stated that distances are metres (D054).
+- **The second 9B file** is UD-Q6_K_XL, not a duplicate, so it gets its own id, `qwen3.5-9b-q6k`, and its own row. (A UD-Q4_K_XL file of the same size would have been a duplicate of `/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf`: brain-install reports "duplicate of …" and leaves such a download where it is, for you to delete. A Q8_0 would have become `qwen3.5-9b-q8`.)
+- **The downloaded quants are bigger than the research's.** Sections B2 and C1 below estimate UD-Q4_K_XL files. The 12B came as UD-Q6_K_XL (10.7 GB of weights against B2's 7.4 GB) and the 4B as Q8_0 (4.5 GB against C1's 2.9 GB), so expect their VRAM well above those estimates.
+- **Comparison bars:** lfm2.5-vl (the resident eye, 3B) makes tool calls in 0.2–0.5 s per command warm; the 9B took 0.2–1.5 s. Both are the model's tool-call time, measured by hand. Compare them with the bench's **first action** median and p95, not with its latency column: latency is the wall time of the whole `/api/chat` turn and includes the motion (a gesture runs to its end and a goto until the robot arrives), so a model that gets "wave hello" or "walk forward thirty centimeters" exactly right still shows several seconds there. A new model has to beat or match these bars on first action to be worth a role.
+
+### Adding and measuring a model
+
+Two commands, run from the repo root once the browser says the download is complete (a browser partial is named `Unconfirmed NNN.crdownload`; the installer skips it, and any file whose size is still changing):
+
+```bash
+./rocky.sh brain-install ~/Downloads/<file>.gguf          # add --dry-run first to see the plan
+./rocky.sh brain-bench --models <id> --vision              # <id> is the one brain-install printed
+```
+
+The same tools without the launcher: `.venv/bin/python sim/brain_install.py …` and `.venv/bin/python sim/brain_bench.py …`. With no FILE, brain-install takes every finished `*.gguf` in `~/Downloads`. A GGUF whose architecture has no brain template (the flux image model in `~/Downloads`, an MTP draft head) is reported as skipped and left where it is.
+
+**What brain-install does.** It reads the GGUF header (family `qwen35`, `gemma4` or `lfm2`, base name, size) and derives the id: Qwen3.5-4B → `qwen3.5-4b`, gemma-4-12b-it → `gemma-4-12b` (`--id` overrides). It copies the file to `/mnt/models/<id>/`, checks the size and the header there, then deletes the copy in Downloads (`--copy` keeps it). It never overwrites a file. For a vision family it uses, in this order: the mmproj already in that folder; a generic `mmproj-F16.gguf` from Downloads that names the same base model; a hard link of the one another id's folder already holds for the same base model (same bytes, no extra disk; this is how `qwen3.5-9b-q6k` gets the 9B's); or else it fetches `mmproj-F16.gguf` from the model's Hugging Face repo (`--no-fetch` stops that). The file ends up as `mmproj-<basename>-F16.gguf`. It adds a `models.manifest.json` entry, backs up `config.yaml` to `config.yaml.bak-YYYYMMDD-<id>`, and inserts a stanza before the RETRIEVAL STACK block. The stanza's name says "vision (mmproj)" so the cockpit offers it as a vision model; its description starts with "UNMEASURED"; it uses 16k context, ttl 1800, Qwen3.5 with thinking off, Gemma 4 with the 140–280 image-token rule. It never edits `groups:`, `selectors:` or `macros:`, and it never loads the model.
+
+**brain-install restarts llama-swap.** Every loaded model unloads: the resident pair, anything Open WebUI is using, the live cockpit's brain. The next request to each starts cold. `--no-restart` installs now and leaves the restart to you (`systemctl --user restart llama-swap`); the new id is listed only after a restart.
+
+**What brain-bench measures.** It starts its own cockpit on :8792 in the obstacle course and refuses the live one on :8765. For each model it unloads every loaded GPU model, the one under test included, so its load is cold (the CPU embedding and reranker models stay), and waits `--idle` seconds (default 20) of true idle, as the GPU rules require. Then it:
+
+1. makes the model the role being tested (`--mode multimodal` for the multimodal role, `--mode local` for the text brain);
+2. times the cold first answer and checks that this model answered, not a fallback (a fallback answer skips the model, with the reason);
+3. reads `nvidia-smi` for the VRAM the model added;
+4. asks llama-swap directly for about 150 tokens to get the decode speed;
+5. sends 20 spoken-style commands (`--commands`; stop, wave, walk forward thirty centimeters, turn left ninety degrees, find the ball, how are you feeling, …), each followed by a stop, and scores the tool picked, its arguments, raw tool text leaking into the reply, missed stops and unasked motion;
+6. places the ball left, right, ahead or nowhere and asks "what do you see, and is it on your left or right?" (`--describe`, default 6 turns);
+7. with `--vision`, runs the vision bench's box detection and floor questions;
+8. unloads the model (unless `--keep-loaded`). The models it unloaded earlier load again on their next request, cold.
+
+**Leave the live cockpit alone while brain-bench runs.** The bench never sends anything to :8765, but both cockpits share the GPU. Do not type or talk to the live cockpit (turn hands-free off), and do not ask it to look or find. Any request there that reaches a model loads that model (the live cockpit's multimodal role is `qwen3.5-9b`, which runs alone) and evicts the one being measured; the bench's next line then loads it back. That repeated swapping is the pattern behind the 2026-09-01 GPU lockout, and it also spoils the VRAM and latency numbers.
+
+It writes `sim/out/brain_bench.json` and prints a table plus a Markdown block. The block starts with the table's header line and separator line, which the table above already has: paste only the model's row (the lines after the separator) over its pending row.
+
+**What each number means for choosing a role:**
+
+- **Multimodal role** (the model sees the eye with every message and acts): `stop_missed` 0 and `unsafe` 0 are required; after that, `cmd_ok` near 20, a first-action median near the 9B's 0.2–1.5 s, and a correct describe side. It runs alone, so its VRAM only decides what else can run at the same time (ComfyUI, a game).
+- **Brain role** (Local model mode; bench it with `--mode local`): the same command numbers, and no picture is needed. A brain small enough to sit beside lfm2.5-vl (its VRAM plus lfm2.5-vl's 4,556 MiB, with headroom under 16,384) could share a new group with an eye copy, as section A below describes. That is your decision after measuring, never the `resident` group.
+- **Vision role** (look and find in every mode): the `--vision` columns. Compare its seen rate, median bearing error and median distance error with lfm2.5-vl's 12/12, 0.7° and 3 cm at 0.4 s. A vision model outside the resident pair swaps with the brain on every look.
+- **`first_answer_s`** is what a swap costs: after switching, after a fallback, or after the 30-minute ttl unloaded the model.
+- **`decode_tps`** matters for descriptions and chat. Tool calls are short, so for voice commands the first-action numbers count more.
+- **Latency and first action.** The latency cell's first pair (median / p95, "wall") is the wall time of each `/api/chat` turn, motion included. The "first action" pair (`1st act s` in the printed table, median only) is the time from sending the line to the first thing the sim shows: a stop, a chord, a gesture or a walk starting, a look. It is polled ten times a second, so it can read up to 0.1 s late, and it counts only the lines that changed something in the sim. First action is the model's decision time and the number to compare with the 0.2–0.5 s and 0.2–1.5 s bars.
+
+**The co-residency rule.** The 9B, the 12B and the 35B driver cannot be loaded together, and llama-swap evicts one to load another. New ids never go in the `resident` group: that group is measured at 14,928 of 16,384 MiB, and llama-swap does not check memory, so a third member turns a swap into an out-of-memory crash at spawn. Section C1's estimate for a UD-Q4_K_XL 4B (4.2–4.7 GB) raised the question of replacing lfm2.5-vl in `resident`. That idea applies to a UD-Q4_K_XL 4B only, not to the Q8_0 downloaded on 2026-09-25: its weights and mmproj alone are 4,916 MiB before any KV cache or compute buffer, above lfm2.5-vl's measured 4,556 MiB slot (section B's note says the same). It would need a UD-Q4_K_XL download, its measured VRAM and your decision; the installer never does it.
+
+---
+
 # Rocky brain: small-model recommendation
 
 **Short version:** get **Qwen3.5-9B** first. It covers both of your wishes. Run it without its vision file and it is a 9B text brain that fits beside lfm2.5-vl entirely in VRAM (about 11.5 GB of 16). Add its vision file (mmproj) and it becomes the all-in-one brain on its own (about 8.3 GB). It has the best published tool-calling scores of anything checked. It also uses the same tool format and parser as your current brain (qwen3.6-35b-a3b), and the rocky brain code already sends `enable_thinking:false`. If it gets tools wrong in testing, try **Gemma 4 12B** next for all-in-one, or **Granite 4.1 8B** next for text-only.

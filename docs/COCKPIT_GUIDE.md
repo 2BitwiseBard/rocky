@@ -35,6 +35,7 @@ The **Brain & chat** panel picks who answers what you type or say.
 - **lfm2.5-vl** for fast tool calls: about 0.3 s per command (0.2 to 0.5 s measured), tool calls included, and it is already resident on the GPU beside the everyday driver. Pick it as the brain when you want voice commands to feel immediate.
 - **qwen3.6-35b-a3b** for conversation: the everyday driver, better at talk and multi-step requests, several seconds per turn.
 - **gemma-4-26b-a4b** for vision (the vision role, or as the multimodal model): the best image descriptions in the fleet, but it does not fit beside the resident pair, so the first **look** swaps models and can take from seconds to over a minute.
+- **qwen3.5-9b** is the default multimodal model: one model that sees and calls tools. Measured 2026-09-24: 7.2 GB on the GPU, 6.5 s from cold to its first answer, 0.2 to 1.5 s per spoken command. It runs alone, so using it unloads the resident pair. How to switch, and how to judge a new model: [Choosing a brain](#choosing-a-brain).
 
 The panel warns when brain and vision are not the qwen3.6-35b-a3b + lfm2.5-vl pair that shares the GPU, because then every look may swap models. Quarantined models never appear in the lists. Each role shows its fallback chain; when a model fails, the reply says which fallback answered.
 
@@ -56,6 +57,70 @@ The name is one word of 3 to 24 letters. The page's match is deliberately strict
 - No prefixes: `pebblestone` is not `Pebble`, `rocket` is not `Rocky`.
 
 What "trusted" means: the brains refuse to move the robot on a voice line unless the line was confirmed (your Enter), carried the wake word, or came through the gate above. The server has its own check (D052, `harness/intent.py`), which knows only the names *pebble* and *rocky* and whisper's usual guesses at them (`pebbles`, `peble`, `pebbly`, `rockie`, `rocket`), anywhere in the sentence, and the chat lets such a line move the robot whatever the page sent. So with the default names the server's check is the looser one: `walk to the pebbles` passes it. A custom name is enforced by this page alone: it sends a line that passes its match as trusted. The page shares the name with other screens (a screen with no name of its own picks it up), but the server's voice check does not use it.
+
+## Choosing a brain
+
+The cockpit gives each job to a model, one per **role**, and the **mode** says which of them answers what you type or say. Both are set in **Brain & chat**: on a phone, the **Talk** tab; on a computer, the Talk group of the sidebar. The role choices are saved and come back when the cockpit restarts; the mode is not saved.
+
+The four roles:
+
+- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to.
+- **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in every mode, Talk included.
+- **multimodal**: one model that gets the eye's picture with every message and calls the tools itself. Only models whose llama-swap name or description says they can see (vision, multimodal or mmproj) are offered.
+- **stt**: the whisper model name the mic's audio is sent with. Which whisper service answers is decided when the cockpit starts: the fast one on :8086 when it is up, the large one on :8082 otherwise.
+
+The four modes:
+
+- **Talk**: no model, a fixed phrase parser. Instant and predictable.
+- **Local model**: the brain role answers. When it wants to see, it calls look, which goes to the vision role.
+- **Multimodal**: the multimodal role sees and acts in one call, with no hand-off between two models.
+- **Claude**: the Anthropic API when a key is set; otherwise run `./rocky.sh chat` in a terminal.
+
+Each picker marks a model **● warm** (loaded: it answers at once) or **○ cold** (the first message loads it, which takes seconds, or longer for a big model). Quarantined models never appear. A text-only model is refused as vision or multimodal, and the refusal shows in red under the pickers. A model installed while the page is open shows up after a page reload.
+
+From a shell on this machine, the same call the pickers make:
+
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/brain -H 'Content-Type: application/json' \
+  -d '{"mode": "multimodal", "multimodal_model": "qwen3.5-9b"}'
+```
+
+The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model llama-swap offers and each role's fallback chain.
+
+### When a model fails
+
+Each role has a fallback chain, shown under the pickers (for example multimodal: qwen3.5-9b → gemma-4-26b-a4b). A model that times out (90 s), returns an error or answers nothing is skipped, and the next one tries. The reply then starts with a note in brackets that names the model that answered and why the earlier ones did not, and the chat shows each skip as a ↪ line. When the multimodal chain runs out, the text brain answers without the picture (it can still call look). When no model answers, the Talk parser does, unless tools already ran: then the reply lists what ran, and nothing is done twice. When llama-swap is down, the pickers say so and only Talk works. A fallback can mean loading another model, so that reply can take much longer than usual.
+
+### What fits on the GPU
+
+The card has 16 GB. Only the everyday pair stays loaded together: qwen3.6-35b-a3b as the brain and lfm2.5-vl as the eye (llama-swap's `resident` group). Every other chat model runs alone: loading it unloads the pair, and loading the pair again unloads it. The 9B, the 12B and the 35B never fit together.
+
+- A multimodal model is one model and one load: nothing swaps while it works.
+- A brain and a vision model that are not the resident pair swap on every look, which takes seconds to minutes each time. The amber note under the pickers warns about it.
+- A new model never goes in the `resident` group. llama-swap does not check memory for a group, so a third member makes the next load fail with an out-of-memory error.
+
+### Adding and measuring a model
+
+A downloaded model goes in with `./rocky.sh brain-install` and is measured with `./rocky.sh brain-bench --models ID`. The steps and the table of measured models are in `docs/BRAIN_MODELS_2026-09-24.md`. Two things to know here: brain-install restarts llama-swap, so every loaded model unloads and this cockpit's next answer starts cold; and before each model's run the bench unloads every loaded GPU model, the one it measures included, so the load it times is cold.
+
+**Leave this cockpit alone while brain-bench runs.** The bench starts its own cockpit on :8792 and never sends anything to this one, but the two share the GPU. Do not type or talk to this cockpit (turn **hands-free** off), and do not ask it to look or find. Any request here that reaches a model loads that model and evicts the one being measured, and the bench's next line loads it back. That repeated swapping is what this GPU punishes (it is the pattern behind the 2026-09-01 lockout), and it spoils the bench's VRAM and latency numbers.
+
+### Reading a bench row
+
+The bench prints one row per model. What each column tells you:
+
+- **`vram_mib`**: GPU memory the model took once warm, out of 16,384. It decides what the model can run beside.
+- **`first_answer_s`**: loading from cold plus the first reply. It is what you wait after switching to the model, or when a fallback or a look has to load it.
+- **`decode_tps`**: generation speed in tokens per second. It matters for descriptions and longer replies; a tool call is short.
+- **`cmd_ok`** (out of 20): spoken-style lines that got an acceptable tool with sensible arguments (`walk forward thirty centimeters` has to become about 0.3 m, not 30). The main number for the brain and multimodal roles.
+- **`stop_missed`**: stop lines that did not stop the robot. It must be 0: one miss rules the model out for voice driving.
+- **`unsafe`**: motion nobody asked for. It must be 0 too.
+- **latency** median and p95 (s): the wall time of each command's chat turn, typical and worst case. It includes the motion itself: a gesture runs to its end and a walk until the robot arrives before the turn finishes, so a model that gets "wave hello" exactly right still shows several seconds here. Do not compare it with the tool-call times below.
+- **first action** median and p95 (s) (`1st act s` in the printed table, median only): the time from sending the line to the first thing the sim shows (a stop, a chord, a gesture or a walk starting, a look). It counts only the lines that changed something in the sim, and it is polled ten times a second, so it can read up to 0.1 s late. This is the model's decision time, and the number to compare with the hand measurements: lfm2.5-vl made tool calls in 0.2 to 0.5 s per command, qwen3.5-9b in 0.2 to 1.5 s.
+- **describe**: whether the model mentions the ball when it is in view (and not when it is not), and on the correct side. For the multimodal and vision roles.
+- **vision** (with `--vision`): how often find's box saw the object, and its median bearing and distance errors. For the vision role.
+
+The bench runs on clean sim pictures, so its vision numbers are a best case for the real camera.
 
 ## Making gestures
 

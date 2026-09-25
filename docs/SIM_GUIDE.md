@@ -323,6 +323,23 @@ everything the terminal playground has and the parts that need a screen:
   refusals (text-only model as vision, quarantined model) are printed.
   Replies show fallback notes and the tool trace; a `compose_gesture`
   result has **save gesture** / **open in studio** buttons.
+- **Adding a brain model**: `./rocky.sh brain-install [FILE ...]`
+  (`sim/brain_install.py`) moves a downloaded GGUF from `~/Downloads` into
+  `/mnt/models/<id>/`, finds or fetches its mmproj, adds the llama-swap
+  stanza and the manifest entry, and restarts llama-swap (every loaded
+  model unloads); `--dry-run` shows the plan and touches nothing.
+  `./rocky.sh brain-bench --models ID [--vision]` (`sim/brain_bench.py`)
+  then measures it in its own cockpit on :8792, never the one on :8765:
+  VRAM, cold first answer, decode t/s, 20 spoken commands scored for the
+  right tool, missed stops and unasked motion, left/right descriptions,
+  and with `--vision` the vision bench. The GPU is shared, so leave the
+  live cockpit alone while it runs (no chat, hands-free off, no look or
+  find): a model request there evicts the model under test. Its latency
+  column includes the motion; compare the first-action column with the
+  0.2–1.5 s tool-call times. It prints a row for
+  `docs/BRAIN_MODELS_2026-09-24.md`, whose "Adding and measuring a model"
+  section has the workflow; the cockpit guide's "Choosing a brain" says
+  how to read a row and switch roles.
 - **Voice**: hold 🎤 to talk, or tap once to start and tap again to stop
   (phones lose a long press). The transcript lands in the input box; with
   the wake word ("pebble, …" — the fast model's misspellings count) or no
