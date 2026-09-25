@@ -426,6 +426,94 @@ gemma 2–3 across two runs. The void guard stays the cliff sensor. These
 are clean MuJoCo renders (one orange ball, grey boxes, a checker floor),
 so treat the numbers as an upper bound for the real camera.
 
+**Memory and awareness.** The cockpit keeps a **scene memory** per world
+(`sim/scene_memory.py`). It records what the robot looked at, the objects
+`find_object` located, what the operator told it, which guards fired (void
+latch, latched safe-stop, thermal, bus faults) and the chords it said on its
+own. Each object is kept as a name, a map position, a confidence and a
+source. Sightings of the same name within 0.25 m merge into one object;
+farther apart they stay separate (two boxes, or a ball that was moved). A
+sighting less than half as confident as the stored one (a look near a find)
+is only counted: it does not move or relabel the object. The memory is saved
+to `sim/out/memory/<key>.json` (git-ignored; `ROCKY_MEMORY_DIR` moves it,
+`--no-memory` keeps it in RAM). A preset keeps its name as the key
+(`room.json`); an edited or unnamed world (`custom`, a replay's recorded
+world) is keyed by its name plus a hash of its spec (`custom-3fa91c0e.json`),
+so two different custom worlds never share a memory. Editing a world
+carries its memory over, and switching worlds loads that world's file. A
+file that does not load is moved aside as `*.corrupt-<time>`; a hand-edited
+one is normalised on load (a missing confidence loads as vague, 0.2).
+Positions are kept only on the floor (within ±6 m). Tools (chat, MCP, talk
+mode):
+
+- `where_is(name)`: "where is the ball". It answers with the newest sighting
+  good enough to walk to, and mentions a newer vague one alongside.
+- `recall(query)`: "what do you remember about the box". An empty query lists
+  recent entries, the operator's notes and things near the robot first.
+- `remember(note)`: "remember that the charger is by the door". "The X is
+  here", "this spot is X", "call this spot X" or "mark here as X" pins X at
+  the robot's pose; "the X is at (1.0, 0.2)" pins those coordinates. A pin off
+  the floor is refused, not quietly kept as a note.
+- `go_back_to(name)`: "go back to the ball", "go back home" (after "this spot
+  is home"), "go back to the start" (every reset and world load pins `start`
+  at the spawn point). Ordinary gotos, so every guard applies. It stops about
+  0.4 m short, or goes onto a pinned place, and does not re-check with the
+  eye. "Go back to where you were" asks which place you mean; it never walks
+  backwards.
+- `forget(name | all)`. Only "all" / "everything" wipes the memory, and it
+  keeps the previous file as `<key>.json.bak`. "Forget that" or "forget it"
+  names nothing, so it asks instead. A spoken "forget everything" needs the
+  wake word.
+
+Every `--awareness-s` seconds (default 20 s, 0 = off) while the robot is
+idle, the cockpit writes a **situation** line. It holds, most useful first:
+the pose, any guard that is latched, what the lidar sees by direction, the
+three nearest remembered objects (with age, source, and "stale" when they may
+have moved), servo heat (only above 50% of the thermal budget), the servo bus
+(only when servos are connected) and the last look (or what `find_object`
+found). It aims at under 400 characters, since it rides in every chat turn.
+Every chat turn also gets a fresh situation line, put at the start of the
+message, so "what's around you?" is answered from it. It also shows on the state feed (`situation`,
+`memory_objects`) and in `status`. With **reactions** on (the default in
+`./rocky.sh cockpit`; `--no-reactions` turns them off) the robot says
+`alarm_help` when a guard latches, or `curious_question` when something new
+appears within 0.5 m while it stands still. It does this at most once per
+30 s, and each reaction is logged to Events. **Curious** (`--curious`, off by
+default) lets it make one unprompted `look` per minute when the lidar scene
+has changed. That look is a vision-model call, so it can load a model.
+`GET /api/memory`, `POST /api/memory {action: remember|forget|clear|recall|where_is}`
+and `POST /api/awareness {interval_s, curious, reactions, refresh}` drive all
+of this (`refresh: true` composes a situation line now). A body that is not
+JSON gets a 400.
+
+Honesty notes:
+
+- **Find positions** come from the vision box geometry (the box's floor
+  point, pushed back by half its projected width to estimate the centre).
+  The vision bench measured about 0.03 m median error in clean sim renders.
+  One end-to-end run on 2026-09-24 put the obstacle-course ball 0.034 m from
+  its true centre, and `go_back_to` ended 0.37 m from it after the robot had
+  walked 0.3 m away. None of this is measured on real hardware.
+- **Look placements** carry confidence 0.2 (small models guess distances
+  badly), and `go_back_to` refuses anything below 0.4.
+- **Far find sightings** (more than 2 m from the camera) are kept at
+  confidence 0.3 at most. Near the horizon a few pixels are metres (the box
+  bottom at 0.32 of the frame height projects to 14 m, at 0.36 to 3 m), and
+  the vision bench measured the geometry only out to 1.4 m.
+- **The lidar** only sees things taller than about 0.18 m, so the ball and low
+  boxes never trigger a reaction.
+- **Stale objects**: the world puts its objects back at their spawn on every
+  reset, world load and world edit. So anything seen more than 10 minutes ago,
+  or before the last reset or world load, is marked stale. The map fades it,
+  and `where_is`, the situation line and `recall`'s summary say "stale".
+  `go_back_to` refuses a sighting from before the last reset (it names the
+  old coordinates, so a plain goto can still go there) and flags one that is
+  only old. Places pinned at the robot's pose ("X is here", `start`) do not
+  go stale.
+- **Bus events**: a streaming fault (`nan`, `cut`, `lost`) goes into the
+  memory at most once per kind per 30 s. `rate` and `reopen` are routine and
+  are not recorded as guards.
+
 **Hardening (D052).** The sim thread no longer dies silently: an exception
 out of a physics step limps the real legs, fails every waiting HTTP
 request with 503 (before, one exception froze every request forever) and
@@ -446,8 +534,10 @@ streams. The HTTP API under `/api/` is what the MCP proxy
 (`harness/cockpit_backend.py`) and any script can use (send JSON):
 `POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/cmd {"line": "walk 45"}`,
 `/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`,
-`GET /api/model`, `GET /api/gait`, `POST /api/gesture/check|solve|teach`.
-`sim/tests/test_cockpit_api.py` drives all of it headless.
+`GET /api/model`, `GET /api/gait`, `POST /api/gesture/check|solve|teach`,
+`GET|POST /api/memory`, `GET|POST /api/awareness`.
+`sim/tests/test_cockpit_api.py` and `sim/tests/test_awareness.py` drive
+all of it headless.
 
 ## 3c. Toward the real robot: gesture studio, voice, realism, hardware (D051, D052)
 
@@ -611,6 +701,38 @@ python run_sim.py                             # does it still walk
 
 The hip axis height, leg lengths and joint limits all come from
 `params.yaml`; nothing in `sim/` or `gait/` carries its own copy.
+
+**Robot description (D053).** The robot's shape is data too. The `robot:`
+block in `params.yaml` holds:
+- the leg count and station angles
+- the per-leg joint chain: names, axes, offsets that alias `l1_coxa` /
+  `hip_axis_z` / `l2_femur` / `l3_tibia`
+- the foot point, the claw as a tool, and the IK solver
+
+`rocky_model.robot()` turns the block into a `RobotSpec`. `validate()`
+refuses a spec the code cannot run. `python gait/rocky_model.py` prints it
+with its topology hash (`7f066d9bd8c0` today).
+
+What already reads the spec:
+- `pebble_gait.N_LEGS` / `STATION_DEG`
+- the MJCF's station angles, leg count and actuator order
+  (`rm.actuator_order()` is the `ctrl[:15]` / `ctrl[15:20]` contract)
+- the URDF's stations
+
+Tests pin the rest. The compiled links must equal the spec, the URDF joints
+must equal it, and a stale `pebble.urdf.xacro` now fails a test instead of
+only CI.
+
+**Not wired yet** (backlog B36, steps 2-10 of `docs/ROBOT_AS_DATA.md`):
+- The generators still build the leg from a yaw/hip/knee template, so an
+  added joint validates but never reaches the MJCF.
+- The playground and RL envs still index actuators by position.
+- Checkpoints do not record the topology.
+- IK is the closed-form 3-joint solver.
+- The driver knows only yaw/hip/knee.
+
+For a design change today (a servo, lengths, foot, material, a joint or a
+leg), follow **`docs/DESIGN_CHANGE_GUIDE.md`**.
 
 ## 7. Known gaps
 

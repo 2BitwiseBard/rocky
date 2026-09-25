@@ -34,6 +34,18 @@ Asking the model to TYPE bearing/distance instead ('estimate') was
 measured useless on lfm2.5-vl (sim/vision_bench.py): it echoes the
 prompt's numbers.
 
+MEMORY (sim/scene_memory.py, sim.memory): look and find_object record what
+they saw (find: the box's floor geometry -> a map position, sighting_to_map;
+look: objects the description places with a direction AND a distance, at
+confidence 0.2; a find farther than FIND_TRUSTED_M at <= 0.3); tools
+remember / where_is / recall / go_back_to / forget (go_back_to = ordinary
+gotos, every guard; it refuses the vague and anything seen before the last
+reset, and flags a stale one; forget wipes only on 'all', and a spoken wipe
+needs the wake word). Each chat turn to a model starts
+with the cockpit's fresh 'Situation: ...' line (sim.situation_now) in the
+USER turn — not the system prompt, which would re-prefill the tool list
+every turn on llama.cpp.
+
 FALLBACK: brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision
 lfm2.5-vl -> gemma-4-26b-a4b; multimodal -> gemma -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
@@ -82,7 +94,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-for _p in (ROOT, os.path.join(ROOT, "gait")):
+for _p in (ROOT, os.path.join(ROOT, "gait"), HERE):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -91,6 +103,8 @@ from harness.intent import (plan as intent_plan, execute as intent_execute,     
 from harness.local_brain import (build_tools, build_system, parse_args_json,          # noqa: E402
                                  MAX_HOPS, MAX_TURNS, CALL_TIMEOUT_S)
 from harness.backend import SIGNED                                                    # noqa: E402
+from scene_memory import (objects_from_description, parse_note, fmt_age,               # noqa: E402
+                          direction_words, forget_scope, GO_MIN_CONF, WORLD_MAX_M, SPAWN_NAME)
 
 DEFAULT_BASE = "http://127.0.0.1:8080/v1"
 WHISPER_URL = os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082")
@@ -116,6 +130,8 @@ CATALOG_TTL_S = 20.0      # llama-swap's model list (loaded/cold changes as mode
 VOICE_RECENT_S = 60.0     # a chat text equal to the last transcript within this is voice
 MAX_TEXT = 2000
 RESULT_CHARS = 4000       # a tool result is cut to this in the transcript
+SITUATION_CHARS = 500     # the situation line rides in every chat turn (composed to < 400 chars; this is the
+#                           hard cap, cut at a word — the least useful clauses come last)
 
 _VISION_RE = re.compile(r"vision|multimodal|mmproj|\bvlm?\b", re.I)
 _TEXT_ONLY_RE = re.compile(r"text[\s-]*only", re.I)
@@ -205,6 +221,9 @@ FIND_STEP_MIN_M = 0.10      # a step toward it is distance - FIND_NEAR_M, clampe
 FIND_STEP_MAX_M = 0.40      # (min 0.10, not 0.25: a 0.25 m step from 0.30 m away would ram it)
 FIND_STEP_BLIND_M = 0.25    # seen, confident, but no distance (a box above the horizon line)
 FIND_MIN_CONF = 0.40        # below this, never walk toward it: turn and look again
+FIND_TRUSTED_M = 2.0        # a sighting farther than this goes to memory as VAGUE (<= FIND_FAR_CONF):
+FIND_FAR_CONF = 0.3         # near the horizon a few pixels are metres (v 0.32 -> 14 m, 0.36 -> 3 m);
+#                             the vision bench measured the box geometry only out to 1.4 m
 FIND_DEFAULT_CONF = 0.50    # "seen" with no confidence field at all
 FIND_SCAN_DEG = 30.0        # a scan turn (counter-clockwise); at most one full circle
 BEARING_LIMIT_DEG = 60.0
@@ -252,13 +271,81 @@ EXTRA_TOOLS.append(
                                                             f"{FIND_MAX_STEPS}, max {FIND_MAX_STEPS_CAP})"}},
             "required": ["name"]}}})
 
+# ------------------------------------------------------------ scene memory tools
+# (sim/scene_memory.py; the cockpit owns one SceneMemory per world — sim.memory)
+GO_BACK_STANDOFF_M = FIND_NEAR_M + EYE_FWD_M   # 0.35 m torso-to-near-edge: where find_object stops
+GO_BACK_LEG_M = 1.2         # one goto leg (goto's 40 s cap is ~1.8 m at 45 mm/s)
+GO_BACK_MAX_LEGS = 4
+GO_BACK_DEFAULT_SIZE_M = 0.10
+REMEMBER_DOC = ("Remember a fact the operator states, in their words ('the charger is by the door'). "
+                "'the X is here' / 'this spot is X' / 'call this spot X' pins X at the robot's current "
+                "position; 'the X is at (1.0, 0.2)' pins map meters (the floor is +-6 m); anything else "
+                "is kept as a note that recall finds by its words. Only for what the operator tells you "
+                "— sightings are remembered automatically.")
+WHERE_IS_DOC = ("Where is a named object, from memory (no looking, no walking): its map position "
+                "(meters), how long ago it was seen, confidence and source (find = the eye's box "
+                "geometry; user = the operator pinned it; look = a vague description). stale=true: "
+                "seen over 10 min ago or before the last reset, so it may have moved — find_object "
+                "re-checks. known=false when it was never located — then call find_object.")
+RECALL_DOC = ("Search the robot's memory of this world — what it saw, found, was told, and which "
+              "guards fired — for a query ('ball', 'charger', 'cliff'); returns the most relevant "
+              "entries with their age. An empty query returns recent entries, the operator's notes "
+              "and things near the robot first.")
+GO_BACK_DOC = ("Walk back to a remembered object or place ('go back to the ball', 'go back to the "
+               f"{SPAWN_NAME}' = where the robot spawned): ordinary gotos toward its remembered "
+               "position (every guard applies), stopping ~0.4 m short of it (a place the operator "
+               "pinned with 'X is here': onto it). Refused when it is not remembered, only vaguely, or "
+               "only from before the last reset — then call find_object. A stale sighting (> 10 min) "
+               "is walked to but flagged. It does NOT re-check with the eye: call look or "
+               "find_object afterwards if the object may have moved.")
+FORGET_DOC = ("Forget one named object (and every memory that mentions it), or everything with name "
+              "'all'. A pronoun ('that', 'it') forgets nothing: name the thing. Only when the "
+              "operator asks.")
+EXTRA_TOOLS += [
+    {"type": "function", "function": {
+        "name": "remember", "description": REMEMBER_DOC,
+        "parameters": {"type": "object", "properties": {
+            "note": {"type": "string", "description": "the fact, in the operator's words"}},
+            "required": ["note"]}}},
+    {"type": "function", "function": {
+        "name": "where_is", "description": WHERE_IS_DOC,
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "the object, in plain words: 'ball'"}},
+            "required": ["name"]}}},
+    {"type": "function", "function": {
+        "name": "recall", "description": RECALL_DOC,
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "k": {"type": "integer", "description": "how many entries (default 5, max 20)"}}}}},
+    {"type": "function", "function": {
+        "name": "go_back_to", "description": GO_BACK_DOC,
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "the remembered object: 'ball'"}},
+            "required": ["name"]}}},
+    {"type": "function", "function": {
+        "name": "forget", "description": FORGET_DOC,
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "the object, or 'all'"}},
+            "required": ["name"]}}},
+]
+MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the robot's own awareness "
+               "(pose, guards, what the lidar sees nearby, remembered objects, the last look; servo "
+               "heat and the servo bus only when they matter), written by the cockpit, not by the "
+               "operator: answer 'what's around you' or 'what do you know' from it. The lidar sees "
+               "only things taller than ~0.18 m (a ball or a low step is invisible to it). Memory: "
+               "where_is / recall answer from what was seen or told before (a 'stale' entry may have "
+               "moved); go_back_to walks to a remembered object, and to "
+               f"'{SPAWN_NAME}' (the spawn point); remember keeps what the operator tells you; "
+               "find_object and look are remembered automatically.")
+MEMORY_TOOLS = ("remember", "where_is", "recall", "go_back_to", "forget")
+
 TOOL_NAMES = ("say", "gesture", "goto", "stop", "scan_summary", "status", "look",
               "list_gestures", "compose_gesture", "check_gesture", "save_gesture",
-              "find_object", "turn")        # turn: internal (find_object's scan; replays), not offered to models
+              "find_object", "turn") + MEMORY_TOOLS   # turn: internal (find_object's scan; replays), not offered to models
 NOTED = ("goto", "gesture", "say", "stop", "compose_gesture", "turn")     # recordings replay these
-# find_object is not NOTED: the gotos and turns it makes are, so a replay repeats the
-# motion without asking a vision model again
-GATED = tuple(MOTION_TOOLS) + ("find_object", "turn")      # a spoken line needs the wake word
+# find_object / go_back_to are not NOTED: the gotos and turns they make are, so a replay
+# repeats the motion without asking a vision model (or the memory) again
+GATED = tuple(MOTION_TOOLS) + ("find_object", "turn", "go_back_to")   # a spoken line needs the wake word
 
 # the static defaults (the cockpit builds both per request with the live lists)
 TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
@@ -531,6 +618,47 @@ def _wrap_deg(a):
     return (float(a) + 180.0) % 360.0 - 180.0
 
 
+def floor_to_map(pose, bearing_deg, dist_from_camera_m):
+    """A floor point seen by the eye (pixel_to_floor's bearing + distance, both
+    from the CAMERA, which sits EYE_FWD_M ahead of the torso centre) -> map x, y.
+    bearing_to_map measures from the torso (it aims gotos); this is the
+    geometric position the memory keeps."""
+    yaw = math.radians(float(pose["yaw_deg"]))
+    cx = float(pose["x"]) + EYE_FWD_M * math.cos(yaw)
+    cy = float(pose["y"]) + EYE_FWD_M * math.sin(yaw)
+    th = yaw - math.radians(float(bearing_deg))
+    return cx + float(dist_from_camera_m) * math.cos(th), cy + float(dist_from_camera_m) * math.sin(th)
+
+
+def sighting_to_map(pose, det):
+    """A find_object detection -> {x, y, size_m?} in the map frame, or None
+    (unseen / no distance). With a box: the box's bottom corners projected to
+    the floor give its floor width; the centre estimate is half that width
+    beyond the near edge along the same bearing (a round or square object is
+    about as deep as it is wide). Without a box (method 'estimate'): the
+    model's own point, no size."""
+    if not det or not det.get("seen") or det.get("distance_m") is None or det.get("bearing_deg") is None:
+        return None
+    dist, bearing, size = float(det["distance_m"]), float(det["bearing_deg"]), None
+    box = det.get("bbox")
+    if box:
+        a, b = pixel_to_floor(box[0], box[3]), pixel_to_floor(box[2], box[3])
+        if a is not None and b is not None:
+            (da, ba), (db, bb) = a, b
+            pa = (da * math.cos(math.radians(-ba)), da * math.sin(math.radians(-ba)))
+            pb = (db * math.cos(math.radians(-bb)), db * math.sin(math.radians(-bb)))
+            size = math.hypot(pa[0] - pb[0], pa[1] - pb[1])
+            if 0.0 < size < 2.0:
+                dist += size / 2.0
+            else:
+                size = None
+    x, y = floor_to_map(pose, bearing, dist)
+    out = {"x": round(x, 3), "y": round(y, 3)}
+    if size is not None:
+        out["size_m"] = round(size, 3)
+    return out
+
+
 class _Surface:
     """The harness backend contract (say/gesture/goto/...) routed through
     Brains.tool, so harness.intent.execute gets the same guards, argument
@@ -570,6 +698,21 @@ class _Surface:
         return await self._t("find_object", name=name,
                              **({"max_steps": max_steps} if max_steps is not None else {}))
 
+    async def remember(self, note):
+        return await self._t("remember", note=note)
+
+    async def where_is(self, name):
+        return await self._t("where_is", name=name)
+
+    async def recall(self, query="", k=None):
+        return await self._t("recall", query=query, **({"k": k} if k is not None else {}))
+
+    async def go_back_to(self, name):
+        return await self._t("go_back_to", name=name)
+
+    async def forget(self, name):
+        return await self._t("forget", name=name)
+
 
 # ------------------------------------------------------------------ the brains
 class Brains:
@@ -598,7 +741,25 @@ class Brains:
         self._probe = {}                                       # id -> vision bool from /props
         self._voice_last = (0.0, "")
         self.composed = None                                   # the last compose_gesture draft
+        self.last_look = None                                  # {text, model, t, pose}: the awareness loop reads it
+        self.last_find = None                                  # {name, found, detail, t, model}: ditto (find's looks)
         self._load_conf()
+
+    @property
+    def memory(self):
+        """The cockpit's SceneMemory (sim.memory), or None (fake sims, tests)."""
+        return getattr(self.sim, "memory", None)
+
+    def _remember_obs(self, **obs):
+        """Record one observation; never raises (memory is a convenience, not a guard)."""
+        mem = self.memory
+        if mem is None:
+            return None
+        try:
+            return mem.remember(obs)
+        except Exception as e:                                 # noqa: BLE001
+            self._log(f"memory: not recorded ({type(e).__name__}: {e})")
+            return None
 
     # ---------------------------------------------------------------- config
     def _load_conf(self):
@@ -834,7 +995,8 @@ class Brains:
 
     def system_for(self, multimodal=False):
         s = self.sim
-        extra = LOOK_NOTE + " " + COMPOSE_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
+        extra = (LOOK_NOTE + " " + COMPOSE_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
+                 + (" " + MEMORY_NOTE if self.memory is not None else ""))
         return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
 
     def surface(self, voice=False):
@@ -853,6 +1015,10 @@ class Brains:
             return {"ok": False, "error": "voice_unconfirmed",
                     "hint": "a spoken motion command needs the wake word ('pebble, ...') "
                             "or the operator's confirmation"}
+        if voice and name == "forget" and forget_scope(args.get("name", ""))[0] == "all":
+            return {"ok": False, "error": "voice_unconfirmed",   # a misheard line must not wipe the memory
+                    "hint": "forgetting everything by voice needs the wake word ('pebble, forget "
+                            "everything') or the typed chat"}
         if name in NOTED:
             try:
                 self.sim.note_cmd(f"tool {name} {json.dumps(args)}")
@@ -875,6 +1041,8 @@ class Brains:
                 return await self.find_object(**args)
             if name == "turn":
                 return await self.turn(**args)
+            if name in MEMORY_TOOLS:
+                return await getattr(self, "mem_" + name)(**args)
             return await getattr(self.sim, "tool_" + name)(**args)
         except TypeError as e:
             return {"ok": False, "error": f"bad arguments for {name}: {e}"}
@@ -1081,7 +1249,11 @@ class Brains:
 
     async def look(self, model=None, prompt=None):
         """The eye described by the vision role (prompt: a custom question,
-        e.g. the vision bench's floor-safety checks)."""
+        e.g. the vision bench's floor-safety checks). A standard description
+        is remembered (scene memory: kind 'look'; objects it names with a
+        direction AND a distance go on the map at confidence 0.2) and kept as
+        last_look for the awareness loop; a custom question's answer is not."""
+        pose = await self._pose() if prompt is None else None
         v = await self._vision(prompt or VISION_PROMPT, model)
         if not v["ok"]:
             if v["error"].startswith("no vision model answered"):
@@ -1093,6 +1265,13 @@ class Brains:
         out = {"ok": True, "model": v["model"], "description": text, "latency_s": v["latency_s"]}
         if v.get("fallback"):
             out["fallback"] = v["fallback"]
+        if prompt is None:
+            self.last_look = {"text": text, "model": v["model"], "t": time.time(), "pose": pose}
+            if pose is not None:
+                objs = objects_from_description(text, pose)
+                self._remember_obs(kind="look", text=text, pose=pose, objects=objs)
+                if objs:
+                    out["placed"] = [o["name"] for o in objs]
         return out
 
     async def detect(self, name, model=None, method="bbox"):
@@ -1211,12 +1390,21 @@ class Brains:
             out.update(extra)
             self._log(f"find {name}: {detail}")
             self._event("find", f"{name}: {detail}"[:80])
+            self._remember_obs(kind="find", text=f"find {name}: {detail}", pose=pose)
+            self.last_find = {"name": name, "found": bool(found), "detail": detail, "t": time.time(),
+                              "model": used, "looks": len(steps)}
+            mem = self.memory
+            if mem is not None:
+                w = mem.where_is(name)
+                if w is not None:
+                    out["remembered"] = w
             return out
 
         for i in range(1, max_steps + 1):
             if self._operator_stopped(n0):
                 return await end(False, "stopped by the operator", ok=False, stopped="user")
             frame_n = (getattr(self.sim, "frames", {}) or {}).get("eye", (0, b""))[0]
+            pose_look = await self._pose() if self.memory is not None else None
             det = await self.detect(name, model=model, method=method)
             if not det.get("ok"):
                 err = det.get("error", "no vision model answered")
@@ -1234,6 +1422,21 @@ class Brains:
             steps.append(rec)
             if d["seen"]:
                 last_seen = {k: d[k] for k in ("bearing_deg", "distance_m", "confidence")}
+                at = sighting_to_map(pose_look, d) if pose_look is not None else None
+                if at is not None:                   # scene memory: where it is, in the map frame
+                    rec["map_xy"] = [at["x"], at["y"]]
+                    self._remember_obs(
+                        kind="find", pose=pose_look,
+                        text=(f"{name} seen at {d['bearing_deg']:+.0f} deg, {d['distance_m']:.2f} m "
+                              f"(conf {d['confidence']:.2f}, {d['method']}) -> map ({at['x']:.2f}, {at['y']:.2f})"),
+                        # a typed estimate is not geometry (0.30 m median error measured): below
+                        # go_back_to's bar whatever confidence the model claims
+                        # and a far box is near the horizon, where a pixel is decimetres to metres:
+                        # beyond FIND_TRUSTED_M it is a hint for the map, never a goal either
+                        objects=[dict(at, name=name, source="find" if d["method"] == "bbox" else "find-estimate",
+                                      confidence=min(d["confidence"], FIND_FAR_CONF)
+                                      if d["method"] != "bbox" or d["distance_m"] > FIND_TRUSTED_M
+                                      else d["confidence"])])
             dist = "?" if d["distance_m"] is None else f"{d['distance_m']:.2f}"
             what = d["what"][:40] if d["parsed"] else f"unparsed: {det['raw'][:40]!r}"
             saw = (f"seen at {d['bearing_deg']:+.0f} deg, {dist} m, conf {d['confidence']:.2f}"
@@ -1279,6 +1482,183 @@ class Brains:
         else:
             detail = f"not found in {max_steps} looks (turned {turned:.0f} deg)"
         return await end(False, detail)
+
+    # ------------------------------------------------------------ scene memory
+    def _no_memory(self):
+        return {"ok": False, "error": "no scene memory here: it lives in the cockpit (./rocky.sh cockpit)"}
+
+    async def mem_remember(self, note=None, name=None, x=None, y=None):
+        """remember(note): the operator's words; 'X is here' / 'X is at (x, y)'
+        pin a position. (name + x + y: the cockpit map's 'remember here'.)"""
+        mem = self.memory
+        if mem is None:
+            return self._no_memory()
+        note = str(note or "").strip()[:300]
+        pose = await self._pose()
+        obj = None
+        if name is not None and x is not None and y is not None:
+            tx, ty, err = validate_goto(x, y)
+            if err:
+                return {"ok": False, "error": err.replace("goto", "remember")}
+            obj = {"name": str(name)[:60], "x": tx, "y": ty, "confidence": 0.9, "source": "user"}
+            note = note or f"the {name} is at ({tx:.2f}, {ty:.2f})"
+        elif note:
+            obj = parse_note(note, pose)         # 'X is here' carries anchor=robot: go_back_to goes onto it
+        if not note:
+            return {"ok": False, "error": "remember needs the note (what to remember, in words)"}
+        if obj is not None and (abs(obj["x"]) > WORLD_MAX_M or abs(obj["y"]) > WORLD_MAX_M):
+            # refused out loud: quietly keeping it as a note let the robot say 'remembered' with
+            # nothing pinned (review 2026-09-24: a pin at (150, 0) came back ok)
+            return {"ok": False, "error": f"({obj['x']:g}, {obj['y']:g}) is off the floor: a pinned place "
+                                          f"must be within +-{WORLD_MAX_M:g} m of the origin (map meters)"}
+        rec = self._remember_obs(kind="user", text=note, pose=pose, objects=[obj] if obj else [])
+        if rec is None:
+            return {"ok": False, "error": "not remembered (see the console)"}
+        self._event("memory", f"remember: {note}"[:80])
+        out = {"ok": True, "remembered": note, "object": rec["objects"][0] if rec["objects"] else None}
+        if not rec["objects"]:
+            out["note"] = ("kept as a note (no position in it): recall finds it by its words. To pin a "
+                           "place, stand the robot at it and say 'the <thing> is here'.")
+        return out
+
+    async def mem_where_is(self, name=None):
+        mem = self.memory
+        if mem is None:
+            return self._no_memory()
+        name = str(name or "").strip()[:60]
+        if not name:
+            return {"ok": False, "error": "where_is needs the name of the object"}
+        w = mem.where_is(name)
+        if w is None:
+            notes = mem.notes_about(name)
+            out = {"ok": True, "known": False, "name": name,
+                   "detail": f"no position remembered for the {name} in this world"
+                             + (" (only notes: " + "; ".join(notes) + ")" if notes else "")
+                             + " — find_object looks for it"}
+            if notes:
+                out["notes"] = notes
+            return out
+        pose = await self._pose()
+        out = {"ok": True, "known": True, "name": name, **w}
+        rel = ""
+        if pose is not None:
+            d, side = direction_words(pose, w["x"], w["y"])
+            out.update(distance_m=round(d, 2), direction=side)
+            rel = f", {d:.2f} m {side} of the robot"
+        if w["confidence"] < GO_MIN_CONF:
+            flag = " — VAGUE (a look description or a far sighting): find_object to locate it"
+        elif w.get("stale"):
+            flag = " — STALE: it may have moved; find_object re-checks"
+        else:
+            flag = ""
+        also = ""
+        if w.get("also_seen"):
+            a = w["also_seen"]
+            also = (f"; a vaguer newer sighting ({a['source']}, confidence {a['confidence']:.2f}, "
+                    f"{fmt_age(a['age_s'])}) put it at ({a['x']:.2f}, {a['y']:.2f})")
+        out["detail"] = (f"the {w['name']} was at ({w['x']:.2f}, {w['y']:.2f}){rel}, seen {fmt_age(w['age_s'])} "
+                         f"({w['source']}, confidence {w['confidence']:.2f}"
+                         + (", before the last reset / world load" if w.get("earlier_session") else "")
+                         + ")" + flag + also)
+        return out
+
+    async def mem_recall(self, query="", k=5):
+        mem = self.memory
+        if mem is None:
+            return self._no_memory()
+        n = _num(k)
+        k = int(max(1, min(20, n if n is not None else 5)))
+        pose = await self._pose()
+        hits = mem.recall(str(query or "")[:200], k=k, pose=pose)
+        return {"ok": True, "query": str(query or ""), "found": len(hits),
+                "entries": [{"kind": h["kind"], "text": h["text"], "age": fmt_age(h["age_s"]),
+                             "objects": [{k2: o[k2] for k2 in ("name", "x", "y", "confidence")} for o in h["objects"]]}
+                            for h in hits],
+                "summary": mem.summary(pose)}
+
+    async def mem_forget(self, name=None):
+        mem = self.memory
+        if mem is None:
+            return self._no_memory()
+        name = str(name or "").strip()[:60]
+        scope = forget_scope(name)[0] if name else "unclear"
+        if scope == "unclear":                # 'forget that' names nothing: it must not wipe everything
+            return {"ok": False, "error": f"forget what? {name!r} names no object — name it ('forget the "
+                                          "ball'), or 'all' to forget everything"}
+        n = mem.forget("all" if scope == "all" else name)
+        self._event("memory", f"forget {name}: {n} records")
+        self._log(f"memory: forgot {name} ({n} records)")
+        return {"ok": True, "forgot": name, "records": n}
+
+    async def mem_go_back_to(self, name=None):
+        """Walk back to a remembered object: gotos of at most GO_BACK_LEG_M
+        toward it until within the standoff (find_object's stopping distance
+        plus half its size; 0 for a place pinned with 'X is here'). Every leg
+        is an ordinary goto (tool_goto: every guard); any veto ends it."""
+        mem = self.memory
+        if mem is None:
+            return self._no_memory()
+        name = str(name or "").strip()[:60]
+        if not name:
+            return {"ok": False, "error": "go_back_to needs the name of a remembered object"}
+        w = mem.where_is(name)
+        if w is None:
+            notes = mem.notes_about(name)
+            return {"ok": False, "error": "not remembered", "name": name,
+                    "hint": f"no position remembered for the {name} — find_object looks for it"
+                            + (" (notes: " + "; ".join(notes) + ")" if notes else "")}
+        if w["confidence"] < GO_MIN_CONF:
+            return {"ok": False, "error": f"only a vague position for the {w['name']} (confidence "
+                                          f"{w['confidence']:.2f}, source {w['source']})",
+                    "where": w, "hint": "find_object locates it with the eye's box geometry"}
+        if w.get("earlier_session") and w.get("stale"):
+            # the world respawned its bodies since (a reset / world load): 'back at the ball'
+            # would be a claim about where it USED to be (review 2026-09-24). Pinned places
+            # (anchor robot) and the operator's own pins are not stale / not refused.
+            if w.get("source") != "user":
+                return {"ok": False, "error": f"the {w['name']} was last seen before the last reset / "
+                                              "world load: it may be anywhere now",
+                        "where": w, "hint": f"find_object looks for it (or goto ({w['x']:.2f}, {w['y']:.2f}) "
+                                            "to walk to where it was)"}
+        standoff = 0.0 if w.get("anchor") == "robot" else \
+            GO_BACK_STANDOFF_M + (w.get("size_m") or GO_BACK_DEFAULT_SIZE_M) / 2.0
+        n0 = len(getattr(self.sim, "cmd_log", None) or [])
+        legs = []
+        self._log(f"go back to {name}: remembered at ({w['x']:.2f}, {w['y']:.2f}), {fmt_age(w['age_s'])}, "
+                  f"stopping {standoff:.2f} m short")
+        self._event("memory", f"go back to {name}")
+
+        def result(ok, detail, pose, **extra):
+            self._log(f"go back to {name}: {detail}")
+            self._event("memory", f"{name}: {detail}"[:80])
+            return {"ok": ok, "arrived": ok, "name": name, "where": w, "detail": detail, "legs": legs,
+                    "pose": pose, **extra}
+
+        for _ in range(GO_BACK_MAX_LEGS):
+            pose = await self._pose()
+            if pose is None:
+                return result(False, "no pose: cannot aim a goto", None)
+            if self._operator_stopped(n0):
+                return result(False, "stopped by the operator", pose, stopped="user")
+            d = math.hypot(w["x"] - pose["x"], w["y"] - pose["y"])
+            if d <= standoff + 0.05:
+                stale = (" — STALE: it may have moved since; find_object re-checks" if w.get("stale")
+                         else "")
+                return result(True, f"back at the {w['name']}: {d:.2f} m from where it was remembered "
+                                    f"({fmt_age(w['age_s'])}; not re-checked with the eye){stale}", pose,
+                              distance_m=round(d, 3), stale=bool(w.get("stale")))
+            step = min(d - standoff, GO_BACK_LEG_M)
+            tx = round(pose["x"] + (w["x"] - pose["x"]) / d * step, 3)
+            ty = round(pose["y"] + (w["y"] - pose["y"]) / d * step, 3)
+            r = await self.tool("goto", {"x": tx, "y": ty})
+            how = r.get("stopped") or ("refused" if r.get("ok") is False else "?")
+            legs.append({"x": tx, "y": ty, "stopped": how})
+            if how != "arrived":
+                why = r.get("detail") or r.get("error") or how
+                return result(False, f"stopped on the way: goto {how} ({why})", r.get("pose") or pose,
+                              stopped=how)
+        pose = await self._pose()
+        return result(False, f"not there after {GO_BACK_MAX_LEGS} legs", pose, stopped="timeout")
 
     # ------------------------------------------------------------------ voice
     async def transcribe(self, raw, mode=None, trusted=False):
@@ -1419,6 +1799,8 @@ class Brains:
             if name == "find_object" and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
                 reply = (res.get("detail") if res.get("detail") else
                          f"find_object failed: {res.get('error')}")
+            elif name in MEMORY_TOOLS and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
+                reply = _memory_reply(name, res)
             elif name == "look" and isinstance(res, dict):
                 reply = (f"eye ({res.get('model')}): {res['description']}" if res.get("ok")
                          else f"look failed: {res.get('error')}")
@@ -1431,11 +1813,40 @@ class Brains:
                 reply += f" — stopped: {res['stopped']}"
         return {"reply": reply, "trace": trace, "mode": "talk"}
 
-    def _messages(self, mode, text, image_b64=None):
+    async def situation_text(self):
+        """The cockpit's CURRENT situation line (composed fresh in the sim
+        thread: pose, lidar, memory, guards), or None (no cockpit, or it failed)."""
+        f = getattr(self.sim, "situation_now", None)
+        if f is None:
+            return None
+        try:
+            s = await f()
+        except Exception as e:                                 # noqa: BLE001 — never block a chat turn
+            self._log(f"situation: {type(e).__name__}: {e}")
+            return None
+        t = s.get("text") if isinstance(s, dict) else None
+        if not t:
+            return None
+        t = str(t)
+        if len(t) > SITUATION_CHARS:                           # cut at a word: the tail is the least useful
+            t = t[:SITUATION_CHARS - 1].rsplit(" ", 1)[0] + "…"
+        return t
+
+    @staticmethod
+    def _with_situation(text, situation):
+        """The situation rides in the CURRENT user turn, not the system prompt:
+        llama.cpp reuses the KV cache of the longest unchanged prefix, and the
+        system prompt sits before the tool list (~3k tokens) in the Qwen
+        template — a changing system prompt re-prefills all of it every turn.
+        The history keeps the operator's words only."""
+        return f"Situation: {situation}\n\nOperator: {text}" if situation else text
+
+    def _messages(self, mode, text, image_b64=None, situation=None):
         msgs = [{"role": "system", "content": self.system_for(multimodal=mode == "multimodal")}]
         for turn in self.hist.get(mode, [])[-MAX_TURNS:]:
             msgs.append({"role": "user", "content": turn["user"]})
             msgs.append({"role": "assistant", "content": turn["reply"]})
+        text = self._with_situation(text, situation)
         if image_b64:
             msgs.append({"role": "user", "content": [
                 {"type": "text", "text": text},
@@ -1479,6 +1890,7 @@ class Brains:
 
     async def _llm(self, text, mode, allow):
         trace, notes = [], []
+        situation = await self.situation_text()
         cat = await self._acatalog()
         stages = []
         image = None
@@ -1493,7 +1905,7 @@ class Brains:
         if mode == "local":
             notes += sk
         stages.append(("brain", ch))
-        msgs = self._messages(mode, text, image)
+        msgs = self._messages(mode, text, image, situation)
         for stage, chain in stages:
             tools = self.tools_for(look=True)
             for mdl in chain:
@@ -1543,7 +1955,7 @@ class Brains:
         for turn in self.hist.get("claude", [])[-MAX_TURNS:]:
             msgs += [{"role": "user", "content": turn["user"]},
                      {"role": "assistant", "content": turn["reply"]}]
-        msgs.append({"role": "user", "content": text})
+        msgs.append({"role": "user", "content": self._with_situation(text, await self.situation_text())})
         trace, content, gave_up = [], "", True
         for _hop in range(MAX_HOPS):
             try:
@@ -1576,6 +1988,27 @@ class Brains:
                        f"(last: {summarize_trace(trace)})")
         self._remember("claude", text, content, trace)
         return {"reply": content, "trace": trace, "mode": "claude", "model": model, "gave_up": gave_up}
+
+
+def _memory_reply(name, res):
+    """Talk mode's sentence for a memory tool result."""
+    if res.get("ok") is False:
+        return f"{name}: {res.get('error')}" + (f" — {res['hint']}" if res.get("hint") else "")
+    if name == "where_is":
+        return res.get("detail") or "?"
+    if name == "recall":
+        if not res.get("entries"):
+            return f"nothing remembered about {res.get('query')!r}. {res.get('summary', '')}".strip()
+        return "; ".join(f"{e['text']} ({e['age']})" for e in res["entries"][:4])
+    if name == "remember":
+        o = res.get("object")
+        return (f"remembered: {res['remembered']}" +
+                (f" — the {o['name']} pinned at ({o['x']:.2f}, {o['y']:.2f})" if o else " (as a note)"))
+    if name == "forget":
+        return f"forgot {res.get('forgot')} ({res.get('records')} records)"
+    if name == "go_back_to":
+        return res.get("detail") or "?"
+    return json.dumps(res, default=str)[:300]
 
 
 def _no_const(c):

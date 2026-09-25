@@ -7,7 +7,9 @@ local_brain and intent all drive the ONE sim the browser is showing.
                               else the in-process sim — re-resolved per call
 
 Adds the `look` and `find_object` tools (the robot's eye through a vision
-model), which only exist where a cockpit is running — absent tool > lying tool.
+model) and the scene-memory tools (`remember`, `where_is`, `recall`,
+`go_back_to`, `forget` — sim/scene_memory.py), which only exist where a
+cockpit is running — absent tool > lying tool.
 
 D052: AutoBackend used to be resolved ONCE when the MCP server started, so
 a cockpit started after `./rocky.sh chat` was never used (the chat drove an
@@ -34,6 +36,7 @@ import httpx
 DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
 AUTO_TTL_S = 3.0
 FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
+GO_BACK_TIMEOUT_S = 200.0  # go_back_to: up to 4 goto legs of <= 40 s each
 
 
 def cockpit_alive(url=DEFAULT_URL, timeout=2.0):
@@ -120,6 +123,35 @@ class CockpitBackend:
 
     async def list_gestures(self) -> dict:
         return await self._tool("list_gestures")
+
+    # ---- scene memory (the cockpit's; sim/scene_memory.py)
+    async def remember(self, note: str) -> dict:
+        return await self._tool("remember", note=note)
+
+    async def where_is(self, name: str) -> dict:
+        return await self._tool("where_is", name=name)
+
+    async def recall(self, query: str = "", k: int = 5) -> dict:
+        return await self._tool("recall", query=query, k=k)
+
+    async def forget(self, name: str) -> dict:
+        return await self._tool("forget", name=name)
+
+    async def go_back_to(self, name: str) -> dict:
+        """Up to GO_BACK_MAX_LEGS gotos inside the cockpit: allow GO_BACK_TIMEOUT_S."""
+        try:
+            r = await self.client.post(f"{self.url}/api/tool/go_back_to", json={"name": name},
+                                       timeout=httpx.Timeout(GO_BACK_TIMEOUT_S, connect=5.0))
+            return r.json()
+        except httpx.ConnectError as e:
+            return {"ok": False, "error": f"cockpit unreachable: {e}", "gone": True}
+        except Exception as e:
+            return {"ok": False, "error": f"cockpit unreachable: {e} (go_back_to may still be "
+                                          "walking in the cockpit — call stop to end it)"}
+
+
+_NO_MEMORY = {"ok": False, "error": "no scene memory here: it lives in the cockpit "
+                                    "(./rocky.sh cockpit); the in-process sim has none"}
 
 
 class AutoBackend:
@@ -247,6 +279,27 @@ class AutoBackend:
             return {"ok": False, "error": "no eye here: find_object needs the cockpit "
                                           "(./rocky.sh cockpit); the in-process sim has none"}
         return self._tag(await be.find_object(name, max_steps))
+
+    async def _mem(self, tool, /, **args):
+        be = await self.pick()
+        if not hasattr(be, tool):
+            return dict(_NO_MEMORY)
+        return await getattr(be, tool)(**args)
+
+    async def remember(self, note: str) -> dict:
+        return await self._mem("remember", note=note)
+
+    async def where_is(self, name: str) -> dict:
+        return await self._mem("where_is", name=name)
+
+    async def recall(self, query: str = "", k: int = 5) -> dict:
+        return await self._mem("recall", query=query, k=k)
+
+    async def forget(self, name: str) -> dict:
+        return await self._mem("forget", name=name)
+
+    async def go_back_to(self, name: str) -> dict:
+        return self._tag(await self._mem("go_back_to", name=name))     # it moves: say which robot
 
     async def list_gestures(self) -> dict:
         be = await self.pick()

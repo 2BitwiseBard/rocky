@@ -34,10 +34,22 @@ with pebble_feasibility before it moves or saves anything, solves reaches
 with the whole-body pose solver and turns a recorded pose stream into
 keyframes; the residual walker is fed the observation its checkpoint was
 trained on (rl_common contract), not a hand-built one.
+
+Memory + awareness (2026-09-24): sim.memory is a SceneMemory per world
+(sim/scene_memory.py; persisted by main() to sim/out/memory/<key>.json —
+memory_key: a preset by name, anything else by name + a hash of its spec);
+guards, looks and finds record into it; a reset / world load starts a new
+memory epoch (earlier sightings turn stale, 'start' is pinned at the spawn). _aware_tick (sim thread, 1 Hz wall
+clock, never fatal) composes sim.situation while idle (--awareness-s),
+reacts to a guard latch / a new obstacle with a chord (reactions, once per
+30 s) and, only with --curious, schedules one look a minute. Routes:
+/api/memory, /api/awareness; the state feed carries situation +
+memory_objects.
 """
 from __future__ import annotations
 import argparse
 import asyncio
+import hashlib
 import io
 import ipaddress
 import json
@@ -83,6 +95,8 @@ from harness.backend import CHORD_WORDS                                # noqa: E
 # D052: the brains (roles, fallbacks, histories, voice, look) live in cockpit_brains
 from cockpit_brains import (Brains, TOOLS, SYSTEM, VISION_PROMPT, TOOL_NAMES,   # noqa: E402,F401
                             validate_goto, goto_range_error, local_ai_key as _local_ai_key)
+# scene memory + situational awareness (the owner's "memory" and "awareness" asks)
+from scene_memory import SceneMemory, DEFAULT_DIR as MEMORY_DIR, fmt_age      # noqa: E402
 
 V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (45.5 mm/s today)
 GOTO_CAP_S = 40.0            # a goto that has not ended by then ends as "timeout"
@@ -102,8 +116,42 @@ GOTO_DETOUR_RESET_M = 0.15   # this much new progress after a detour earns the d
 TEACH_HZ = 20.0              # the studio's pose-stream recorder
 TEACH_MAX_S = 60.0           # ... stops itself after this long (1200 samples)
 HEARTBEAT_STALE_S = 2.0      # the UI calls the sim thread dead after this long without a loop
+# ---- situational awareness (the sim thread; wall-clock seconds, so 4x speed does not
+#      make the robot chattier). See CockpitSim._aware_tick.
+AWARENESS_S = float(os.environ.get("ROCKY_AWARENESS_S", "20"))   # compose the situation this often
+#                              while idle + NORMAL (0 = off); a chat turn always composes a fresh one
+AWARE_CHECK_S = 1.0          # the lidar look-around for reactions (1 Hz; goto reads it at 8 Hz)
+REACT_MIN_S = 30.0           # at most one spoken reaction per this long
+CURIOUS_MIN_S = 60.0         # 'curious': at most one unprompted look (a vision-model call) per this long
+NEW_OBSTACLE_M = 0.5         # a lidar return this close where there was none (>= +0.1 m) = something new
+STILL_M, STILL_DEG = 0.03, 5.0   # ... judged only while the robot itself stood still
+SCENE_CHANGE_M = 0.15        # a sector's nearest return moved this much: the scene changed (curious)
+AWARE_FAILS_MAX = 3          # an awareness tick that keeps raising turns awareness off (never the sim)
+SECTORS = ("ahead", "ahead-left", "left", "behind-left", "behind", "behind-right", "right", "ahead-right")
+# bus events that are not guard trips: 'rate' (oversized goal steps, throttled to 1/s while
+# streaming) and 'reopen' (a recovery) flooded the memory as guards (review 2026-09-24)
+HW_ROUTINE = {"scan", "entry", "mirror", "rearm", "limp", "set_id", "center", "dir", "limits", "rate", "reopen"}
+HW_ALARM = {"cut", "lost"}   # bus events that are guard trips (a servo cut, a lost servo/port)
+HW_GUARD_EVERY_S = 30.0      # a bus guard (nan, cut, lost ...) goes to the memory at most once per kind per this
+HEAT_SAY = 0.5               # the situation line mentions servo heat above this fraction of the budget
 AUDIO_DIR = os.path.join(ROOT, "audio")
 CHORD_SPEC_DIR = os.path.join(AUDIO_DIR, "custom")          # D051: chord words designed in the cockpit
+
+def memory_key(name, spec):
+    """The scene-memory key (file name) of a world: a preset loaded as it
+    ships keeps its name ('room.json'); anything else — an edit, an unnamed
+    spec ('custom'), a replay's recorded world — is name + a hash of its
+    spec, so unrelated 'custom' worlds never share (or overwrite) a memory
+    (review 2026-09-24). Loading the same spec again finds its memory."""
+    name = str(name)
+    try:
+        blob = json.dumps(spec, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        blob = repr(spec)
+    if name in PRESETS and blob == json.dumps(PRESETS[name], sort_keys=True, default=str):
+        return name
+    return f"{name}-{hashlib.sha1(blob.encode()).hexdigest()[:8]}"
+
 
 class SimDead(RuntimeError):
     """The sim thread has stopped (a fatal exception or quit); nothing it owns answers."""
@@ -179,6 +227,17 @@ class CockpitSim(Playground):
         self.mode = "idle"
         self.events = deque(maxlen=200)
         self.console = deque(maxlen=200)
+        # scene memory: RAM only by default (tests, headless); main() turns persistence on.
+        # Keyed by memory_key: a preset by its name, anything else by name + a hash of its spec
+        self.memory = SceneMemory(memory_key(self.world_name, spec), directory=None, log=self.log)
+        self._hw_guard_t = {}               # bus event kind -> when it last went to the memory
+        self.awareness = dict(interval_s=AWARENESS_S, curious=False, reactions=False)
+        self.situation = dict(text="", t=None)
+        self._pose_cache = None             # the last pose the sim thread saw (for other threads)
+        self._aw = dict(check_next=0.0, compose_next=0.0, last_react=-1e9, last_curious=-1e9,
+                        prev=None, prev_pose=None, pending=None, fails=0, curious_scene=None,
+                        curious_task=None)
+        self._aloop = None                  # the asyncio loop (set by call): curious looks run there
         self.goto_state = None
         self._stop_req = False
         self.frames = {"chase": (0, b""), "eye": (0, b"")}
@@ -214,6 +273,40 @@ class CockpitSim(Playground):
         self.log(f"{kind}: {msg}")
         if kind in ("void", "latch") or str(msg).startswith(("refused", "blocked")):
             self.refusal = (time.time(), f"{kind}: {msg}")
+        if kind in ("void", "latch", "thermal"):
+            self._remember_guard(f"{kind}: {msg}", alarm=kind in ("void", "latch"))
+
+    def _remember_guard(self, text, alarm=False):
+        """A guard fired: a 'guard' observation in the scene memory, and (void /
+        latch / a bus cut) a pending alarm reaction for the awareness tick.
+        Any thread; never raises (the sim thread calls it from inside step)."""
+        mem = getattr(self, "memory", None)
+        if mem is not None:
+            try:
+                mem.remember({"kind": "guard", "text": str(text), "pose": self._pose_cache})
+            except Exception:                                   # noqa: BLE001
+                pass
+        if alarm and hasattr(self, "_aw"):
+            self._aw["pending"] = ("alarm_help", str(text)[:80])
+
+    def _hw_event(self, kind, msg):
+        """The bridge's on_event (its own thread: append + log + memory only, no MjData).
+        A bus guard goes to the memory at most once per kind per HW_GUARD_EVERY_S
+        (a streaming fault must not push the look history out of the 500 entries,
+        nor rewrite the file every debounce); an alarm kind still raises the
+        alarm reaction every time (that one is rate-limited by REACT_MIN_S)."""
+        self.events.append(("hw:" + kind, msg))
+        self.log(f"hw {kind}: {msg}")
+        if kind in HW_ROUTINE:
+            return
+        now = time.monotonic()
+        last = getattr(self, "_hw_guard_t", {})
+        if now - last.get(kind, -1e9) < HW_GUARD_EVERY_S:
+            if kind in HW_ALARM and hasattr(self, "_aw"):
+                self._aw["pending"] = ("alarm_help", f"bus {kind}: {msg}"[:80])
+            return
+        last[kind] = now
+        self._remember_guard(f"bus {kind}: {msg}", alarm=kind in HW_ALARM)
 
     def note_refusal(self, reply):
         """A console/teleop reply that is a guard's refusal -> the overlay."""
@@ -297,8 +390,7 @@ class CockpitSim(Playground):
         self.hw_disconnect()
         # D052: is_idle gates sim2real (the Playground also ANDs its own is_idle in);
         # on_event must not block — append + log only
-        hw = HardwareBridge(port, on_event=lambda k, m: (self.events.append(("hw:" + k, m)), self.log(f"hw {k}: {m}")),
-                            is_idle=self.is_idle)
+        hw = HardwareBridge(port, on_event=self._hw_event, is_idle=self.is_idle)
         hw.speed_cps = hw_bridge.ENTRY_SPEED_CPS    # the stream-speed slider starts gentle (200 c/s), not servo max
         self.hw = hw
         return hw.status()
@@ -381,6 +473,7 @@ class CockpitSim(Playground):
         if not self.alive:
             raise SimDead(self.fatal or "the sim thread has stopped")
         loop = asyncio.get_running_loop()
+        self._aloop = loop                       # the awareness tick schedules curious looks on it
         fut = loop.create_future()
         self.pending.put(_Job(fn, loop, fut))
         while True:
@@ -477,6 +570,12 @@ class CockpitSim(Playground):
             self._goto_post(gs)
         if self.teach is not None:
             self._teach_sample()
+        a = self.awareness
+        if a["interval_s"] > 0 or a["reactions"] or a["curious"]:
+            try:
+                self._aware_tick()
+            except Exception as e:                       # noqa: BLE001 — awareness is not physics
+                self._aware_failed(e)
         if self._k % self.render_every == 0:
             try:
                 self._render()
@@ -863,6 +962,17 @@ class CockpitSim(Playground):
         self.push = None
         self._respawn(p_xy if same_world else np.zeros(2), yaw if same_world else 0.0, keep_righter=True)
         self.fingerprint = robot_fingerprint(model)
+        # scene memory follows the world: an edit carries it over, another world loads its own.
+        # A memory error must never leave the world switch half done (the model is swapped).
+        # carry only on an explicit EDIT (keep_pose=True: /api/world/add): a different spec under
+        # the same name ('custom' again) is a different world with its own key and file
+        try:
+            self.memory.set_world(memory_key(name, spec), carry=bool(keep_pose))
+        except Exception as e:                           # noqa: BLE001
+            self.log(f"memory: world switch failed ({type(e).__name__}: {e}) — memory kept as it was")
+        self._memory_epoch(f"world '{name}' {'edited' if same_world else 'loaded'}: its objects are at "
+                           "their spawn", spawn=not same_world)
+        self._aw.update(prev=None, prev_pose=None, curious_scene=None, compose_next=0.0)
         if self.walk is not None:
             self.set_walk(self.walk["name"], _keep_gait=self.walk.get("gait_prev"))
         self.log(f"world: {name} ({model.ngeom} geoms) | {self.righter_note}")
@@ -903,8 +1013,251 @@ class CockpitSim(Playground):
         self.gesture = None
         self.push = None
         self._respawn(keep_righter=True)
+        self._memory_epoch("reset: the robot and the world's objects are back at their spawn")
         self.log("reset")
         return "reset: origin, upright, planted"
+
+    def _memory_epoch(self, why, spawn=True):
+        """Sim thread (or before it starts): the world's bodies are back at
+        their spawn, so every earlier sighting may be wrong now
+        (SceneMemory.new_epoch: they turn 'earlier_session' + stale). spawn:
+        pin 'start' at the robot's spawn pose. Never raises."""
+        try:
+            pose = self.pose()
+            self._pose_cache = pose
+            self.memory.new_epoch(why=why, pose=pose,
+                                  spawn={"x": pose["x"], "y": pose["y"], "yaw": pose["yaw_deg"]} if spawn else None)
+        except Exception as e:                           # noqa: BLE001 — memory is not physics
+            self.log(f"memory: epoch not recorded ({type(e).__name__}: {e})")
+
+    # ------------------------------------------------ situational awareness
+    def awareness_settings(self):
+        return dict(self.awareness, check_s=AWARE_CHECK_S, react_min_s=REACT_MIN_S,
+                    curious_min_s=CURIOUS_MIN_S, new_obstacle_m=NEW_OBSTACLE_M)
+
+    def set_awareness(self, interval_s=None, curious=None, reactions=None):
+        """Any thread. interval_s: seconds between situation updates while idle
+        (0 = off; else 5..3600); curious: allow one unprompted look (a vision
+        model call) per CURIOUS_MIN_S when the lidar scene changed; reactions:
+        speak a chord on a guard latch or a new obstacle (once per REACT_MIN_S)."""
+        a = dict(self.awareness)
+        if interval_s is not None:
+            if isinstance(interval_s, bool):
+                raise ValueError("interval_s must be a number of seconds (0 = off)")
+            v = float(interval_s)
+            if not np.isfinite(v) or v < 0:
+                raise ValueError("interval_s must be a finite number >= 0 (0 = off)")
+            a["interval_s"] = 0.0 if v == 0 else float(np.clip(v, 5.0, 3600.0))
+        for k, v in (("curious", curious), ("reactions", reactions)):
+            if v is not None:
+                if not isinstance(v, bool):
+                    raise ValueError(f"{k} must be true or false")
+                a[k] = v
+        self.awareness = a
+        self._aw["compose_next"] = 0.0
+        self._aw["fails"] = 0
+        self.log("awareness: " + ", ".join(f"{k} {v}" for k, v in a.items()))
+        return self.awareness_settings()
+
+    def _lidar_summary(self):
+        """Sim thread: the puck's 360 deg scan as 8 body-frame sectors (nearest
+        return per sector, None = nothing within range) + the nearest overall."""
+        angles, ranges, _ = lidar_scan(self.model, self.data, self.torso)
+        deg = np.degrees(angles)
+        idx = (((deg + 22.5) % 360.0) // 45.0).astype(int)
+        sectors = {}
+        for i, name in enumerate(SECTORS):
+            r = ranges[(idx == i) & np.isfinite(ranges)]
+            sectors[name] = round(float(r.min()), 3) if r.size else None
+        near = [(r, n) for n, r in sectors.items() if r is not None]
+        r, n = min(near) if near else (None, None)
+        plane = float(self.data.xpos[self.torso][2] - self.z0 + PUCK_DZ)
+        return dict(sectors=sectors, nearest_m=r, nearest_dir=n, plane_m=round(plane, 3))
+
+    @staticmethod
+    def _lidar_words(lid):
+        """'lidar: nearest 0.42 m ahead, 1.10 m left; clear elsewhere' — every
+        sector is accounted for (review 2026-09-24: 'clear' used to be cut at
+        4 names, so the unlisted clear sectors read as unknown). Its height
+        caveat (sees only things taller than ~0.18 m) is in MEMORY_NOTE."""
+        if not lid:
+            return "lidar: no scan"
+        s = lid["sectors"]
+        close = sorted(((r, n) for n, r in s.items() if r is not None and r < 1.5))
+        if not close:
+            return "lidar: nothing within 1.5 m"
+        shown = ", ".join(f"{r:.2f} m {n}" for r, n in close[:3])
+        if len(close) <= 3:
+            return f"lidar: nearest {shown}; clear elsewhere"
+        clear = [n for n, r in s.items() if r is None or r >= 1.5]
+        return (f"lidar: nearest {shown} (+{len(close) - 3} more within 1.5 m); "
+                f"clear: {', '.join(clear) if clear else 'nothing'}")
+
+    def _eye_words(self, now):
+        """The eye clause: the last description (quoted, <= 80 chars), or —
+        when find_object used the eye since — what it found."""
+        lk = getattr(self.brains, "last_look", None)
+        lf = getattr(self.brains, "last_find", None)
+        if lf and (not lk or lf["t"] >= lk["t"]):
+            return (f"eye: last used by find_object ({lf['name']} {'found' if lf['found'] else 'not found'}, "
+                    f"{fmt_age(now - lf['t'])})")
+        if lk:
+            q = lk["text"] if len(lk["text"]) <= 64 else lk["text"][:63].rsplit(" ", 1)[0] + "…"
+            return f"eye ({lk.get('model')}, {fmt_age(now - lk['t']).replace('just now', 'now')}): \"{q}\""
+        return "eye: no description yet"
+
+    def compose_situation(self, lid=None, now=None):
+        """Sim thread: the robot's situation as one line + the fields behind it
+        -> self.situation. Reads only what the sim already has (pose, guards,
+        a lidar scan, the last look, the memory, servo heat, the bus): it never
+        calls a model. Aimed at < 400 chars (it rides in every chat turn): the
+        nominal clauses are left out (no 'no guard latched', heat only above
+        HEAT_SAY, the bus only when servos are connected) and the most useful
+        come first — pose, guards, lidar, memory, heat, bus, eye — so a cut
+        (Brains.situation_text, SITUATION_CHARS) drops the least useful tail."""
+        now = time.time() if now is None else now
+        lid = self._lidar_summary() if lid is None else lid
+        pose = self.pose()
+        self._pose_cache = pose
+        g = self.guard_status()
+        guards = []
+        if self.void is not None:
+            guards.append(f"VOID latched at {self.void['bearing_deg']:.0f} deg (body frame; `clear` releases)")
+        if self.sup.latched:
+            guards.append(f"LATCHED safe-stop ({self.sup.latch_reason})")
+        if g.get("locomotion_held"):
+            guards.append("locomotion held (sim2real)")
+        th = self.thermal_status()
+        if th["tripped"]:
+            guards.append(f"servos PAST the thermal budget: {', '.join(th['tripped'])}")
+        heat = (f"servos warm: {th['hot']} at {th['heat_max'] * 100:.0f}% of its thermal budget"
+                if not th["tripped"] and th["heat_max"] > HEAT_SAY else None)
+        hw = self._hw_brief()
+        if hw is None:
+            bus = "bus: no servos connected (sim only)"
+        else:
+            bus = (f"bus: {hw.get('port')}, {hw.get('n', 0)} servos, mirror {hw.get('mirror')}, "
+                   f"{hw.get('errors', 0)} errors" + (f", tripped ids {hw['tripped']}" if hw.get("tripped") else ""))
+            if hw.get("tripped"):
+                guards.append(f"servo ids {hw['tripped']} tripped on the bus")
+        lk = getattr(self.brains, "last_look", None)
+        look = None
+        if lk:
+            look = dict(text=lk["text"], model=lk.get("model"), age_s=round(now - lk["t"], 1))
+        mpose = {"x": pose["x"], "y": pose["y"], "yaw_deg": pose["yaw_deg"]}
+        mem = self.memory.summary(mpose, now=now, max_objects=3, short=True)
+        idle = self.idle_reason() is None
+        state = self.sup.state
+        px, py, pyaw = (0.0 if abs(v) < 0.005 else v for v in (pose["x"], pose["y"], pose["yaw_deg"]))
+        parts = [f"at ({px:.2f}, {py:.2f}) m facing {pyaw:.0f} deg in world '{self.world_name}'; "
+                 f"reflex {state}, {'idle' if idle else self.mode}"]
+        if guards:
+            parts.append("GUARDS: " + "; ".join(guards))
+        parts += [self._lidar_words(lid), mem]
+        if heat:
+            parts.append(heat)
+        if hw is not None:
+            parts.append(bus)
+        parts.append(self._eye_words(now))
+        text = ". ".join(parts) + "."
+        self.situation = dict(text=text, t=round(now, 2), pose=pose, world=self.world_name, state=state,
+                              mode=self.mode, idle=idle, guards=guards, lidar=lid, look=look, memory=mem,
+                              heat=th, bus=bus)
+        return self.situation
+
+    async def situation_now(self):
+        """Any coroutine: a FRESH situation (composed in the sim thread) — what a
+        chat turn prepends, so the brain's 'what's around you' is current."""
+        return await self.call(self.compose_situation)
+
+    def _aware_failed(self, e):
+        self._aw["fails"] += 1
+        self.log(f"awareness tick failed ({type(e).__name__}: {e}) [{self._aw['fails']}/{AWARE_FAILS_MAX}]")
+        if self._aw["fails"] >= AWARE_FAILS_MAX:
+            self.awareness = dict(self.awareness, interval_s=0.0, reactions=False, curious=False)
+            self.log("awareness: OFF after repeated failures (POST /api/awareness turns it back on)")
+
+    def _react(self, word, why, now):
+        """Say a chord on the robot's own initiative, at most once per
+        REACT_MIN_S, when reactions are on; Events + console + memory."""
+        if not self.awareness["reactions"]:
+            return False
+        if now - self._aw["last_react"] < REACT_MIN_S:
+            self.log(f"reaction {word} held back (one per {REACT_MIN_S:.0f} s): {why}")
+            return False
+        self._aw["last_react"] = now
+        self.do(f"say {word}")
+        self.events.append(("react", f"{word}: {why}"))
+        self.log(f"react: {word} — {why}")
+        try:
+            self.memory.remember({"kind": "said", "text": f"{word} ({why})", "pose": self._pose_cache})
+        except Exception:                                # noqa: BLE001
+            pass
+        return True
+
+    def _aware_tick(self, now=None, lid=None):
+        """Sim thread, from step(): at AWARE_CHECK_S (wall clock) —
+          1. a pending guard alarm (void / latch / bus cut) -> 'alarm_help';
+          2. a lidar look-around: while the robot stood still and idle, a return
+             within NEW_OBSTACLE_M where there was none -> 'curious_question'
+             (the robot's own walking does not count);
+          3. every interval_s while idle + NORMAL: compose the situation;
+             'curious' on: one look (a vision-model call, on the event loop)
+             per CURIOUS_MIN_S when the lidar scene changed.
+        `now` / `lid` are injectable (the tests: no physics, no model)."""
+        now = time.monotonic() if now is None else now
+        aw, a = self._aw, self.awareness
+        if now < aw["check_next"]:
+            return
+        aw["check_next"] = now + AWARE_CHECK_S
+        pend, aw["pending"] = aw["pending"], None
+        if pend is not None:
+            self._react(pend[0], pend[1], now)
+        lid = self._lidar_summary() if lid is None else lid
+        pose = self.pose()
+        self._pose_cache = pose
+        idle = self.sup.state == "NORMAL" and self.idle_reason() is None
+        prev, pp = aw["prev"], aw["prev_pose"]
+        still = pp is not None and np.hypot(pose["x"] - pp["x"], pose["y"] - pp["y"]) < STILL_M and \
+            abs((pose["yaw_deg"] - pp["yaw_deg"] + 180.0) % 360.0 - 180.0) < STILL_DEG
+        if prev is not None and still and idle:
+            for name, r in lid["sectors"].items():
+                was = prev["sectors"].get(name)
+                if r is not None and r < NEW_OBSTACLE_M and (was is None or was > r + 0.1):
+                    why = f"something new {r:.2f} m {name} (lidar)"
+                    try:
+                        self.memory.remember({"kind": "scan", "text": why, "pose": pose})
+                    except Exception:                    # noqa: BLE001
+                        pass
+                    self._react("curious_question", why, now)
+                    break
+        aw["prev"], aw["prev_pose"] = lid, pose
+        if a["interval_s"] > 0 and idle and now >= aw["compose_next"]:
+            aw["compose_next"] = now + a["interval_s"]
+            self.compose_situation(lid)
+            if a["curious"]:
+                self._maybe_curious(lid, now)
+
+    def _maybe_curious(self, lid, now):
+        """Sim thread: schedule ONE look on the event loop when the lidar scene
+        changed since the last curious look (and CURIOUS_MIN_S has passed)."""
+        aw = self._aw
+        last = aw["curious_scene"]
+        changed = last is None or any(
+            (r is None) != (last["sectors"].get(n) is None) or
+            (r is not None and abs(r - last["sectors"][n]) > SCENE_CHANGE_M)
+            for n, r in lid["sectors"].items())
+        task = aw["curious_task"]
+        if not changed or now - aw["last_curious"] < CURIOUS_MIN_S or self._aloop is None or \
+                (task is not None and not task.done()):
+            return
+        aw["last_curious"], aw["curious_scene"] = now, lid
+        self.log("curious: the scene changed — one look")
+        self.events.append(("curious", "look"))
+        try:
+            aw["curious_task"] = asyncio.run_coroutine_threadsafe(self.brains.look(), self._aloop)
+        except RuntimeError:                              # the loop is closed
+            aw["curious_task"] = None
 
     # ------------------------------------------------------ tool surface
     def pose(self):
@@ -958,7 +1311,8 @@ class CockpitSim(Playground):
         out = dict(t=round(self.t, 2), state=getattr(self.sup, "state", "?"), mode=self.mode,
                    world=self.world_name, tilt=0.0, events=[], console=list(self.console)[-40:],
                    error=f"{type(e).__name__}: {e}", heartbeat=self.heartbeat())
-        for k, f in (("pose", self.pose), ("hw", self._hw_brief)):
+        for k, f in (("pose", self.pose), ("hw", self._hw_brief), ("situation", self._situation_brief),
+                     ("memory_objects", self.memory.to_map)):
             try:
                 out[k] = f()
             except Exception:                            # noqa: BLE001
@@ -973,6 +1327,7 @@ class CockpitSim(Playground):
     def _snapshot(self):
         with self.lock:
             v = self.cmd_v.copy()
+        self._pose_cache = self.pose()
         gs = self.goto_state
         ref = self.refusal if (self.refusal and time.time() - self.refusal[0] < 6.0) else None
         tr = self.teach
@@ -1000,7 +1355,20 @@ class CockpitSim(Playground):
                     teach=None if tr is None else dict(samples=len(tr["qs"]), seconds=round(self.t - tr["t0"], 1),
                                                       src=tr["src"], full=bool(tr.get("full"))),
                     fingerprint=self.fingerprint, ckpt_fp=self._ckpt_fp(),
-                    heartbeat=self.heartbeat())
+                    heartbeat=self.heartbeat(),
+                    situation=self._situation_brief(), memory_objects=self.memory.to_map(),
+                    awareness=dict(self.awareness))
+
+    def _situation_brief(self):
+        """The situation for the 10 Hz feed: text, age and the small fields."""
+        s = self.situation
+        if not s.get("t"):
+            return dict(text="", t=None, age_s=None)
+        out = {k: s.get(k) for k in ("text", "t", "idle", "guards", "memory", "bus")}
+        out["age_s"] = round(time.time() - s["t"], 1)
+        lid = s.get("lidar") or {}
+        out["lidar"] = {k: lid.get(k) for k in ("nearest_m", "nearest_dir", "sectors")}
+        return _jsonable(out)
 
     async def tool_say(self, word):
         if chord_wav(word) is None:
@@ -1113,13 +1481,25 @@ class CockpitSim(Playground):
             return out
         out = await self.call(do_scan)
         self.events.append(("scan", out.get("nearest_obstacle_m")))
+        if out.get("nearest_obstacle_m") is not None:
+            try:
+                self.memory.remember({"kind": "scan", "pose": self._pose_cache,
+                                      "text": f"lidar: nearest {out['nearest_obstacle_m']:.2f} m at "
+                                              f"{out['nearest_obstacle_bearing_deg']:.0f} deg (map bearing)"})
+            except Exception:                            # noqa: BLE001
+                pass
         return out
 
     async def tool_status(self):
         s = await self.call(self.snapshot)
-        return {"ok": True, "mode": s["mode"], "pose": s["pose"], "reflex_state": s["state"],
-                "tilt_deg": s["tilt"], "world": s["world"], "battery_v": 11.9,
-                "last_events": [list(e) for e in s["events"][-5:]]}
+        out = {"ok": True, "mode": s["mode"], "pose": s["pose"], "reflex_state": s["state"],
+               "tilt_deg": s["tilt"], "world": s["world"], "battery_v": 11.9,
+               "last_events": [list(e) for e in s["events"][-5:]]}
+        sit = (s.get("situation") or {}).get("text")
+        if sit:                                          # the awareness line (MCP clients get it here)
+            out["situation"] = sit
+            out["situation_age_s"] = s["situation"].get("age_s")
+        return out
 
     async def tool_look(self, model=None):
         """The eye through the vision role's fallback chain (cockpit_brains)."""
@@ -1679,6 +2059,10 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         except Exception as e:                             # noqa: BLE001
             sim.log(f"hw disconnect on quit: {e}")
         sim.alive = False
+        try:
+            sim.memory.flush()                             # the debounced save, before the process goes
+        except Exception as e:                             # noqa: BLE001
+            sim.log(f"memory flush on quit: {e}")
 
         def bye():
             time.sleep(0.4)
@@ -2030,6 +2414,76 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
             sim.log(f"hw {act}: {type(e).__name__}: {e}")
             return JSONResponse({"ok": False, "error": f"{type(e).__name__}: {e}"})
 
+    # ---------------------------------------------------------- scene memory + awareness
+    async def _json_object(request):
+        """The request body as a dict, or None when it is not JSON (a 400, not a 500)."""
+        try:
+            body = await request.json()
+        except ValueError:
+            return None
+        return body if isinstance(body, dict) else {}
+
+    def _not_json():
+        return JSONResponse({"ok": False, "error": "body must be JSON"}, status_code=400)
+
+    def _memory_view(n=20):
+        pose = sim._pose_cache
+        return _jsonable({"ok": True, "world": sim.world_name, "objects": sim.memory.to_map(),
+                          "observations": sim.memory.last(n), "summary": sim.memory.summary(pose),
+                          "situation": sim.situation, "awareness": sim.awareness_settings(),
+                          "stats": sim.memory.stats()})
+
+    async def memory_get(request):
+        """GET /api/memory?n=20: the remembered objects (for the map), the last n
+        observations (newest first), the memory summary and the situation."""
+        try:
+            n = int(request.query_params.get("n", 20))
+        except ValueError:
+            n = 20
+        return JSONResponse(_memory_view(max(0, min(200, n))))
+
+    async def memory_post(request):
+        """POST /api/memory {action: remember {note} | {name, x, y} (pin on the
+        map) | forget {name} | clear | recall {query, k?} | where_is {name}}."""
+        body = await _json_object(request)
+        if body is None:
+            return _not_json()
+        act = str(body.get("action", ""))
+        b = sim.brains
+        if act == "remember":
+            r = await b.mem_remember(note=body.get("note"), name=body.get("name"), x=body.get("x"), y=body.get("y"))
+        elif act == "forget":
+            r = await b.mem_forget(body.get("name"))
+        elif act == "clear":
+            r = await b.mem_forget("all")
+        elif act == "recall":
+            r = await b.mem_recall(body.get("query", ""), body.get("k", 5))
+        elif act == "where_is":
+            r = await b.mem_where_is(body.get("name"))
+        else:
+            return JSONResponse({"ok": False, "error": f"unknown action {act!r} (remember | forget | clear | "
+                                                       "recall | where_is)"}, status_code=400)
+        view = _memory_view(10)
+        return JSONResponse(_jsonable(dict(r, objects=view["objects"], stats=view["stats"])))
+
+    async def awareness_get(_):
+        return JSONResponse(_jsonable({"ok": True, "awareness": sim.awareness_settings(),
+                                       "situation": sim.situation}))
+
+    async def awareness_post(request):
+        """POST /api/awareness {interval_s?, curious?, reactions?, refresh?}
+        (refresh: true composes a situation now)."""
+        body = await _json_object(request)
+        if body is None:
+            return _not_json()
+        try:
+            a = sim.set_awareness(body.get("interval_s"), body.get("curious"), body.get("reactions"))
+        except (TypeError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": str(e), "awareness": sim.awareness_settings()},
+                                status_code=400)
+        sit = await sim.situation_now() if body.get("refresh") else sim.situation
+        return JSONResponse(_jsonable({"ok": True, "awareness": a, "situation": sit}))
+
     async def help_(_):
         return JSONResponse({"teleop": TELEOP_HELP, "rl": HELP_RL,
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
@@ -2066,6 +2520,8 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/model", model_info), Route("/api/gait", gait_list),
         Route("/api/servo", servo_set, methods=["POST"]),
         Route("/api/hw", hw_status), Route("/api/hw", hw_action, methods=["POST"]),
+        Route("/api/memory", memory_get), Route("/api/memory", memory_post, methods=["POST"]),
+        Route("/api/awareness", awareness_get), Route("/api/awareness", awareness_post, methods=["POST"]),
     ]
 
     async def sim_dead(_request, exc):
@@ -2085,6 +2541,15 @@ def main(argv=None):
                          "./rocky.sh tailnet (tailscale serve, tailnet-only HTTPS)")
     ap.add_argument("--world", default=os.environ.get("ROCKY_WORLD", "flat"))
     ap.add_argument("--brain", default="talk", choices=["talk", "local", "multimodal", "claude"])
+    ap.add_argument("--awareness-s", type=float, default=AWARENESS_S,
+                    help="compose the situation every N s while idle (0 = off; default %(default)s)")
+    ap.add_argument("--curious", action="store_true",
+                    help="allow one unprompted look (a vision-model call) per minute when the lidar scene changed")
+    ap.add_argument("--no-reactions", action="store_true",
+                    help="never speak a chord on the robot's own initiative (guard latch / new obstacle)")
+    ap.add_argument("--no-memory", action="store_true",
+                    help="keep the scene memory in RAM only (default: sim/out/memory/<world>.json, "
+                         "or ROCKY_MEMORY_DIR)")
     args = ap.parse_args(argv)
     if not is_loopback(args.host) and not args.unsafe_lan:
         print(f"cockpit: refusing --host {args.host}: the cockpit has NO authentication — anyone who can reach "
@@ -2097,6 +2562,13 @@ def main(argv=None):
     import uvicorn
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
     sim.brain["mode"] = args.brain
+    if not args.no_memory:
+        sim.memory.set_directory(os.environ.get("ROCKY_MEMORY_DIR") or MEMORY_DIR)
+        st = sim.memory.stats()
+        print(f"cockpit: scene memory {st['path']} ({st['observations']} observations, {st['objects']} objects)",
+              flush=True)
+    sim._memory_epoch(f"cockpit started in world '{sim.world_name}': its objects are at their spawn")
+    sim.set_awareness(args.awareness_s, args.curious, not args.no_reactions)
     sim.exit_on_fatal = True                     # D052: a dead sim thread ends the process (exit 1)
     threading.Thread(target=sim.run_forever, daemon=True).start()
     app = make_app(sim, check_host=not args.unsafe_lan)
@@ -2108,7 +2580,8 @@ def main(argv=None):
     # handler set before uvicorn.run() is silently replaced; the exit has to be
     # the server's handle_exit itself.
     server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning"))
-    server.handle_exit = lambda *_: (sim.hw_disconnect() if sim.hw is not None else None, os._exit(0))
+    server.handle_exit = lambda *_: (sim.hw_disconnect() if sim.hw is not None else None,
+                                     sim.memory.flush(), os._exit(0))
     server.run()
 
 

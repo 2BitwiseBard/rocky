@@ -281,3 +281,74 @@ def test_wake_word_tolerates_whisper_misspellings():
     from harness.intent import has_wake_word
     assert has_wake_word("Pebbel, stop") and has_wake_word("Peble bow") and has_wake_word("hey rocky sit")
     assert not has_wake_word("people walk forward") and not has_wake_word("walk forward thirty centimeters")
+
+
+# ------------------------------------------------------------- scene memory (cockpit)
+def test_memory_routes():
+    assert calls("where is the ball") == [("where_is", {"name": "ball"})]
+    assert calls("Where's the red ball?") == [("where_is", {"name": "red ball"})]
+    assert calls("where did you see the box") == [("where_is", {"name": "box"})]
+    assert calls("where are you") == [("status", {})]                # still status
+    assert calls("go back to the box") == [("go_back_to", {"name": "box"})]
+    assert calls("pebble, return to the ball please") == [("go_back_to", {"name": "ball"})]
+    assert calls("remember that the charger is by the door") == [
+        ("remember", {"note": "the charger is by the door"})]
+    assert calls("Remember: the Charger is here.") == [("remember", {"note": "the Charger is here"})]
+    assert calls("what do you remember") == [("recall", {"query": ""})]
+    assert calls("what do you remember about the box") == [("recall", {"query": "box"})]
+    assert calls("forget the ball") == [("forget", {"name": "ball"})]
+    assert calls("forget everything") == [("forget", {"name": "all"})]
+
+
+def test_memory_routes_do_not_steal_motion_or_stop():
+    assert plan("go back 30 cm")["relative"] == (-0.3, 0.0)          # a relative move, not go_back_to
+    assert calls("find the ball") == [("find_object", {"name": "ball"})]
+    assert calls("remember to stop") == [("stop", {})]                # stop always wins
+    assert moves(plan("go back to the box")) and not moves(plan("where is the box"))
+    assert not moves(plan("remember that the ball is here"))
+
+
+def test_memory_tools_on_a_backend_without_memory_say_so():
+    res = asyncio.run(execute(MockBackend(), plan("where is the ball")))
+    assert res[0][0] == "where_is" and res[0][1]["ok"] is False
+    assert "no scene memory" in res[0][1]["error"]
+    res = asyncio.run(execute(MockBackend(), plan("go back to the ball"), allow_motion=False))
+    assert res[0][1]["error"] == "voice_unconfirmed"                  # gated before anything else
+
+
+def test_go_back_somewhere_is_never_a_relative_move():
+    """Review 2026-09-24: 'go back home' / 'go back to where you were' walked 0.2 m backwards."""
+    for text in ("go back to where you were", "go back to where I was", "come back to me"):
+        p = plan(text)
+        assert p.get("ask") and not moves(p) and p["relative"] is None, text
+    assert calls("go back home") == [("go_back_to", {"name": "home"})]
+    assert calls("return to base") == [("go_back_to", {"name": "base"})]
+    assert calls("go back to the start") == [("go_back_to", {"name": "start"})]
+    assert calls("go back to where you started") == [("go_back_to", {"name": "start"})]
+    assert calls("go back to the beginning") == [("go_back_to", {"name": "start"})]
+    assert calls("go back to where the ball was") == [("go_back_to", {"name": "ball"})]
+    assert calls("go back to (0.4, 0.2)") == [("goto", {"x": 0.4, "y": 0.2})]
+    assert plan("go back 30 cm")["relative"] == (-0.3, 0.0) and plan("go back")["relative"] == (-0.2, 0.0)
+
+
+def test_forget_a_pronoun_asks_and_never_wipes():
+    for text in ("forget that", "no, forget that", "forget the", "forget those", "forget my stuff", "forget it"):
+        p = plan(text)
+        assert p.get("ask") and not any(n == "forget" for n, _ in p["calls"]), text
+    assert calls("forget it all") == [("forget", {"name": "all"})]
+
+
+def test_naming_this_spot_is_remembered():
+    assert calls("call this spot home") == [("remember", {"note": "call this spot home"})]
+    assert calls("pebble, mark here as the dock") == [("remember", {"note": "mark here as the dock"})]
+    assert calls("remember this spot as home") == [("remember", {"note": "this spot as home"})]
+
+
+def test_a_spoken_forget_everything_needs_the_wake_word():
+    class Mem(MockBackend):
+        async def forget(self, name):
+            return {"ok": True, "forgot": name}
+    res = asyncio.run(execute(Mem(), plan("forget everything"), allow_motion=False))
+    assert res[0][1]["error"] == "voice_unconfirmed"
+    res = asyncio.run(execute(Mem(), plan("forget the ball"), allow_motion=False))
+    assert res[0][1]["ok"] is True

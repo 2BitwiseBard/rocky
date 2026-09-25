@@ -17,7 +17,8 @@ Wire into a client (e.g. Claude Code .mcp.json):
                "cwd": "<repo>/rocky"}}
 
 Tools: say, gesture, goto, stop, scan_summary, status, list_gestures, and
-look where an eye exists (a cockpit backend). map_query / patrol / dock are
+look / find_object where an eye exists and remember / where_is / recall /
+go_back_to / forget where the scene memory exists (a cockpit backend). map_query / patrol / dock are
 not stubbed — absent tool > lying tool. D052: the gesture and say docs are
 built from the backend's LIVE lists when the server starts (saved keyframe
 gestures and custom chord words included); gesture takes direction
@@ -131,6 +132,37 @@ def build_server(backend=None) -> FastMCP:
             found | stopped (a goto came back cliff / blocked / stuck: a veto,
             report it). Up to ~1-2 minutes; stop ends it."""
             return await be.find_object(name, max_steps)
+
+    if hasattr(be, "where_is"):                  # the cockpit's scene memory (sim/scene_memory.py)
+        try:                                     # one source of truth for the docs (the cockpit's)
+            from sim.cockpit_brains import (REMEMBER_DOC, WHERE_IS_DOC, RECALL_DOC, GO_BACK_DOC,
+                                            FORGET_DOC)
+        except Exception:                        # noqa: BLE001 — a docs import must not kill the server
+            REMEMBER_DOC = "Remember a fact the operator states ('the charger is here' pins the robot's pose)."
+            WHERE_IS_DOC = "Where a named object was seen or pinned (map meters, age, confidence), from memory."
+            RECALL_DOC = "Search the robot's memory of this world for a query."
+            GO_BACK_DOC = "Walk back to a remembered object (ordinary gotos, every guard applies)."
+            FORGET_DOC = "Forget one object, or everything with name 'all'."
+
+        @mcp.tool(annotations={"readOnlyHint": False}, description=REMEMBER_DOC)
+        async def remember(note: str) -> dict:
+            return await be.remember(note)
+
+        @mcp.tool(annotations={"readOnlyHint": True}, description=WHERE_IS_DOC)
+        async def where_is(name: str) -> dict:
+            return await be.where_is(name)
+
+        @mcp.tool(annotations={"readOnlyHint": True}, description=RECALL_DOC)
+        async def recall(query: str = "", k: int = 5) -> dict:
+            return await be.recall(query, k)
+
+        @mcp.tool(annotations={"readOnlyHint": False}, description=GO_BACK_DOC)
+        async def go_back_to(name: str) -> dict:
+            return await be.go_back_to(name)
+
+        @mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True}, description=FORGET_DOC)
+        async def forget(name: str) -> dict:
+            return await be.forget(name)
 
     return mcp
 

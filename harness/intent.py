@@ -30,6 +30,12 @@ Understood (case-insensitive; number WORDS 1-100 work too: "thirty cm"):
   look around                         -> gesture
   say <word>                          -> chord-speak (fuzzy-matched)
   find the ball / go to the box       -> find_object (look, turn, walk up to it; cockpit only)
+  where is the ball / where's the box -> where_is (scene memory: no looking, no walking)
+  go back to the ball / return to the box -> go_back_to (walks to the remembered spot)
+  remember that the charger is by the door / remember the charger is here
+                                      -> remember (a note; "X is here" pins the pose)
+  what do you remember [about the box] / recall the ball -> recall
+  forget the ball / forget everything -> forget        (memory: cockpit only)
   what do you see / look / take a look -> look (the eye + a vision model)
                                          where the backend has one, else
                                          scan_summary
@@ -74,7 +80,8 @@ _GESTURE_ALIASES.update({"turn around": "turn_in_place",
 _DIRS = {"forward": (1, 0), "forwards": (1, 0), "ahead": (1, 0),
          "back": (-1, 0), "backward": (-1, 0), "backwards": (-1, 0),
          "left": (0, 1), "right": (0, -1)}
-MOTION_TOOLS = ("goto", "gesture", "compose_gesture", "find_object")   # stop is NEVER gated
+MOTION_TOOLS = ("goto", "gesture", "compose_gesture", "find_object", "go_back_to")   # stop is NEVER gated
+MEMORY_TOOLS = ("remember", "where_is", "recall", "go_back_to", "forget")          # the cockpit's scene memory
 WAKE_WORDS = ("pebble", "pebbles", "peble", "pebbly", "rocky", "rockie", "rocket")   # D052 voice: the fast whisper (base.en) mishears the name; accept its usual guesses
 UNITLESS_MAX = 3.0        # a bare number below this is meters; at/above it we ask
 
@@ -140,6 +147,91 @@ def _p(calls, reply, relative=None, **kw):
 
 
 _FIND_FILLER = {"please", "now", "for", "me", "pebble", "rocky", "and", "then", "again", "it", "there"}
+_MEM_FILLER = _FIND_FILLER | {"is", "was", "are", "were", "you", "saw", "seen", "went", "at", "last",
+                              "earlier", "before", "go", "went", "left", "put"}
+_ARTICLE = r"(?:the|a|an|that|my|those|these)"
+# words that name no object: 'forget that' / 'forget the' / 'forget my stuff' must ASK,
+# never wipe (review 2026-09-24: they erased every note and pin)
+_NOT_A_NAME = {"that", "this", "those", "these", "it", "them", "one", "ones", "stuff", "things", "thing",
+               "the", "a", "an", "my", "our", "your", "some", "any"}
+# 'go back to the start / the beginning / where you started' -> the spawn pin (scene_memory.SPAWN_NAME)
+_START_WORDS = {"start", "beginning", "spawn", "starting point", "start point", "starting position"}
+
+
+def _names_nothing(name):
+    return not name or all(w in _NOT_A_NAME for w in name.split())
+
+
+def _ask(reply):
+    return _p([("say", {"word": "curious_question"})], reply, ask=True)
+
+
+def _noun(phrase, filler=_MEM_FILLER):
+    """'red ball was please' -> 'red ball' (the noun phrase ends at a filler word; last 2 words)."""
+    words = []
+    for w in (phrase or "").split():
+        if w in filler:
+            break
+        words.append(w)
+    return " ".join(words[-2:])
+
+
+def _memory_plan(t, raw):
+    """The scene-memory phrasings (cockpit only) -> a plan, or None.
+    t: the normalised text; raw: the wake-word-stripped original (a note keeps its words)."""
+    m = re.match(r"^\W*(?:please\s+|ok\s+|okay\s+)?remember\b(?:\s+that)?[\s,:]+(.+)$", raw.strip(), re.I)
+    if m and not re.match(r"^(?:what|where|when|how|anything|everything)\b", m.group(1).strip(), re.I):
+        note = m.group(1).strip().rstrip(".!")
+        return _p([("remember", {"note": note})], f"remembering: {note}")
+    m = re.match(r"^\W*(?:please\s+)?(?:call|mark|name|label)\s+(?:this|here)\b.+$", raw.strip(), re.I)
+    if m:                                  # 'call this spot home' / 'mark here as the dock': a pin
+        note = raw.strip().rstrip(".!")
+        return _p([("remember", {"note": note})], f"remembering: {note}")
+    m = re.match(r"^(?:(?:no|nah|oh|ok|okay|please)[\s,]+)*forget\s+(?:about\s+)?(?:" + _ARTICLE +
+                 r"\s+)?([a-z][a-z ]*)", t)
+    if m:
+        name = m.group(1).strip()
+        name = "all" if re.match(r"^(everything|all|it all)\b", name) else _noun(name)
+        if _names_nothing(name):
+            return _ask("forget what? name it ('forget the ball'), or say 'forget everything'.")
+        return _p([("forget", {"name": name})], f"forgetting {'everything' if name == 'all' else 'the ' + name}.")
+    # 'go back to the box' / 'return to the ball' / 'go back home' / 'go back to where you
+    # were' — never a relative move (review 2026-09-24: 'go back home' walked 0.2 m backwards)
+    m = re.search(r"\b(?:(?:go|walk|head|come|get|run|move)\s+back|return)\s+(?:to\b\s*(.*)|(home)\b)", t)
+    if m:
+        rest = (m.group(1) if m.group(1) is not None else m.group(2) or "").strip()
+        xy = re.match(rf"^\(?\s*({_NUM})\s*[, ]\s*({_NUM})", rest)
+        if xy:
+            x, y = float(xy.group(1)), float(xy.group(2))
+            return _p([("goto", {"x": x, "y": y})], f"heading to ({x:g}, {y:g}) m.")
+        if re.match(r"^where\s+(?:you|i|we)\s+(?:started|began|spawned|came\s+from)\b", rest):
+            name = "start"
+        elif re.match(r"^(?:where\s+(?:you|i|we|it)\b|where\s*$)", rest) or not rest:
+            return _ask("back to where? name a remembered place ('go back to the ball', 'go back to the "
+                        "start'), or say how far ('go back 30 cm').")
+        else:
+            rest = re.sub(r"^where\s+", "", rest)
+            rest = re.sub(r"^(?:the|a|an|that|my|our|those|these)\s+", "", rest)
+            name = _noun(rest)
+            if name in _START_WORDS:
+                name = "start"
+            elif name == "origin":
+                return _p([("goto", {"x": 0.0, "y": 0.0})], "heading to the origin (0, 0) m.")
+        if _names_nothing(name):
+            return _ask("back to what? name a remembered object or place, e.g. 'go back to the ball'.")
+        return _p([("go_back_to", {"name": name})], f"going back to the {name}.")
+    m = re.search(r"\bwhere(?:s|\s+is|\s+are|\s+was|\s+were|\s+did\s+you\s+(?:see|leave|put|find)|"
+                  r"\s+have\s+you\s+seen)\s+(?:" + _ARTICLE + r"\s+)?([a-z][a-z ]*)", t)
+    if m:
+        name = _noun(m.group(1))
+        if name and name.split()[0] not in ("you", "i", "we", "it", "am", "are", "they"):
+            return _p([("where_is", {"name": name})], f"the {name}:")
+    m = re.search(r"\b(?:what\s+do\s+you\s+(?:remember|know|recall)|do\s+you\s+remember|recall)\b"
+                  r"(?:\s+about)?\s*(?:" + _ARTICLE + r"\s+)?([a-z ]*)", t)
+    if m:
+        q = _noun(m.group(1))
+        return _p([("recall", {"query": q})], f"recalling{' ' + q if q else ''}:")
+    return None
 
 
 def plan(text: str):
@@ -149,13 +241,20 @@ def plan(text: str):
     relative goto is returned as a delta; the executor adds the pose from
     status (the parser has no idea where the robot is, by design).
     A plan that needs the operator to be clearer carries ask=True and no motion."""
-    t = _norm(strip_wake_word(text))
+    raw = strip_wake_word(text)
+    t = _norm(raw)
     if not t:
         return _p([], "")
 
     # stop first — it must win over anything else in the sentence
     if re.search(r"\b(stop|halt|freeze|whoa|abort)\b", t):
         return _p([("stop", {})], "stopping.")
+
+    # scene memory: remember / forget / go back to / where is / recall (before "go ... back"
+    # is read as a relative move and "where" as status)
+    mp = _memory_plan(t, raw)
+    if mp is not None:
+        return mp
 
     # explicit chord-speak: "say discovery"
     m = re.search(r"\bsay\s+(\w+)", t)
@@ -331,10 +430,17 @@ async def execute(backend, p, allow_motion=True):
         if name in MOTION_TOOLS and not allow_motion:
             out.append((name, _VOICE_REFUSAL))
             continue
+        if name == "forget" and not allow_motion and str(args.get("name", "")).lower() in ("all", "everything"):
+            out.append((name, _VOICE_REFUSAL))    # a misheard line must not wipe the memory
+            continue
         if name == "look" and not hasattr(backend, "look"):
             name = "scan_summary"                  # no eye here: the lidar is the honest answer
         if name == "find_object" and not hasattr(backend, "find_object"):
             out.append((name, {"ok": False, "error": "no eye here: find_object needs the cockpit "
+                                                     "(./rocky.sh cockpit)"}))
+            continue
+        if name in MEMORY_TOOLS and not hasattr(backend, name):
+            out.append((name, {"ok": False, "error": f"no scene memory here: {name} needs the cockpit "
                                                      "(./rocky.sh cockpit)"}))
             continue
         fn = getattr(backend, name)
