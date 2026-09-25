@@ -165,12 +165,12 @@ bearing_683zz:           # coxa yaw support bearing 3x7x3
   w: 3.0
 
 leg:
-  l1_coxa: 45.0          # yaw axis -> femur pivot axis (horizontal)
-  hip_axis_z: 61.0       # femur pivot height above the deck plane (D047; was a hard-coded 58 in gait/sim/urdf)
-  l2_femur: 95.0         # femur pivot -> knee axis (center to center)
-  l3_tibia: 135.0        # knee axis -> foot contact point
-  servo: st3215          # D052: actuators.<servo> drives yaw/hip/knee
-  claw_servo: scs0009
+  l1_coxa: &l1_coxa 45.0 # yaw axis -> femur pivot axis (horizontal)
+  hip_axis_z: &hip_axis_z 61.0  # femur pivot height above the deck plane (D047; was a hard-coded 58 in gait/sim/urdf)
+  l2_femur: &l2_femur 95.0  # femur pivot -> knee axis (center to center)
+  l3_tibia: &l3_tibia 135.0  # knee axis -> foot contact point
+  servo: &leg_servo st3215  # D052: actuators.<servo> drives yaw/hip/knee
+  claw_servo: &claw_servo scs0009
   foot:                  # D052: the contact geometry at the end of l3 (part_hand + part_footpad)
     tip_radius: 3.5      # closed-hand cone tip sphere (part_hand.CONE_TIP_R)
     pad_crown: 3.0       # TPU sole under the tip (part_footpad.CROWN)
@@ -186,7 +186,7 @@ leg:
   sea_travel: 7.0        # spring travel in foot cartridge
 
 body:
-  circumradius: 110.0    # pentagon center -> leg station
+  circumradius: &body_r 110.0  # pentagon center -> leg station
   deck_t: 4.0            # printed deck thickness
   shell_rim_z: 60.0      # mm above the deck plane: carapace top rim, where a hand shoves
                          # (sim/shove.py lever; part_shell tier 4 tops at 52 + the hatch cap).
@@ -209,6 +209,37 @@ bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
     volt_min_v: 9.9
     volt_max_v: 12.9
     load_warn_pct: 60
+
+# ------------------------------------------------------------
+# D053 (2026-09-24): the robot's SHAPE as data — docs/ROBOT_AS_DATA.md.
+# rocky_model.robot() reads this block (and builds exactly this from
+# leg/body/bus if it is absent). Every number here is an ALIAS (*name) of a
+# key above — nothing is typed twice. Ranges stay in joints.pos_deg (keyed
+# by joint name), bus ids in bus.leg_ids / bus.hand_ids; this block only
+# links them. Step 1 of 10: the generators read the station angles, the leg
+# count and the actuator order from here; the chain itself still reaches
+# the MJCF / URDF through their templates (step 2), pinned by
+# sim/tests/test_model_consistency.py::test_spec_matches_compiled_links.
+# ------------------------------------------------------------
+robot:
+  legs:
+    count: 5
+    first_station_deg: 90      # leg 0 north, CCW; station i = first + i*360/count
+                               # NOT wrapped: leg 4 is 378 (pebble.xml says euler="0 0 378")
+    # station_deg: [...]       # optional explicit list; non-uniform needs allow_asymmetric: true
+    station_radius_mm: *body_r
+  leg:                         # template instantiated per leg; chain is base -> foot,
+                               # offsets in mm in the PARENT joint frame (= the gait's LEG frame)
+    chain:
+      - {name: yaw,  axis: [0, 0, 1],  offset_mm: [0, 0, 0],                  link: coxa}
+      - {name: hip,  axis: [0, -1, 0], offset_mm: [*l1_coxa, 0, *hip_axis_z], link: femur}
+      - {name: knee, axis: [0, -1, 0], offset_mm: [*l2_femur, 0, 0],          link: tibia}
+    foot: {offset_mm: [*l3_tibia, 0, 0]}   # the IK point; contact geometry stays in leg.foot
+    tool: {name: claw, axis: [0, 0, 1], servo: *claw_servo}   # role tool: not in IK / RL action
+    servo: *leg_servo          # default per joint; a chain entry may say servo: <actuators key>
+    ik: {solver: auto, branch: knee_down}   # auto = analytic iff the chain is yaw + 2 parallel pitches
+  overrides: {}                # per-leg / per-joint servo: validate() REFUSES non-empty until a
+                               # consumer honours it (ROBOT_AS_DATA step 10)
 
 interfaces:              # D020 — see docs/INTERFACES.md. Loads through
                          # dowels/lips/shoulders, NEVER latches. FROZEN.

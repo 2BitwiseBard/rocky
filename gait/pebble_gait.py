@@ -32,8 +32,8 @@ L2 = _P["leg"]["l2_femur"]
 L3 = _P["leg"]["l3_tibia"]
 R_BODY = _P["body"]["circumradius"]
 Z_HIP = float(_P["leg"]["hip_axis_z"])   # femur pivot height above the deck plane (params SSOT, D047)
-N_LEGS = 5
-STATION_DEG = 90 + 72 * np.arange(N_LEGS)   # leg 0 north, CCW
+N_LEGS = _rm.n_legs()                      # D053: params robot.legs (5)
+STATION_DEG = np.array(_rm.stations_deg())  # leg 0 north, CCW: 90 + 72 i, unwrapped (D053: from the spec)
 SUPPORT_TOL_MM = 15.0      # D052: a foot this close to the ground counts as LOADED (speed class)
 
 # ---------------------------------------------------------------- kinematics

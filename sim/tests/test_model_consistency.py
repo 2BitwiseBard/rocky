@@ -170,6 +170,43 @@ def test_pebble_xml_is_regenerated():
         assert f.read() == build_mjcf.build_xml(), "sim/pebble.xml is stale: run sim/build_mjcf.py"
 
 
+def test_spec_matches_compiled_links(model):
+    """D053: the robot description's shape IS the compiled model's. Until the
+    generators read the chain (ROBOT_AS_DATA step 2) the leg is still a template
+    in build_mjcf.leg_xml; this pins the two together (0.06 mm = the template's
+    %.4f m rounding)."""
+    spec = rm.robot()
+    assert spec.n_legs == N
+    for L in spec.legs:
+        i = L.index
+        assert np.allclose(model.body(f"coxa{i}").pos * 1000, L.mount_mm, atol=0.06)
+        w, x, y, z = model.body(f"coxa{i}").quat
+        yaw = math.degrees(2 * math.atan2(z, w))
+        assert abs(x) < 1e-12 and abs(y) < 1e-12
+        assert (yaw - L.station_deg) % 360 == pytest.approx(0.0, abs=1e-6) or \
+            (yaw - L.station_deg) % 360 == pytest.approx(360.0, abs=1e-6)
+        chain_bodies = [f"coxa{i}", f"femur{i}", f"tibia{i}"]
+        for k, (j, body) in enumerate(zip(L.joints, chain_bodies)):
+            if k:                                           # joint k's origin = its body's pos in the parent
+                assert np.allclose(model.body(body).pos * 1000, j.offset_mm, atol=0.06), (body, j)
+            jm = model.joint(f"{j.name}{i}")
+            assert model.jnt_bodyid[jm.id] == model.body(body).id
+            assert np.allclose(model.jnt_axis[jm.id], j.axis)
+            assert np.allclose(np.degrees(model.jnt_range[jm.id]), j.range_deg)
+        assert np.allclose(model.site(f"foot_tip{i}").pos * 1000, L.foot_offset_mm, atol=0.06)
+        assert model.site_bodyid[model.site(f"foot_tip{i}").id] == model.body(chain_bodies[-1]).id
+        tj = model.joint(f"{L.tool.name}{i}")
+        assert np.allclose(model.jnt_axis[tj.id], L.tool.axis)
+        assert np.allclose(np.degrees(model.jnt_range[tj.id]), L.tool.range_deg)
+        assert np.allclose(model.body(model.jnt_bodyid[tj.id]).pos * 1000,
+                           np.add(L.foot_offset_mm, L.tool.offset_mm), atol=0.06)
+    names = [model.actuator(a).name for a in range(model.nu)]
+    assert names == rm.actuator_order()                     # the ctrl[:15] / ctrl[15:20] contract
+    hinge = mujoco.mjtJoint.mjJNT_HINGE
+    hinges = [model.joint(j).name for j in range(model.njnt) if model.jnt_type[j] == hinge]
+    assert sorted(hinges) == sorted(names)                  # one actuator per joint, no joint left over
+
+
 def test_mjcf_ranges_damping_forcerange(model):
     lim = rm.joint_limits_deg()
     for i in range(N):
@@ -260,6 +297,37 @@ def test_urdf_limits_effort_velocity_damping():
             assert float(j.find("dynamics").get("damping")) == pytest.approx(rm.damping_nms(), abs=1e-3)
         seen += 1
     assert seen == 20
+
+
+def test_urdf_xacro_is_regenerated():
+    """D053: the committed xacro is what generate_urdf writes (before this only
+    CI's regenerate-then-git-diff caught a stale URDF)."""
+    sys.path.insert(0, os.path.join(REPO, "ros2", "rocky_description"))
+    import generate_urdf as gu
+    want = gu.build_xacro().replace("__TORSO_INERTIAL__", gu.inertial(*gu.combine_torso_inertia()))
+    with open(os.path.join(REPO, "ros2", "rocky_description", "urdf", "pebble.urdf.xacro")) as f:
+        assert f.read() == want, "pebble.urdf.xacro is stale: run ros2/rocky_description/generate_urdf.py"
+
+
+def test_urdf_joints_are_the_spec():
+    """The expanded URDF has the spec's joints, chain and axes, leg by leg."""
+    root = ET.parse(URDF).getroot()
+    rev = [j for j in root.iter("joint") if j.get("type") == "revolute"]
+    spec = rm.robot()
+    want = [f"{n}{L.index}" for L in spec.legs for n in L.joint_names + (L.tool.name,)]
+    assert [j.get("name") for j in rev] == want
+    by = {j.get("name"): j for j in rev}
+    for L in spec.legs:
+        for k, jt in enumerate(L.joints):
+            j = by[f"{jt.name}{L.index}"]
+            assert np.allclose([float(v) for v in j.find("axis").get("xyz").split()], jt.axis)
+            if k:
+                xyz = [float(v) * 1000 for v in j.find("origin").get("xyz").split()]
+                assert np.allclose(xyz, jt.offset_mm, atol=0.06), (j.get("name"), xyz)
+        yaw = by[f"{L.joints[0].name}{L.index}"]
+        assert yaw.find("parent").get("link") == "base_link"
+        xyz = [float(v) * 1000 for v in yaw.find("origin").get("xyz").split()]
+        assert np.allclose(xyz, L.mount_mm, atol=0.06)
 
 
 # ------------------------------------------------------------------ driver + servo model

@@ -101,10 +101,10 @@ M_SHIN = M_TIBIA * 0.7 - 2 * M_PRONG   # D052: was 0.7 M + 2 prongs on top (+40 
 
 
 def leg_xml(i):
-    ang = 90 + 72 * i
+    ang = rm.stations_deg()[i]             # D053: the spec's station (90 + 72 i, unwrapped: leg 4 is 378)
     rng = {k: f"{LIM[k][0]:g} {LIM[k][1]:g}" for k in LIM}
     return f"""
-      <body name="coxa{i}" pos="{RB*np.cos(np.deg2rad(ang)):.4f} {RB*np.sin(np.deg2rad(ang)):.4f} 0" euler="0 0 {ang}">
+      <body name="coxa{i}" pos="{RB*np.cos(np.deg2rad(ang)):.4f} {RB*np.sin(np.deg2rad(ang)):.4f} 0" euler="0 0 {ang:g}">
         <joint name="yaw{i}" type="hinge" axis="0 0 1" range="{rng['yaw']}" damping="{DAMP:.4f}" armature="0.005"/>
         <geom type="box" size="0.030 0.016 0.030" pos="0.020 0 0.030" mass="{M_COXA}" rgba="0.35 0.30 0.45 1"/>
         <body name="femur{i}" pos="{L1:.4f} 0 {Z_HIP:.4f}">
@@ -129,14 +129,19 @@ def leg_xml(i):
 
 
 def actuators_xml():
+    """One <position> per rm.actuator_order() entry (D053): leg joints leg-major,
+    then the tools — the ctrl[:15] / ctrl[15:20] order every consumer relies on.
+    The kp/kv literals stay here per kind until they move into params
+    (docs/ROBOT_AS_DATA.md step 2)."""
+    tools = set(rm.robot().tool_names())
     out = []
-    for i in range(5):
-        for j in ("yaw", "hip", "knee"):
-            out.append(f'    <position name="{j}{i}" joint="{j}{i}" kp="20" kv="0.6" '
+    for name in rm.actuator_order():
+        if name.rstrip("0123456789") in tools:
+            out.append(f'    <position name="{name}" joint="{name}" kp="0.5" kv="0.02" '
+                       f'forcerange="-{CLAW_FR:.4f} {CLAW_FR:.4f}"/>')
+        else:
+            out.append(f'    <position name="{name}" joint="{name}" kp="20" kv="0.6" '
                        f'forcerange="-{F_PEAK:.4f} {F_PEAK:.4f}"/>')
-    for i in range(5):
-        out.append(f'    <position name="claw{i}" joint="claw{i}" kp="0.5" kv="0.02" '
-                   f'forcerange="-{CLAW_FR:.4f} {CLAW_FR:.4f}"/>')
     return "\n".join(out)
 
 
@@ -164,7 +169,7 @@ def build_xml() -> str:
       <freejoint/>
       <geom type="cylinder" size="{RB:.4f} 0.012" pos="0 0 0.018" mass="{M_TORSO*0.75:.4f}" rgba="0.62 0.50 0.82 1"/>
       <geom type="cylinder" size="{RB*0.7:.4f} 0.014" pos="0 0 0.044" mass="{M_TORSO*0.25:.4f}" rgba="0.55 0.42 0.75 1"/>
-      {"".join(leg_xml(i) for i in range(5))}
+      {"".join(leg_xml(i) for i in range(rm.n_legs()))}
     </body>
   </worldbody>
   <actuator>

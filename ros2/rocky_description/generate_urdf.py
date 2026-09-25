@@ -192,9 +192,9 @@ def leg_macro() -> str:
 
 
 def build_xacro() -> str:
-    legs = "\n".join(
-        f'  <xacro:pebble_leg i="{i}" angle="${{radians({90 + 72 * i})}}"/>'
-        for i in range(5))
+    legs = "\n".join(                   # D053: stations from the spec (90 + 72 i, unwrapped)
+        f'  <xacro:pebble_leg i="{i}" angle="${{radians({rm.stations_deg()[i]:g})}}"/>'
+        for i in range(rm.n_legs()))
     return f"""<?xml version="1.0"?>
 <!-- AUTO-GENERATED from cad/params.yaml by generate_urdf.py — edit THAT, not this -->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="pebble">
