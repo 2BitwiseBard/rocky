@@ -8,6 +8,33 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-24 · Session 9g (laptop, evening) — talk to it: fast speech, an eye that measures, memory, an all-in-one brain, the phone front end (D053, D054)
+
+**Ask:** the phone's mic said "nothing heard" and the whole loop was slow; "smaller
+LLMs so it can all be on the GPU"; "a multimodal all-in-one"; "make the UI better for
+the phone, a remote mode, a help guide, a better wake word"; "I'll revisit the CAD and
+add joints / servos / materials"; "that memory and situational-awareness idea".
+
+**Measured, then shipped (all pushed):**
+- Speech: 18–20 s → ~1 s per command (`whisper-fast.service` :8086, base.en CPU greedy);
+  hold-or-tap mic with a timer, hands-free listening, fuzzy wake word (`9a66eff`, `1740e26`).
+- Brain: the research round (3 sweeps, 22 candidates, each verified) → Qwen3.5-9B
+  downloaded, registered in llama-swap (runs alone), measured 7.2 GB / 6.5 s cold /
+  57.7 t/s / tool calls 0.2–1.5 s / `look` OK; default multimodal role. lfm2.5-vl keeps
+  the fast eye. Report: `docs/BRAIN_MODELS_2026-09-24.md`.
+- Vision: `find_object` with box→floor geometry, 0.7° bearing / 3 cm distance, 3/3 finds;
+  `sim/vision_bench.py` (`46ee083`). A VLM is not a cliff sensor (1–3 of 4).
+- Memory + awareness: `sim/scene_memory.py`, five tools for every brain and MCP, a
+  situation line per turn, chord reactions; go_back_to measured (`876d9db`).
+- The robot as data, step 1 (D053): RobotSpec from params, generators read it,
+  byte-identical output; `docs/ROBOT_AS_DATA.md` + `docs/DESIGN_CHANGE_GUIDE.md` (`78df557`).
+- B34 first retrain on obs v2: negative (0/20 hardware handoff); recover1 stays.
+- Phone front end (tab bar, remote + follow, in-app guide, wake-word card): built and
+  reviewed in this session; see the commit that follows this entry.
+
+**Not verified:** any of it on hardware; tailnet on the phone was verified by the owner
+(HTTPS works, plain http is refused by tailscale serve — type https).
+
 ## 2026-09-24 · Session 9f (laptop) — the full review and D052: the sim stops flattering the servo
 
 **Ask:** review everything before a real servo goes on the bus. The owner

@@ -47,7 +47,7 @@ USER turn — not the system prompt, which would re-prefill the tool list
 every turn on llama.cpp.
 
 FALLBACK: brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision
-lfm2.5-vl -> gemma-4-26b-a4b; multimodal -> gemma -> the text brain chain
+lfm2.5-vl -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> gemma -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
 and the reply SAYS which model answered and why the earlier ones did not.
 Quarantined models (gpt-oss-20b, glm-flash-reap: GPU faults) are never
@@ -118,11 +118,11 @@ SKIP_PREFIXES = ("embedding", "reranker", "lab")              # not chat models
 ROLE_KEYS = {"brain": "model", "vision": "vision_model", "multimodal": "multimodal_model",
              "claude": "claude_model", "stt": "stt_model"}
 ROLE_DEFAULTS = {"model": "tool-model", "vision_model": "vision-model",
-                 "multimodal_model": "gemma-4-26b-a4b", "claude_model": "claude-sonnet-5",
+                 "multimodal_model": "qwen3.5-9b", "claude_model": "claude-sonnet-5",
                  "stt_model": "whisper"}
 FALLBACK = {"brain": ["qwen3.6-35b-a3b", "qwen3.8-27b-iq4"],
             "vision": ["lfm2.5-vl", "gemma-4-26b-a4b"],
-            "multimodal": ["gemma-4-26b-a4b"]}
+            "multimodal": ["qwen3.5-9b", "gemma-4-26b-a4b"]}   # qwen3.5-9b: measured 2026-09-24, 7.2 GB, 58 t/s, tools + vision
 GOTO_MAX_M = 3.0          # a goto target farther than this from the robot is an argument error
 LOOK_MAX_TOKENS = 160
 REPLY_MAX_TOKENS = 512
@@ -349,7 +349,9 @@ GATED = tuple(MOTION_TOOLS) + ("find_object", "turn", "go_back_to")   # a spoken
 
 # the static defaults (the cockpit builds both per request with the live lists)
 TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
-SYSTEM = build_system(extra=LOOK_NOTE)
+UNITS_NOTE = ("\nUnits: goto and every distance argument are METRES. 'thirty centimeters' = 0.3, "
+              "'half a meter' = 0.5, '2 meters' = 2.0 — never pass 30 for 30 cm (a 9B model did).")
+SYSTEM = build_system(extra=LOOK_NOTE + UNITS_NOTE)
 
 
 class ModelFailure(Exception):
@@ -995,7 +997,7 @@ class Brains:
 
     def system_for(self, multimodal=False):
         s = self.sim
-        extra = (LOOK_NOTE + " " + COMPOSE_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
+        extra = (LOOK_NOTE + " " + COMPOSE_NOTE + UNITS_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
                  + (" " + MEMORY_NOTE if self.memory is not None else ""))
         return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
 
