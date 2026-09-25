@@ -122,14 +122,17 @@ def _fuzzy_word(w: str):
     return m[0] if m else None
 
 
-def has_wake_word(text: str) -> bool:
+def has_wake_word(text: str, extra=()) -> bool:
     """'pebble, forward 30 cm' / 'hey rocky stop' — the voice gate (D052).
     Fuzzy: whisper's misspellings of the name (edit distance 1 on a 5-6 letter
-    word) count, so 'pebbel stop' still passes; 'people' does not (cutoff 0.8)."""
+    word) count, so 'pebbel stop' still passes; 'people' does not (cutoff 0.8).
+    extra: more accepted names (the cockpit's operator-set robot name, D054)."""
     low = text.lower()
-    if re.search(rf"\b({'|'.join(WAKE_WORDS)})\b", low):
+    names = tuple(WAKE_WORDS) + tuple(n.strip().lower() for n in extra if n and n.strip())
+    if re.search(rf"\b({'|'.join(re.escape(n) for n in names)})\b", low):
         return True
-    return any(difflib.get_close_matches(w, ("pebble", "rocky"), n=1, cutoff=0.8) for w in re.findall(r"[a-z]+", low)[:4])
+    canon = ("pebble", "rocky") + tuple(n for n in names[len(WAKE_WORDS):] if len(n) >= 4)
+    return any(difflib.get_close_matches(w, canon, n=1, cutoff=0.8) for w in re.findall(r"[a-z]+", low)[:4])
 
 
 def strip_wake_word(text: str) -> str:

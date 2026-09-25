@@ -2527,6 +2527,8 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
     async def sim_dead(_request, exc):
         return JSONResponse({"ok": False, "error": f"sim thread stopped: {exc}", "alive": False}, status_code=503)
 
+    from cockpit_shared import routes as shared_routes
+    routes += shared_routes(sim)          # GET/POST /api/ui, GET /api/ui/events (4 Hz SSE), GET /api/guide (docs/COCKPIT_GUIDE.md)
     return Starlette(routes=routes, exception_handlers={SimDead: sim_dead},
                      middleware=[Middleware(RequestGuard, extra_hosts=tuple(extra_hosts), check_host=check_host)])
 

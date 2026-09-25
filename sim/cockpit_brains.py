@@ -1723,7 +1723,7 @@ class Brains:
         c = clean_transcript(data)
         text = c["text"]
         mode = mode or self.state["mode"]
-        wake = has_wake_word(text)
+        wake = has_wake_word(text, extra=self._wake_names())
         # talk mode knows exactly what moves; an LLM brain may turn any sentence into a goto
         motion = bool(text) and (mode != "talk" or moves(intent_plan(text)))
         self._voice_last = (time.monotonic(), text)
@@ -1731,6 +1731,15 @@ class Brains:
             self._log(f"voice: {text}")
         return {"ok": True, "text": text, "wake": wake, "motion_blocked": motion and not wake,
                 "dropped": c["dropped"]}
+
+    def _wake_names(self):
+        """The operator-set robot name from the shared UI state (cockpit_shared), if any."""
+        try:
+            from cockpit_shared import wake_name
+            n = wake_name(self.sim)
+            return (n,) if n else ()
+        except Exception:
+            return ()
 
     def _recent_voice(self, text):
         t, last = self._voice_last
@@ -1765,7 +1774,7 @@ class Brains:
             return {"reply": f"unknown mode {mode!r} (have {', '.join(MODES)})", "trace": [], "mode": mode}
         self.state["mode"] = mode
         voice = source == "voice" or (source is None and self._recent_voice(text))
-        allow = bool(trusted) or not voice or has_wake_word(text)
+        allow = bool(trusted) or not voice or has_wake_word(text, extra=self._wake_names())
         if not text:
             return {"reply": "", "trace": [], "mode": mode}
         note = self._accept_model(mode, model)
