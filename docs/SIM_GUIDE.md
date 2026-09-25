@@ -453,6 +453,9 @@ farther apart they stay separate (two boxes, or a ball that was moved). A
 sighting less than half as confident as the stored one (a look near a find)
 is only counted: it does not move or relabel the object. The memory is saved
 to `sim/out/memory/<key>.json` (git-ignored; `ROCKY_MEMORY_DIR` moves it,
+as `ROCKY_GESTURE_DIR` moves the keyframe-gesture library — the brain bench
+gives its cockpit scratch copies of both, so a model's compose_gesture never
+lands in `gait/gestures`;
 `--no-memory` keeps it in RAM). A preset keeps its name as the key
 (`room.json`); an edited or unnamed world (`custom`, a replay's recorded
 world) is keyed by its name plus a hash of its spec (`custom-3fa91c0e.json`),

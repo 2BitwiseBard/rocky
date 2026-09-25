@@ -40,7 +40,7 @@
 #   rocky.sh cad-check             whole-tree CAD CI (build123d) — 23/23 or it didn't happen
 #   rocky.sh help                  this text (the whole header, so new commands show up)
 #
-# Env overrides: ROCKY_REPO, ROCKY_WORLD (flat|room|cliff), ROCKY_VIEWER (1|0),
+# Env overrides: ROCKY_REPO, ROCKY_WORLD (flat|room|cliff), ROCKY_VIEWER (1|0), ROCKY_GESTURE_DIR,
 # ROCKY_AUDIO (1|0), ROCKY_LLM_MODEL, ROCKY_VOICE_SECS, ROCKY_VOICE_WAV (test file
 # instead of the mic), ROCKY_COCKPIT_PORT (tailnet's proxy target).
 set -euo pipefail

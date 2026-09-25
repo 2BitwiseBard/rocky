@@ -71,7 +71,9 @@ from pebble_gestures2 import posed, CLAW_MAX, _rotz
 import rocky_model as _rm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GESTURE_DIR = os.path.join(HERE, "gestures")
+# ROCKY_GESTURE_DIR points a process at another library (sim/brain_bench.py gives its own
+# cockpit a scratch copy, so a model's compose_gesture never lands in the repo's gait/gestures).
+GESTURE_DIR = os.environ.get("ROCKY_GESTURE_DIR") or os.path.join(HERE, "gestures")
 KEYS = ("body", "yaw", "dz", "arm", "reach", "reach_world", "claw", "say", "ease", "t")
 EASES = ("smooth", "linear", "hold")
 ENDS = ("stand", "hold")

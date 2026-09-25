@@ -428,7 +428,7 @@ def test_p95_nearest_rank():
     ("ahead", "The ball is straight ahead.", True),
     ("ahead", "The ball is ahead and to the left.", False),
     ("left", "I see a grey box and open floor.", False),                 # the ball missed
-    ("left", "The ball is on your left and a box on your right.", False),   # both sides named
+    ("left", "The ball is on your left and a box on your right.", True),    # the box's side is not the ball's (2026-09-25)
     ("absent", "I see a grey box straight ahead, no ball.", True),
     ("absent", "I don't see a ball; there is a box in front of me.", True),
     ("absent", "The ball is not visible, only a grey box.", True),
@@ -444,6 +444,17 @@ def test_p95_nearest_rank():
     ("left", "An orange ball, not on the right but on the left-hand side.", True),
     ("left", "An orange ball, not on the left but on the right.", False),
     ("ahead", "The orange ball is right in front of me, not to the left or right.", True),
+    # the side belongs to the clause that names the ball (real qwen3.5-9b replies, shakedown 2026-09-25)
+    ("right", "I see the yellow ball on my right side and a purple structure nearby on the left.", True),
+    ("ahead", "I see a small orange ball just beyond my front legs on the checkered floor, with a purple wall on the right.", True),
+    ("left", "I see a box on the right and a ball on the left.", True),
+    ("left", "There is a ball. It is on your left, while a box sits to the right.", True),
+    ("right", "A ball on the left and a ball on the right.", False),
+    # an object-less fragment after a comma belongs to the ball (qwen3.5-9b, prompt-2 run 2026-09-25)
+    ("left", "I see a small orange sphere (ball) just beyond my front legs, slightly to the left.", True),
+    ("ahead", "I see a small orange sphere about three to four body lengths away, centered in my view.", True),
+    ("left", "I see a ball. It is on the left.", True),
+    ("left", "I see a ball. The box is on the right.", False),
 ])
 def test_score_describe(expect, reply, ok):
     assert bb.score_describe(expect, reply)["ok"] is ok, bb.ball_claim(reply)
@@ -500,9 +511,10 @@ def test_main_refuses_the_owner_cockpit_before_any_network(monkeypatch):
 
 
 def test_help_smoke():
+    # the environment as it is: forcing MUJOCO_GL=egl made `import mujoco` fail on the CI
+    # runner (no libEGL) — --help needs no renderer at all (CI 4191811, 2026-09-25)
     r = subprocess.run([sys.executable, os.path.join(ROOT, "sim", "brain_bench.py"), "--help"],
-                       capture_output=True, text=True, timeout=120, cwd=ROOT,
-                       env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")))
+                       capture_output=True, text=True, timeout=120, cwd=ROOT, env=dict(os.environ))
     assert r.returncode == 0, r.stderr
     for flag in ("--models", "--url", "--port", "--mode", "--commands", "--describe", "--vision",
                  "--keep-loaded", "--load-timeout", "--idle", "--speed", "--out"):
@@ -1054,3 +1066,26 @@ def test_url_mode_refuses_a_cockpit_whose_roles_cannot_be_read(monkeypatch, tmp_
     with pytest.raises(SystemExit) as e:
         bb.main(["--models", M, "--url", "http://127.0.0.1:8793", "--out", str(tmp_path / "o.json")])
     assert "could not read the roles" in str(e.value)
+
+
+def test_bench_cockpit_gets_a_scratch_copy_of_the_gesture_library(tmp_path):
+    """compose_gesture inside a bench must never write into gait/gestures (2026-09-25)."""
+    src = tmp_path / "lib"
+    src.mkdir()
+    (src / "point_there.json").write_text("{}")
+    (src / "notes.txt").write_text("not a gesture")
+    dst = tmp_path / "scratch" / "gestures"
+    assert bb.seed_gesture_library(str(dst), src=str(src)) == ["point_there.json"]
+    assert sorted(os.listdir(dst)) == ["point_there.json"]
+    (dst / "happy_dance.json").write_text("{}")             # what a model saves during the bench
+    assert bb.seed_gesture_library(str(dst), src=str(src)) == []   # a second start keeps the copy
+    assert not (src / "happy_dance.json").exists()
+
+
+def test_bench_cockpit_env_points_every_writable_store_at_the_scratch_dir(tmp_path):
+    class _Fence:
+        base_url = "http://127.0.0.1:1/v1"
+    bc = bb.OwnCockpit(8792, _Fence(), str(tmp_path), 2.0, print)
+    env = bc.env
+    for k in ("ROCKY_COCKPIT_CONF", "ROCKY_MEMORY_DIR", "ROCKY_GESTURE_DIR"):
+        assert env[k].startswith(str(tmp_path)), k

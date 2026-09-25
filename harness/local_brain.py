@@ -156,6 +156,11 @@ def build_system(gestures=None, lexicon=None, extra=""):
         "- 'turn left/right' = gesture turn_in_place with direction; a sidestep is gesture "
         "sidestep with direction.\n"
         "- If a tool returns ok=false, say so plainly in your reply.\n"
+        "- When the motion you called has ended (any result), do NOT start another motion "
+        "the operator did not ask for: reply. 'find X' and 'go back to X' are complete when "
+        "their tool returns; a move is complete when goto returns.\n"
+        "- say is ONE chord per turn: after it returns, write your sentence. Never call say "
+        "again in the same turn ('how are you?' = one say, then the sentence).\n"
         f"Chord-speak words: {', '.join(lexicon or []) or '(see say)'}.\n"
         f"Gestures: {', '.join(gestures or []) or '(call list_gestures)'}.\n"
         + (extra + "\n" if extra else "")

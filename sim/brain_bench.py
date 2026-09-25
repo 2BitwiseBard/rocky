@@ -686,11 +686,41 @@ _RIGHT_INTENSIFIER_RE = re.compile(
     r"|\b(?:all|that's|thats|is|you're|youre|exactly)\s+right\b", re.I)
 _LEFT_RE = re.compile(r"\bleft\b", re.I)
 _RIGHT_RE = re.compile(r"\bright\b", re.I)
-_AHEAD_RE = re.compile(r"\b(?:ahead|cent(?:er|re)d?|middle|straight|directly in front|in front)\b", re.I)
+_AHEAD_RE = re.compile(r"\b(?:ahead|cent(?:er|re)(?:e?d)?|middle|straight|directly in front|in front|front)\b", re.I)
+# for the SIDE only: a conjunction also ends a clause WHEN the next fragment names its own object
+# ('the ball on my right and a box on the left' -> right is the ball's; 'ahead and to the left'
+# stays one clause). Claims still use _CLAUSE_RE ('no box and no ball' stays negated).
+_CONJ_RE = re.compile(r"\band\b|\bwhile\b|\bwith\b|\bwhereas\b", re.I)
 _SIDE_WORD = r"(?:(?:on|to|at|in|towards?)\s+)?(?:(?:the|my|your|its)\s+)?(left|right)\b(?:[- ]hand)?(?:\s+side)?"
 # a negated side: 'not (on) my right', 'neither left nor right', "isn't to the left or the right"
 _NEG_SIDE_RE = re.compile(r"(?:\b(?:not|neither|nor|never)|n't)\s+" + _SIDE_WORD
                           + r"(?:\s*,?\s*(?:or|nor)\s+" + _SIDE_WORD + r")?", re.I)
+
+
+_OTHER_OBJ_RE = re.compile(r"\b(?:box|boxes|cube|cubes|wall|walls|structure|block|blocks|stairs?|step|obstacle|"
+                           r"rubble|pillar|cylinder|ramp|edge|cliff|table|chair)\b", re.I)
+
+
+def _other_object_only(clause):
+    """A clause about a box / wall / ... that does not name the ball: its side is not the ball's."""
+    return bool(_OTHER_OBJ_RE.search(clause)) and not _BALL_RE.search(clause)
+
+
+_SIDE_SPLIT_RE = re.compile(_CLAUSE_RE.pattern + "|" + _CONJ_RE.pattern, re.I)
+
+
+def _side_clauses(text):
+    """Clauses for the SIDE: cut at _CLAUSE_RE boundaries and conjunctions, but a fragment
+    that names no object of its own stays with the clause before it — 'a ball just beyond
+    my front legs, slightly to the left' is one clause (left), 'ahead and to the left' is
+    one clause, while '..., with a purple wall on the right' is its own (the wall's side)."""
+    out = []
+    for frag in _SIDE_SPLIT_RE.split(text):
+        if out and not (_BALL_RE.search(frag) or _OTHER_OBJ_RE.search(frag)):
+            out[-1] = out[-1] + " " + frag
+        else:
+            out.append(frag)
+    return out
 
 
 def _positive_ball(clause):
@@ -721,17 +751,26 @@ def _side(text):
 def ball_claim(text):
     """(claims a ball, side 'left' | 'right' | 'ahead' | 'both' | None). A clause
     that negates before naming the ball ('I don't see a ball') is not a claim.
-    The side comes from the sentences that claim the ball, else from the whole
-    reply minus the negated clauses ('It is on your left.' after 'A ball.')."""
+    The side comes from the clauses that claim the ball, else the sentences that
+    claim it, else the whole reply minus the negated clauses ('It is on your
+    left.' after 'A ball.')."""
     text = str(text or "")
     claims = any(_positive_ball(c) for c in _CLAUSE_RE.split(text))
     if not claims:
         return False, None
-    sents = [s for s in _SENT_RE.split(text) if any(_positive_ball(c) for c in _CLAUSE_RE.split(s))]
-    side = _side(" ".join(sents))
+    # 1. the clauses that claim the ball ('the ball on my right, and a box on the left' -> right;
+    #    'a ball just beyond my front legs, with a wall on the right' -> ahead)
+    side = _side(" ".join(c for c in _side_clauses(text) if _positive_ball(c)))
+    # 2. the sentences that claim it, minus clauses about another object
     if side is None:
-        side = _side(" ".join(c for c in _CLAUSE_RE.split(text)
-                              if not (_BALL_RE.search(c) and not _positive_ball(c))))
+        sents = [s for s in _SENT_RE.split(text) if any(_positive_ball(c) for c in _CLAUSE_RE.split(s))]
+        side = _side(" ".join(c for s in sents for c in _side_clauses(s) if not _other_object_only(c)))
+    # 3. the whole reply minus negated-ball clauses and clauses about another object
+    #    ('There is a ball. It is on your left, while a box sits to the right.' -> left)
+    if side is None:
+        side = _side(" ".join(c for c in _side_clauses(text)
+                              if not (_BALL_RE.search(c) and not _positive_ball(c))
+                              and not _other_object_only(c)))
     return True, side
 
 
@@ -1154,6 +1193,23 @@ def _child_cockpits(port):
     return out
 
 
+def seed_gesture_library(dst, src=None):
+    """Copy the repo's keyframe gestures (gait/gestures/*.json) into dst once, so the bench
+    cockpit knows the same gestures but a model's compose_gesture ('do a happy dance')
+    saves into the scratch copy — the shakedown of 2026-09-25 left happy_dance.json in the
+    repo. Returns the names copied (empty when dst already existed)."""
+    src = src or os.path.join(ROOT, "gait", "gestures")
+    if os.path.isdir(dst):
+        return []
+    os.makedirs(dst, exist_ok=True)
+    names = []
+    for fn in sorted(os.listdir(src)) if os.path.isdir(src) else []:
+        if fn.endswith(".json"):
+            shutil.copyfile(os.path.join(src, fn), os.path.join(dst, fn))
+            names.append(fn)
+    return names
+
+
 class OwnCockpit:
     """The bench's own cockpit process: fenced (ROCKY_LLM_BASE_URL = the fence),
     a scratch conf (the owner's ~/.config/rocky/cockpit.json is never written) and
@@ -1169,7 +1225,9 @@ class OwnCockpit:
     def env(self):
         return {"ROCKY_LLM_BASE_URL": self.fence.base_url,
                 "ROCKY_COCKPIT_CONF": os.path.join(self.tmp, "cockpit.json"),
-                "ROCKY_MEMORY_DIR": os.path.join(self.tmp, "memory")}
+                "ROCKY_MEMORY_DIR": os.path.join(self.tmp, "memory"),
+                # a model's compose_gesture saves a gesture: into THIS copy, never gait/gestures
+                "ROCKY_GESTURE_DIR": os.path.join(self.tmp, "gestures")}
 
     def start(self):
         if port_busy(self.port):
@@ -1177,6 +1235,7 @@ class OwnCockpit:
                              "an earlier bench run?) — the bench would drive THAT one, unfenced. Stop it, or "
                              "pick another --port")
         over = self.env
+        seed_gesture_library(over["ROCKY_GESTURE_DIR"])
         saved = {k: os.environ.get(k) for k in over}
         os.environ.update(over)
         try:

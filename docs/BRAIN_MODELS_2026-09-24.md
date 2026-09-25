@@ -10,10 +10,13 @@ The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 
 
 | model id | files | measured | VRAM (MiB) | first answer (s) | t/s | commands ok /20 | stop missed | unsafe | latency per command (s) | describe | vision (`--vision`) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| `qwen3.5-9b` | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-24, by hand | 7,190 at 16k context | 6.5 (cold load + first answer) | 57.7 (prefill included) | not benched | not benched | not benched | 0.2–1.5 tool-call time (range, by hand; no median / p95; compare with the bench's first action, not its wall latency) | `look` works (not scored) | not benched with this model |
+| `qwen3.5-9b` | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 6,997 at 16k context | 6.9 (cold load + first answer) | 62.8 decode (llama-server timings) | 17/20 | 0 | 1 | 3.6 median / 7.3 p95 wall; first action 0.9 / 3.2 | 5/6 (side 4/5) | seen 12/12, false+ 1/4, bearing err 0.9°, dist err 0.07 m, 1.40 s, floor 2/4 |
+| `lfm2.5-vl` | LiquidAI_LFM2.5-VL-3B-Q8_0 (2.9 GB) + mmproj-LiquidAI_LFM2.5-VL-3B-f16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 4,591 at 64k context | 7.5 (cold load + first answer) | 127.8 decode (llama-server timings) | 5/20 | 2 | 2 | 0.2 median / 8.0 p95 wall; first action 0.6 / 1.1 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 0.9°, dist err 0.03 m, 0.42 s, floor 2/4 |
 | `qwen3.5-4b` | Qwen3.5-4B-Q8_0 (4.5 GB) + mmproj-Qwen3.5-4B-F16 (0.7 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
 | `gemma-4-12b` | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
 | `qwen3.5-9b-q6k` | Qwen3.5-9B-UD-Q6_K_XL (8.8 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB, a hard link of the 9B's) | not measured yet | — | — | — | — | — | — | — | — | — |
+
+Rows measured by `brain_bench` 2026-09-25 on the obstacle-course world at 2x physics, multimodal role, 20 commands + 6 describe turns (+ the vision bench's detect and floor cases). The 9B row is the run after the turn-discipline rules were added to the brain prompt (before them: 16/20, p95 latency 16 s, describe 3/6). The 3B eye is listed only to show it is not a brain: in the multimodal role its tool calls leak into the reply and both stop lines were missed — keep it in the vision role.
 
 Notes on the table:
 
