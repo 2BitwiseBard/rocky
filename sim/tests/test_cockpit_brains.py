@@ -1384,3 +1384,29 @@ def test_a_look_in_an_unchanged_scene_is_remembered():
     r = run(b.look())
     assert "stale_scene" not in r and r["placed"] == ["ball"] and b.last_look["text"] == BALL_AHEAD
     assert mem.where_is("ball") is not None
+
+
+# ------------------------------------------------------------------ B41: per-family prompt notes + thinking
+def test_family_note_and_thinking_switch(monkeypatch):
+    monkeypatch.delenv("ROCKY_FAMILY_NOTES", raising=False)
+    assert "call stop" in cb.family_note("gemma-4-12b") and cb.family_note("gemma-4-26b-a4b")
+    assert "call stop" in cb.family_note("qwen3.5-9b") and "Gemma" not in cb.family_note("qwen3.5-9b")
+    assert cb.family_note("qwen3.6-35b-a3b") == "" and cb.family_note(None) == ""
+    monkeypatch.setenv("ROCKY_FAMILY_NOTES", "0")
+    assert cb.family_note("gemma-4-12b") == ""
+    monkeypatch.delenv("ROCKY_THINKING_MODELS", raising=False)
+    assert not cb.thinking_for("gemma-4-12b")
+    monkeypatch.setenv("ROCKY_THINKING_MODELS", "gemma-4-12b, qwen3.5-4b")
+    assert cb.thinking_for("gemma-4-12b") and cb.thinking_for("qwen3.5-4b") and not cb.thinking_for("qwen3.5-9b")
+
+
+def test_system_prompt_carries_the_family_note_per_model_in_the_chain(monkeypatch):
+    monkeypatch.delenv("ROCKY_FAMILY_NOTES", raising=False)
+    s = Script(gemma_4_26b_a4b=[RuntimeError("HTTP 503")], qwen3_5_9b=[answer("fine")])
+    b = brains(s)
+    b.state["multimodal_model"] = "gemma-4-26b-a4b"
+    r = run(b.chat("how are you", mode="multimodal", source="typed"))
+    assert r["model"] == "qwen3.5-9b"
+    sys_by_model = {m: msgs[0]["content"] for m, msgs, *_ in s.calls}
+    assert "Gemma:" in sys_by_model["gemma-4-26b-a4b"] and "Gemma:" not in sys_by_model["qwen3.5-9b"]
+    assert b.system_for(model="tool-model") == b.system_for()

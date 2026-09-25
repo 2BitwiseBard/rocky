@@ -11,10 +11,13 @@ The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 
 | model id | files | measured | VRAM (MiB) | first answer (s) | t/s | commands ok /20 | stop missed | unsafe | latency per command (s) | describe | vision (`--vision`) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `qwen3.5-9b` | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 6,997 at 16k context | 6.9 (cold load + first answer) | 62.8 decode (llama-server timings) | 17/20 | 0 | 1 | 3.6 median / 7.3 p95 wall; first action 0.9 / 3.2 | 5/6 (side 4/5) | seen 12/12, false+ 1/4, bearing err 0.9°, dist err 0.07 m, 1.40 s, floor 2/4 |
+| `qwen3.5-9b` + family note (B41) | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 7,003 at 16k context | 29.1 (cold load + first answer); 26.1 without its 3.0 s of look, gesture, gesture | 62.0 decode (llama-server timings) | 19/20 | 0 | 1 | 2.9 median / 5.6 p95 wall; first action 0.9 / 1.9 | 5/6 (side 4/5) | not run |
 | `lfm2.5-vl` | LiquidAI_LFM2.5-VL-3B-Q8_0 (2.9 GB) + mmproj-LiquidAI_LFM2.5-VL-3B-f16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 4,591 at 64k context | 7.5 (cold load + first answer) | 127.8 decode (llama-server timings) | 5/20 | 2 | 2 | 0.2 median / 8.0 p95 wall; first action 0.6 / 1.1 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 0.9°, dist err 0.03 m, 0.42 s, floor 2/4 |
 | `qwen3.5-4b` | Qwen3.5-4B-Q8_0 (4.5 GB) + mmproj-Qwen3.5-4B-F16 (0.7 GB) | 2026-09-25, brain_bench (multimodal) | 5,841 at 16k context | 10.1 (cold load + first answer) | 72.3 decode (llama-server timings) | 16/20 | 0 | 3 | 3.6 median / 18.8 p95 wall; first action 0.9 / 6.2 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 1.1°, dist err 0.12 m, 0.83 s, floor 3/4 |
 | `gemma-4-12b` | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | 2026-09-25, brain_bench (multimodal) | 11,325 at 16k context | 15.2 (cold load + first answer) | 33.1 decode (llama-server timings) | 17/20 | 1 | 0 | 4.7 median / 9.7 p95 wall; first action 1.4 / 2.4 | 5/6 (side 4/5) | seen 12/12, false+ 1/4, bearing err 0.7°, dist err 0.04 m, 1.71 s, floor 3/4 — re-measured after the box-order fix (its boxes are x-first; read y-first the first run got 21.9°) |
 | `gemma-4-26b-a4b` | gemma-4-26B-A4B-it-UD-Q5_K_XL (21.3 GB) + mmproj-gemma-4-26B-A4B-F16 (1.2 GB) | 2026-09-25, brain_bench (multimodal) | 14,857 at 64k context | 41.9 (cold load + first answer) | 38.7 decode (llama-server timings) | 15/20 | 2 | 1 | 6.2 median / 32.1 p95 wall; first action 2.0 / 4.8 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 0.6°, dist err 0.07 m, 2.79 s, floor 3/4 |
+| `gemma-4-12b` + family note (B41) | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | 2026-09-25, brain_bench (multimodal) | 11,325 at 16k context | 24.9 (cold load + first answer) | 33.8 decode (llama-server timings) | 20/20 | 0 | 0 | 4.4 median / 13.7 p95 wall; first action 1.4 / 5.6 | 4/6 (side 3/5) | not run |
+| `gemma-4-12b` + family note + thinking ON (B41) | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | 2026-09-25, brain_bench (multimodal) | 11,325 at 16k context | 25.2 (cold load + first answer) | 33.3 decode (llama-server timings) | 16/20 | 0 | 0 | 13.2 median / 27.7 p95 wall; first action 4.4 / 20.8 | 2/6 (side 1/5) | not run |
 | `qwen3.5-9b-q6k` | Qwen3.5-9B-UD-Q6_K_XL (8.8 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 9,173 at 16k context | 13.7 (cold load + first answer) | 43.4 decode (llama-server timings) | 17/20 | 0 | 1 | 3.8 median / 7.1 p95 wall; first action 1.1 / 2.3 | 3/6 (side 2/5) | seen 12/12, false+ 0/4, bearing err 1.7°, dist err 0.07 m, 1.54 s, floor 3/4 |
 
 Rows measured by `brain_bench` 2026-09-25 on the obstacle-course world at 2x physics, multimodal role, 20 commands + 6 describe turns (+ the vision bench's detect and floor cases). The 9B row is the run after the turn-discipline rules were added to the brain prompt (before them: 16/20, p95 latency 16 s, describe 3/6). The 3B eye is listed only to show it is not a brain: in the multimodal role its tool calls leak into the reply and both stop lines were missed — keep it in the vision role.
@@ -52,6 +55,17 @@ any model sees it, so a miss here is a mark against the model's tool eagerness, 
 
 Roles after this round: multimodal `qwen3.5-9b` → `qwen3.5-4b` → `gemma-4-12b`; vision `lfm2.5-vl` → `gemma-4-12b` →
 `gemma-4-26b-a4b`; brain (text, beside the eye) `qwen3.6-35b-a3b` → `qwen3.8-27b-iq4` as before.
+
+**B41 addendum (same evening): explicit numbered rules lift both small families; thinking hurts.** A per-family
+prompt note (`sim/cockpit_brains.py` `FAMILY_NOTES`, on by default for ids starting `gemma` and `qwen3.5`; `ROCKY_FAMILY_NOTES=0`
+turns it off) that says, in order: a stop line = call stop and nothing else; pick the ONE tool that does what was asked and call
+it before writing; one sentence after the result; chords are for greetings and feelings. Measured with the same harness
+(stop gate off in the bench so the model's own stop shows): `gemma-4-12b` 17/20 → **20/20**, 0 missed stops, 0 unasked
+motion, first action 1.4 s; `qwen3.5-9b` 17/20 → **19/20**, 0 missed, median latency 3.6 → 2.9 s, p95 7.3 → 5.6 s, describe
+5/6. Thinking ON for the 12B (`ROCKY_THINKING_MODELS=gemma-4-12b`, `enable_thinking` in its template): 16/20, three lines
+answered in text with no tool, median latency 13 s, describe 2/6 — off stays the rule. Roles are unchanged: the 9B keeps the
+default on latency and VRAM (0.9 s to act, 7 GB vs 1.4 s, 11.3 GB); Gemma 12B is the accuracy option for an operator who
+prefers it, one click away in the Talk tab. n = 20 lines per run: a one-line difference is noise, three is not.
 
 ### Adding and measuring a model
 

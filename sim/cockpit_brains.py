@@ -379,6 +379,36 @@ TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
 UNITS_NOTE = ("\nUnits: move, goto and every distance argument are METRES. 'thirty centimeters' = 0.3 "
               "(move(forward_m=0.3)), 'half a meter' = 0.5, '2 meters' = 2.0 — never pass 30 for 30 cm "
               "(a 9B model did).")
+GEMMA_NOTE = ("\nGemma: on every operator line do exactly this, in order. 1. If the line asks to stop, halt "
+              "or freeze: call stop and nothing else. 2. Otherwise pick the ONE tool that does what was asked "
+              "(walk / back up = move, turn = gesture turn_in_place, a named gesture = gesture, a question "
+              "about the scene = look, a remembered place = go_back_to, an object to reach = find_object) "
+              "and CALL it before writing any text; an action request is never answered with say alone. "
+              "3. After its result, write one short sentence. Chords (say) are for greetings and feelings only.")
+# B41 (2026-09-25): a per-family addition to the prompt, keyed by the model id's prefix. Gemma 4 (12B and
+# 26B) answered a bare "stop" with a chord and the 26B gave up on compose in the D055 bench; this is the
+# "Gemma-style prompt" A/B. ROCKY_FAMILY_NOTES=0 turns every note off (the bench sets it per run).
+QWEN_NOTE = GEMMA_NOTE.replace("\nGemma: on every operator line", "\nOn every operator line")
+FAMILY_NOTES = {"gemma": GEMMA_NOTE, "qwen3.5": QWEN_NOTE}   # the small Qwens; the 35B driver is untouched
+
+
+def family_note(model):
+    """The prompt addition for this model's family ('' when none, or when ROCKY_FAMILY_NOTES=0)."""
+    if os.environ.get("ROCKY_FAMILY_NOTES", "1") == "0":
+        return ""
+    m = str(model or "").lower()
+    return next((note for fam, note in FAMILY_NOTES.items() if m.startswith(fam)), "")
+
+
+def thinking_for(model):
+    """enable_thinking for this model: True only for the ids (prefix match) listed in
+    ROCKY_THINKING_MODELS, e.g. 'gemma-4-12b,qwen3.5-4b' (B41 A/B; default off — robot turns
+    are short tool calls, and the 2026-09-24 note: qwen3.8 spent its whole budget thinking)."""
+    m = str(model or "").lower()
+    ids = [x.strip().lower() for x in os.environ.get("ROCKY_THINKING_MODELS", "").split(",") if x.strip()]
+    return any(m.startswith(x) for x in ids)
+
+
 SYSTEM = build_system(extra=LOOK_NOTE + UNITS_NOTE)
 
 
@@ -1091,7 +1121,7 @@ class Brains:
         if self._complete_fn is not None:
             return self._complete_fn(model, messages, tools, max_tokens)
         kw = dict(model=model, messages=messages, max_tokens=max_tokens,
-                  extra_body={"chat_template_kwargs": {"enable_thinking": False}})
+                  extra_body={"chat_template_kwargs": {"enable_thinking": thinking_for(model)}})
         if tools:
             kw["tools"] = tools
         r = self._openai().chat.completions.create(**kw)
@@ -1123,10 +1153,10 @@ class Brains:
         return build_tools(getattr(s, "gesture_names", None), getattr(s, "lexicon", None),
                            signed=SIGNED, look=look, extra=EXTRA_TOOLS)
 
-    def system_for(self, multimodal=False):
+    def system_for(self, multimodal=False, model=None):
         s = self.sim
         extra = (LOOK_NOTE + " " + COMPOSE_NOTE + UNITS_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
-                 + (" " + MEMORY_NOTE if self.memory is not None else ""))
+                 + (" " + MEMORY_NOTE if self.memory is not None else "") + family_note(model))
         return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
 
     def surface(self, voice=False, stops=None):
@@ -2227,6 +2257,8 @@ class Brains:
         for stage, chain in stages:
             tools = self.tools_for(look=True)
             for mdl in chain:
+                msgs[0] = {"role": "system",                      # per-family note (B41)
+                           "content": self.system_for(multimodal=mode == "multimodal", model=mdl)}
                 try:
                     reply, gave_up = await self._tool_loop(
                         mdl, msgs, tools, trace, allow,

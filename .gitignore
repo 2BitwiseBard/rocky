@@ -33,3 +33,7 @@ MUJOCO_LOG.TXT
 
 # scene memory (sim/scene_memory.py): per-machine robot memory, not source
 sim/out/memory/
+
+# personal, machine-specific to-do lists (the owner's evening checklists); the repo stays generic
+OWNER_TODO*.md
+TONIGHT*.md
