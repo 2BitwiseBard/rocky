@@ -29,6 +29,7 @@ Understood (case-insensitive; number WORDS 1-100 work too: "thirty cm"):
   jazz hands / fist bump / wave / bow / sit / shake / beckon /
   look around                         -> gesture
   say <word>                          -> chord-speak (fuzzy-matched)
+  find the ball / go to the box       -> find_object (look, turn, walk up to it; cockpit only)
   what do you see / look / take a look -> look (the eye + a vision model)
                                          where the backend has one, else
                                          scan_summary
@@ -73,7 +74,7 @@ _GESTURE_ALIASES.update({"turn around": "turn_in_place",
 _DIRS = {"forward": (1, 0), "forwards": (1, 0), "ahead": (1, 0),
          "back": (-1, 0), "backward": (-1, 0), "backwards": (-1, 0),
          "left": (0, 1), "right": (0, -1)}
-MOTION_TOOLS = ("goto", "gesture", "compose_gesture")   # stop is NEVER gated
+MOTION_TOOLS = ("goto", "gesture", "compose_gesture", "find_object")   # stop is NEVER gated
 WAKE_WORDS = ("pebble", "pebbles", "peble", "pebbly", "rocky", "rockie", "rocket")   # D052 voice: the fast whisper (base.en) mishears the name; accept its usual guesses
 UNITLESS_MAX = 3.0        # a bare number below this is meters; at/above it we ask
 
@@ -138,6 +139,9 @@ def _p(calls, reply, relative=None, **kw):
     return dict(calls=calls, reply=reply, relative=relative, **kw)
 
 
+_FIND_FILLER = {"please", "now", "for", "me", "pebble", "rocky", "and", "then", "again", "it", "there"}
+
+
 def plan(text: str):
     """text -> dict(calls=[(tool, args)...], reply=str, relative=(dx,dy)|None).
 
@@ -168,6 +172,22 @@ def plan(text: str):
     if m:
         x, y = float(m.group(1)), float(m.group(2))
         return _p([("goto", {"x": x, "y": y})], f"heading to ({x:g}, {y:g}) m.")
+
+    # the eye, moving: "find the ball" / "go to the box" / "fetch the red ball" -> find_object
+    # (an article is required after go/walk/come to, so "go to 0.4 0.2" never lands here)
+    m = re.search(r"\b(?:find|fetch|approach|search\s+for|go\s+get)\s+(?:the\s+|a\s+|an\s+|that\s+|my\s+)?"
+                  r"([a-z][a-z ]*)|\b(?:go|walk|head|come|move)\s+(?:over\s+)?to\s+(?:the|a|an|that|my)\s+"
+                  r"([a-z][a-z ]*)", t)
+    if m:
+        words = []
+        for w in (m.group(1) or m.group(2)).split():      # the noun phrase ends at a filler word
+            if w in _FIND_FILLER:
+                break
+            words.append(w)
+        words = words[-2:]                                  # "big red ball" -> "red ball"
+        if words:
+            name = " ".join(words)
+            return _p([("find_object", {"name": name})], f"looking for the {name}.")
 
     # the eye: "what do you see" / "look" / "take a look" (bare "look around" is the gesture)
     if re.search(r"what.*\bsee\b|\bcan you see\b|\btake a look\b|\blook\b(?!\s+around\b)", t) or \
@@ -313,6 +333,10 @@ async def execute(backend, p, allow_motion=True):
             continue
         if name == "look" and not hasattr(backend, "look"):
             name = "scan_summary"                  # no eye here: the lidar is the honest answer
+        if name == "find_object" and not hasattr(backend, "find_object"):
+            out.append((name, {"ok": False, "error": "no eye here: find_object needs the cockpit "
+                                                     "(./rocky.sh cockpit)"}))
+            continue
         fn = getattr(backend, name)
         if name == "gesture" and "direction" in args and not _accepts(fn, "direction"):
             # a backend without signed gestures turns/steps LEFT only — say so, never fake right

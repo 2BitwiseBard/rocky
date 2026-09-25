@@ -120,6 +120,18 @@ def build_server(backend=None) -> FastMCP:
             what is in front of the robot (obstacles, objects, open floor)."""
             return await be.look()
 
+    if hasattr(be, "find_object"):
+        @mcp.tool(annotations={"readOnlyHint": False})
+        async def find_object(name: str, max_steps: int = 6) -> dict:
+            """Find an object by name with the eye and walk up to it ('ball',
+            'box'). Runs in the cockpit by itself: look (a vision model boxes
+            it; bearing and distance come from the camera geometry), then a
+            0.1-0.4 m goto toward it (every guard applies) or a 30 deg scan turn
+            when it is unseen or unsure. Ends found (within ~0.25 m) | not
+            found | stopped (a goto came back cliff / blocked / stuck: a veto,
+            report it). Up to ~1-2 minutes; stop ends it."""
+            return await be.find_object(name, max_steps)
+
     return mcp
 
 

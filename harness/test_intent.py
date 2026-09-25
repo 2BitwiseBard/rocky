@@ -208,6 +208,25 @@ def test_execute_look_falls_back_to_the_lidar_without_an_eye():
     assert out[0][0] == "scan_summary" and out[0][1]["ok"]
 
 
+def test_find_the_ball_is_find_object_and_moves():
+    assert calls("find the ball") == [("find_object", {"name": "ball"})]
+    assert calls("pebble, go to the box please") == [("find_object", {"name": "box"})]
+    assert calls("find the big red ball") == [("find_object", {"name": "red ball"})]
+    assert calls("walk to the door and wave") == [("find_object", {"name": "door"})]
+    assert calls("go to 0.4 0.2") == [("goto", {"x": 0.4, "y": 0.2})]      # numbers stay a goto
+    assert calls("look for the ball") == [("look", {})]                  # looking never walks
+    assert moves(plan("find the ball"))                                  # voice needs the wake word
+    assert calls("stop finding the ball") == [("stop", {})]
+
+
+def test_execute_find_object_without_an_eye_says_so():
+    b = MockBackend()                          # no find_object(): no eye, refused honestly
+    out = _run(execute(b, plan("find the ball")))
+    assert out[0][0] == "find_object" and out[0][1]["ok"] is False and "cockpit" in out[0][1]["error"]
+    out = _run(execute(b, plan("find the ball"), allow_motion=False))
+    assert out[0][1]["error"] == "voice_unconfirmed"
+
+
 def test_execute_signed_gesture():
     b = MockBackend()
     out = _run(execute(b, plan("turn right")))

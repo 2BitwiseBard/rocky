@@ -1451,7 +1451,17 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         return Response(_curves["png"], media_type="image/png")
 
     async def look(request):
+        """{model?} describes the eye; {find: 'ball', model?, method?: bbox|estimate}
+        asks for the structured detection find_object uses (seen / bearing /
+        distance / confidence, parsed); {question: '...', model?} asks the eye a
+        custom question (the vision bench's floor-safety checks)."""
         body = await request.json() if request.headers.get("content-length", "0") != "0" else {}
+        body = body if isinstance(body, dict) else {}
+        if body.get("find"):
+            return JSONResponse(await sim.brains.detect(str(body["find"]), body.get("model"),
+                                                        method=str(body.get("method") or "bbox")))
+        if body.get("question"):
+            return JSONResponse(await sim.brains.look(body.get("model"), prompt=str(body["question"])[:600]))
         return JSONResponse(await sim.tool_look(body.get("model")))
 
     async def shove(request):

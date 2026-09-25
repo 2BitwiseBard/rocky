@@ -6,8 +6,8 @@ local_brain and intent all drive the ONE sim the browser is showing.
     ROCKY_BACKEND=auto     -> AutoBackend: the cockpit whenever one answers,
                               else the in-process sim — re-resolved per call
 
-Adds the `look` tool (the robot's eye through a vision model), which only
-exists where a cockpit is running — absent tool > lying tool.
+Adds the `look` and `find_object` tools (the robot's eye through a vision
+model), which only exist where a cockpit is running — absent tool > lying tool.
 
 D052: AutoBackend used to be resolved ONCE when the MCP server started, so
 a cockpit started after `./rocky.sh chat` was never used (the chat drove an
@@ -33,6 +33,7 @@ import httpx
 
 DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
 AUTO_TTL_S = 3.0
+FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
 
 
 def cockpit_alive(url=DEFAULT_URL, timeout=2.0):
@@ -103,6 +104,19 @@ class CockpitBackend:
 
     async def look(self) -> dict:
         return await self._tool("look")
+
+    async def find_object(self, name: str, max_steps: int | None = None) -> dict:
+        """Several looks + gotos inside the cockpit: allow FIND_TIMEOUT_S, not 120 s."""
+        args = {"name": name, **({"max_steps": max_steps} if max_steps is not None else {})}
+        try:
+            r = await self.client.post(f"{self.url}/api/tool/find_object", json=args,
+                                       timeout=httpx.Timeout(FIND_TIMEOUT_S, connect=5.0))
+            return r.json()
+        except httpx.ConnectError as e:
+            return {"ok": False, "error": f"cockpit unreachable: {e}", "gone": True}
+        except Exception as e:
+            return {"ok": False, "error": f"cockpit unreachable: {e} (find_object may still be "
+                                          "running in the cockpit — call stop to end it)"}
 
     async def list_gestures(self) -> dict:
         return await self._tool("list_gestures")
@@ -226,6 +240,13 @@ class AutoBackend:
             return {"ok": False, "error": "no eye here: look needs the cockpit "
                                           "(./rocky.sh cockpit); the in-process sim has none"}
         return await be.look()
+
+    async def find_object(self, name: str, max_steps: int | None = None) -> dict:
+        be = await self.pick()
+        if not hasattr(be, "find_object"):
+            return {"ok": False, "error": "no eye here: find_object needs the cockpit "
+                                          "(./rocky.sh cockpit); the in-process sim has none"}
+        return self._tag(await be.find_object(name, max_steps))
 
     async def list_gestures(self) -> dict:
         be = await self.pick()

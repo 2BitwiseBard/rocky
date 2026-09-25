@@ -21,6 +21,19 @@ group; any other brain + vision pair pays a model swap on EVERY look.
 MODES: talk (regex, harness/intent.py — no model) | local (brain + look
 tool) | multimodal (the eye JPEG rides in the user turn) | claude.
 
+FIND (find_object, every mode incl. talk: "find the ball"): look -> the
+vision model BOXES the named object (0-1000 coords, LFM2.5-VL's native
+grounding) -> bearing + distance from projecting the box's bottom-centre
+onto the floor through the eye's measured pose (pixel_to_floor) -> a
+0.1-0.4 m goto toward it (tool_goto: every guard) or, unseen / unsure
+(< 0.4), a 30 deg scan turn (turn(): the turn_in_place gait, timed) ->
+look again; found within 0.25 m | not found | stopped by a goto veto.
+Gemma writes boxes y-first ([ymin, xmin, ymax, xmax]) whatever it is
+asked: box_order() reads them that way.
+Asking the model to TYPE bearing/distance instead ('estimate') was
+measured useless on lfm2.5-vl (sim/vision_bench.py): it echoes the
+prompt's numbers.
+
 FALLBACK: brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision
 lfm2.5-vl -> gemma-4-26b-a4b; multimodal -> gemma -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
@@ -114,7 +127,8 @@ VISION_PROMPT = ("You are the eye of a small five-legged robot walking on a floo
                  "If the view is mostly floor, say so.")
 LOOK_NOTE = ("You also have `look`: the robot's eye camera described by a vision model. Use it "
              "when asked what you see, before walking toward something, or after a goto came "
-             "back stuck or blocked.")
+             "back stuck or blocked. To go to something the operator names ('find the ball'), "
+             "call find_object once: it looks, turns and walks by itself.")
 MULTIMODAL_NOTE = ("The operator's message may carry the robot's CURRENT eye-camera image: answer "
                    "'what do you see' from it directly; call look only for a fresh view after "
                    "the robot has moved.")
@@ -172,9 +186,79 @@ EXTRA_TOOLS = [
             "name": {"type": "string", "description": "optional new name"},
             "overwrite": {"type": "boolean"}}}}},
 ]
+
+# ------------------------------------------------------------ find_object (vision-driven)
+# The eye (world_builder.EYE_CAM): 320x240, fovy 70 (-> ~86 deg wide), pitched 15 deg
+# down, 0.10 m ahead of the torso centre. MEASURED in the flat world standing at the
+# D052 gait height: the camera is 0.2126 m above the floor; the bottom edge of the
+# image meets the floor ~0.18 m ahead of the camera, the image centre ~0.79 m.
+EYE_W_PX, EYE_H_PX = 320, 240
+EYE_FOVY_DEG = 70.0
+EYE_PITCH_DEG = 15.0
+EYE_HEIGHT_M = 0.2126
+EYE_FWD_M = 0.10
+EYE_HFOV_DEG = round(math.degrees(2 * math.atan(math.tan(math.radians(EYE_FOVY_DEG / 2)) * EYE_W_PX / EYE_H_PX)), 1)
+FIND_MAX_STEPS = 6          # looks per find_object call (each look may be followed by one move)
+FIND_MAX_STEPS_CAP = 16
+FIND_NEAR_M = 0.25          # the object's near edge is this close to the camera (or closer): found
+FIND_STEP_MIN_M = 0.10      # a step toward it is distance - FIND_NEAR_M, clamped to [min, max]
+FIND_STEP_MAX_M = 0.40      # (min 0.10, not 0.25: a 0.25 m step from 0.30 m away would ram it)
+FIND_STEP_BLIND_M = 0.25    # seen, confident, but no distance (a box above the horizon line)
+FIND_MIN_CONF = 0.40        # below this, never walk toward it: turn and look again
+FIND_DEFAULT_CONF = 0.50    # "seen" with no confidence field at all
+FIND_SCAN_DEG = 30.0        # a scan turn (counter-clockwise); at most one full circle
+BEARING_LIMIT_DEG = 60.0
+FIND_MAX_TOKENS = 120
+FIND_METHODS = ("bbox", "estimate")
+# turn(): the gaited turn runs at pg2.TURN_WZ fitted into the gait budget. MEASURED in
+# the cockpit (flat world, D052 gait, 2026-09-24): turn_in_place (4.8 s) turns ~47 deg;
+# with these constants turn(30) turned 31.3-31.7 deg, turn(-45) -45.2, turn(90) 86.1.
+TURN_RATE_DPS = 14.2
+TURN_EXTRA_S = 1.4
+TURN_MIN_DEG, TURN_MAX_DEG = 5.0, 180.0
+
+# "bbox" (default): the model draws a box (0-1000 image coordinates, what LFM2.5-VL
+# grounds in natively) and the bearing and distance come from projecting the box's
+# bottom-centre onto the floor through the camera pose above — geometry, not a guess.
+FIND_PROMPT = (
+    'Is there a {name} in this image? If yes, reply with ONLY this JSON: {{"seen": true, '
+    '"bbox": [x1, y1, x2, y2], "confidence": 0 to 1, "what": "a few words"}} where bbox is the '
+    "{name}'s bounding box in 0-1000 image coordinates. If there is no {name}, reply "
+    '{{"seen": false, "what": "what you see instead"}}.')
+# "estimate": the model itself estimates bearing and distance (the first design; the
+# vision bench keeps it for comparison — small VLMs tend to echo the numbers in the prompt)
+FIND_ESTIMATE_PROMPT = (
+    "You are the eye of a small robot on a floor. This is its forward camera: about "
+    f"{EYE_HFOV_DEG:.0f} degrees wide, looking slightly down from 0.2 m above the floor. The "
+    "bottom edge of the image is about 0.2 m in front of the camera, the middle of the image "
+    "about 0.8 m. Is there a {name} in the image? Reply with ONLY one JSON object, no other "
+    'text: {{"seen": true or false, "bearing_deg": left-right position, -43 = left edge of the '
+    'image, 0 = centre, 43 = right edge, "distance_m": distance from the camera in meters, '
+    '"confidence": 0 to 1, "what": "a few words"}}. If there is no {name}, reply '
+    '{{"seen": false, "confidence": 1, "what": "what you see instead"}}.')
+FIND_DOC = (
+    "Find an object by name with the eye and walk up to it (e.g. 'find the ball', 'go to the "
+    "box'). It loops by itself: look (a vision model boxes the object; its bearing and distance "
+    "come from the camera geometry), then walk 0.1-0.4 m toward it (an ordinary goto: every "
+    "guard applies), or turn 30 deg to scan when it is not seen or the sighting is unsure; it "
+    "ends found (within ~0.25 m) | not found | stopped (a goto came back cliff / blocked / "
+    "stuck: report it, do not retry blindly). Takes up to ~1-2 minutes.")
+EXTRA_TOOLS.append(
+    {"type": "function", "function": {
+        "name": "find_object", "description": FIND_DOC,
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string", "description": "what to find, in plain words: 'ball', 'box'"},
+            "max_steps": {"type": "integer", "description": f"looks before giving up (default "
+                                                            f"{FIND_MAX_STEPS}, max {FIND_MAX_STEPS_CAP})"}},
+            "required": ["name"]}}})
+
 TOOL_NAMES = ("say", "gesture", "goto", "stop", "scan_summary", "status", "look",
-              "list_gestures", "compose_gesture", "check_gesture", "save_gesture")
-NOTED = ("goto", "gesture", "say", "stop", "compose_gesture")     # recordings replay these
+              "list_gestures", "compose_gesture", "check_gesture", "save_gesture",
+              "find_object", "turn")        # turn: internal (find_object's scan; replays), not offered to models
+NOTED = ("goto", "gesture", "say", "stop", "compose_gesture", "turn")     # recordings replay these
+# find_object is not NOTED: the gotos and turns it makes are, so a replay repeats the
+# motion without asking a vision model again
+GATED = tuple(MOTION_TOOLS) + ("find_object", "turn")      # a spoken line needs the wake word
 
 # the static defaults (the cockpit builds both per request with the live lists)
 TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
@@ -280,6 +364,173 @@ def _strip_images(msgs):
     return msgs
 
 
+_OBJ_RE = re.compile(r"\{[^{}]*\}", re.S)
+_FENCE_RE = re.compile(r"```(?:json)?", re.I)
+
+
+def _num(v):
+    """A finite float from a number or a numeric string, else None (bools refused)."""
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, str):
+        m = re.search(r"-?\d+(?:\.\d+)?", v)
+        if not m:
+            return None
+        v = m.group(0)
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def pixel_to_floor(u, v, height_m=EYE_HEIGHT_M, pitch_deg=EYE_PITCH_DEG):
+    """An eye-image point (u right, v down, both 0..1 of the frame) -> where its
+    ray meets the floor: (distance_m from the camera, bearing_deg in the image
+    convention, negative = LEFT), or None when the ray does not come down to
+    the floor (at or above the horizon). A pinhole with square pixels; flat
+    floor at the robot's standing height assumed."""
+    f = (EYE_H_PX / 2) / math.tan(math.radians(EYE_FOVY_DEG / 2))
+    xc = (float(u) - 0.5) * EYE_W_PX / f                  # right
+    yc = -(float(v) - 0.5) * EYE_H_PX / f                 # up
+    p = math.radians(pitch_deg)
+    # camera axes in the body frame: forward (cos p, 0, -sin p), up (sin p, 0, cos p),
+    # right (0, -1, 0) — world_builder's xyaxes="0 -1 0 0.26 0 0.97"
+    rx, ry, rz = math.cos(p) + yc * math.sin(p), -xc, -math.sin(p) + yc * math.cos(p)
+    if rz >= -1e-6:
+        return None
+    t = float(height_m) / -rz
+    gx, gy = t * rx, t * ry
+    return math.hypot(gx, gy), -math.degrees(math.atan2(gy, gx))
+
+
+def box_order(model):
+    """How a model family writes a box. Gemma (like Gemini / PaliGemma) answers
+    [ymin, xmin, ymax, xmax] whatever the prompt asks — MEASURED in the vision
+    bench 2026-09-24: read as x-first, its bearings were off by a median 21 deg;
+    read y-first, within ~2 deg. LFM2.5-VL (and Qwen-VL) write [x1, y1, x2, y2]."""
+    return "yx" if "gemma" in str(model or "").lower() else "xy"
+
+
+def _bbox(v, order="xy"):
+    """[x1, y1, x2, y2] (or [y1, x1, y2, x2] for order 'yx') -> x-first
+    fractions of the frame (0..1), ordered; accepts 0..1 fractions or 0-1000
+    coordinates. None when it is not a usable box."""
+    if not isinstance(v, (list, tuple)) or len(v) != 4:
+        return None
+    n = [_num(x) for x in v]
+    if any(x is None for x in n):
+        return None
+    scale = 1.0 if max(n) <= 1.0 else 1000.0
+    if max(n) > 1000.0 or min(n) < 0.0:
+        return None
+    x1, y1, x2, y2 = (x / scale for x in n)
+    if order == "yx":
+        x1, y1, x2, y2 = y1, x1, y2, x2
+    x1, x2 = sorted((x1, x2))
+    y1, y2 = sorted((y1, y2))
+    if x2 - x1 <= 0 or y2 - y1 <= 0:
+        return None
+    return [round(x1, 4), round(y1, 4), round(x2, 4), round(y2, 4)]
+
+
+_LIST4_RE = re.compile(r"\[\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\]")
+
+
+def parse_detection(text, order="xy"):
+    """A vision model's answer to FIND_PROMPT / FIND_ESTIMATE_PROMPT ->
+    {seen, bearing_deg, distance_m, confidence, what, parsed, method, bbox}.
+    Robust to what small VLMs do: prose or a code fence around the JSON,
+    single quotes, Python True/False, a trailing comma, a percent confidence,
+    numbers as strings, a bare [x1, y1, x2, y2] list, bbox_2d for bbox
+    (order 'yx': the model writes [ymin, xmin, ymax, xmax], see box_order). A box
+    wins over any bearing/distance the model typed: they are computed from the
+    box's bottom-centre (pixel_to_floor). Anything that does not parse is 'not
+    seen' (parsed False) — never a guess. A sighting with no bearing is not
+    actionable, so it is 'not seen' too. bearing_deg is clamped to
+    +-BEARING_LIMIT_DEG (image convention: negative = LEFT)."""
+    out = {"seen": False, "bearing_deg": None, "distance_m": None, "confidence": 0.0,
+           "what": "", "parsed": False, "method": "estimate", "bbox": None}
+    raw = _FENCE_RE.sub("", _THINK_RE.sub("", str(text or "")))
+    m = _OBJ_RE.search(raw)
+    d = None
+    if m:
+        blob = m.group(0)
+        for cand in (blob, re.sub(r",\s*}", "}", re.sub(r"\bFalse\b", "false", re.sub(
+                r"\bTrue\b", "true", re.sub(r"\bNone\b", "null", blob.replace("'", '"')))))):
+            try:
+                d = json.loads(cand, parse_constant=_no_const)
+                break
+            except ValueError:
+                continue
+    if not isinstance(d, dict):
+        lm = _LIST4_RE.search(raw)
+        if lm and _bbox(list(lm.groups())) is not None:
+            d = {"seen": True, "bbox": list(lm.groups())}      # a bare box: the model's grounding answer
+        else:
+            out["what"] = raw.strip()[:80]
+            return out
+    out["parsed"] = True
+    box = _bbox(d.get("bbox") if d.get("bbox") is not None else d.get("bbox_2d"), order)
+    seen = d.get("seen", box is not None)
+    if isinstance(seen, str):
+        seen = seen.strip().lower() in ("true", "yes", "1", "y")
+    seen = bool(seen) if isinstance(seen, (bool, int, float)) else False
+    bearing, dist, conf = _num(d.get("bearing_deg")), _num(d.get("distance_m")), _num(d.get("confidence"))
+    out["what"] = str(d.get("what") or d.get("label") or "")[:80]
+    if box is not None:
+        out["method"], out["bbox"] = "bbox", box
+        u, v = (box[0] + box[2]) / 2, box[3]
+        fl = pixel_to_floor(u, v)
+        if fl is None:                               # its foot is at/above the horizon: bearing only
+            bearing, dist = -math.degrees(math.atan((u - 0.5) * EYE_W_PX / (
+                (EYE_H_PX / 2) / math.tan(math.radians(EYE_FOVY_DEG / 2))))), None
+        else:
+            dist, bearing = fl
+    if bearing is not None:
+        bearing = max(-BEARING_LIMIT_DEG, min(BEARING_LIMIT_DEG, bearing))
+    if dist is not None and dist <= 0:
+        dist = None
+    if conf is None:
+        conf = FIND_DEFAULT_CONF if seen else 0.0
+    elif 1.0 < conf <= 100.0:                        # "confidence": 85 -> 0.85
+        conf = conf / 100.0
+    conf = max(0.0, min(1.0, conf))
+    if seen and bearing is None:
+        seen = False
+        out["what"] = (out["what"] + " (no bearing given)").strip()
+    out.update(seen=seen, bearing_deg=None if bearing is None else round(bearing, 1),
+               distance_m=None if dist is None else round(dist, 3), confidence=round(conf, 2))
+    return out
+
+
+def bearing_to_map(pose, bearing_deg, dist_m):
+    """A point dist_m along an eye bearing, in the map frame. bearing_deg is the
+    image convention (negative = LEFT); the body frame has +y to the LEFT, so
+    the body angle is -bearing_deg, and the map angle is yaw - bearing_deg.
+    Measured from the torso centre (pose), which is where goto steers."""
+    th = math.radians(float(pose["yaw_deg"]) - float(bearing_deg))
+    return (float(pose["x"]) + float(dist_m) * math.cos(th),
+            float(pose["y"]) + float(dist_m) * math.sin(th))
+
+
+def find_policy(det, near_m=FIND_NEAR_M, min_conf=FIND_MIN_CONF):
+    """One detection -> ("stop", 0.0) | ("goto", step_m) | ("scan", 0.0).
+    Never walks on a low-confidence (or unseen) detection."""
+    if not det.get("seen") or float(det.get("confidence") or 0.0) < min_conf:
+        return "scan", 0.0
+    d = det.get("distance_m")
+    if d is None:
+        return "goto", FIND_STEP_BLIND_M
+    if d <= near_m:
+        return "stop", 0.0
+    return "goto", round(min(FIND_STEP_MAX_M, max(FIND_STEP_MIN_M, d - near_m)), 3)
+
+
+def _wrap_deg(a):
+    return (float(a) + 180.0) % 360.0 - 180.0
+
+
 class _Surface:
     """The harness backend contract (say/gesture/goto/...) routed through
     Brains.tool, so harness.intent.execute gets the same guards, argument
@@ -314,6 +565,10 @@ class _Surface:
 
     async def list_gestures(self):
         return await self._t("list_gestures")
+
+    async def find_object(self, name, max_steps=None):
+        return await self._t("find_object", name=name,
+                             **({"max_steps": max_steps} if max_steps is not None else {}))
 
 
 # ------------------------------------------------------------------ the brains
@@ -594,7 +849,7 @@ class Brains:
             args = {}
         if not isinstance(args, dict):
             return {"ok": False, "error": f"arguments for {name} must be an object"}
-        if voice and name in MOTION_TOOLS:
+        if voice and name in GATED:
             return {"ok": False, "error": "voice_unconfirmed",
                     "hint": "a spoken motion command needs the wake word ('pebble, ...') "
                             "or the operator's confirmation"}
@@ -616,6 +871,10 @@ class Brains:
                 return await self.check_gesture(**args)
             if name == "save_gesture":
                 return await self.save_gesture(**args)
+            if name == "find_object":
+                return await self.find_object(**args)
+            if name == "turn":
+                return await self.turn(**args)
             return await getattr(self.sim, "tool_" + name)(**args)
         except TypeError as e:
             return {"ok": False, "error": f"bad arguments for {name}: {e}"}
@@ -783,36 +1042,243 @@ class Brains:
         _n, jpg = frames.get("eye", (0, b""))
         return base64.b64encode(jpg).decode() if jpg else None
 
-    async def look(self, model=None):
+    async def _vision(self, prompt, model=None, max_tokens=LOOK_MAX_TOKENS):
+        """The eye frame + prompt through the vision role's fallback chain.
+        -> {"ok": True, "model", "text", "latency_s", "fallback"?} or
+        {"ok": False, "error", "tried"}. latency_s is the answering model's call
+        alone (a cold model's load time included)."""
         b64 = self._eye_b64()
         if b64 is None:
-            return {"ok": False, "error": "no eye frame yet (renderer off?)"}
+            return {"ok": False, "error": "no eye frame yet (renderer off?)", "tried": []}
         cat = await self._acatalog()
         chain, tried = self.chain("vision", first=model, cat=cat)
         for m in chain:
             msgs = [{"role": "user", "content": [
-                {"type": "text", "text": VISION_PROMPT},
+                {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}]
+            t0 = time.monotonic()
             try:
-                r = await self._acall(m, msgs, None, LOOK_MAX_TOKENS)
+                r = await self._acall(m, msgs, None, max_tokens)
             except ModelFailure as e:
                 tried.append(f"{m}: {e}")
                 continue
             text = r["content"]
             if not text:
-                tried.append(f"{m}: empty description")
+                tried.append(f"{m}: empty answer")
                 continue
-            try:
-                self.sim.events.append(("look", text[:60]))
-            except Exception:
-                pass
-            self._log(f"look ({m}): {text}")
-            out = {"ok": True, "model": m, "description": text}
+            out = {"ok": True, "model": m, "text": text, "latency_s": round(time.monotonic() - t0, 2)}
             if tried:
                 out["fallback"] = tried
             return out
-        return {"ok": False, "error": "no vision model described the frame" +
+        return {"ok": False, "error": "no vision model answered" +
                 (": " + "; ".join(tried) if tried else ""), "tried": tried}
+
+    def _event(self, kind, what):
+        try:
+            self.sim.events.append((kind, what))
+        except Exception:
+            pass
+
+    async def look(self, model=None, prompt=None):
+        """The eye described by the vision role (prompt: a custom question,
+        e.g. the vision bench's floor-safety checks)."""
+        v = await self._vision(prompt or VISION_PROMPT, model)
+        if not v["ok"]:
+            if v["error"].startswith("no vision model answered"):
+                v["error"] = v["error"].replace("answered", "described the frame", 1)
+            return v
+        text = v["text"]
+        self._event("look", text[:60])
+        self._log(f"look ({v['model']}): {text}")
+        out = {"ok": True, "model": v["model"], "description": text, "latency_s": v["latency_s"]}
+        if v.get("fallback"):
+            out["fallback"] = v["fallback"]
+        return out
+
+    async def detect(self, name, model=None, method="bbox"):
+        """Is `name` in the eye frame, and where? method 'bbox' (FIND_PROMPT: the
+        model boxes it, geometry gives bearing + distance) or 'estimate'
+        (FIND_ESTIMATE_PROMPT: the model says bearing + distance itself), through
+        the vision chain, parsed by parse_detection -> {"ok", "model",
+        "detection", "raw", "latency_s"} (ok False only when no model answered)."""
+        name = str(name or "").strip()[:60]
+        if not name:
+            return {"ok": False, "error": "detect needs the name of what to look for"}
+        if method not in FIND_METHODS:
+            return {"ok": False, "error": f"method must be one of {', '.join(FIND_METHODS)}"}
+        prompt = (FIND_PROMPT if method == "bbox" else FIND_ESTIMATE_PROMPT).format(name=name)
+        v = await self._vision(prompt, model, FIND_MAX_TOKENS)
+        if not v["ok"]:
+            return v
+        det = parse_detection(v["text"], order=box_order(v["model"]))
+        out = {"ok": True, "model": v["model"], "detection": det, "raw": v["text"][:300],
+               "latency_s": v["latency_s"]}
+        if v.get("fallback"):
+            out["fallback"] = v["fallback"]
+        return out
+
+    # ------------------------------------------------------------- turn + find
+    async def _pose(self):
+        sim = self.sim
+        if not hasattr(sim, "pose"):
+            return None
+        try:
+            return await sim.call(sim.pose)
+        except Exception:
+            return sim.pose()
+
+    async def turn(self, deg):
+        """Turn on the spot by about `deg` degrees (+ = left, counter-clockwise):
+        the turn_in_place gait for a duration fitted to the measured turn rate,
+        through the Playground's blend like any gesture (so its standstill rule
+        and the sim2real locomotion hold apply). Reports the MEASURED turn."""
+        d = _num(deg)
+        if d is None:
+            return {"ok": False, "error": f"turn needs deg as a number, got {deg!r}"}
+        if not TURN_MIN_DEG <= abs(d) <= TURN_MAX_DEG:
+            return {"ok": False, "error": f"turn deg must be {TURN_MIN_DEG:g}..{TURN_MAX_DEG:g} "
+                                          f"in magnitude (+ = left), got {d:g}"}
+        import pebble_gestures2 as pg2
+        total = abs(d) / TURN_RATE_DPS + TURN_EXTRA_S
+        cmd = (0.0, 0.0, math.copysign(pg2.TURN_WZ, d))
+
+        def fn(g, t, total=total, cmd=cmd):
+            return pg2._gaited(g, t, total, cmd)
+        fn.gaited = True                         # it walks: the sim2real locomotion hold applies
+        before = await self._pose()
+        r = await self._run_fn(fn, total, f"turn_{'left' if d > 0 else 'right'}_{abs(d):.0f}")
+        if r.get("ok"):
+            after = r.get("pose") or await self._pose()
+            r.update(asked_deg=round(d, 1), duration_s=round(total, 1))
+            if before and after:
+                r["turned_deg"] = round(_wrap_deg(after["yaw_deg"] - before["yaw_deg"]), 1)
+        return r
+
+    def _cmds_since(self, n0):
+        log = getattr(self.sim, "cmd_log", None)
+        return [] if log is None else [line for _t, line in list(log)[n0:]]
+
+    def _operator_stopped(self, n0):
+        """A stop from anywhere since find_object started: the console `stop`,
+        the STOP key (teleop ' '), or the stop tool (MCP, chat, /api/tool)."""
+        for line in self._cmds_since(n0):
+            s = str(line).strip()
+            if s == "stop" or s == "teleop" or line == "teleop  " or s.startswith("tool stop"):
+                return True
+        return False
+
+    async def _fresh_eye(self, n_prev):
+        """Wait (up to frame_wait_s) until the eye has rendered 2 frames past
+        n_prev, so the next look sees where the robot is NOW."""
+        t_end = time.monotonic() + float(getattr(self, "frame_wait_s", 1.0))
+        while time.monotonic() < t_end:
+            n = (getattr(self.sim, "frames", {}) or {}).get("eye", (0, b""))[0]
+            if n >= n_prev + 2:
+                return
+            await asyncio.sleep(0.05)
+
+    async def find_object(self, name, max_steps=FIND_MAX_STEPS, model=None, method="bbox"):
+        """Look -> (turn | walk toward it) -> look ..., until the vision model
+        puts it within FIND_NEAR_M of the camera ('found'), max_steps looks
+        are used ('not found'), a full scan circle saw nothing, or a goto
+        comes back vetoed (cliff / blocked / stuck / ...: 'stopped', reported,
+        not retried). Walks only on a confident sighting (>= FIND_MIN_CONF);
+        every walk is an ordinary goto (tool_goto: every guard applies).
+        Never raises; every step goes to the console and Events."""
+        name = str(name or "").strip()[:60]
+        if not name:
+            return {"ok": False, "error": "find_object needs the name of what to find"}
+        if method not in FIND_METHODS:
+            return {"ok": False, "error": f"method must be one of {', '.join(FIND_METHODS)}"}
+        n = _num(max_steps)
+        if n is None:
+            return {"ok": False, "error": f"max_steps must be a number, got {max_steps!r}"}
+        max_steps = int(max(1, min(FIND_MAX_STEPS_CAP, n)))
+        n0 = len(getattr(self.sim, "cmd_log", None) or [])
+        steps, turned, used, last_seen = [], 0.0, None, None
+        self._log(f"find {name}: start (up to {max_steps} looks)")
+        self._event("find", f"{name}: start")
+
+        async def end(found, detail, ok=True, **extra):
+            # ok: the behaviour ran to a normal end (found or not found); False for a veto
+            # (stopped=...) or a failure (error=...), like goto's own results
+            pose = await self._pose()
+            out = {"ok": bool(ok), "found": found, "name": name, "detail": detail,
+                   "looks": len(steps), "turned_deg": round(turned, 1), "model": used,
+                   "steps": steps, "pose": pose}
+            if last_seen is not None and not found:
+                out["last_seen"] = last_seen
+            out.update(extra)
+            self._log(f"find {name}: {detail}")
+            self._event("find", f"{name}: {detail}"[:80])
+            return out
+
+        for i in range(1, max_steps + 1):
+            if self._operator_stopped(n0):
+                return await end(False, "stopped by the operator", ok=False, stopped="user")
+            frame_n = (getattr(self.sim, "frames", {}) or {}).get("eye", (0, b""))[0]
+            det = await self.detect(name, model=model, method=method)
+            if not det.get("ok"):
+                err = det.get("error", "no vision model answered")
+                if not steps:
+                    self._log(f"find {name}: {err}")
+                    return {"ok": False, "found": False, "name": name, "error": err,
+                            "tried": det.get("tried", []), "steps": []}
+                return await end(False, f"the eye stopped answering: {err}", ok=False, error=err)
+            used = det["model"]
+            d = det["detection"]
+            act, step_m = find_policy(d)
+            rec = {"step": i, "method": d["method"], "seen": d["seen"], "bearing_deg": d["bearing_deg"],
+                   "distance_m": d["distance_m"], "confidence": d["confidence"], "what": d["what"],
+                   "parsed": d["parsed"], "action": act, "look_s": det["latency_s"]}
+            steps.append(rec)
+            if d["seen"]:
+                last_seen = {k: d[k] for k in ("bearing_deg", "distance_m", "confidence")}
+            dist = "?" if d["distance_m"] is None else f"{d['distance_m']:.2f}"
+            what = d["what"][:40] if d["parsed"] else f"unparsed: {det['raw'][:40]!r}"
+            saw = (f"seen at {d['bearing_deg']:+.0f} deg, {dist} m, conf {d['confidence']:.2f}"
+                   if d["seen"] else f"not seen ({what})")
+            self._log(f"find {name} {i}/{max_steps} ({used}, {det['latency_s']:.1f} s): {saw} -> {act}"
+                      + (f" {step_m:.2f} m" if act == "goto" else ""))
+            if act == "stop":
+                side = "ahead" if abs(d["bearing_deg"]) < 10 else (
+                    "ahead-left" if d["bearing_deg"] < 0 else "ahead-right")
+                src = ("from its box and the camera geometry" if d["method"] == "bbox"
+                       else "the vision model's own estimate")
+                return await end(True, f"found the {name}: ~{d['distance_m']:.2f} m {side} "
+                                       f"(bearing {d['bearing_deg']:+.0f} deg, {src})")
+            if i == max_steps:
+                break                                # no move after the last look: nothing would check it
+            if act == "scan":
+                if turned + FIND_SCAN_DEG >= 360.0 - 1e-6:
+                    return await end(False, f"not found: scanned a full circle ({i} looks)")
+                r = await self.tool("turn", {"deg": FIND_SCAN_DEG})
+                rec["turn"] = {k: r.get(k) for k in ("ok", "turned_deg", "error", "hint") if k in r}
+                if not r.get("ok"):
+                    return await end(False, f"the scan turn was refused: {r.get('error')} "
+                                            f"{r.get('hint') or ''}".strip(), ok=False, stopped="blocked")
+                turned += FIND_SCAN_DEG
+            else:
+                pose = await self._pose()
+                if pose is None:
+                    return await end(False, "no pose: cannot aim a goto", ok=False)
+                tx, ty = bearing_to_map(pose, d["bearing_deg"], step_m)
+                tx, ty = round(tx, 3), round(ty, 3)
+                r = await self.tool("goto", {"x": tx, "y": ty})
+                how = r.get("stopped") or ("refused" if r.get("ok") is False else "?")
+                rec["goto"] = {"x": tx, "y": ty, "step_m": step_m, "stopped": how}
+                if r.get("stopped") != "arrived":
+                    why = r.get("detail") or r.get("error") or how
+                    return await end(False, f"stopped on the way: goto {how} ({why})", ok=False,
+                                     stopped=how)
+            await self._fresh_eye(frame_n)
+        if last_seen is not None:
+            ld = "?" if last_seen["distance_m"] is None else f"{last_seen['distance_m']:.2f}"
+            detail = (f"not reached within {max_steps} looks (last seen at "
+                      f"{last_seen['bearing_deg']:+.0f} deg, ~{ld} m)")
+        else:
+            detail = f"not found in {max_steps} looks (turned {turned:.0f} deg)"
+        return await end(False, detail)
 
     # ------------------------------------------------------------------ voice
     async def transcribe(self, raw, mode=None, trusted=False):
@@ -950,7 +1416,10 @@ class Brains:
         reply = p["reply"]
         if results:
             name, res = results[-1]
-            if name == "look" and isinstance(res, dict):
+            if name == "find_object" and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
+                reply = (res.get("detail") if res.get("detail") else
+                         f"find_object failed: {res.get('error')}")
+            elif name == "look" and isinstance(res, dict):
                 reply = (f"eye ({res.get('model')}): {res['description']}" if res.get("ok")
                          else f"look failed: {res.get('error')}")
             elif name in ("status", "scan_summary"):

@@ -388,6 +388,44 @@ in 12.2 s; a 0.8 m wall at x = 0.6 → blocked at 0.27 m after both detours
 0.2 m in its 8 s: the reactive layer is not a planner); an 8 cm box →
 stuck after 3 s; the cliff world → cliff at x = 0.19.
 
+**Vision.** The eye is a 320×240 camera on the torso (~86° wide, pitched
+15° down, 0.21 m above the floor, 0.10 m ahead of the torso centre).
+`look` sends its JPEG to the vision role (default `lfm2.5-vl`) for a
+two-sentence description. `find_object(name)` (a chat tool, `POST
+/api/tool/find_object {"name": "ball"}`, the MCP tool, and talk mode:
+"find the ball" / "go to the box") runs a loop. The model **draws a box**
+around the named object. Bearing and distance come from projecting the
+box's bottom-centre onto the floor through the camera's measured pose
+(`pixel_to_floor`). The robot then takes a 0.1–0.4 m ordinary `goto`
+toward it (every guard applies). If the object is unseen, or the model's
+confidence is below 0.4, it makes a 30° scan turn instead (at most one
+full circle). It looks again after each move, and ends found (≤ 0.25 m
+from the camera) / not found / stopped (a goto came back cliff, blocked
+or stuck: reported, not retried). Every step goes to the console and
+Events, and the STOP key ends it. Gemma writes boxes y-first (`[ymin,
+xmin, ymax, xmax]`) whatever the prompt asks, so `box_order()` reads them
+that way. `sim/vision_bench.py` measures all of it. It starts its own
+cockpit on :8791, places the ball or a box at known bearings and
+distances, and scores each model. Measured 2026-09-24:
+
+| model | method | detected | false sightings | median bearing error | median distance error | latency |
+|---|---|---|---|---|---|---|
+| lfm2.5-vl | box + geometry | 12/12 | 0/4 | 0.7° (max 10°) | 0.03 m | 0.4 s |
+| lfm2.5-vl | model types the numbers | 12/12 | 0/4 | 15° (max 73°) | 0.30 m | 0.4 s |
+| gemma-4-26b-a4b | box + geometry | 12/12 | 0/4 | 0.75° (max 3°) | 0.03 m | 2.8 s (cold load 26 s) |
+| gemma-4-26b-a4b | model types the numbers | 11/12 | 0/4 | 10° (max 20°) | 0.28 m | 2.8 s |
+
+`find_object` found its target 3/3 with each model (ball ahead-left 0.9 m,
+box ahead-right 0.8 m, and a ball behind-left that needs the scan turns):
+9–16 s per trial with lfm2.5-vl, 18–32 s with gemma. Asking the model to
+type bearing and distance itself does not work: lfm2.5-vl echoes the
+prompt's example numbers (0°/43°, 0.2/0.8 m). **Floor safety is not a
+vision job.** Asked yes/no "does the floor end ahead?" facing the cliff,
+both models said no. Over four questions, lfm2.5-vl got 1–2 right and
+gemma 2–3 across two runs. The void guard stays the cliff sensor. These
+are clean MuJoCo renders (one orange ball, grey boxes, a checker floor),
+so treat the numbers as an upper bound for the real camera.
+
 **Hardening (D052).** The sim thread no longer dies silently: an exception
 out of a physics step limps the real legs, fails every waiting HTTP
 request with 503 (before, one exception froze every request forever) and

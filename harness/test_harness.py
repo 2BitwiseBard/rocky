@@ -129,7 +129,7 @@ async def test_v1_tools_are_absent_not_stubbed(server):
         tools = {t.name for t in (await cs.list_tools()).tools}
         assert tools == {"say", "gesture", "goto", "stop",
                          "scan_summary", "status", "list_gestures"}
-        for absent in ("look", "map_query", "patrol", "dock"):
+        for absent in ("look", "find_object", "map_query", "patrol", "dock"):
             assert absent not in tools
 
 
