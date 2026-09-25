@@ -8,6 +8,13 @@ prints and dumb bugs are the most valuable lines in this file.*
 
 ---
 
+## 2026-09-25 · Session 9h — three brains installed and measured; stop never waits for a model
+
+**Done**       — `rocky.sh brain-install` + `brain-bench` (built by an 11-agent workflow, 26 review findings fixed). The owner's downloads (Qwen3.5-4B Q8_0, Qwen3.5-9B UD-Q6_K_XL, Gemma 4 12B UD-Q6_K_XL) installed with their projectors; five brains measured on the robot's jobs with one harness. Stop gate in every model mode, `move(forward_m, left_m)`, two prompt rules, per-model box order, world change forgets the eye, `event_seq`, scratch gesture library for the bench. Docs: BRAIN_MODELS status table + verdict, COCKPIT_GUIDE (choosing a brain, saying stop, move), SIM_GUIDE.
+**Decisions**  — D055. `qwen3.5-9b` stays the default all-in-one brain, `qwen3.5-4b` is the small one, `gemma-4-12b` the Gemma option, the Q6 9B a delete candidate, the 26B and the 3B eye are not brains.
+**Broke**      — Four `until ! pgrep -f` waiters spun all night (the pattern matches its own `zsh -c`); the auto-mode classifier refused the real install (it deletes downloads and edits the shared llama-swap config), so the owner ran `! ./rocky.sh brain-install --no-restart`; CI failed twice on the `--help` smoke test until the child ran with `MUJOCO_GL=disable` (cockpit.py's egl default leaks into subprocesses, the runner has no libEGL); a bench 'happy dance' saved a gesture into the repo; Gemma 12B's boxes are x-first, not y-first like the 26B (21.9° → 0.7°); both Gemma models answer a bare "stop" with a chord when unguarded.
+**Next**       — D056 one capability registry (cockpit `/api/capabilities`, MCP list rebuilt live + list-changed); place recognition with the three-verdict bench (B38); speaker id + people memory (B39); sensors as params (B40); Gemma with thinking on (B41). Restart the owner's cockpit onto this code.
+
 ## 2026-09-24 · Session 9g (laptop, evening) — talk to it: fast speech, an eye that measures, memory, an all-in-one brain, the phone front end (D053, D054)
 
 **Ask:** the phone's mic said "nothing heard" and the whole loop was slow; "smaller

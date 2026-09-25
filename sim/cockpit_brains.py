@@ -77,6 +77,47 @@ VOICE: whisper verbose_json, per-segment no_speech_prob / avg_logprob
 filter + a hallucination list (harness.intent.clean_transcript); a spoken
 line may not MOVE the robot without the wake word ("pebble, ...") unless
 the operator confirms it (trusted=true, i.e. pressed Enter on it).
+
+MOVE (2026-09-25): a relative move is its own tool, move(forward_m, left_m) in
+the robot's frame (harness.local_brain: MOVE_DOC, validate_move, move_target).
+Brains.move reads the pose when the call starts and runs an ordinary goto to
+the map target — every guard, goto's results, the goto is what a recording
+replays; |move| <= 1.5 m (the goto envelope). The prompt no longer asks the
+model for x += d*cos(yaw): the bench saw qwen3.5-9b / lfm2.5-vl get it wrong
+(a 3B 'forward 30 cm' went 96 deg off). move is GATED like goto.
+
+STOP FIRST (2026-09-25): in local / multimodal / claude a line that is a stop
+(stop_line: harness.intent's stop words, minus 'don't stop' / 'non-stop' /
+'stop sign' / 'bus stop') runs the stop tool BEFORE any model is asked and
+without waiting for the per-mode lock a running turn holds (a model takes
+0.2-1.5 s per command warm, 6.5 s cold, minutes on a failing chain). It stops
+by voice without the wake word too (stop is never gated), and voice_result
+never holds a stop line for confirmation. A line with more in it than the stop
+is not dropped silently: a question or a note to remember ('why did you
+stop?', 'remember that the stop button is red') goes to the model AFTER the
+stop, with its motion refused (stop_follow_up); anything else ('walk forward
+30 cm and then stop') gets only the stop and the reply says the rest did not
+run.
+An operator stop (any stop in sim.cmd_log that no model turn made: a stop
+line, the STOP button or key, the console, /api/tool/stop and the MCP stop)
+refuses motion to every line sent BEFORE it (operator_stopped): the turn
+that is running, and a line still waiting for the per-mode lock or for its
+status read (talk too: its surface is guarded). The mark is taken when the
+line arrives, not when it gets the lock (review 2026-09-25: a queued 'wave'
+waved after the stop). A chain that then fails does not hand the line to the
+regex brain. The tools that read the pose before they walk (move, turn,
+find_object, go_back_to) check for a stop after the read, with no await
+between that check and the start of the motion. The history slot of a model
+turn is taken when it starts, so a stop that overtakes it is remembered
+after it. Talk mode keeps its own stop path (intent's plan, every stop word)
+and only skips the lock. ROCKY_STOP_FIRST=0 (or Brains(stop_first=False))
+sends stop lines to the model: brain_bench only, to measure a model's own
+stop handling.
+
+SCENE (2026-09-25): a world load, edit or reset forgets the eye's context
+(the cockpit's _forget_scene). A look or find_object still running then
+comes back flagged stale_scene: it is returned, but it is not remembered and
+does not become last_look / last_find (the scene it describes is gone).
 """
 from __future__ import annotations
 
@@ -101,7 +142,7 @@ for _p in (ROOT, os.path.join(ROOT, "gait"), HERE):
 from harness.intent import (plan as intent_plan, execute as intent_execute,        # noqa: E402
                             has_wake_word, moves, clean_transcript, MOTION_TOOLS)
 from harness.local_brain import (build_tools, build_system, parse_args_json,          # noqa: E402
-                                 MAX_HOPS, MAX_TURNS, CALL_TIMEOUT_S)
+                                 MAX_HOPS, MAX_TURNS, CALL_TIMEOUT_S, validate_move, move_target)
 from harness.backend import SIGNED                                                    # noqa: E402
 from scene_memory import (objects_from_description, parse_note, fmt_age,               # noqa: E402
                           direction_words, forget_scope, GO_MIN_CONF, WORLD_MAX_M, SPAWN_NAME)
@@ -142,8 +183,8 @@ VISION_PROMPT = ("You are the eye of a small five-legged robot walking on a floo
                  "how far (near = within a few body lengths), and where the open floor is. "
                  "If the view is mostly floor, say so.")
 LOOK_NOTE = ("You also have `look`: the robot's eye camera described by a vision model. Use it "
-             "when asked what you see, before walking toward something, or after a goto came "
-             "back stuck or blocked. To go to something the operator names ('find the ball'), "
+             "when asked what you see, before walking toward something, or after a move or goto "
+             "came back stuck or blocked. To go to something the operator names ('find the ball'), "
              "call find_object once: it looks, turns and walks by itself.")
 MULTIMODAL_NOTE = ("The operator's message may carry the robot's CURRENT eye-camera image: answer "
                    "'what do you see' from it directly; call look only for a fresh view after "
@@ -339,18 +380,57 @@ MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the ro
                "find_object and look are remembered automatically.")
 MEMORY_TOOLS = ("remember", "where_is", "recall", "go_back_to", "forget")
 
-TOOL_NAMES = ("say", "gesture", "goto", "stop", "scan_summary", "status", "look",
+TOOL_NAMES = ("say", "gesture", "move", "goto", "stop", "scan_summary", "status", "look",
               "list_gestures", "compose_gesture", "check_gesture", "save_gesture",
               "find_object", "turn") + MEMORY_TOOLS   # turn: internal (find_object's scan; replays), not offered to models
 NOTED = ("goto", "gesture", "say", "stop", "compose_gesture", "turn")     # recordings replay these
-# find_object / go_back_to are not NOTED: the gotos and turns they make are, so a replay
-# repeats the motion without asking a vision model (or the memory) again
-GATED = tuple(MOTION_TOOLS) + ("find_object", "turn", "go_back_to")   # a spoken line needs the wake word
+# find_object / go_back_to / move are not NOTED: the gotos and turns they make are, so a
+# replay repeats the motion without asking a vision model (or the memory, or the pose) again
+GATED = tuple(MOTION_TOOLS) + ("find_object", "turn", "go_back_to", "move")   # a spoken line needs the wake word
+
+# STOP FIRST (see the module doc). harness.intent decides what a stop is: plan() checks
+# its stop words before anything else in a line. These uses of a stop word are not an
+# order and are masked out before asking it. Masking only deletes words, so it cannot
+# invent a stop, and a line with a real stop left in it ("don't go, stop!") still stops.
+_NOT_A_STOP_RE = re.compile(
+    r"\b(?:don'?t|do\s+not)\s+(?:ever\s+)?\w+"    # "don't stop": keep going ("it won't stop!" IS a stop)
+    r"|\bnon[\s-]*\w+"                             # "non-stop" (whisper also writes "non stop")
+    r"|\b\w+\s+signs?\b"                           # "a stop sign ahead?"
+    r"|\b(?:bus|pit|truck|rest)\s+\w+")            # "the bus stop": a place, not an order
+STOP_FIRST_REPLY = "stopped (safe-stop)."
+STOP_FIRST_ENV = "ROCKY_STOP_FIRST"      # "0": stop lines go to the model (brain_bench only)
+MID_TURN_STOP = {"ok": False, "error": "operator_stopped",
+                 "hint": "the operator stopped the robot after sending this message: no new motion "
+                         "until their next message. Say so; do not retry."}
+# a stop line with more in it (stop_follow_up): what the reply adds when the rest is not run,
+# and what the model is told when it answers the rest (a question, a note) after the stop
+STOP_REST_NOTE = (" Only the stop ran: the rest of the line did not (send it again without the "
+                  "stop word to run it).")
+STOP_NO_CLAUDE_NOTE = " The rest of the line needs a model: Claude here needs ANTHROPIC_API_KEY."
+STOP_ASK_NOTE = ("\n\n[The cockpit already stopped the robot: this line says stop. Motion is refused "
+                 "for the rest of this turn; answer or do the rest of the line.]")
+TALK_STOPPED_NOTE = " — not run: the robot was stopped after you sent this (send it again to run it)"
+# a stop word and the -ing word it ends ("stop turning" is a whole stop order)
+_STOP_WORD_RE = re.compile(r"\b(?:stop|halt|freeze|whoa|abort)\b(?:\s+[a-z]+ing\b)?")
+# words that add nothing to a stop order ('stop right now', 'come to a full stop', 'it won't stop!',
+# 'I said stop'): what is left of a line after them and the stop words is 'the rest'
+_STOP_FILLER = frozenset({
+    "a", "an", "the", "it", "its", "it's", "that", "this", "all", "everything", "and", "so", "then",
+    "now", "right", "away", "immediately", "at", "once", "please", "just", "ok", "okay", "hey", "hi",
+    "yo", "oh", "um", "uh", "no", "wait", "hold", "on", "there", "here", "you", "i", "we", "me", "can",
+    "could", "would", "will", "should", "to", "be", "do", "moving", "walking", "going", "come", "full",
+    "dead", "robot", "pebble", "rocky", "again", "already", "said", "told", "quick", "quickly", "fast",
+    "won't", "wont", "doesn't", "doesnt", "isn't", "aren't", "can't", "cant", "don't", "dont",
+    "there's", "theres", "emergency"})
+_QUESTION_START = frozenset({"why", "what", "what's", "whats", "how", "who", "whose", "whom", "when", "where",
+                             "which", "did", "does", "do", "is", "are", "was", "were", "has", "have", "had"})
+_REMEMBER_WORDS = frozenset(("remember", "recall", "note"))
 
 # the static defaults (the cockpit builds both per request with the live lists)
 TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
-UNITS_NOTE = ("\nUnits: goto and every distance argument are METRES. 'thirty centimeters' = 0.3, "
-              "'half a meter' = 0.5, '2 meters' = 2.0 — never pass 30 for 30 cm (a 9B model did).")
+UNITS_NOTE = ("\nUnits: move, goto and every distance argument are METRES. 'thirty centimeters' = 0.3 "
+              "(move(forward_m=0.3)), 'half a meter' = 0.5, '2 meters' = 2.0 — never pass 30 for 30 cm "
+              "(a 9B model did).")
 SYSTEM = build_system(extra=LOOK_NOTE + UNITS_NOTE)
 
 
@@ -359,6 +439,51 @@ class ModelFailure(Exception):
 
 
 # ------------------------------------------------------------------ pure helpers
+def intent_stop(text):
+    """harness.intent's own verdict: does plan() read this line as a stop? (Its stop
+    words win over everything else in a line; talk mode runs exactly this.)"""
+    return intent_plan(str(text or ""))["calls"][:1] == [("stop", {})]
+
+
+def stop_line(text):
+    """Is this operator line an order to stop? intent's stop words (stop / halt /
+    freeze / whoa / abort), minus the uses that are not an order ('don't stop',
+    'non-stop', 'a stop sign ahead?', 'the bus stop'). Pure."""
+    low = str(text or "").lower().replace("\u2019", "'")     # whisper and phones write don’t
+    return intent_stop(_NOT_A_STOP_RE.sub(" , ", low))
+
+
+def stop_follow_up(text, names=()):
+    """What a stop line carries besides the stop. Pure. None: nothing ('stop',
+    'stop right now', 'Pebble, stop.', 'come to a full stop', 'can you stop?');
+    'ask': a question or a note to remember ('why did you stop?', 'what does the
+    stop button do?', 'remember that the stop button is red') — the model answers
+    it after the stop, its motion refused; 'note': anything else ('walk forward
+    30 cm and then stop', 'stop at the door') — only the stop runs and the reply
+    says so. names: extra wake names (the operator-set robot name)."""
+    low = str(text or "").lower().replace("\N{RIGHT SINGLE QUOTATION MARK}", "'")
+    skip = _STOP_FILLER | {str(n).lower() for n in names or () if n}
+    rest = [w for w in (t.strip("'") for t in re.findall(r"[a-z0-9']+", _STOP_WORD_RE.sub(" ", low)))
+            if w and w not in skip]
+    if not rest:
+        return None
+    # the first word that is not an opener or a name: 'hey pebble, why did you stop'
+    lead = [w for w in (t.strip("'") for t in re.findall(r"[a-z0-9']+", low))
+            if w and (w in _QUESTION_START or w not in skip)]
+    question = low.rstrip().endswith("?") or (bool(lead) and lead[0] in _QUESTION_START)
+    return "ask" if question or _REMEMBER_WORDS & set(rest) else "note"
+
+
+def _is_stop_cmd(line):
+    """A cmd_log line that stopped the robot: the console `stop` (any case, any
+    arguments: playground.do() lowercases the first word and reads nothing else,
+    so 'Stop' from a phone keyboard and 'stop now' stop too), the STOP key
+    (teleop ' '), or the stop tool (MCP, chat, /api/tool)."""
+    s = str(line).strip()
+    return (s.lower().split()[:1] == ["stop"] or s == "teleop" or line == "teleop  "
+            or s.startswith("tool stop"))
+
+
 def local_ai_key():
     for k in ("ROCKY_LLM_API_KEY", "LOCAL_AI_KEY"):
         if os.environ.get(k):
@@ -493,12 +618,21 @@ def pixel_to_floor(u, v, height_m=EYE_HEIGHT_M, pitch_deg=EYE_PITCH_DEG):
     return math.hypot(gx, gy), -math.degrees(math.atan2(gy, gx))
 
 
+# Models that write a box y-first ([ymin, xmin, ymax, xmax]) whatever the prompt asks.
+# MEASURED, not assumed — the two Gemma 4 models differ:
+#   gemma-4-26b-a4b (separate vision encoder, projector gemma4v): y-first. Vision bench
+#     2026-09-24: read x-first its bearings were off by a median 21 deg, read y-first ~2 deg.
+#   gemma-4-12b (unified encoder-free vision, projector gemma4uv): x-first. Brain bench
+#     2026-09-25 read it y-first and got 21.9 deg; asked directly, a ball at +25 deg came back
+#     as [676, 488, 799, 595] and at -25 deg as [198, 487, 323, 591] — x moves, y stays.
+# LFM2.5-VL and Qwen-VL write [x1, y1, x2, y2]. Add an id prefix here only with a measurement.
+BOX_Y_FIRST = ("gemma-4-26b", "gemma-4-31b")
+
+
 def box_order(model):
-    """How a model family writes a box. Gemma (like Gemini / PaliGemma) answers
-    [ymin, xmin, ymax, xmax] whatever the prompt asks — MEASURED in the vision
-    bench 2026-09-24: read as x-first, its bearings were off by a median 21 deg;
-    read y-first, within ~2 deg. LFM2.5-VL (and Qwen-VL) write [x1, y1, x2, y2]."""
-    return "yx" if "gemma" in str(model or "").lower() else "xy"
+    """"yx" for the model ids in BOX_Y_FIRST (prefix match), else "xy"."""
+    m = str(model or "").lower()
+    return "yx" if any(m.startswith(p) for p in BOX_Y_FIRST) else "xy"
 
 
 def _bbox(v, order="xy"):
@@ -664,12 +798,17 @@ def sighting_to_map(pose, det):
 class _Surface:
     """The harness backend contract (say/gesture/goto/...) routed through
     Brains.tool, so harness.intent.execute gets the same guards, argument
-    checks and voice gate as the LLM brains."""
+    checks and voice gate as the LLM brains. stops (_TurnStops, talk mode):
+    once the operator has stopped the robot since the line arrived, its motion
+    calls are refused (MID_TURN_STOP) — checked right before each call, after
+    any status read the plan made."""
 
-    def __init__(self, brains, voice=False):
-        self._b, self._voice = brains, voice
+    def __init__(self, brains, voice=False, stops=None):
+        self._b, self._voice, self._stops = brains, voice, stops
 
     async def _t(self, tool, /, **args):          # positional-only: gesture's arg is `name`
+        if self._stops is not None and tool in GATED and self._stops.stopped():
+            return dict(MID_TURN_STOP)
         return await self._b.tool(tool, args, voice=self._voice)
 
     async def say(self, word):
@@ -680,6 +819,9 @@ class _Surface:
 
     async def goto(self, x, y):
         return await self._t("goto", x=x, y=y)
+
+    async def move(self, forward_m, left_m=0.0):
+        return await self._t("move", forward_m=forward_m, left_m=left_m)
 
     async def stop(self):
         return await self._t("stop")
@@ -716,6 +858,27 @@ class _Surface:
         return await self._t("forget", name=name)
 
 
+class _TurnStops:
+    """Has the operator stopped the robot since this line ARRIVED (mark: taken
+    in Brains.chat before the per-mode lock, so a line queued behind a running
+    turn counts the stops sent while it waited)? Reads the sim's cmd_log, so
+    every stop counts (a stop-first chat line, the STOP button or key, the
+    console, /api/tool/stop and the MCP stop) except the stops model turns
+    made themselves (Brains._model_stops). Once it has seen one it stays
+    stopped: the line's motion calls are refused (MID_TURN_STOP), and a failed
+    chain does not hand it to the regex brain. A sim without a cmd_log (test
+    fakes) never reads as stopped."""
+
+    def __init__(self, brains, mark=None):
+        self._b, self.hit = brains, False
+        self._mark = brains._stop_mark() if mark is None else mark
+
+    def stopped(self):
+        if not self.hit:
+            self.hit = self._b._operator_stops_since(self._mark) > 0
+        return self.hit
+
+
 # ------------------------------------------------------------------ the brains
 class Brains:
     """Roles, histories, locks and fallbacks for one cockpit sim.
@@ -728,8 +891,11 @@ class Brains:
     max_tokens) -> {"content": str, "tool_calls": [{"id", "name", "arguments"}]}."""
 
     def __init__(self, sim, base_url=None, api_key=None, conf_path=CONF_PATH, complete=None,
-                 timeout_s=CALL_TIMEOUT_S, catalog=None):
+                 timeout_s=CALL_TIMEOUT_S, catalog=None, stop_first=None):
         self.sim = sim
+        # stop lines skip the model (STOP FIRST); off only for brain_bench, which measures the model's own stop
+        self.stop_first = (os.environ.get(STOP_FIRST_ENV, "1").strip() != "0" if stop_first is None
+                           else bool(stop_first))
         self.base = (base_url or os.environ.get("ROCKY_LLM_BASE_URL") or DEFAULT_BASE).rstrip("/")
         self.key = api_key or local_ai_key()
         self.timeout_s = float(timeout_s)
@@ -737,6 +903,7 @@ class Brains:
         self.state = dict(mode="talk", **ROLE_DEFAULTS)       # sim.brain IS this dict
         self.hist = {}                                         # mode -> [{user, reply, tools, t}]
         self._locks = {}
+        self._model_stops = 0                                  # stops model turns noted in cmd_log (not the operator's)
         self._complete_fn = complete
         self._client = None
         self._cat = (time.monotonic(), catalog, True) if catalog is not None else (0.0, None, False)
@@ -746,11 +913,24 @@ class Brains:
         self.last_look = None                                  # {text, model, t, pose}: the awareness loop reads it
         self.last_find = None                                  # {name, found, detail, t, model}: ditto (find's looks)
         self._load_conf()
+        if not self.stop_first:
+            self._log(f"brains: stop-first is OFF ({STOP_FIRST_ENV}=0): stop lines go to the model "
+                      "(for brain_bench; the STOP button still stops)")
 
     @property
     def memory(self):
         """The cockpit's SceneMemory (sim.memory), or None (fake sims, tests)."""
         return getattr(self.sim, "memory", None)
+
+    def _scene_mark(self):
+        """What changes when the scene does (a world load, an edit, a reset): the
+        cockpit's scene_epoch where it keeps one, and its scene memory's world and
+        epoch (set_world / new_epoch run on every one of them). A look or find that
+        started under another mark describes a scene that is gone. Constant for
+        fakes without either (never stale)."""
+        mem = self.memory
+        return (getattr(self.sim, "scene_epoch", None), getattr(mem, "world", None),
+                getattr(mem, "_epoch", None), getattr(mem, "session_t0", None))
 
     def _remember_obs(self, **obs):
         """Record one observation; never raises (memory is a convenience, not a guard)."""
@@ -1001,12 +1181,14 @@ class Brains:
                  + (" " + MEMORY_NOTE if self.memory is not None else ""))
         return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
 
-    def surface(self, voice=False):
-        return _Surface(self, voice)
+    def surface(self, voice=False, stops=None):
+        return _Surface(self, voice, stops)
 
-    async def tool(self, name, args=None, voice=False, look_model=None):
+    async def tool(self, name, args=None, voice=False, look_model=None, by_model=False):
         """Run one tool for any brain or the MCP proxy. Never raises: a bad
-        argument or a failing tool comes back as {"ok": False, "error": ...}."""
+        argument or a failing tool comes back as {"ok": False, "error": ...}.
+        by_model: a model turn's own call (_tool_loop, _claude) — its stop is
+        counted in _model_stops, so it is not taken for an operator stop."""
         if name not in TOOL_NAMES:
             return {"ok": False, "error": f"no such tool {name!r}", "hint": ", ".join(TOOL_NAMES)}
         if args is None:
@@ -1023,7 +1205,10 @@ class Brains:
                             "everything') or the typed chat"}
         if name in NOTED:
             try:
+                n0 = self._cmd_mark()
                 self.sim.note_cmd(f"tool {name} {json.dumps(args)}")
+                if name == "stop" and by_model and self._cmd_mark() > n0:
+                    self._model_stops += 1             # with its cmd_log line: no await between them
             except Exception:
                 pass
         try:
@@ -1043,6 +1228,8 @@ class Brains:
                 return await self.find_object(**args)
             if name == "turn":
                 return await self.turn(**args)
+            if name == "move":
+                return await self.move(**args)
             if name in MEMORY_TOOLS:
                 return await getattr(self, "mem_" + name)(**args)
             return await getattr(self.sim, "tool_" + name)(**args)
@@ -1254,7 +1441,12 @@ class Brains:
         e.g. the vision bench's floor-safety checks). A standard description
         is remembered (scene memory: kind 'look'; objects it names with a
         direction AND a distance go on the map at confidence 0.2) and kept as
-        last_look for the awareness loop; a custom question's answer is not."""
+        last_look for the awareness loop; a custom question's answer is not.
+        A world load, edit or reset while the model looked (_scene_mark moved):
+        the description is returned flagged stale_scene, but neither remembered
+        nor kept — it describes a scene that is gone (review 2026-09-25: the old
+        world's ball landed in the new world's memory)."""
+        scene0 = self._scene_mark()
         pose = await self._pose() if prompt is None else None
         v = await self._vision(prompt or VISION_PROMPT, model)
         if not v["ok"]:
@@ -1267,6 +1459,12 @@ class Brains:
         out = {"ok": True, "model": v["model"], "description": text, "latency_s": v["latency_s"]}
         if v.get("fallback"):
             out["fallback"] = v["fallback"]
+        if self._scene_mark() != scene0:
+            out["stale_scene"] = True
+            out["note"] = ("the world was reset, loaded or edited while the eye looked: this describes "
+                           "the scene before that (not remembered)")
+            self._log("look: the scene changed while it looked — the description is not remembered")
+            return out
         if prompt is None:
             self.last_look = {"text": text, "model": v["model"], "t": time.time(), "pose": pose}
             if pose is not None:
@@ -1298,6 +1496,37 @@ class Brains:
             out["fallback"] = v["fallback"]
         return out
 
+    # ------------------------------------------------------------- move (relative)
+    async def move(self, forward_m, left_m=0.0):
+        """A move in the robot's own frame (forward_m + ahead / - back, left_m + left /
+        - right, meters): the pose is read NOW (x, y, yaw), the map target is
+        move_target(pose, forward_m, left_m), and it runs as an ordinary goto through
+        self.tool (noted for replays, every guard: void, lead limits, thermal,
+        feasibility; goto's results unchanged: arrived | cliff | stuck | blocked |
+        timeout | user | preempted | FELL). Refused beyond the goto envelope
+        (validate_move: 1.5 m). The result is goto's plus `move` {forward_m,
+        left_m, from, target}. Small models got the yaw trigonometry wrong (a
+        'forward 30 cm' from the 3B went 96 deg off): this does it for them."""
+        f, l, err = validate_move(forward_m, left_m)
+        if err:
+            return {"ok": False, "error": err}
+        n0 = self._cmd_mark()
+        pose = await self._pose()
+        if not pose:
+            return {"ok": False, "error": "no pose: cannot aim a move"}
+        if self._operator_stopped(n0):
+            # a stop landed while the pose was read (one sim tick): with no goto running it
+            # only set safe_stop, and the goto below would walk anyway. No await from this
+            # check to the goto's start job, so a later stop is queued behind it and ends it.
+            return dict(MID_TURN_STOP)
+        tx, ty = move_target(pose, f, l)
+        r = await self.tool("goto", {"x": tx, "y": ty})
+        out = dict(r) if isinstance(r, dict) else {"ok": False, "error": str(r)}
+        out["move"] = {"forward_m": f, "left_m": l,
+                       "from": {k: pose.get(k) for k in ("x", "y", "yaw_deg")},
+                       "target": {"x": tx, "y": ty}}
+        return out
+
     # ------------------------------------------------------------- turn + find
     async def _pose(self):
         sim = self.sim
@@ -1326,7 +1555,10 @@ class Brains:
         def fn(g, t, total=total, cmd=cmd):
             return pg2._gaited(g, t, total, cmd)
         fn.gaited = True                         # it walks: the sim2real locomotion hold applies
+        n0 = self._cmd_mark()
         before = await self._pose()
+        if self._operator_stopped(n0):           # a stop during the pose read: as in move()
+            return dict(MID_TURN_STOP)
         r = await self._run_fn(fn, total, f"turn_{'left' if d > 0 else 'right'}_{abs(d):.0f}")
         if r.get("ok"):
             after = r.get("pose") or await self._pose()
@@ -1339,14 +1571,30 @@ class Brains:
         log = getattr(self.sim, "cmd_log", None)
         return [] if log is None else [line for _t, line in list(log)[n0:]]
 
+    def _cmd_mark(self):
+        log = getattr(self.sim, "cmd_log", None)
+        return 0 if log is None else len(log)
+
+    def _stops_since(self, n0):
+        return sum(1 for line in self._cmds_since(n0) if _is_stop_cmd(line))
+
     def _operator_stopped(self, n0):
-        """A stop from anywhere since find_object started: the console `stop`,
-        the STOP key (teleop ' '), or the stop tool (MCP, chat, /api/tool)."""
-        for line in self._cmds_since(n0):
-            s = str(line).strip()
-            if s == "stop" or s == "teleop" or line == "teleop  " or s.startswith("tool stop"):
-                return True
-        return False
+        """A stop from anywhere since cmd_log mark n0 (find_object, go_back_to, and
+        move / turn across their pose read): the console `stop`, the STOP key
+        (teleop ' '), or the stop tool (MCP, chat, /api/tool)."""
+        return self._stops_since(n0) > 0
+
+    def _stop_mark(self):
+        """(cmd_log length, model stops so far): _TurnStops counts the operator's
+        stops after this point."""
+        return (self._cmd_mark(), self._model_stops)
+
+    def _operator_stops_since(self, mark):
+        """Stops in cmd_log since `mark` that no model turn made (a model's own
+        stop is counted in _model_stops as it is noted, so the difference is the
+        operator's: a stop line, the STOP button or key, the console, the MCP)."""
+        n0, m0 = mark
+        return self._stops_since(n0) - (self._model_stops - m0)
 
     async def _fresh_eye(self, n_prev):
         """Wait (up to frame_wait_s) until the eye has rendered 2 frames past
@@ -1365,7 +1613,11 @@ class Brains:
         comes back vetoed (cliff / blocked / stuck / ...: 'stopped', reported,
         not retried). Walks only on a confident sighting (>= FIND_MIN_CONF);
         every walk is an ordinary goto (tool_goto: every guard applies).
+        A stop (any source) ends it before its next turn or goto, also one that
+        lands while the eye looks; a world load, edit or reset ends it too
+        (stopped='preempted', stale_scene: nothing it saw is remembered).
         Never raises; every step goes to the console and Events."""
+        scene0 = self._scene_mark()
         name = str(name or "").strip()[:60]
         if not name:
             return {"ok": False, "error": "find_object needs the name of what to find"}
@@ -1392,6 +1644,9 @@ class Brains:
             out.update(extra)
             self._log(f"find {name}: {detail}")
             self._event("find", f"{name}: {detail}"[:80])
+            if self._scene_mark() != scene0:         # another scene now: not its memory, not its last find
+                out["stale_scene"] = True
+                return out
             self._remember_obs(kind="find", text=f"find {name}: {detail}", pose=pose)
             self.last_find = {"name": name, "found": bool(found), "detail": detail, "t": time.time(),
                               "model": used, "looks": len(steps)}
@@ -1416,6 +1671,9 @@ class Brains:
                             "tried": det.get("tried", []), "steps": []}
                 return await end(False, f"the eye stopped answering: {err}", ok=False, error=err)
             used = det["model"]
+            if self._scene_mark() != scene0:         # the world changed under the look: it saw a scene that is gone
+                return await end(False, "the world was reset, loaded or edited while it looked", ok=False,
+                                 stopped="preempted")
             d = det["detection"]
             act, step_m = find_policy(d)
             rec = {"step": i, "method": d["method"], "seen": d["seen"], "bearing_deg": d["bearing_deg"],
@@ -1454,6 +1712,8 @@ class Brains:
                                        f"(bearing {d['bearing_deg']:+.0f} deg, {src})")
             if i == max_steps:
                 break                                # no move after the last look: nothing would check it
+            if self._operator_stopped(n0):           # a stop while the eye looked: no turn, no goto after it
+                return await end(False, "stopped by the operator", ok=False, stopped="user")
             if act == "scan":
                 if turned + FIND_SCAN_DEG >= 360.0 - 1e-6:
                     return await end(False, f"not found: scanned a full circle ({i} looks)")
@@ -1467,6 +1727,8 @@ class Brains:
                 pose = await self._pose()
                 if pose is None:
                     return await end(False, "no pose: cannot aim a goto", ok=False)
+                if self._operator_stopped(n0):       # ... or during that pose read (no await from here to the goto)
+                    return await end(False, "stopped by the operator", ok=False, stopped="user")
                 tx, ty = bearing_to_map(pose, d["bearing_deg"], step_m)
                 tx, ty = round(tx, 3), round(ty, 3)
                 r = await self.tool("goto", {"x": tx, "y": ty})
@@ -1724,8 +1986,10 @@ class Brains:
         text = c["text"]
         mode = mode or self.state["mode"]
         wake = has_wake_word(text, extra=self._wake_names())
-        # talk mode knows exactly what moves; an LLM brain may turn any sentence into a goto
-        motion = bool(text) and (mode != "talk" or moves(intent_plan(text)))
+        # talk mode knows exactly what moves; an LLM brain may turn any sentence into a goto.
+        # A stop line moves nothing and is sent at once: the page must not hold it for an Enter
+        motion = bool(text) and (mode != "talk" or moves(intent_plan(text))) and not (
+            mode != "talk" and self.stop_first and stop_line(text))
         self._voice_last = (time.monotonic(), text)
         if text:
             self._log(f"voice: {text}")
@@ -1767,7 +2031,11 @@ class Brains:
     async def chat(self, text, mode=None, model=None, source=None, trusted=False):
         """One operator message -> {reply, trace, mode, model?, fallback?, voice,
         motion_allowed, motion_blocked}. source 'voice' | 'typed' | None (None:
-        voice iff the text equals the last transcript — the legacy UI auto-sent it)."""
+        voice iff the text equals the last transcript — the legacy UI auto-sent it).
+        The line's stop mark is taken HERE, when it arrives: an operator stop sent
+        after it refuses its motion (operator_stopped), also while it still waits
+        for the per-mode lock behind a running turn."""
+        mark = self._stop_mark()
         text = str(text or "").strip()[:MAX_TEXT]
         mode = mode or self.state["mode"]
         if mode not in MODES:
@@ -1778,13 +2046,17 @@ class Brains:
         if not text:
             return {"reply": "", "trace": [], "mode": mode}
         note = self._accept_model(mode, model)
-        async with self._lock(mode):
-            if mode == "talk":
-                r = await self._talk(text, allow)
-            elif mode == "claude":
-                r = await self._claude(text, allow)
-            else:
-                r = await self._llm(text, mode, allow)
+        if mode != "talk" and self.stop_first and stop_line(text):
+            r = await self._stop_line(text, mode, allow, mark)   # the stop: no model, no lock, never waits
+        elif mode == "talk" and intent_stop(text):
+            r = await self._talk(text, allow)                 # intent's plan as ever, not behind a running turn
+        else:
+            stops = _TurnStops(self, mark)
+            async with self._lock(mode):
+                if mode == "talk":
+                    r = await self._talk(text, allow, stops)
+                else:
+                    r = await self._model_turn(mode, text, allow, stops)
         if note:
             r["reply"] = f"{note} {r['reply']}"
         blocked = any(isinstance(t.get("result"), dict) and t["result"].get("error") == "voice_unconfirmed"
@@ -1795,9 +2067,68 @@ class Brains:
                            "'pebble, …' or press Enter to confirm)")
         return r
 
-    async def _talk(self, text, allow):
+    async def _stop_first(self, text, mode, allow):
+        """A stop line in a model mode (STOP FIRST): the stop tool runs now, exactly
+        the call a model would make (sim.tool_stop: velocity zeroed, gesture blended
+        out, goto cancelled, safe-stop), and no model is asked. By voice without the
+        wake word it stops too: stop is never gated."""
+        res = await self.tool("stop", {}, voice=not allow)
+        trace = [{"tool": "stop", "args": {}, "result": res}]
+        reply = (STOP_FIRST_REPLY if res.get("ok") else
+                 f"stop FAILED: {res.get('error')} — press the red STOP button.")
+        return {"reply": reply, "trace": trace, "mode": mode, "model": None, "stop_first": True}
+
+    async def _stop_line(self, text, mode, allow, mark):
+        """A stop line in a model mode: the stop now (_stop_first: no lock, no model),
+        then what else the line carries (stop_follow_up). A question or a note to
+        remember goes to the model under the mode's lock, with its motion refused
+        (mark is from before the stop), and its answer follows the stop's reply;
+        anything else is named as not run (STOP_REST_NOTE). A failed stop asks no
+        model: its reply says to press STOP. The turn goes into the mode's history,
+        so the model's next turn knows the operator stopped it."""
+        follow = stop_follow_up(text, self._wake_names())
+        r = await self._stop_first(text, mode, allow)
+        stopped = bool(r["trace"][0]["result"].get("ok"))
+        if stopped and follow == "ask":
+            if mode != "claude" or self.claude_available():
+                async with self._lock(mode):
+                    return await self._model_turn(mode, text, allow, _TurnStops(self, mark),
+                                                  ask=text + STOP_ASK_NOTE, before=r)
+            r["reply"] += STOP_NO_CLAUDE_NOTE
+        elif stopped and follow:
+            r["reply"] += STOP_REST_NOTE
+        self._remember(mode, text, r["reply"], r["trace"])
+        return r
+
+    async def _model_turn(self, mode, text, allow, stops, ask=None, before=None):
+        """One model turn (local / multimodal / claude), under the caller's lock. Its
+        history slot is taken when it starts and filled when it ends, so a stop line
+        that overtakes it is remembered AFTER it, as it happened (review 2026-09-25:
+        the stop came out older than the walk it interrupted). ask: what the model
+        is sent instead of text (the history keeps the operator's text). before: the
+        stop-first result this turn answers the rest of — its reply and trace go first."""
+        if mode == "claude" and not self.claude_available():
+            return self._claude_missing()
+        slot = self._reserve(mode, text)
+        r = None
+        try:
+            if mode == "claude":
+                r = await self._claude(text, allow, stops, ask=ask)
+            else:
+                r = await self._llm(text, mode, allow, stops, ask=ask)
+            if before is not None:
+                r = dict(r, reply=f"{before['reply']} {r['reply']}", trace=before["trace"] + r["trace"],
+                         stop_first=True)
+        finally:
+            self._fill(mode, slot, r)
+        return r
+
+    async def _talk(self, text, allow, stops=None):
+        """Talk mode (and a failed chain's fallback): intent's plan through the
+        guarded surface. stops: the line's _TurnStops — its motion is refused once
+        the operator stopped the robot after sending it."""
         p = intent_plan(text)
-        results = await intent_execute(self.surface(voice=not allow), p, allow_motion=allow)
+        results = await intent_execute(self.surface(voice=not allow, stops=stops), p, allow_motion=allow)
         if p["relative"] is not None:                 # execute() turned the delta into a goto
             argl = [{"dx_m": p["relative"][0], "dy_m": p["relative"][1]}]
         else:
@@ -1807,7 +2138,9 @@ class Brains:
         reply = p["reply"]
         if results:
             name, res = results[-1]
-            if name == "find_object" and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
+            if isinstance(res, dict) and res.get("error") == MID_TURN_STOP["error"]:
+                reply += TALK_STOPPED_NOTE
+            elif name == "find_object" and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
                 reply = (res.get("detail") if res.get("detail") else
                          f"find_object failed: {res.get('error')}")
             elif name in MEMORY_TOOLS and isinstance(res, dict) and res.get("error") != "voice_unconfirmed":
@@ -1815,6 +2148,8 @@ class Brains:
             elif name == "look" and isinstance(res, dict):
                 reply = (f"eye ({res.get('model')}): {res['description']}" if res.get("ok")
                          else f"look failed: {res.get('error')}")
+                if res.get("stale_scene"):
+                    reply += f" ({res.get('note')})"
             elif name in ("status", "scan_summary"):
                 reply += " " + json.dumps(res, default=str)[:400]
             elif isinstance(res, dict) and res.get("ok") is False and res.get("error") != "voice_unconfirmed":
@@ -1852,9 +2187,13 @@ class Brains:
         The history keeps the operator's words only."""
         return f"Situation: {situation}\n\nOperator: {text}" if situation else text
 
+    def _past(self, mode):
+        """The mode's finished turns, oldest first (a running turn's slot is pending)."""
+        return [t for t in self.hist.get(mode, []) if not t.get("pending")][-MAX_TURNS:]
+
     def _messages(self, mode, text, image_b64=None, situation=None):
         msgs = [{"role": "system", "content": self.system_for(multimodal=mode == "multimodal")}]
-        for turn in self.hist.get(mode, [])[-MAX_TURNS:]:
+        for turn in self._past(mode):
             msgs.append({"role": "user", "content": turn["user"]})
             msgs.append({"role": "assistant", "content": turn["reply"]})
         text = self._with_situation(text, situation)
@@ -1872,9 +2211,27 @@ class Brains:
                   "t": round(time.time(), 1)})
         del h[:-MAX_TURNS]
 
-    async def _tool_loop(self, model, msgs, tools, trace, allow, look_model=None):
+    def _reserve(self, mode, text):
+        """A history slot for a turn that starts now (pending until _fill; the
+        trimming waits for _fill, so a full history still shows MAX_TURNS turns)."""
+        slot = {"user": text, "reply": "", "tools": [], "t": round(time.time(), 1), "pending": True}
+        self.hist.setdefault(mode, []).append(slot)
+        return slot
+
+    def _fill(self, mode, slot, r):
+        """The turn's reply into its slot; a turn that raised (r None) leaves none."""
+        h = self.hist.setdefault(mode, [])
+        if r is None:
+            h[:] = [e for e in h if e is not slot]
+            return
+        slot.update(reply=r.get("reply") or "(no reply)", tools=[t["tool"] for t in r.get("trace") or []])
+        slot.pop("pending", None)
+        del h[:-MAX_TURNS]
+
+    async def _tool_loop(self, model, msgs, tools, trace, allow, look_model=None, stops=None):
         """(reply, gave_up). Raises ModelFailure only from a model call — by
-        then every earlier tool_call already has its result in msgs."""
+        then every earlier tool_call already has its result in msgs.
+        stops (_TurnStops): after an operator stop, motion calls are refused."""
         for hop in range(MAX_HOPS):
             r = await self._acall(model, msgs, tools, REPLY_MAX_TOKENS)
             calls = r["tool_calls"]
@@ -1891,16 +2248,24 @@ class Brains:
                  "function": {"name": n, "arguments": json.dumps(a if a is not None else {})}}
                 for cid, n, a, _e in parsed]})
             for cid, n, a, err in parsed:
-                res = ({"ok": False, "error": f"bad arguments for {n}: {err}"} if err
-                       else await self.tool(n, a, voice=not allow, look_model=look_model))
+                if err:
+                    res = {"ok": False, "error": f"bad arguments for {n}: {err}"}
+                elif stops is not None and n in GATED and stops.stopped():
+                    res = dict(MID_TURN_STOP)
+                else:
+                    res = await self.tool(n, a, voice=not allow, look_model=look_model, by_model=True)
                 trace.append({"tool": n, "args": a or {}, "result": res})
                 msgs.append({"role": "tool", "tool_call_id": cid,
                              "content": json.dumps(res, default=str)[:RESULT_CHARS]})
         return (f"gave up after {MAX_HOPS} tool rounds without a final answer "
                 f"(last: {summarize_trace(trace)})"), True
 
-    async def _llm(self, text, mode, allow):
+    async def _llm(self, text, mode, allow, stops=None, ask=None):
+        """A local / multimodal turn -> r (the caller keeps the history: _model_turn).
+        ask: what the model is sent instead of text (a stop line's rest)."""
         trace, notes = [], []
+        if stops is None:
+            stops = _TurnStops(self)
         situation = await self.situation_text()
         cat = await self._acatalog()
         stages = []
@@ -1916,21 +2281,20 @@ class Brains:
         if mode == "local":
             notes += sk
         stages.append(("brain", ch))
-        msgs = self._messages(mode, text, image, situation)
+        msgs = self._messages(mode, ask or text, image, situation)
         for stage, chain in stages:
             tools = self.tools_for(look=True)
             for mdl in chain:
                 try:
                     reply, gave_up = await self._tool_loop(
                         mdl, msgs, tools, trace, allow,
-                        look_model=mdl if stage == "multimodal" else None)
+                        look_model=mdl if stage == "multimodal" else None, stops=stops)
                 except ModelFailure as e:
                     notes.append(f"{mdl} failed ({e})")
                     self._log(f"brain {mdl} failed: {e}")
                     continue
                 if notes:
                     reply = f"[{'; '.join(notes)} → answered by {mdl}] {reply}"
-                self._remember(mode, text, reply, trace)
                 return {"reply": reply, "trace": trace, "mode": mode, "model": mdl,
                         "fallback": notes, "gave_up": gave_up}
             if stage == "multimodal":
@@ -1941,21 +2305,35 @@ class Brains:
             reply = (f"[no model finished the turn: {'; '.join(notes)}] what ran: "
                      f"{summarize_trace(trace)}")
             r = {"reply": reply, "trace": trace, "mode": mode, "model": None}
+        elif ask is not None and ask != text:          # a stop line's rest: the stop already ran
+            reply = (f"[no model answered: {'; '.join(notes) or 'none available'}] only the stop ran: "
+                     "the rest of the line was not answered")
+            r = {"reply": reply, "trace": trace, "mode": mode, "model": None}
+        elif stops.stopped():                          # the operator stopped the robot after sending the line
+            reply = (f"[no model answered: {'; '.join(notes) or 'none available'}] the robot was stopped "
+                     "meanwhile, so the line was not run — send it again to run it")
+            r = {"reply": reply, "trace": trace, "mode": mode, "model": None}
         else:
-            r = await self._talk(text, allow)
+            r = await self._talk(text, allow, stops)
             why = "; ".join(notes) or "none available"
             r["reply"] = f"[no model answered: {why} → regex brain] {r['reply']}"
             r["mode"], r["model"] = mode, "talk"
         r["fallback"] = notes
-        self._remember(mode, text, r["reply"], trace)
         return r
 
-    async def _claude(self, text, allow):
+    @staticmethod
+    def _claude_missing():
+        return {"reply": "Claude in the cockpit needs `pip install anthropic` and ANTHROPIC_API_KEY. "
+                         "Without a key, run `./rocky.sh chat` in a terminal: with the cockpit up, "
+                         "Claude Code drives THIS sim over MCP and you watch it here.",
+                "trace": [], "mode": "claude"}
+
+    async def _claude(self, text, allow, stops=None, ask=None):
+        """A claude turn -> r (the caller keeps the history: _model_turn)."""
         if not self.claude_available():
-            return {"reply": "Claude in the cockpit needs `pip install anthropic` and ANTHROPIC_API_KEY. "
-                             "Without a key, run `./rocky.sh chat` in a terminal: with the cockpit up, "
-                             "Claude Code drives THIS sim over MCP and you watch it here.",
-                    "trace": [], "mode": "claude"}
+            return self._claude_missing()
+        if stops is None:
+            stops = _TurnStops(self)
         import anthropic
         client = anthropic.Anthropic(timeout=self.timeout_s, max_retries=0)
         model = self.state["claude_model"]
@@ -1963,10 +2341,10 @@ class Brains:
                   "input_schema": t["function"]["parameters"]} for t in self.tools_for(look=True)]
         system = self.system_for()
         msgs = []
-        for turn in self.hist.get("claude", [])[-MAX_TURNS:]:
+        for turn in self._past("claude"):
             msgs += [{"role": "user", "content": turn["user"]},
                      {"role": "assistant", "content": turn["reply"]}]
-        msgs.append({"role": "user", "content": self._with_situation(text, await self.situation_text())})
+        msgs.append({"role": "user", "content": self._with_situation(ask or text, await self.situation_text())})
         trace, content, gave_up = [], "", True
         for _hop in range(MAX_HOPS):
             try:
@@ -1989,7 +2367,10 @@ class Brains:
             results = []
             for u in uses:                                  # every tool_use gets its tool_result
                 args = dict(u.input) if isinstance(u.input, dict) else {}
-                res = await self.tool(u.name, args, voice=not allow)
+                if u.name in GATED and stops.stopped():
+                    res = dict(MID_TURN_STOP)
+                else:
+                    res = await self.tool(u.name, args, voice=not allow, by_model=True)
                 trace.append({"tool": u.name, "args": args, "result": res})
                 results.append({"type": "tool_result", "tool_use_id": u.id,
                                 "content": json.dumps(res, default=str)[:RESULT_CHARS]})
@@ -1997,7 +2378,6 @@ class Brains:
         if gave_up:
             content = (f"gave up after {MAX_HOPS} tool rounds without a final answer "
                        f"(last: {summarize_trace(trace)})")
-        self._remember("claude", text, content, trace)
         return {"reply": content, "trace": trace, "mode": "claude", "model": model, "gave_up": gave_up}
 
 

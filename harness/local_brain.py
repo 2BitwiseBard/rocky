@@ -2,7 +2,7 @@
 """local_brain — a LOCAL LLM drives sim-Pebble through the harness tools.
 
 The VISION_PLAN brain rehearsal, fully offline: an Ollama model gets the
-same tools the MCP server exposes (say / gesture / goto / stop /
+same tools the MCP server exposes (say / gesture / move / goto / stop /
 scan_summary / status / list_gestures), you type to it, it decides which tools to call,
 and the SimBackend runs them on real MuJoCo physics with the reflex
 guards live. Swap the model, keep the robot — that's the architecture.
@@ -47,7 +47,9 @@ the transcript keeps the last MAX_TURNS turns; model calls time out at
 from __future__ import annotations
 import argparse
 import asyncio
+import functools
 import json
+import math
 import os
 import sys
 
@@ -59,8 +61,15 @@ sys.path.insert(0, os.path.dirname(HERE))
 # not retried: D052 saw a local model re-issue the same goto after "stuck".
 GOTO_OUTCOMES = ("arrived", "cliff", "stuck", "blocked", "timeout", "user",
                  "preempted", "FELL")
+# The goto envelope: ~0.045 m/s against goto's 40 s cap is ~1.8 m of flat floor, so a
+# target within ~1.5 m is what reliably arrives (the cockpit's hard argument cap,
+# cockpit_brains.GOTO_MAX_M = 3 m, is only the refusal for nonsense). `move` refuses
+# anything farther than this.
+GOTO_REACH_M = 1.5
 GOTO_DOC = ("Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) "
-            "facing +x; +y is its left). Blocks until it ends and returns "
+            "facing +x; +y is its left) — a point the operator gives as coordinates or "
+            "a remembered position; for a move relative to the robot ('forward 30 cm') "
+            "use move instead. Blocks until it ends and returns "
             "stopped= arrived | cliff (the void reflex vetoed it: do NOT retry "
             "toward it) | blocked (EITHER the lidar saw an obstacle in the way "
             "and 2 detours — a 45 deg veer, then a sidestep — did not get past "
@@ -70,9 +79,112 @@ GOTO_DOC = ("Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) "
             "something the lidar cannot see, lower than the puck, is in the way "
             "— look, then pick a different target; never re-send the same "
             "one) | timeout "
-            "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m) | user "
+            f"(too far: ~0.045 m/s, 40 s cap, keep targets within ~{GOTO_REACH_M:g} m) | user "
             "(stop was called) | preempted (a newer goto took over) | FELL. "
             "A veto is a NORMAL result: report it.")
+MOVE_MAX_M = GOTO_REACH_M
+MOVE_MIN_M = 0.01         # below this a move is no move (a model calling move for a turn)
+MOVE_DOC = ("Relative move in the robot's OWN frame, in METERS: forward_m + ahead / - back, "
+            "left_m + left / - right (default 0). 'forward 30 cm' = move(forward_m=0.3); "
+            "'back up 20 cm' = move(forward_m=-0.2); 'half a meter to your left' = "
+            "move(forward_m=0, left_m=0.5). It reads the robot's pose and heading itself (no "
+            "status call, no trigonometry) and walks there as a goto: every guard applies and it "
+            "ends the same way, stopped= arrived | cliff | stuck | blocked | timeout | user | "
+            f"preempted | FELL (a veto is a NORMAL result: report it, do not retry). At most "
+            f"{MOVE_MAX_M:g} m. goto is for MAP coordinates.")
+
+
+def validate_move(forward_m, left_m=0.0, max_m=MOVE_MAX_M):
+    """(forward, left, None) or (None, None, error). Pure. Numbers in meters, finite,
+    not both ~0, and within the goto envelope (hypot(forward, left) <= max_m, so
+    |forward_m| and |left_m| are each capped too): move(forward_m=30) for '30 cm'
+    is refused here, before anything walks."""
+    if left_m is None:
+        left_m = 0.0
+    if isinstance(forward_m, bool) or isinstance(left_m, bool):
+        return None, None, "move needs forward_m and left_m in meters (numbers), got a boolean"
+    try:
+        f, l = float(forward_m), float(left_m)
+    except (TypeError, ValueError):
+        return None, None, (f"move needs forward_m and left_m in meters (numbers), got "
+                            f"forward_m={forward_m!r}, left_m={left_m!r}")
+    if not (math.isfinite(f) and math.isfinite(l)):
+        return None, None, f"move needs finite numbers, got forward_m={forward_m!r}, left_m={left_m!r}"
+    d = math.hypot(f, l)
+    if d > max_m:
+        return None, None, (f"move of {d:.2f} m refused: at most {max_m:g} m (the goto envelope, "
+                            f"~0.045 m/s in 40 s). forward_m and left_m are METERS — 30 cm = 0.3; "
+                            f"for farther, move in legs")
+    if d < MOVE_MIN_M:
+        return None, None, ("move needs a distance: forward_m (+ ahead / - back) and/or left_m "
+                            "(+ left / - right) in meters; to turn, use gesture turn_in_place")
+    return f, l, None
+
+
+def move_target(pose, forward_m, left_m=0.0):
+    """The map target of a robot-frame move. Pure: pose {x, y, yaw_deg} (a missing
+    yaw_deg is 0 = facing map +x), forward_m ahead, left_m to the robot's left ->
+    (x + f*cos(yaw) - l*sin(yaw), y + f*sin(yaw) + l*cos(yaw)), rounded to 1 mm."""
+    yaw = math.radians(float(pose.get("yaw_deg") or 0.0))
+    f, l = float(forward_m), float(left_m or 0.0)
+    c, s = math.cos(yaw), math.sin(yaw)
+    return (round(float(pose["x"]) + f * c - l * s, 3),
+            round(float(pose["y"]) + f * s + l * c, 3))
+
+
+def _status_pose(st):
+    """A status result -> (pose {x, y, yaw_deg?}, None) or (None, why)."""
+    if not isinstance(st, dict):
+        return None, f"status answered {st!r}"
+    if st.get("ok") is False:
+        return None, f"status failed: {st.get('error')}"
+    pose = st.get("pose") if isinstance(st.get("pose"), dict) else st
+    try:
+        out = {"x": float(pose["x"]), "y": float(pose["y"])}
+    except (KeyError, TypeError, ValueError):
+        return None, "status has no pose"
+    if pose.get("yaw_deg") is not None:
+        out["yaw_deg"] = float(pose["yaw_deg"])
+    return out, None
+
+
+async def move_via(backend, forward_m, left_m=0.0):
+    """move on any backend with status + goto (the MCP server, the local_brain
+    REPL): validate, read the pose NOW, goto the map target — the backend's own
+    goto, so every guard and every result (stopped=...) is exactly goto's. The
+    result is goto's plus `move` {forward_m, left_m, from, target}; a backend
+    whose status has no heading (the mock, the in-process sim) is taken as
+    facing map +x and the result says so.
+    A cockpit (CockpitBackend, or AutoBackend while a cockpit answers) runs the
+    move itself (/api/tool/move): the pose read and the goto's start happen in
+    one place, with its check for a stop that lands between them — over HTTP a
+    stop could land between our status and our goto unseen, and AutoBackend
+    could read the pose from one robot and walk the other. A cockpit that does
+    not know move yet ('no such tool') gets status + goto as before."""
+    f, l, err = validate_move(forward_m, left_m)
+    if err:
+        return {"ok": False, "error": err}
+    be = await backend.pick() if callable(getattr(backend, "pick", None)) else backend   # AutoBackend: one robot
+    tag = getattr(backend, "_tag", None) if be is not backend else None
+
+    def done(r):
+        return tag(r) if tag is not None else r
+    remote = getattr(be, "_tool", None)            # a cockpit's /api/tool/<name>
+    if callable(remote):
+        r = await remote("move", forward_m=f, left_m=l)
+        if not (isinstance(r, dict) and r.get("ok") is False
+                and str(r.get("error", "")).startswith("no such tool")):
+            return done(r)
+    pose, why = _status_pose(await be.status())
+    if pose is None:
+        return done({"ok": False, "error": f"move needs the robot's pose: {why}"})
+    tx, ty = move_target(pose, f, l)
+    r = await be.goto(tx, ty)
+    out = dict(r) if isinstance(r, dict) else {"ok": False, "error": str(r)}
+    out["move"] = {"forward_m": f, "left_m": l, "from": pose, "target": {"x": tx, "y": ty}}
+    if "yaw_deg" not in pose:
+        out["move"]["note"] = "this backend reports no heading: forward = map +x"
+    return done(out)
 
 
 def build_tools(gestures=None, lexicon=None, signed=("turn_in_place", "sidestep"),
@@ -106,6 +218,14 @@ def build_tools(gestures=None, lexicon=None, signed=("turn_in_place", "sidestep"
                 "direction": {"type": "string", "enum": ["left", "right"]}},
                 "required": ["name"]}}},
         {"type": "function", "function": {
+            "name": "move", "description": MOVE_DOC,
+            "parameters": {"type": "object", "properties": {
+                "forward_m": {"type": "number",
+                              "description": "meters, + ahead / - back (0.3 = 30 cm)"},
+                "left_m": {"type": "number",
+                           "description": "meters, + left / - right (default 0)"}},
+                "required": ["forward_m"]}}},
+        {"type": "function", "function": {
             "name": "goto", "description": GOTO_DOC,
             "parameters": {"type": "object", "properties": {
                 "x": {"type": "number"}, "y": {"type": "number"}},
@@ -137,6 +257,14 @@ def build_tools(gestures=None, lexicon=None, signed=("turn_in_place", "sidestep"
     return tools + list(extra)
 
 
+MOVE_RULE = (
+    "- Relative moves use move: 'forward 30 cm' = move(forward_m=0.3), 'back up 20 cm' = "
+    "move(forward_m=-0.2), 'half a meter to your left' = move(forward_m=0, left_m=0.5) — the "
+    "robot's own frame, no status call, no trigonometry. goto is for map targets (x, y) or "
+    "remembered positions: the map starts at (0, 0) with the robot facing +x, +y is its left. "
+    f"Distances are METERS; it walks ~0.045 m/s: keep moves and targets within ~{GOTO_REACH_M:g} m.")
+
+
 def build_system(gestures=None, lexicon=None, extra=""):
     """The brain's standing orders, with the live lexicon and gesture list."""
     return (
@@ -145,20 +273,17 @@ def build_system(gestures=None, lexicon=None, extra=""):
         "words via `say`; your text reply goes to the operator's console.\n"
         "Rules:\n"
         "- Do what the operator asked and nothing more. One motion at a time: call a "
-        "gesture or a goto, read its result, then decide the next step. Never call a "
+        "gesture, a move or a goto, read its result, then decide the next step. Never call a "
         "motion tool twice in one reply.\n"
-        "- Positions are METERS in the map frame; the robot starts at (0, 0) facing +x, "
-        "+y is its left. For a relative move ('forward 30 cm') call status first: forward is the "
-        "robot heading yaw_deg, so x += d*cos(yaw), y += d*sin(yaw). "
-        "It walks ~0.045 m/s: keep targets within ~1.5 m.\n"
-        "- goto ends as arrived | cliff | stuck | blocked | timeout | user | preempted | "
+        + MOVE_RULE + "\n"
+        "- move and goto end as arrived | cliff | stuck | blocked | timeout | user | preempted | "
         "FELL. cliff/stuck/blocked are vetoes: report them; do not retry the same target.\n"
         "- 'turn left/right' = gesture turn_in_place with direction; a sidestep is gesture "
         "sidestep with direction.\n"
         "- If a tool returns ok=false, say so plainly in your reply.\n"
         "- When the motion you called has ended (any result), do NOT start another motion "
         "the operator did not ask for: reply. 'find X' and 'go back to X' are complete when "
-        "their tool returns; a move is complete when goto returns.\n"
+        "their tool returns; a move is complete when move or goto returns.\n"
         "- say is ONE chord per turn: after it returns, write your sentence. Never call say "
         "again in the same turn ('how are you?' = one say, then the sentence).\n"
         f"Chord-speak words: {', '.join(lexicon or []) or '(see say)'}.\n"
@@ -224,6 +349,8 @@ def make_backend(kind):
 
 async def call_tool(backend, name, args):
     fn = getattr(backend, name, None)
+    if fn is None and name == "move":             # the harness backends have status + goto
+        fn = functools.partial(move_via, backend)
     if fn is None:
         return {"ok": False, "error": f"no such tool {name}"}
     try:

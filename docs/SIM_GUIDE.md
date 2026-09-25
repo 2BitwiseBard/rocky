@@ -354,6 +354,19 @@ everything the terminal playground has and the parts that need a screen:
   Talk brain (instant) or the local brain with `lfm2.5-vl` (0.2–0.5 s per
   command, tool calls included, already resident beside the 35B driver);
   the 35B driver itself adds several seconds per turn.
+- **Stop first** (`sim/cockpit_brains.py`, 2026-09-25): with a model brain,
+  a line with a stop word (`stop_line`: harness.intent's stop words, minus
+  "don't stop", "non-stop", "stop sign", "bus stop") runs the stop tool at
+  once, without a model and without waiting for the running turn. What else
+  the line says (`stop_follow_up`) decides the rest: a question or a note
+  goes to the model after the stop with motion refused; anything else is
+  not run and the reply says so. Every chat line takes a stop mark when it
+  arrives: a stop after that (a stop line, the STOP button or key, the
+  console `stop` in any case, `/api/tool/stop`, the MCP stop; not a model's
+  own stop call) refuses its motion calls with `operator_stopped`, also while
+  it still waits for the per-mode lock (Talk included), and a model chain
+  that then fails does not fall back to the regex brain. `ROCKY_STOP_FIRST=0`
+  sends stop lines to the model (the brain bench does, to measure it).
 - **Teleop**: arrow buttons or the keyboard (page focused, no text box
   active), gestures and chord-speak from dropdowns, shove buttons. The
   movement buttons are disabled, with the reason, while locomotion is held.
@@ -404,6 +417,29 @@ in 12.2 s; a 0.8 m wall at x = 0.6 → blocked at 0.27 m after both detours
 (16 s); a 0.25 m-wide wall → also blocked (the sidestep made only ~25 mm/s,
 0.2 m in its 8 s: the reactive layer is not a planner); an 8 cm box →
 stuck after 3 s; the cliff world → cliff at x = 0.19.
+
+**Move (2026-09-25).** `move(forward_m, left_m=0)` is a relative move in
+the robot's own frame, in metres: `forward_m` + ahead / − back, `left_m` +
+left / − right. It reads the pose when the call starts and runs an
+ordinary `goto` to `(x + f·cos yaw − l·sin yaw, y + f·sin yaw + l·cos yaw)`
+(`harness.local_brain.move_target`), so every guard above applies and it
+ends exactly as a goto does; the result is the goto's plus `move`
+{`forward_m`, `left_m`, `from`, `target`}. It refuses a move longer than
+1.5 m (the goto envelope: ~0.045 m/s in 40 s), so `move(forward_m=30)` for
+"30 cm" walks nowhere. The model brains' prompt used to ask the model for
+`x += d·cos(yaw)` after a `status` call; small models get that wrong (a
+3B model's "forward 30 cm" went 96° off), so relative moves are now `move`
+and `goto` is for map targets and remembered positions. `move` is gated like
+`goto` (a spoken move needs the wake word). A recording replays the goto
+the move made, not the move. A stop that lands while the move reads the
+pose (one sim tick) refuses it (`operator_stopped`): with no goto running
+yet, the stop alone would only have set safe-stop and the goto would have
+walked. `turn` and `find_object` check the same way before each motion. The
+MCP server has the same tool (`harness/server.py`): with a cockpit behind
+it, the cockpit runs the move (`/api/tool/move`); other backends get
+status, then their own goto (the mock and the in-process sim report no
+heading, so there forward is map +x and the result says so). `move` and
+`goto` over MCP refuse `true` for a distance, as the cockpit does.
 
 **Vision.** The eye is a 320×240 camera on the torso (~86° wide, pitched
 15° down, 0.21 m above the floor, 0.10 m ahead of the torso centre).
@@ -491,7 +527,10 @@ the pose, any guard that is latched, what the lidar sees by direction, the
 three nearest remembered objects (with age, source, and "stale" when they may
 have moved), servo heat (only above 50% of the thermal budget), the servo bus
 (only when servos are connected) and the last look (or what `find_object`
-found). It aims at under 400 characters, since it rides in every chat turn.
+found). A reset, a world load and a world edit forget that last look and
+find (the line says "eye: no description yet"); a look or find still
+running across one comes back with `stale_scene: true` and is neither
+remembered nor kept as the last one. It aims at under 400 characters, since it rides in every chat turn.
 Every chat turn also gets a fresh situation line, put at the start of the
 message, so "what's around you?" is answered from it. It also shows on the state feed (`situation`,
 `memory_objects`) and in `status`. With **reactions** on (the default in
@@ -550,9 +589,11 @@ loopback, `*.ts.net`, a tailnet 100.64/10 address, this machine's name or
 Origin check.
 
 The state feed is server-sent events at 10 Hz; the cameras are MJPEG
-streams. The HTTP API under `/api/` is what the MCP proxy
+streams. The feed (and `/api/state`) carries the newest 12 `events` plus `event_seq`, a count of every event since the cockpit started, so a client sees a new event even when the 12 look the same.
+The HTTP API under `/api/` is what the MCP proxy
 (`harness/cockpit_backend.py`) and any script can use (send JSON):
-`POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/cmd {"line": "walk 45"}`,
+`POST /api/tool/goto {"x": 0.3, "y": 0}`, `/api/tool/move {"forward_m": 0.3}`,
+`/api/cmd {"line": "walk 45"}`,
 `/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`,
 `GET /api/model`, `GET /api/gait`, `POST /api/gesture/check|solve|teach`,
 `GET|POST /api/memory`, `GET|POST /api/awareness`.
@@ -659,7 +700,9 @@ clips the scripts write (`*_voiced.mp4` include chord-speak narration).
 ## 5. Driving it with words: the harness
 
 The six-tool contract (`docs/MCP_CONTRACT_v0.md`): `say`, `gesture`,
-`goto(x, y)` in metres, `stop`, `scan_summary`, `status`. Vetoes come back
+`goto(x, y)` in metres, `stop`, `scan_summary`, `status`, plus
+`list_gestures` and `move(forward_m, left_m)` (a goto relative to the
+robot, see *Move* in §3b). Vetoes come back
 as ordinary results (`{"stopped": "cliff"}`), never exceptions, and the
 reflex supervisor and cliff guard run inside `goto` regardless of who is
 calling.

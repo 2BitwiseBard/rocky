@@ -45,6 +45,14 @@ reacts to a guard latch / a new obstacle with a chord (reactions, once per
 30 s) and, only with --curious, schedules one look a minute. Routes:
 /api/memory, /api/awareness; the state feed carries situation +
 memory_objects.
+
+Hygiene (2026-09-25): a world load / edit / reset forgets the eye's last
+description and find_object's last report, the composed situation, the
+awareness tick's previous scan and the eye FRAME itself (_forget_scene; live
+cameras re-render on the next loop turn, paused or not), so neither the next
+situation line nor the next look describes a world that is gone; the state feed's `event_seq` counts
+every event ever appended (EventLog), so a client sees a new event even
+when the 12-event window looks the same.
 """
 from __future__ import annotations
 import argparse
@@ -209,6 +217,36 @@ def _wrap_rad(a):
     return (a + np.pi) % (2 * np.pi) - np.pi
 
 
+class EventLog(deque):
+    """sim.events: the bounded events feed that also counts every append
+    (`seq`, never reset in one cockpit's lifetime), so a client can tell a NEW
+    event from a window that only looks the same — twelve identical ('say',
+    'yes') entries before and after one more 'yes' (the brain bench's blind
+    spot). The state feed carries it as `event_seq`. Appends come from the
+    sim thread, the event loop and the hardware bridge's thread: the lock
+    keeps `seq` and the contents in step, and tail() reads both at once."""
+
+    def __init__(self, iterable=(), maxlen=None):        # deque's own signature (copy/pickle call it so)
+        super().__init__(maxlen=maxlen)
+        self._lock = threading.Lock()
+        self.seq = 0
+        self.extend(iterable)
+
+    def append(self, x):
+        with self._lock:
+            super().append(x)
+            self.seq += 1
+
+    def extend(self, xs):
+        for x in xs:
+            self.append(x)
+
+    def tail(self, n):
+        """(seq, the newest n events), read together."""
+        with self._lock:
+            return self.seq, (list(self)[-n:] if n > 0 else [])
+
+
 class CockpitSim(Playground):
     """The Playground with a goto controller, world swapping, offscreen
     cameras and an async job queue; every method that touches MjData
@@ -225,7 +263,7 @@ class CockpitSim(Playground):
         self.speed = 1.0
         self.paused = False
         self.mode = "idle"
-        self.events = deque(maxlen=200)
+        self.events = EventLog(maxlen=200)  # counts every append: the feed's event_seq
         self.console = deque(maxlen=200)
         # scene memory: RAM only by default (tests, headless); main() turns persistence on.
         # Keyed by memory_key: a preset by its name, anything else by name + a hash of its spec
@@ -242,6 +280,8 @@ class CockpitSim(Playground):
         self._stop_req = False
         self.frames = {"chase": (0, b""), "eye": (0, b"")}
         self._renderers = None
+        self._cams_live = False             # a renderer was built once: the cameras work in this process
+        self._render_due = False            # render on the next loop turn, paused or not (_forget_scene)
         self.cam = dict(distance=1.4, elevation=-24.0, azimuth=0.0)     # behind the robot, looking +x
         self.render_every = int(round(1 / (15 * self.DT)))      # ~15 fps
         self.last = dict(con=np.zeros(5, bool), tilt=0.0, height=0.0, gxy=0.0)
@@ -511,6 +551,8 @@ class CockpitSim(Playground):
                 self.last_loop_wall = time.time()
                 self._drain()
                 if self.paused:
+                    if self._render_due:                 # a world load / reset while paused: show it
+                        self._render_safe()
                     time.sleep(0.02)
                     t_wall = time.monotonic()
                     continue
@@ -576,12 +618,8 @@ class CockpitSim(Playground):
                 self._aware_tick()
             except Exception as e:                       # noqa: BLE001 — awareness is not physics
                 self._aware_failed(e)
-        if self._k % self.render_every == 0:
-            try:
-                self._render()
-            except Exception as e:                       # noqa: BLE001 — cameras are not physics
-                self.log(f"render failed ({type(e).__name__}: {e}); cameras off")
-                self._renderers = False
+        if self._render_due or self._k % self.render_every == 0:
+            self._render_safe()
 
     # ------------------------------------------------- residual walker
     def _walk_residual(self):
@@ -870,6 +908,16 @@ class CockpitSim(Playground):
         self.log(f"goto ({tx:.2f}, {ty:.2f})")
 
     # ------------------------------------------------------------ render
+    def _render_safe(self):
+        """Sim thread: both cameras now (step's cadence, or a due render after
+        _forget_scene). Never raises: a failure turns the cameras off."""
+        self._render_due = False
+        try:
+            self._render()
+        except Exception as e:                           # noqa: BLE001 — cameras are not physics
+            self.log(f"render failed ({type(e).__name__}: {e}); cameras off")
+            self._renderers = False
+
     def _render(self):
         if self._renderers is None:
             try:
@@ -888,6 +936,7 @@ class CockpitSim(Playground):
             self._vopt = mujoco.MjvOption()
             self._vopt.geomgroup[3] = 1
             self._renderers = (chase, eye, cam, ecam)
+            self._cams_live = True
         if self._renderers is False:
             return
         chase, eye, cam, ecam = self._renderers
@@ -972,7 +1021,7 @@ class CockpitSim(Playground):
             self.log(f"memory: world switch failed ({type(e).__name__}: {e}) — memory kept as it was")
         self._memory_epoch(f"world '{name}' {'edited' if same_world else 'loaded'}: its objects are at "
                            "their spawn", spawn=not same_world)
-        self._aw.update(prev=None, prev_pose=None, curious_scene=None, compose_next=0.0)
+        self._forget_scene(f"world '{name}' {'edited' if same_world else 'loaded'}")
         if self.walk is not None:
             self.set_walk(self.walk["name"], _keep_gait=self.walk.get("gait_prev"))
         self.log(f"world: {name} ({model.ngeom} geoms) | {self.righter_note}")
@@ -1014,8 +1063,50 @@ class CockpitSim(Playground):
         self.push = None
         self._respawn(keep_righter=True)
         self._memory_epoch("reset: the robot and the world's objects are back at their spawn")
+        self._forget_scene("reset")
         self.log("reset")
         return "reset: origin, upright, planted"
+
+    def _forget_scene(self, why):
+        """Sim thread (set_world, reset): the scene the robot last described is
+        gone — another world, an edited one, or the same one with the robot
+        and every object back at their spawn. Drop what would describe it in
+        the next situation line: the eye's last description and find_object's
+        last report (Brains.last_look / Brains.last_find — the clause turns
+        'eye: no description yet'), the composed situation itself (the feed
+        and `status` showed it until the next compose), and the awareness
+        tick's previous lidar scan / pose / curious scene (so the first scan
+        in the new scene is a baseline, not a change); the next tick composes
+        a fresh situation. The eye FRAME goes too (review 2026-09-25: it is
+        only replaced by a render, and nothing renders while paused, with the
+        cameras off, or for up to 1/15 s on the cadence — a look in that gap
+        described the old world again): it turns empty with its counter moved
+        on (so _put stays monotonic and the MJPEG route skips it), look /
+        find_object / a multimodal turn say 'no eye frame yet', and when the
+        cameras work a render is due on the next loop turn, paused or not
+        (_render_due; never when no renderer was ever built — tests run
+        GL-free with render_every = 10**9). The chase frame stays until that
+        render (it is the operator's view, no model reads it). The scene
+        memory is not touched here (its epoch is _memory_epoch's job). Never
+        raises. A look already in flight when the world changes still lands
+        afterwards (it describes the frame it took)."""
+        try:
+            b = getattr(self, "brains", None)
+            dropped = [k for k in ("last_look", "last_find") if getattr(b, k, None) is not None]
+            for k in ("last_look", "last_find"):
+                if b is not None and hasattr(b, k):
+                    setattr(b, k, None)
+            n, jpg = self.frames.get("eye", (0, b""))
+            self.frames["eye"] = (n + 1, b"")
+            if jpg:
+                dropped.append("the eye frame")
+            self._render_due = bool(self._cams_live)
+            self.situation = dict(text="", t=None)
+            self._aw.update(prev=None, prev_pose=None, curious_scene=None, compose_next=0.0)
+            if dropped:
+                self.log(f"{why}: forgot {' + '.join(dropped)} (they described the old scene)")
+        except Exception as e:                           # noqa: BLE001 — bookkeeping, never fatal
+            self.log(f"{why}: scene context not cleared ({type(e).__name__}: {e})")
 
     def _memory_epoch(self, why, spawn=True):
         """Sim thread (or before it starts): the world's bodies are back at
@@ -1309,7 +1400,7 @@ class CockpitSim(Playground):
 
     def _snapshot_min(self, e):
         out = dict(t=round(self.t, 2), state=getattr(self.sup, "state", "?"), mode=self.mode,
-                   world=self.world_name, tilt=0.0, events=[], console=list(self.console)[-40:],
+                   world=self.world_name, tilt=0.0, events=[], event_seq=None, console=list(self.console)[-40:],
                    error=f"{type(e).__name__}: {e}", heartbeat=self.heartbeat())
         for k, f in (("pose", self.pose), ("hw", self._hw_brief), ("situation", self._situation_brief),
                      ("memory_objects", self.memory.to_map)):
@@ -1319,7 +1410,8 @@ class CockpitSim(Playground):
                 out[k] = None
         try:
             out["tilt"] = round(float(self.last["tilt"]), 1)
-            out["events"] = _jsonable(list(self.events)[-12:])
+            out["event_seq"], ev = self.events.tail(12)
+            out["events"] = _jsonable(ev)
         except Exception:                                # noqa: BLE001
             pass
         return out
@@ -1331,6 +1423,7 @@ class CockpitSim(Playground):
         gs = self.goto_state
         ref = self.refusal if (self.refusal and time.time() - self.refusal[0] < 6.0) else None
         tr = self.teach
+        seq, ev = self.events.tail(12)       # event_seq moves even when the 12-event window looks the same
         return dict(t=round(self.t, 2), pose=self.pose(), state=self.sup.state, mode=self.mode,
                     cmd=[round(float(x), 2) for x in v], cmd_eff=[round(float(x), 2) for x in self.cmd_eff],
                     tilt=round(self.last["tilt"], 1),
@@ -1343,7 +1436,7 @@ class CockpitSim(Playground):
                     browser_audio=self.browser_audio, hw=self._hw_brief(),
                     goto=None if gs is None else [gs["tx"], gs["ty"]], gesture=self.gesture_busy,
                     gesture_phase=self.gesture_phase,
-                    events=_jsonable(list(self.events)[-12:]), console=list(self.console)[-40:],
+                    events=_jsonable(ev), event_seq=seq, console=list(self.console)[-40:],
                     brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
                                                 duty=self.gait.duty, hstep=self.gait.hstep,
                                                 phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)

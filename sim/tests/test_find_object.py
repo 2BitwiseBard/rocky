@@ -85,6 +85,8 @@ def test_gemma_boxes_are_y_first():
     # gemma-4-26b-a4b's real answer for the ball at image bearing -25 deg, 0.45 m (near edge)
     raw = '{"seen": true, "bbox": [557, 202, 687, 323], "confidence": 0.9}'
     assert cb.box_order("gemma-4-26b-a4b") == "yx" and cb.box_order("lfm2.5-vl") == "xy"
+    assert cb.box_order("gemma-4-12b") == "xy"        # unified vision writes x-first (measured 2026-09-25)
+    assert cb.box_order("qwen3.5-9b") == "xy" and cb.box_order(None) == "xy"
     d = cb.parse_detection(raw, order=cb.box_order("gemma-4-26b-a4b"))
     assert abs(d["bearing_deg"] - (-25.0)) < 3.0 and abs(d["distance_m"] - 0.45) < 0.08
     wrong = cb.parse_detection(raw)                          # read x-first: nowhere near

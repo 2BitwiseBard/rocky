@@ -127,7 +127,7 @@ async def test_gesture_busy_while_walking(server, backend):
 async def test_v1_tools_are_absent_not_stubbed(server):
     async with client_session(server._mcp_server) as cs:
         tools = {t.name for t in (await cs.list_tools()).tools}
-        assert tools == {"say", "gesture", "goto", "stop",
+        assert tools == {"say", "gesture", "move", "goto", "stop",
                          "scan_summary", "status", "list_gestures"}
         for absent in ("look", "find_object", "map_query", "patrol", "dock"):
             assert absent not in tools
@@ -257,6 +257,171 @@ async def test_cockpit_proxy_gesture_passes_its_name():
     be.client.post = post
     assert (await be.gesture("wave")) == {"ok": True}
     assert sent[-1] == ("http://127.0.0.1:1/api/tool/gesture", {"name": "wave"})
+
+
+# ------------------------------------------------ move (relative, robot frame)
+@pytest.mark.asyncio
+async def test_move_schema_and_doc(server):
+    async with client_session(server._mcp_server) as cs:
+        tools = {t.name: t for t in (await cs.list_tools()).tools}
+    mv = tools["move"]
+    props = mv.inputSchema["properties"]
+    assert props["forward_m"]["type"] == "number" and props["left_m"]["type"] == "number"
+    assert props["left_m"].get("default") == 0.0
+    assert mv.inputSchema["required"] == ["forward_m"]
+    assert "move(forward_m=0.3)" in mv.description and "MAP coordinates" in mv.description
+    for outcome in ("arrived", "cliff", "stuck", "blocked", "timeout", "user", "preempted"):
+        assert outcome in mv.description, outcome
+    assert "use move instead" in tools["goto"].description
+
+
+@pytest.mark.asyncio
+async def test_move_walks_the_backends_goto(server, backend):
+    async with client_session(server._mcp_server) as cs:
+        r = await _call(cs, "move", {"forward_m": 0.1})
+        assert r["stopped"] == "arrived" and r["ok"] is True
+        assert r["move"]["target"] == {"x": 0.1, "y": 0.0}
+        assert "no heading" in r["move"]["note"]                  # the mock is a point: forward = +x
+        r = await _call(cs, "move", {"forward_m": -0.2, "left_m": 0.05})   # from where the first ended
+        assert r["stopped"] == "arrived"                           # (the mock arrives within 1 cm)
+        assert r["move"]["target"]["x"] == pytest.approx(r["move"]["from"]["x"] - 0.2, abs=1e-3)
+        assert (r["pose"]["x"], r["pose"]["y"]) == pytest.approx((-0.1, 0.05), abs=0.011)
+
+
+@pytest.mark.asyncio
+async def test_move_veto_and_refusal_come_back_as_results(server, backend):
+    """PLUMBING: the mock's scripted void vetoes a move exactly as it vetoes the goto."""
+    async with client_session(server._mcp_server) as cs:
+        r = await _call(cs, "move", {"forward_m": 30})              # 30 cm typed as 30
+        assert r["ok"] is False and "METERS" in r["error"]
+        assert backend.x == 0.0 and backend.mode == "idle"         # nothing walked
+        r = await _call(cs, "move", {"forward_m": 1.0})
+        assert r["stopped"] == "cliff" and r["ok"] is False
+        assert backend.mode == "safe_stop"
+
+
+@pytest.mark.asyncio
+async def test_move_uses_the_heading_when_status_reports_one():
+    class Turned(MockBackend):
+        async def status(self):
+            r = await super().status()
+            r["pose"]["yaw_deg"] = 90.0                             # facing map +y
+            return r
+    srv = build_server(Turned())
+    async with client_session(srv._mcp_server) as cs:
+        r = await _call(cs, "move", {"forward_m": 0.1, "left_m": 0.05})
+    assert r["move"]["target"] == {"x": -0.05, "y": 0.1} and "note" not in r["move"]
+    assert r["stopped"] == "arrived"
+
+
+@pytest.mark.asyncio
+async def test_move_without_a_pose_does_not_walk():
+    class Blind(MockBackend):
+        async def status(self):
+            return {"ok": False, "error": "cockpit unreachable: timed out"}
+    be = Blind()
+    srv = build_server(be)
+    async with client_session(srv._mcp_server) as cs:
+        r = await _call(cs, "move", {"forward_m": 0.1})
+    assert r["ok"] is False and "pose" in r["error"] and be.x == 0.0
+
+
+def test_move_target_is_pure():
+    from harness.local_brain import move_target, validate_move
+    assert move_target({"x": 0.0, "y": 0.0, "yaw_deg": 0.0}, 0.3) == (0.3, 0.0)
+    assert move_target({"x": 0.0, "y": 0.0, "yaw_deg": 90.0}, 0.3) == (0.0, 0.3)
+    assert move_target({"x": 0.0, "y": 0.0, "yaw_deg": -90.0}, 0.3, 0.1) == (0.1, -0.3)
+    assert validate_move(0.3) == (0.3, 0.0, None)
+    assert validate_move(2.0)[2] and validate_move(0)[2]
+
+
+@pytest.mark.asyncio
+async def test_local_brain_call_tool_runs_move_on_a_backend_without_one(backend):
+    from harness.local_brain import call_tool
+    r = await call_tool(backend, "move", {"forward_m": 0.1})
+    assert r["stopped"] == "arrived" and backend.x == pytest.approx(0.1, abs=0.011)
+    r = await call_tool(backend, "move", {"left": 0.1})
+    assert r["ok"] is False and "bad arguments" in r["error"]
+
+
+@pytest.mark.asyncio
+async def test_move_and_goto_refuse_a_boolean_distance(server, backend):
+    """Review 2026-09-25: pydantic's lax mode made move(forward_m=true) a 1 m walk
+    (the cockpit refuses a boolean); the schema stays 'number'."""
+    async with client_session(server._mcp_server) as cs:
+        tools = {t.name: t for t in (await cs.list_tools()).tools}
+        assert tools["goto"].inputSchema["properties"]["x"]["type"] == "number"
+        for name, args in (("move", {"forward_m": True}), ("move", {"forward_m": 0.1, "left_m": False}),
+                           ("goto", {"x": True, "y": 0.0})):
+            res = await cs.call_tool(name, args)
+            assert res.isError and "boolean" in res.content[0].text, (name, args)
+        assert backend.x == 0.0 and backend.mode == "idle"            # nothing walked
+        r = await _call(cs, "move", {"forward_m": 0.1, "left_m": None})   # null = 0, as the cockpit reads it
+        assert r["stopped"] == "arrived" and r["move"]["left_m"] == 0.0
+        r = await _call(cs, "goto", {"x": 0, "y": 0})                  # a JSON integer is still a number
+        assert r["stopped"] == "arrived"
+
+
+def _fake_cockpit(knows_move=True, yaw=90.0):
+    """A cockpit's /api/tool/<name>, recorded; an older one does not know move."""
+    sent = []
+
+    async def tool(name, /, **args):
+        sent.append((name, args))
+        if name == "move":
+            if not knows_move:
+                return {"ok": False, "error": "no such tool 'move'", "hint": "say, gesture, goto"}
+            return {"ok": True, "stopped": "arrived", "move": dict(args)}
+        if name == "status":
+            return {"ok": True, "pose": {"x": 0.0, "y": 0.0, "yaw_deg": yaw}, "mode": "idle"}
+        if name == "goto":
+            return {"ok": True, "stopped": "arrived", "pose": {"x": args["x"], "y": args["y"]}}
+        return {"ok": True}
+    return tool, sent
+
+
+@pytest.mark.asyncio
+async def test_move_runs_inside_a_cockpit_backend():
+    """The cockpit reads the pose and starts the goto in one place (its stop check
+    sits between them); over MCP, status then goto left a window a stop could miss."""
+    from harness.cockpit_backend import CockpitBackend
+    from harness.local_brain import move_via
+    be = CockpitBackend("http://127.0.0.1:1")
+    be._tool, sent = _fake_cockpit()
+    r = await move_via(be, 0.3)
+    assert sent == [("move", {"forward_m": 0.3, "left_m": 0.0})] and r["stopped"] == "arrived"
+    r = await move_via(be, 30)                                         # refused here, never sent
+    assert r["ok"] is False and "METERS" in r["error"] and len(sent) == 1
+    old = CockpitBackend("http://127.0.0.1:1")                         # a cockpit from before move
+    old._tool, sent = _fake_cockpit(knows_move=False)
+    r = await move_via(old, 0.3)
+    assert [n for n, _a in sent] == ["move", "status", "goto"]
+    assert sent[-1][1] == pytest.approx({"x": 0.0, "y": 0.3}, abs=1e-3)   # facing +y: forward is +y
+    assert r["stopped"] == "arrived" and r["move"]["target"] == {"x": 0.0, "y": 0.3}
+
+
+@pytest.mark.asyncio
+async def test_auto_backend_moves_one_robot():
+    """AutoBackend re-resolves per call: the move goes whole to the cockpit while one
+    answers, else whole to the in-process fallback (never the pose of one, the goto
+    of the other), and says which."""
+    from harness.cockpit_backend import AutoBackend
+    from harness.local_brain import move_via
+    alive = {"v": False}
+    fb = MockBackend()
+    auto = AutoBackend(url="http://127.0.0.1:1", make_fallback=lambda: fb, ttl=0.0,
+                       alive=lambda url: alive["v"])
+    auto.cockpit._tool, sent = _fake_cockpit()
+    r = await move_via(auto, 0.1)
+    assert r["backend"] == "sim" and r["stopped"] == "arrived" and sent == []
+    assert fb.x == pytest.approx(0.1, abs=0.011)
+    alive["v"] = True
+    r = await move_via(auto, 0.2)
+    assert r["backend"] == "cockpit" and sent == [("move", {"forward_m": 0.2, "left_m": 0.0})]
+    srv = build_server(auto)
+    async with client_session(srv._mcp_server) as cs:
+        r = await _call(cs, "move", {"forward_m": 0.1, "left_m": 0.05})
+    assert r["backend"] == "cockpit" and sent[-1] == ("move", {"forward_m": 0.1, "left_m": 0.05})
 
 
 # --------------------------------------- the physics proof (slow, honest)

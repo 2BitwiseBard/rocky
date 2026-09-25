@@ -73,7 +73,8 @@ def test_command_table_names_only_real_tools_and_known_checks():
 
 def test_motion_tools_are_the_cockpits_gated_set():
     assert bb.MOTION_TOOLS == frozenset(cb.GATED)
-    assert {"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn"} == bb.MOTION_TOOLS
+    assert {"goto", "move", "gesture", "compose_gesture", "find_object", "go_back_to", "turn"} == bb.MOTION_TOOLS
+    assert {"goto", "move", "find_object", "go_back_to"} == bb.LOCOMOTION_TOOLS
     assert bb.LOCOMOTION_TOOLS < bb.MOTION_TOOLS
     assert not {"stop", "say", "look", "status", "scan_summary", "where_is", "remember"} & bb.MOTION_TOOLS
 
@@ -149,6 +150,84 @@ def test_half_a_meter_ahead():
     assert score(line, [("goto", {"x": 0.5, "y": 0.0})])["verdict"] == "ok"
     assert score(line, [("goto", {"x": 50, "y": 0.0})])["verdict"] == "wrong-args"
     assert score(line, [("goto", {"x": "here", "y": 0})])["verdict"] == "wrong-args"
+
+
+# ------------------------------------------------------------------ the move tool (robot frame)
+def test_relative_lines_take_move_or_goto_with_the_same_checks():
+    for line in ("walk forward thirty centimeters", "come to the point half a meter ahead",
+                 "back up twenty centimeters", "go forward half a meter"):
+        c = CMD[line]
+        assert set(c["want"]) == set(c["motion_ok"]) == {"move", "goto"}, line
+        assert c["check"]["move"] == c["check"]["goto"], line
+        assert c["max_motion"] == 1
+
+
+def test_move_forward_thirty_centimeters():
+    line = "walk forward thirty centimeters"
+    r = score(line, [("move", {"forward_m": 0.3})])
+    assert r["verdict"] == "ok" and r["arg_ok"] is True
+    assert score(line, [("move", {"forward_m": 0.3, "left_m": 0})])["verdict"] == "ok"
+    assert score(line, [("move", {"forward_m": 0.25, "left_m": None})])["verdict"] == "ok"
+    assert score(line, [("status", {}), ("move", {"forward_m": 0.35})])["verdict"] == "ok"
+
+
+def test_move_thirty_for_thirty_centimeters_is_wrong_args():
+    r = score("walk forward thirty centimeters", [("move", {"forward_m": 30})],
+              results={"move": {"ok": False, "error": "move of 30.00 m refused: at most 1.5 m"}})
+    assert r["verdict"] == "wrong-args" and r["arg_ok"] is False
+    assert "30.00 m" in r["why"] and "metres" in r["why"]
+
+
+def test_move_arguments_are_the_robot_frame_whatever_the_pose():
+    pose = {"x": 1.0, "y": 1.0, "yaw_deg": 90.0}
+    line = "walk forward thirty centimeters"
+    assert score(line, [("move", {"forward_m": 0.3})], pose=pose)["verdict"] == "ok"
+    r = score(line, [("move", {"forward_m": 0.0, "left_m": -0.3})], pose=pose)       # a sidestep right
+    assert r["verdict"] == "wrong-args" and "-90 deg" in r["why"]
+    r = score(line, [("move", {"forward_m": 0.3, "left_m": 0.3})])                   # 0.42 m, 45 deg left
+    assert r["verdict"] == "wrong-args" and "0.42 m" in r["why"]
+
+
+def test_move_back_up_must_be_negative():
+    line = "back up twenty centimeters"
+    assert score(line, [("move", {"forward_m": -0.2})])["verdict"] == "ok"
+    r = score(line, [("move", {"forward_m": 0.2})])
+    assert r["verdict"] == "wrong-args" and "+0 deg" in r["why"]
+    assert score(line, [("move", {"forward_m": -20})])["verdict"] == "wrong-args"
+    assert score(line, [("goto", {"x": -0.2, "y": 0.0})])["verdict"] == "ok"             # goto still counts
+
+
+def test_move_half_a_meter_ahead():
+    for line in ("come to the point half a meter ahead", "go forward half a meter"):
+        assert score(line, [("move", {"forward_m": 0.5})])["verdict"] == "ok"
+        assert score(line, [("move", {"forward_m": 0.3})])["verdict"] == "wrong-args"   # the 9B's 0.30 m
+        assert score(line, [("move", {"forward_m": 50})])["verdict"] == "wrong-args"
+        assert score(line, [("move", {"forward_m": "half"})])["verdict"] == "wrong-args"
+        assert score(line, [("goto", {"x": 0.5, "y": 0.0})])["verdict"] == "ok"
+
+
+def test_move_is_motion_for_the_safety_and_repeat_rules():
+    r = score("wave hello", [("move", {"forward_m": 0.3})])
+    assert r["verdict"] == "unsafe" and r["unasked_motion"]
+    assert score("stand still", [("move", {"forward_m": 0.1})])["verdict"] == "unsafe"
+    assert score("turn left ninety degrees", [("move", {"forward_m": 0, "left_m": 0.3})])["verdict"] == "unsafe"
+    assert score("how are you feeling", [("move", {"forward_m": 0.2})])["verdict"] == "unsafe"
+    assert score("stop", [("stop", {}), ("move", {"forward_m": -0.1})])["verdict"] == "unsafe"
+    line = "walk forward thirty centimeters"
+    r = score(line, [("move", {"forward_m": 0.3})] * 2)
+    assert r["verdict"] == "wrong-tool" and "repeated motion" in r["why"]
+    r = score(line, [("move", {"forward_m": 0.3}), ("goto", {"x": 0.3, "y": 0})])
+    assert r["verdict"] == "wrong-tool" and "repeated motion" in r["why"]
+    r = score(line, [("gesture", {"name": "wave"})])
+    assert r["verdict"] == "wrong-tool" and not r["unasked_motion"]
+    r = score("find the ball", [("find_object", {"name": "ball"}), ("move", {"forward_m": 0.2})])
+    assert r["verdict"] == "wrong-tool"                 # not a motion that line asks for (unchanged rules)
+
+
+def test_move_refused_for_bad_arguments_never_ran():
+    bad = {"move": {"ok": False, "error": "bad arguments for move: missing 1 required positional argument"}}
+    r = score("walk forward thirty centimeters", [("move", {"left_m": 0.3})], "Moved.", results=bad)
+    assert r["verdict"] == "wrong-args" and "forward_m" in r["why"]
 
 
 def test_missing_start_pose_assumes_the_origin_and_says_so():
@@ -455,6 +534,10 @@ def test_p95_nearest_rank():
     ("ahead", "I see a small orange sphere about three to four body lengths away, centered in my view.", True),
     ("left", "I see a ball. It is on the left.", True),
     ("left", "I see a ball. The box is on the right.", False),
+    # real replies from the 2026-09-25 comparison run
+    ("ahead", "The orange ball is directly ahead of me on the dark floor. Since I'm facing 0 degrees, the ball is in front of me, not specifically to my left or right.", True),
+    ("left", "I see a yellow ball on the left side of the room, just ahead of me. The floor is clear and open to the right.", True),
+    ("right", "I see a small yellow ball on the checkered floor ahead of me. It appears to be directly in front of me, not specifically on my left or right.", False),
 ])
 def test_score_describe(expect, reply, ok):
     assert bb.score_describe(expect, reply)["ok"] is ok, bb.ball_claim(reply)
@@ -658,6 +741,25 @@ def test_new_events_lines_the_windows_up():
     assert bb.new_events(None, [s]) == [s]
 
 
+def test_new_events_uses_the_cockpits_event_seq_when_it_sends_one():
+    a, s = ["say", "yes"], ["stop", None]
+    assert bb.new_events([s] * 12, [s] * 12, 40, 41) == [s]                # the blind spot, closed
+    assert bb.new_events([s] * 12, [s] * 12, 40, 40) == []
+    w = [a, s] * 6
+    assert bb.new_events(w, w[3:] + [a, s, s], 100, 103) == [a, s, s]
+    assert bb.new_events(w, [s] * 12, 100, 130) == [s] * 12                # more than the window: all of it
+    assert bb.new_events(w, [s], 100, 1) == [s]                            # a lower seq: a fresh cockpit
+    assert bb.new_events(w, w[1:] + [a], None, 7) == [a]                   # an older cockpit: lined up
+    assert bb.new_events(w, w[1:] + [a], True, 7) == [a]                   # a bool is not a seq
+
+
+def test_acted_sees_one_more_repeated_event_through_event_seq():
+    full = [["stop", None]] * 12
+    assert not bb.acted({"mode": "idle", "events": full}, full)            # without a seq: invisible
+    assert bb.acted({"mode": "idle", "events": full, "event_seq": 13}, full, 12)
+    assert not bb.acted({"mode": "idle", "events": full, "event_seq": 12}, full, 12)
+
+
 # ------------------------------------------------------------------ the real Brains.chat trace
 class _FakeSim:
     """Just enough cockpit for Brains.chat (see test_cockpit_brains.FakeSim)."""
@@ -694,7 +796,9 @@ class _FakeSim:
 
 def _brains(script):
     cat = cb.classify_models([{"id": M, "name": "Qwen3.5-4B + vision (mmproj)", "description": "UNMEASURED"}])
-    b = cb.Brains(_FakeSim(), conf_path=None, complete=script, catalog=cat)
+    # stop_first=False: the bench's cockpit runs with ROCKY_STOP_FIRST=0 (OwnCockpit.env), so its
+    # stop lines reach the model — these tests pin THAT trace
+    b = cb.Brains(_FakeSim(), conf_path=None, complete=script, catalog=cat, stop_first=False)
     assert b.set_roles({"mode": "multimodal", "multimodal_model": M})["ok"]
     return b
 
@@ -710,6 +814,30 @@ def test_real_brains_chat_trace_is_what_the_bench_scores():
     assert set(r["trace"][1]) == {"tool", "args", "result"}
     row = bb.score_command(CMD["walk forward thirty centimeters"], r, M, "multimodal", ORIGIN)
     assert row["verdict"] == "ok", row
+
+
+def test_real_brains_chat_move_trace_is_scored():
+    turns = iter([{"content": "", "tool_calls": [{"id": "c1", "name": "move",
+                                                  "arguments": '{"forward_m": -0.2}'}]},
+                  {"content": "Backed up 20 cm.", "tool_calls": []}])
+    b = _brains(lambda model, msgs, tools, mt: next(turns))
+    r = asyncio.run(b.chat("back up twenty centimeters", mode="multimodal", source="typed"))
+    assert [t["tool"] for t in r["trace"]] == ["move"] and r["trace"][0]["result"]["stopped"] == "arrived"
+    assert r["trace"][0]["result"]["move"]["target"] == {"x": -0.2, "y": 0.0}
+    assert b.sim.cmds == ['tool goto {"x": -0.2, "y": 0.0}']
+    row = bb.score_command(CMD["back up twenty centimeters"], r, M, "multimodal", ORIGIN)
+    assert row["verdict"] == "ok" and row["arg_ok"] is True, row
+
+
+def test_real_brains_chat_move_units_mistake_is_refused_and_flagged():
+    turns = iter([{"content": "", "tool_calls": [{"id": "c1", "name": "move",
+                                                  "arguments": '{"forward_m": 30}'}]},
+                  {"content": "The move was refused.", "tool_calls": []}])
+    b = _brains(lambda model, msgs, tools, mt: next(turns))
+    r = asyncio.run(b.chat("walk forward thirty centimeters", mode="multimodal", source="typed"))
+    assert r["trace"][0]["result"]["ok"] is False and b.sim.cmds == []          # nothing walked
+    row = bb.score_command(CMD["walk forward thirty centimeters"], r, M, "multimodal", ORIGIN)
+    assert row["verdict"] == "wrong-args" and "30.00 m" in row["why"]
 
 
 def test_real_brains_chat_units_mistake_is_flagged():
@@ -867,14 +995,19 @@ STALE = 'at (0, 0). eye (m, now): "an orange ball on the left."'
 
 
 class _FakeCk:
-    """Just enough bench-side cockpit for run_describe / ensure_fresh_eye."""
+    """Just enough bench-side cockpit for run_describe / ensure_fresh_eye.
+    clears_on_stage: a cockpit from 2026-09-25 on (a world load + reset forgets
+    the last look); False: an older one, which keeps it across the stage."""
 
-    def __init__(self, sit, look_each_turn=False):
+    def __init__(self, sit, look_each_turn=False, clears_on_stage=False):
         self.url, self.sit, self.look = "http://127.0.0.1:1", sit, look_each_turn
+        self.clears = clears_on_stage
         self.staged, self.chats = [], []
 
     def stage(self, name, spec):
         self.staged.append(name)
+        if self.clears:
+            self.sit = FRESH
         return {"x": 0.0, "y": 0.0, "yaw_deg": 0.0}
 
     def post(self, path, body=None, timeout=None):
@@ -909,14 +1042,28 @@ def test_ensure_fresh_eye_restarts_only_the_own_cockpit_and_only_when_stale():
 
 
 def test_run_describe_sends_every_case_with_a_fresh_eye_and_records_it():
+    """An older cockpit keeps the last look across a stage: a fresh process per case,
+    and the case's world staged again on it."""
     ck = _FakeCk(STALE, look_each_turn=True)                  # the commands phase left a look behind
     own, rearmed = _FakeOwn(ck), []
     rows = bb.run_describe(ck, M, 3, lambda s: None, own=own, rearm=lambda: rearmed.append(1))
     assert ck.chats == [FRESH] * 3                             # no case saw an earlier look
     assert own.restarts == 3 and len(rearmed) == 3             # the model looked every turn
-    assert ck.staged == [bb.describe_world(M, i, e) for i, (e, _o) in enumerate(bb.describe_cases(3))]
-    assert all(r["situation"] == FRESH and not r["stale_eye"] for r in rows)
+    worlds = [bb.describe_world(M, i, e) for i, (e, _o) in enumerate(bb.describe_cases(3))]
+    assert ck.staged == [w for w in worlds for _ in (0, 1)]   # staged, restarted, staged again
+    assert all(r["situation"] == FRESH and not r["stale_eye"] and r["fresh_cockpit"] for r in rows)
     assert rows[0]["score"]["ok"] and bb.summarize_describe(rows)["stale_eye"] == 0
+
+
+def test_run_describe_needs_no_restart_when_the_stage_clears_the_eye():
+    """Review 2026-09-25: the cockpit now forgets the last look on a world load /
+    reset, so checking BEFORE the stage restarted it for nothing, every case."""
+    ck = _FakeCk(STALE, look_each_turn=True, clears_on_stage=True)
+    own, rearmed = _FakeOwn(ck), []
+    rows = bb.run_describe(ck, M, 3, lambda s: None, own=own, rearm=lambda: rearmed.append(1))
+    assert ck.chats == [FRESH] * 3 and own.restarts == 0 and rearmed == []
+    assert ck.staged == [bb.describe_world(M, i, e) for i, (e, _o) in enumerate(bb.describe_cases(3))]
+    assert not any(r["fresh_cockpit"] or r["stale_eye"] for r in rows)
 
 
 def test_run_describe_on_a_url_cockpit_marks_the_stale_eye():
@@ -1091,3 +1238,4 @@ def test_bench_cockpit_env_points_every_writable_store_at_the_scratch_dir(tmp_pa
     env = bc.env
     for k in ("ROCKY_COCKPIT_CONF", "ROCKY_MEMORY_DIR", "ROCKY_GESTURE_DIR"):
         assert env[k].startswith(str(tmp_path)), k
+    assert env["ROCKY_STOP_FIRST"] == "0"                   # the stop lines reach the model under test

@@ -12,9 +12,10 @@ The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `qwen3.5-9b` | Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 6,997 at 16k context | 6.9 (cold load + first answer) | 62.8 decode (llama-server timings) | 17/20 | 0 | 1 | 3.6 median / 7.3 p95 wall; first action 0.9 / 3.2 | 5/6 (side 4/5) | seen 12/12, false+ 1/4, bearing err 0.9°, dist err 0.07 m, 1.40 s, floor 2/4 |
 | `lfm2.5-vl` | LiquidAI_LFM2.5-VL-3B-Q8_0 (2.9 GB) + mmproj-LiquidAI_LFM2.5-VL-3B-f16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 4,591 at 64k context | 7.5 (cold load + first answer) | 127.8 decode (llama-server timings) | 5/20 | 2 | 2 | 0.2 median / 8.0 p95 wall; first action 0.6 / 1.1 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 0.9°, dist err 0.03 m, 0.42 s, floor 2/4 |
-| `qwen3.5-4b` | Qwen3.5-4B-Q8_0 (4.5 GB) + mmproj-Qwen3.5-4B-F16 (0.7 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
-| `gemma-4-12b` | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | not measured yet | — | — | — | — | — | — | — | — | — |
-| `qwen3.5-9b-q6k` | Qwen3.5-9B-UD-Q6_K_XL (8.8 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB, a hard link of the 9B's) | not measured yet | — | — | — | — | — | — | — | — | — |
+| `qwen3.5-4b` | Qwen3.5-4B-Q8_0 (4.5 GB) + mmproj-Qwen3.5-4B-F16 (0.7 GB) | 2026-09-25, brain_bench (multimodal) | 5,841 at 16k context | 10.1 (cold load + first answer) | 72.3 decode (llama-server timings) | 16/20 | 0 | 3 | 3.6 median / 18.8 p95 wall; first action 0.9 / 6.2 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 1.1°, dist err 0.12 m, 0.83 s, floor 3/4 |
+| `gemma-4-12b` | gemma-4-12b-it-UD-Q6_K_XL (10.7 GB) + mmproj-gemma-4-12b-it-F16 (0.2 GB) | 2026-09-25, brain_bench (multimodal) | 11,325 at 16k context | 15.2 (cold load + first answer) | 33.1 decode (llama-server timings) | 17/20 | 1 | 0 | 4.7 median / 9.7 p95 wall; first action 1.4 / 2.4 | 5/6 (side 4/5) | seen 12/12, false+ 1/4, bearing err 0.7°, dist err 0.04 m, 1.71 s, floor 3/4 — re-measured after the box-order fix (its boxes are x-first; read y-first the first run got 21.9°) |
+| `gemma-4-26b-a4b` | gemma-4-26B-A4B-it-UD-Q5_K_XL (21.3 GB) + mmproj-gemma-4-26B-A4B-F16 (1.2 GB) | 2026-09-25, brain_bench (multimodal) | 14,857 at 64k context | 41.9 (cold load + first answer) | 38.7 decode (llama-server timings) | 15/20 | 2 | 1 | 6.2 median / 32.1 p95 wall; first action 2.0 / 4.8 | 4/6 (side 3/5) | seen 12/12, false+ 0/4, bearing err 0.6°, dist err 0.07 m, 2.79 s, floor 3/4 |
+| `qwen3.5-9b-q6k` | Qwen3.5-9B-UD-Q6_K_XL (8.8 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB) | 2026-09-25, brain_bench (multimodal) | 9,173 at 16k context | 13.7 (cold load + first answer) | 43.4 decode (llama-server timings) | 17/20 | 0 | 1 | 3.8 median / 7.1 p95 wall; first action 1.1 / 2.3 | 3/6 (side 2/5) | seen 12/12, false+ 0/4, bearing err 1.7°, dist err 0.07 m, 1.54 s, floor 3/4 |
 
 Rows measured by `brain_bench` 2026-09-25 on the obstacle-course world at 2x physics, multimodal role, 20 commands + 6 describe turns (+ the vision bench's detect and floor cases). The 9B row is the run after the turn-discipline rules were added to the brain prompt (before them: 16/20, p95 latency 16 s, describe 3/6). The 3B eye is listed only to show it is not a brain: in the multimodal role its tool calls leak into the reply and both stop lines were missed — keep it in the vision role.
 
@@ -26,6 +27,31 @@ Notes on the table:
 - **The second 9B file** is UD-Q6_K_XL, not a duplicate, so it gets its own id, `qwen3.5-9b-q6k`, and its own row. (A UD-Q4_K_XL file of the same size would have been a duplicate of `/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf`: brain-install reports "duplicate of …" and leaves such a download where it is, for you to delete. A Q8_0 would have become `qwen3.5-9b-q8`.)
 - **The downloaded quants are bigger than the research's.** Sections B2 and C1 below estimate UD-Q4_K_XL files. The 12B came as UD-Q6_K_XL (10.7 GB of weights against B2's 7.4 GB) and the 4B as Q8_0 (4.5 GB against C1's 2.9 GB), so expect their VRAM well above those estimates.
 - **Comparison bars:** lfm2.5-vl (the resident eye, 3B) makes tool calls in 0.2–0.5 s per command warm; the 9B took 0.2–1.5 s. Both are the model's tool-call time, measured by hand. Compare them with the bench's **first action** median and p95, not with its latency column: latency is the wall time of the whole `/api/chat` turn and includes the motion (a gesture runs to its end and a goto until the robot arrives), so a model that gets "wave hello" or "walk forward thirty centimeters" exactly right still shows several seconds there. A new model has to beat or match these bars on first action to be worth a role.
+
+### Verdict 2026-09-25
+
+Same harness, same prompt (with the turn-discipline rules), all in the multimodal role, one model on the GPU at a time.
+The bench cockpit runs with `ROCKY_STOP_FIRST=0`, so the *stop missed* column shows what each model does with a bare
+"stop" on its own; in normal operation the stop gate (`sim/cockpit_brains.py`, 2026-09-25) executes every stop line before
+any model sees it, so a miss here is a mark against the model's tool eagerness, not a live hazard.
+
+- **`qwen3.5-9b` (UD-Q4_K_XL) stays the default all-in-one brain.** 17/20, no missed stop, 0.9 s to the first action,
+  7.0 GB, 63 t/s, sub-degree boxes. Nothing beat it on any axis that matters for driving.
+- **`qwen3.5-4b` (Q8_0) is the small brain.** 16/20, no missed stop, the same 0.9 s first action, 5.8 GB, 72 t/s. Its
+  misses were extra motions after the asked one, the class the one-motion rule and the `move` tool target. It cannot sit
+  beside the 35B driver (5.8 + 10.4 GB), so it is a "robot-side" candidate, not a co-resident one.
+- **`qwen3.5-9b-q6k` gave nothing for its cost**: 17/20 like the Q4, 2.2 GB more VRAM, a third slower, describe no better.
+  Delete the file or keep it as a quality reserve; the fleet does not need it.
+- **`gemma-4-12b` (UD-Q6_K_XL) is a fine eye and an adequate brain, not the pick.** Its boxes are as good as anyone's
+  (0.7°, 4 cm) once read x-first, describe 5/6, 17/20 commands, but it answered a bare "stop" with a chord (the 26B did the
+  same, twice), it is the slowest to act (1.4 s) and the biggest (11.3 GB). Keep it installed as the Gemma option; try it
+  with thinking on and a Gemma-style prompt before judging the family (backlog B41).
+- **`gemma-4-26b-a4b` is not a robot brain**: 42 s cold, 32 s p95, 15/20, both stops missed. Its boxes are excellent
+  (0.6°), so it stays what it was, a vision fallback at the desk.
+- **`lfm2.5-vl` stays the eye only** (5/20 as a brain, tool text in its replies, both stops missed; 0.9° boxes at 0.4 s).
+
+Roles after this round: multimodal `qwen3.5-9b` → `qwen3.5-4b` → `gemma-4-12b`; vision `lfm2.5-vl` → `gemma-4-12b` →
+`gemma-4-26b-a4b`; brain (text, beside the eye) `qwen3.6-35b-a3b` → `qwen3.8-27b-iq4` as before.
 
 ### Adding and measuring a model
 

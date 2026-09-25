@@ -10,7 +10,10 @@ refuse a FAIL), the REACH solver and TEACH recorder endpoints, the hardware
 panel's sim2real idle rule on the mock bus and the model panel's
 fingerprint. The goto reactive layer (lidar detour -> 'blocked') is a slow
 test: it walks the robot into a wall."""
+import json
 import os
+import signal
+import subprocess
 import sys
 import threading
 import time
@@ -292,6 +295,294 @@ def test_bad_numbers_never_wedge_the_cockpit(cockpit_client):
     finally:
         sim.gait.T = T0
     c.post("/api/cmd", json={"line": "stop"})
+
+
+# ------------------------------------------------------------------ hygiene (review items, 2026-09-25)
+EYE = "a red chair two metres ahead"
+
+
+def _plant_eye(sim):
+    """What a look and a find_object leave on the brains (no model call)."""
+    now = time.time()
+    sim.brains.last_look = {"text": EYE, "model": "fake-vl", "t": now, "pose": dict(x=0.0, y=0.0, yaw_deg=0.0)}
+    sim.brains.last_find = {"name": "ball", "found": True, "detail": "0.40 m ahead", "t": now - 5.0,
+                            "model": "fake-vl", "looks": 1}
+
+
+def _situation(c):
+    """A situation composed NOW (in the sim thread), as a chat turn gets it."""
+    r = c.post("/api/awareness", json={"refresh": True}).json()
+    assert r["ok"], r
+    return r["situation"]["text"]
+
+
+def test_a_world_change_or_reset_forgets_the_eye_context(cockpit_client):
+    """Review item: last_look / last_find outlived a world swap, so the next
+    chat turn's situation line described a world that no longer existed."""
+    sim, c = cockpit_client
+    b = sim.brains
+    try:
+        _plant_eye(sim)
+        assert EYE in _situation(c)                                  # the eye clause quotes the last look
+        assert EYE in (c.get("/api/state").json()["situation"]["text"] or "")
+        assert c.post("/api/world", json={"preset": "room"}).json()["ok"]           # another world
+        assert b.last_look is None and b.last_find is None
+        assert EYE not in (c.get("/api/state").json()["situation"]["text"] or "")    # the stored line too
+        text = _situation(c)
+        assert EYE not in text and "eye: no description yet" in text and "'room'" in text
+        for how in ("reset", "reload", "edit"):                      # same world: the scene still changed
+            _plant_eye(sim)
+            assert EYE in _situation(c), how
+            if how == "reset":
+                assert c.post("/api/reset", json={}).json()["reply"].startswith("reset")
+            elif how == "reload":
+                assert c.post("/api/world", json={"preset": "room"}).json()["ok"]
+            else:
+                assert c.post("/api/world/add", json={"object": {"kind": "box", "pos": [1.6, 0.8],
+                                                                  "size": [0.1, 0.1, 0.05]}}).json()["ok"]
+            assert b.last_look is None and b.last_find is None, how
+            assert "eye: no description yet" in _situation(c), how
+    finally:
+        b.last_look = b.last_find = None
+        assert c.post("/api/world", json={"preset": "flat"}).json()["ok"]            # as the fixture had it
+
+
+OLD_FRAME = b"OLD-WORLD-FRAME"
+
+
+def _fake_vision(monkeypatch, b):
+    """A vision chain of one fake model that echoes the eye frame's bytes (no
+    catalog, no network): a look describes exactly the frame it was sent."""
+    import base64
+
+    async def acatalog():
+        return {}
+
+    async def acall(model, msgs, tools, max_tokens):
+        url = msgs[0]["content"][1]["image_url"]["url"]
+        return {"content": "I see " + base64.b64decode(url.split(",", 1)[1]).decode(errors="replace")}
+
+    monkeypatch.setattr(b, "_acatalog", acatalog)
+    monkeypatch.setattr(b, "chain", lambda role, first=None, cat=None: (["fake-vl"], []))
+    monkeypatch.setattr(b, "_acall", acall)
+
+
+def test_a_world_change_or_reset_drops_the_old_eye_frame(cockpit_client, monkeypatch):
+    """Review item: _forget_scene dropped the eye's description but kept its
+    FRAME, which only a render replaces — and nothing renders while paused,
+    with the cameras off, or for up to 1/15 s on the cadence — so the next
+    look described the world that was gone. The frame now goes too."""
+    sim, c = cockpit_client
+    b = sim.brains
+    _fake_vision(monkeypatch, b)
+    try:
+        for how, paused in (("world", True), ("reset", False), ("edit", False)):
+            c.post("/api/speed", json={"paused": paused})
+            sim.frames["eye"] = (7, OLD_FRAME)
+            r = c.post("/api/look", json={}).json()
+            assert r["ok"] and r["description"] == "I see OLD-WORLD-FRAME", (how, r)   # the fake is wired
+            b.last_look = None
+            if how == "world":
+                assert c.post("/api/world", json={"preset": "room"}).json()["ok"]
+            elif how == "reset":
+                assert c.post("/api/reset", json={}).json()["reply"].startswith("reset")
+            else:
+                assert c.post("/api/world/add", json={"object": {"kind": "box", "pos": [1.6, 0.8],
+                                                                  "size": [0.1, 0.1, 0.05]}}).json()["ok"]
+            n, jpg = sim.frames["eye"]
+            assert jpg == b"" and n > 7, how                           # empty, counter still monotonic
+            r = c.post("/api/look", json={}).json()
+            assert r["ok"] is False and "no eye frame yet" in r["error"], (how, r)
+            assert b.last_look is None, how
+            f = c.post("/api/look", json={"find": "ball"}).json()      # find_object's detector too
+            assert f["ok"] is False and "no eye frame yet" in f["error"], (how, f)
+            assert c.get("/frame/eye.jpg").content == b"", how
+            assert "eye: no description yet" in _situation(c), how
+    finally:
+        c.post("/api/speed", json={"paused": False})
+        b.last_look = b.last_find = None
+        assert c.post("/api/world", json={"preset": "flat"}).json()["ok"]            # as the fixture had it
+
+
+def test_live_cameras_render_the_new_scene_at_once_even_paused(cockpit_client, monkeypatch):
+    """When the cameras work, a world load / reset does not leave the eye
+    empty until the cadence (or forever, paused): a render is due on the next
+    loop turn. A GL-free sim (no renderer ever built) never renders for it."""
+    sim, c = cockpit_client
+    renders = []
+
+    def fake_render():                                   # sim thread; stands in for the GL renderer
+        renders.append(sim.world_name)
+        for cam in ("chase", "eye"):
+            n = sim.frames[cam][0] + 1
+            sim.frames[cam] = (n, f"NEW:{sim.world_name}".encode())
+
+    monkeypatch.setattr(sim, "_render", fake_render)
+    try:
+        # GL-free (the fixture's state): the frame is dropped and nothing renders
+        assert sim._cams_live is False
+        assert c.post("/api/world", json={"preset": "room"}).json()["ok"]
+        assert sim.frames["eye"][1] == b"" and renders == [] and sim._render_due is False
+        # live cameras, paused: the new world is on both cameras without a single step
+        monkeypatch.setattr(sim, "_cams_live", True)
+        c.post("/api/speed", json={"paused": True})
+        assert c.get("/api/state").status_code == 200    # a sim-thread round trip: it is parked now
+        sim.frames["eye"] = (sim.frames["eye"][0], OLD_FRAME)
+        k0 = sim._k
+        assert c.post("/api/world", json={"preset": "obstacle course"}).json()["ok"]
+        assert _wait(lambda: sim.frames["eye"][1] == b"NEW:obstacle course", timeout=5.0), sim.frames["eye"]
+        assert sim.frames["chase"][1] == b"NEW:obstacle course"
+        assert sim._k == k0 and renders == ["obstacle course"]      # paused: rendered once, no physics step
+        time.sleep(0.2)
+        assert renders == ["obstacle course"]                       # once, not every paused turn
+        # running: the reset's render comes on the next step, not on the (here: never) cadence
+        c.post("/api/speed", json={"paused": False})
+        assert c.post("/api/reset", json={}).json()["reply"].startswith("reset")
+        assert _wait(lambda: len(renders) == 2, timeout=5.0), renders
+        assert sim.frames["eye"][1] == b"NEW:obstacle course"
+    finally:
+        c.post("/api/speed", json={"paused": False})
+        monkeypatch.setattr(sim, "_cams_live", False)
+        sim._render_due = False
+        assert c.post("/api/world", json={"preset": "flat"}).json()["ok"]            # as the fixture had it
+        sim.frames["eye"] = (sim.frames["eye"][0] + 1, b"")
+        sim.frames["chase"] = (sim.frames["chase"][0] + 1, b"")
+
+
+def test_event_seq_counts_every_event(cockpit_client, monkeypatch):
+    """Review item: a client could not tell a new event from a 12-event window
+    that looks the same (brain_bench's documented blind spot)."""
+    import cockpit
+    sim, c = cockpit_client
+    s0 = c.get("/api/state").json()
+    assert isinstance(s0["event_seq"], int) and s0["event_seq"] >= len(s0["events"])
+    probe = ("say", "event_seq_probe")
+    sim.events.append(probe)                          # as the bridge's thread or the brains would
+    s1 = c.get("/api/state").json()
+    sim.events.append(probe)
+    s2 = c.get("/api/state").json()
+    assert s0["event_seq"] < s1["event_seq"] < s2["event_seq"]
+    assert s2["event_seq"] - s0["event_seq"] >= 2
+    assert list(probe) in s1["events"] and s2["events"][-2:] == [list(probe)] * 2
+    # the SSE feed is the same snapshot: its first message carries it (a SimDead
+    # on the second call ends the stream, so the TestClient read terminates)
+    real, n = sim.call, {"k": 0}
+
+    async def once(fn):
+        n["k"] += 1
+        if n["k"] > 1:
+            raise cockpit.SimDead("test: end the stream")
+        return await real(fn)
+    monkeypatch.setattr(sim, "call", once)
+    r = c.get("/api/events")
+    first = json.loads(r.text.split("\n\n")[0][len("data: "):])
+    assert first["alive"] is True and first["event_seq"] >= s2["event_seq"]
+
+
+def test_event_log_sees_a_new_event_the_window_hides():
+    import copy
+    from cockpit import EventLog
+    ev = EventLog(maxlen=3)
+    for _ in range(5):
+        ev.append(("say", "yes"))
+    seq1, w1 = ev.tail(12)
+    ev.append(("say", "yes"))
+    seq2, w2 = ev.tail(12)
+    assert w1 == w2 == [("say", "yes")] * 3 and (seq1, seq2) == (5, 6)
+    ev.extend([("a", 1), ("b", 2)])
+    assert ev.seq == 8 and list(ev) == [("say", "yes"), ("a", 1), ("b", 2)] and ev.tail(0) == (8, [])
+    cp = copy.copy(ev)                                # deque's copy calls type(d)(d, maxlen)
+    assert isinstance(cp, EventLog) and list(cp) == list(ev) and cp.maxlen == 3
+    big = EventLog(maxlen=10)                         # appends from several threads: none lost
+    ts = [threading.Thread(target=lambda: [big.append(i) for i in range(2000)]) for _ in range(4)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert big.seq == 8000 and len(big) == 10
+
+
+def test_start_cockpit_installs_the_parent_death_hook(monkeypatch, tmp_path):
+    """Review item: a SIGKILLed bench left its cockpit running, holding the port."""
+    import vision_bench as vb
+    seen = {}
+
+    class FakeProc:
+        returncode = None
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+    def fake_popen(argv, **kw):
+        seen.update(kw, argv=argv)
+        return FakeProc()
+    monkeypatch.setattr(vb.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(vb.Cockpit, "alive", lambda self: True)
+    monkeypatch.setattr(vb.tempfile, "gettempdir", lambda: str(tmp_path))     # the log file lands here
+    try:
+        proc, ck = vb.start_cockpit(8799, world="flat")
+    finally:
+        if seen.get("stdout"):
+            seen["stdout"].close()
+    assert isinstance(proc, FakeProc) and ck.url == "http://127.0.0.1:8799"
+    assert seen["argv"][-4:] == ["--port", "8799", "--world", "flat"] and seen["cwd"] == vb.ROOT
+    if sys.platform.startswith("linux"):
+        assert callable(seen["preexec_fn"])
+    else:
+        assert seen["preexec_fn"] is None
+
+
+LINUX = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="PR_SET_PDEATHSIG is Linux-only")
+GET_PDEATHSIG = ("import ctypes; v = ctypes.c_int(-1); "
+                 "ctypes.CDLL(None).prctl(2, ctypes.byref(v), 0, 0, 0); print(v.value)")   # PR_GET_PDEATHSIG
+
+
+@LINUX
+def test_parent_death_hook_arms_the_child():
+    """Run in a CHILD (calling the hook here would arm the pytest process itself)."""
+    import vision_bench as vb
+    hook = vb.parent_death_hook()
+    assert hook is not None
+    r = subprocess.run([sys.executable, "-c", GET_PDEATHSIG], preexec_fn=hook,
+                       capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0 and r.stdout.strip() == str(int(signal.SIGTERM)), r
+    plain = subprocess.run([sys.executable, "-c", GET_PDEATHSIG], capture_output=True, text=True, timeout=30)
+    assert plain.stdout.strip() == "0"                # without the hook: no death signal
+
+
+def _gone(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] == "Z"      # a zombie waiting for its reaper
+    except OSError:
+        return True
+
+
+@LINUX
+def test_a_sigkilled_parent_takes_its_child_along():
+    """The point of the hook: SIGKILL the 'bench' (no finally runs) and its
+    'cockpit' child gets SIGTERM from the kernel instead of living on."""
+    sim_dir = os.path.join(ROOT, "sim")
+    code = (f"import subprocess, sys, time; sys.path.insert(0, {sim_dir!r}); import vision_bench as vb; "
+            "p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], "
+            "preexec_fn=vb.parent_death_hook()); print(p.pid, flush=True); time.sleep(60)")
+    mid = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    child = None
+    try:
+        child = int(mid.stdout.readline())
+        assert not _gone(child)
+        mid.kill()
+        mid.wait(timeout=10)
+        assert _wait(lambda: _gone(child), timeout=10.0), "the child outlived its SIGKILLed parent"
+    finally:
+        mid.kill()
+        mid.stdout.close()
+        if child is not None and not _gone(child):
+            os.kill(child, signal.SIGKILL)
+
 
 # ------------------------------------------------------------------ the fatal path
 def test_a_step_exception_fails_requests_instead_of_hanging():

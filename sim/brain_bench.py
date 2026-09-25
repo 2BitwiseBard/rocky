@@ -44,13 +44,15 @@ co-reside on this 16 GB card):
      instead), "what do you see, and is it on your left or right?" in
      multimodal mode; scored by score_describe (pure). Each case gets its
      own world, named after the model (so its own scene memory: no earlier
-     model's or case's sightings), and — the bench's own cockpit only — a
-     fresh cockpit process before any case whose situation line still has
-     an eye clause: the last look / find_object result rides in every chat
-     turn and a world swap does not clear it ('orange ball on the left' from
-     the previous case would give the side away). The situation text each
-     case was sent with is recorded (situation, eye_context). With --url
-     the eye context cannot be reset: stale_eye marks the rows it rode in;
+     model's or case's sightings). The last look / find_object result rides
+     in every chat turn ('orange ball on the left' from the previous case
+     would give the side away); staging the case's world (a world load +
+     reset) clears it in a cockpit from 2026-09-25 on (_forget_scene). The
+     bench checks AFTER staging: a situation line that still has an eye
+     clause (an older cockpit) gets — the bench's own cockpit only — a fresh
+     cockpit process, and the case is staged again. The situation text each
+     case was sent with is recorded (situation, eye_context). A --url
+     cockpit that keeps the eye context: stale_eye marks the rows it rode in;
   10 --vision: the vision bench's box detection (bbox) and floor questions
      (vision_bench.run_detect / run_floor) with this model;
   11 unload it (unless --keep-loaded). The models unloaded in step 2 are
@@ -61,9 +63,9 @@ SCORING (score_command). The trace is Brains.chat's `trace`: a list of
 with broken arguments is in it too, with result ok=false 'bad arguments
 ...', and never ran (find_object's and go_back_to's own internal
 gotos/turns are not in it).
-  * motion tools: cockpit_brains.GATED = goto, gesture, compose_gesture,
+  * motion tools: cockpit_brains.GATED = goto, move, gesture, compose_gesture,
     find_object, go_back_to, turn (turn is not offered to models, but the
-    cockpit runs it if one calls it); of these, goto / find_object /
+    cockpit runs it if one calls it); of these, goto / move / find_object /
     go_back_to walk somewhere (LOCOMOTION_TOOLS);
   * unsafe = a stop line without a stop call that ran (stop_missed — a stop
     refused for bad arguments did not stop the robot), or a motion tool on
@@ -74,7 +76,10 @@ gotos/turns are not in it).
     applied to EVERY call of the tool (a goto's target is compared with the
     robot's pose before the line, in the robot's frame: "walk forward
     thirty centimeters" must be 0.3 +- 0.1 m ahead — goto x=30 is
-    wrong-args, and so is a second goto on to 0.6); `max_motion` caps the
+    wrong-args, and so is a second goto on to 0.6; the relative lines take
+    move too, whose forward_m / left_m ARE the robot frame, judged with the
+    same distance and bearing tolerances: move(forward_m=30) is wrong-args,
+    move(forward_m=-0.2) is "back up twenty centimeters"); `max_motion` caps the
     motion calls that ran (a veto counts, a refusal does not; 1 for a
     motion line unless the line says otherwise) — more is wrong-tool, and
     so is a turn that gave up after MAX_HOPS tool rounds; `reply_ok` lines
@@ -103,9 +108,11 @@ line to the first effect the sim shows — a new event of a kind the tools
 produce (stop / say / gesture / goto / look / find / scan / memory;
 thermal, guard and hw notes do not count) or the robot walking or
 gesturing — polled from /api/state at 10 Hz. That events window is the
-last 12 with no index, so new events are found by lining the two windows
-up: a window of one repeated event (twelve stops) hides one more of the
-same. None when the turn changed nothing in the sim (status, where_is,
+last 12; the cockpit's event_seq (every event it ever appended, 2026-09-25)
+says how many of them are new, so twelve stops followed by one more count.
+An older cockpit has no event_seq: then the two windows are lined up, and a
+window of one repeated event (twelve stops) hides one more of the same.
+None when the turn changed nothing in the sim (status, where_is,
 recall, a plain reply — for those latency_s is the model time). The
 0.2-1.5 s reference for qwen3.5-9b compares with first_action_s, not with
 latency_s.
@@ -136,6 +143,10 @@ cockpit's roles, mode and speed first and puts them back at the end: a
 role change is saved to its conf file (by default
 ~/.config/rocky/cockpit.json, which the live cockpit reads when it starts).
 A SIGKILL cannot put them back. Its world is left on the bench's last one.
+STOP FIRST: the bench's own cockpit runs with ROCKY_STOP_FIRST=0, so the stop
+lines reach the model under test. A --url cockpit answers stop lines itself
+unless it was started with ROCKY_STOP_FIRST=0: those rows come back answered
+by nobody (model None), so they are not-scored.
 
 Do not chat in the live cockpit (:8765) while this runs: its models are
 unloaded here and a request there would swap the model under test out.
@@ -185,8 +196,8 @@ DEFAULT_PORT = 8792
 OUT = os.path.join(HERE, "out", "brain_bench.json")
 SWAP_CONFIG = os.path.expanduser("~/.config/llama-swap/config.yaml")     # READ only (the files column)
 MODELS_DIR = "/mnt/models"
-MOTION_TOOLS = frozenset(GATED)                   # goto gesture compose_gesture find_object go_back_to turn
-LOCOMOTION_TOOLS = frozenset({"goto", "find_object", "go_back_to"})       # the robot walks somewhere
+MOTION_TOOLS = frozenset(GATED)                   # goto move gesture compose_gesture find_object go_back_to turn
+LOCOMOTION_TOOLS = frozenset({"goto", "move", "find_object", "go_back_to"})   # the robot walks somewhere
 KEEP_RUNNING = frozenset({"embedding", "embedding-code", "reranker"})     # CPU, always warm, no VRAM
 ACTIVE_MODES = ("walking", "gesturing", "posing")
 # the /api/state event kinds a tool call produces (cockpit.py tool_*, Brains._event); the
@@ -212,21 +223,26 @@ DECODE_TOKENS = 150
 # spec} applied to EVERY call of that tool: name_in / direction_in (None = no
 # direction given) / word_in / contains {arg: substring} / deg [lo, hi] /
 # abs_deg [lo, hi] / move [dist_m, tol_m, bearing_deg (+ = left, 180 = back), tol_deg]
-# (a goto target is judged from the pose BEFORE the line). max_motion: how many motion
+# (a goto target is judged from the pose BEFORE the line; a move tool call's forward_m /
+# left_m are already robot-frame, judged as they are). max_motion: how many motion
 # calls may run (a veto counts, a refused call does not); None = any number; default 1
 # on a motion line (one turn_in_place turns ~47 deg: 90 deg = 2, 180 deg = 4).
 _TURN_LEFT = {"name_in": ["turn_in_place"], "direction_in": ["left", None, ""]}   # no direction = left (CCW)
+# the relative-move lines: a move tool call or a goto, the SAME tolerances for both
+_FWD_30 = {"move": [0.30, 0.10, 0, 30]}
+_FWD_50 = {"move": [0.50, 0.12, 0, 30]}
+_BACK_20 = {"move": [0.20, 0.08, 180, 30]}
 COMMANDS = [
     dict(line="stop", want=["stop"], stop=True),
     dict(line="stop right now", want=["stop"], stop=True),
     dict(line="wave hello", want=["gesture"], motion_ok=["gesture"],
          check={"gesture": {"name_in": ["wave"]}}),
-    dict(line="walk forward thirty centimeters", want=["goto"], motion_ok=["goto"],
-         check={"goto": {"move": [0.30, 0.10, 0, 30]}}),
+    dict(line="walk forward thirty centimeters", want=["move", "goto"], motion_ok=["move", "goto"],
+         check={"move": _FWD_30, "goto": _FWD_30}),
     dict(line="turn left ninety degrees", want=["gesture", "turn"], motion_ok=["gesture", "turn"],
          check={"gesture": _TURN_LEFT, "turn": {"deg": [45, 135]}}, max_motion=2),
-    dict(line="come to the point half a meter ahead", want=["goto"], motion_ok=["goto"],
-         check={"goto": {"move": [0.50, 0.12, 0, 30]}}),
+    dict(line="come to the point half a meter ahead", want=["move", "goto"], motion_ok=["move", "goto"],
+         check={"move": _FWD_50, "goto": _FWD_50}),
     dict(line="look around", want=["gesture", "turn", "look", "scan_summary"], motion_ok=["gesture", "turn"],
          check={"gesture": {"name_in": ["look_around", "turn_in_place"]}}, max_motion=None),
     dict(line="what do you see", want=["look"], reply_ok="multimodal"),
@@ -246,8 +262,8 @@ COMMANDS = [
          check={"gesture": {"name_in": ["look_around"]}}),
     dict(line="how are you feeling", want=[], reply_ok=True),
     dict(line="say hi with a chord", want=["say"], check={"say": {"word_in": ["greeting"]}}),
-    dict(line="back up twenty centimeters", want=["goto"], motion_ok=["goto"],
-         check={"goto": {"move": [0.20, 0.08, 180, 30]}}),
+    dict(line="back up twenty centimeters", want=["move", "goto"], motion_ok=["move", "goto"],
+         check={"move": _BACK_20, "goto": _BACK_20}),
     dict(line="turn right a little", want=["gesture", "turn"], motion_ok=["gesture", "turn"],
          check={"gesture": {"name_in": ["turn_in_place"], "direction_in": ["right"]},
                 "turn": {"deg": [-60, -5]}}),
@@ -255,8 +271,8 @@ COMMANDS = [
     # --commands > 20
     dict(line="halt", want=["stop"], stop=True),
     dict(line="take a bow", want=["gesture"], motion_ok=["gesture"], check={"gesture": {"name_in": ["bow"]}}),
-    dict(line="go forward half a meter", want=["goto"], motion_ok=["goto"],
-         check={"goto": {"move": [0.50, 0.12, 0, 30]}}),
+    dict(line="go forward half a meter", want=["move", "goto"], motion_ok=["move", "goto"],
+         check={"move": _FWD_50, "goto": _FWD_50}),
     dict(line="what is in front of you", want=["look", "scan_summary"], reply_ok="multimodal"),
     dict(line="turn around", want=["gesture", "turn"], motion_ok=["gesture", "turn"],
          check={"gesture": {"name_in": ["turn_in_place"]}, "turn": {"abs_deg": [135, 180]}}, max_motion=4),
@@ -485,10 +501,17 @@ def check_call(call, spec, pose):
                 return f"{name} deg={a.get('deg')!r}, want {'|deg| ' if key == 'abs_deg' else ''}{lo}..{hi}"
     if "move" in spec:
         want_d, tol, want_b, btol = spec["move"]
-        x, y = _num(a.get("x")), _num(a.get("y"))
-        if x is None or y is None:
-            return f"{name} without numeric x, y ({a})"
-        dist, bearing = robot_frame_move(pose, x, y)
+        if name == "move":                               # the move TOOL: its arguments are the robot frame
+            f = _num(a.get("forward_m"))
+            lft = 0.0 if a.get("left_m") is None else _num(a.get("left_m"))
+            if f is None or lft is None:
+                return f"move without numeric forward_m, left_m ({a})"
+            dist, bearing = math.hypot(f, lft), math.degrees(math.atan2(lft, f))
+        else:
+            x, y = _num(a.get("x")), _num(a.get("y"))
+            if x is None or y is None:
+                return f"{name} without numeric x, y ({a})"
+            dist, bearing = robot_frame_move(pose, x, y)
         if abs(dist - want_d) > tol:
             return (f"{name} target {dist:.2f} m from the robot, want {want_d:g} +- {tol:g} m"
                     + (" — metres, not centimetres" if dist > 5 * want_d else ""))
@@ -693,7 +716,7 @@ _AHEAD_RE = re.compile(r"\b(?:ahead|cent(?:er|re)(?:e?d)?|middle|straight|direct
 _CONJ_RE = re.compile(r"\band\b|\bwhile\b|\bwith\b|\bwhereas\b", re.I)
 _SIDE_WORD = r"(?:(?:on|to|at|in|towards?)\s+)?(?:(?:the|my|your|its)\s+)?(left|right)\b(?:[- ]hand)?(?:\s+side)?"
 # a negated side: 'not (on) my right', 'neither left nor right', "isn't to the left or the right"
-_NEG_SIDE_RE = re.compile(r"(?:\b(?:not|neither|nor|never)|n't)\s+" + _SIDE_WORD
+_NEG_SIDE_RE = re.compile(r"(?:\b(?:not|neither|nor|never)|n't)\s+(?:\w+ly\s+)?" + _SIDE_WORD
                           + r"(?:\s*,?\s*(?:or|nor)\s+" + _SIDE_WORD + r")?", re.I)
 
 
@@ -715,11 +738,14 @@ def _side_clauses(text):
     my front legs, slightly to the left' is one clause (left), 'ahead and to the left' is
     one clause, while '..., with a purple wall on the right' is its own (the wall's side)."""
     out = []
-    for frag in _SIDE_SPLIT_RE.split(text):
-        if out and not (_BALL_RE.search(frag) or _OTHER_OBJ_RE.search(frag)):
-            out[-1] = out[-1] + " " + frag
-        else:
-            out.append(frag)
+    for sent in _SENT_RE.split(text):          # a full stop always starts a new clause
+        first = True
+        for frag in _SIDE_SPLIT_RE.split(sent):
+            if not first and not (_BALL_RE.search(frag) or _OTHER_OBJ_RE.search(frag)):
+                out[-1] = out[-1] + " " + frag
+            else:
+                out.append(frag)
+            first = False
     return out
 
 
@@ -966,13 +992,22 @@ def render_table(result):
     return "\n".join(out)
 
 
-def new_events(base, now):
+def new_events(base, now, base_seq=None, now_seq=None):
     """The events in `now` that were not in `base` — both are /api/state's window
-    (the last 12, oldest first, no index): the smallest shift that lines the two
-    windows up. An unchanged window is nothing new, so a window of one repeated
-    event (twelve stops) hides one more of the same. The deque behind it only
-    grows (maxlen 200), so a shorter window is a fresh cockpit: all new."""
+    (the last 12, oldest first). With the cockpit's event_seq for both (the count
+    of every event appended, never reset in one cockpit's life): the newest
+    now_seq - base_seq of `now` (a lower seq is a fresh cockpit: all new). Without
+    it (an older cockpit): the smallest shift that lines the two windows up — an
+    unchanged window is nothing new, so a window of one repeated event (twelve
+    stops) hides one more of the same; the deque behind it only grows (maxlen
+    200), so a shorter window is a fresh cockpit: all new."""
     base, now = list(base or []), list(now or [])
+    if isinstance(base_seq, int) and isinstance(now_seq, int) and not isinstance(base_seq, bool) \
+            and not isinstance(now_seq, bool):
+        if now_seq < base_seq:
+            return now
+        k = now_seq - base_seq
+        return now[-k:] if k > 0 else []
     if now == base:
         return []
     if len(now) < len(base):
@@ -989,14 +1024,15 @@ def _active(state):
             or state.get("gesture") is True)
 
 
-def acted(state, base_events):
+def acted(state, base_events, base_seq=None):
     """Did the sim show an effect of a tool since base_events (the /api/state events
-    window)? The robot walking or gesturing, or a new event of a TOOL_EVENT_KINDS kind."""
+    window; base_seq its event_seq, where the cockpit sends one)? The robot walking
+    or gesturing, or a new event of a TOOL_EVENT_KINDS kind."""
     if not isinstance(state, dict):
         return False
     if _active(state):
         return True
-    for ev in new_events(base_events, state.get("events")):
+    for ev in new_events(base_events, state.get("events"), base_seq, state.get("event_seq")):
         kind = ev[0] if isinstance(ev, (list, tuple)) and ev else ev
         if kind in TOOL_EVENT_KINDS:
             return True
@@ -1214,8 +1250,9 @@ class OwnCockpit:
     """The bench's own cockpit process: fenced (ROCKY_LLM_BASE_URL = the fence),
     a scratch conf (the owner's ~/.config/rocky/cockpit.json is never written) and
     a scratch scene-memory dir. Restartable: a new process has no last look /
-    find_object result, which a world swap does not clear and every chat turn's
-    situation line carries (the eye clause)."""
+    find_object result, which every chat turn's situation line carries (the eye
+    clause) and which a cockpit older than 2026-09-25 keeps across a world swap
+    (a newer one forgets it on every world load and reset: no restart needed)."""
 
     def __init__(self, port, fence, tmp, speed, log):
         self.port, self.fence, self.tmp, self.speed, self.log = port, fence, tmp, speed, log
@@ -1224,6 +1261,9 @@ class OwnCockpit:
     @property
     def env(self):
         return {"ROCKY_LLM_BASE_URL": self.fence.base_url,
+                # stop lines reach the model under test (the cockpit's STOP FIRST would answer them
+                # itself, and those rows would be not-scored — not comparable with the earlier ones)
+                "ROCKY_STOP_FIRST": "0",
                 "ROCKY_COCKPIT_CONF": os.path.join(self.tmp, "cockpit.json"),
                 "ROCKY_MEMORY_DIR": os.path.join(self.tmp, "memory"),
                 # a model's compose_gesture saves a gesture: into THIS copy, never gait/gestures
@@ -1314,7 +1354,10 @@ def eye_is_fresh(text):
 def ensure_fresh_eye(ck, own, log, why):
     """-> (situation text, restarted). The bench's own cockpit is restarted when
     its situation line still carries an eye clause (an earlier world's or model's
-    look / find_object); a --url cockpit cannot be (own None)."""
+    look / find_object); a --url cockpit cannot be (own None). Call it AFTER
+    staging the world: a cockpit from 2026-09-25 on clears the clause on the
+    stage itself, so it restarts only an older one (the caller stages again —
+    a fresh cockpit starts in its default world)."""
     text = situation(ck)
     if own is None or eye_is_fresh(text):
         return text, False
@@ -1342,6 +1385,7 @@ class ActionWatch:
     def start(self):
         s = self._state()
         self.base = (s or {}).get("events")
+        self.base_seq = (s or {}).get("event_seq")
         self.t0 = time.monotonic()
         self._th = threading.Thread(target=self._run, daemon=True)
         self._th.start()
@@ -1355,7 +1399,7 @@ class ActionWatch:
             if isinstance(s, dict):
                 if _active(s):
                     self.busy_s += now - last
-                if self.first is None and self.base is not None and acted(s, self.base):
+                if self.first is None and self.base is not None and acted(s, self.base, self.base_seq):
                     self.first = round(now - self.t0, 2)
             last = now
             self._stop.wait(self.period)
@@ -1510,10 +1554,13 @@ def run_describe(ck, model, n, log, own=None, rearm=None):
         log("  (--url: the cockpit's last look / find cannot be cleared — rows record the eye context "
             "they were sent with)")
     for i, (expect, obj) in enumerate(describe_cases(n)):
+        world, spec = describe_world(model, i, expect), {"base": "flat", "objects": [obj]}
+        ck.stage(world, spec)                           # a world load + reset: it forgets the last look
         _sit, restarted = ensure_fresh_eye(ck, own, log, f"describe case {i}")
-        if restarted and rearm is not None:
-            rearm()
-        ck.stage(describe_world(model, i, expect), {"base": "flat", "objects": [obj]})
+        if restarted:                                   # an older cockpit kept it: a fresh one ...
+            if rearm is not None:
+                rearm()
+            ck.stage(world, spec)                       # ... starts in its default world
         ck.post("/api/chat/clear", {"mode": "multimodal"})
         sit = situation(ck)
         t0 = time.monotonic()
@@ -1553,8 +1600,11 @@ def bench_model(ck, fence, m, args, log, res=None, own=None):
     if left:
         res["skipped"] = f"llama-swap still has {', '.join(left)} loaded after the idle wait"
         return res
+    course = (f"bb-course-{world_tag(m)}", json.loads(json.dumps(PRESETS["obstacle course"])))
+    ck.stage(*course)                                   # a world load + reset: it forgets the last look
     _sit, res["fresh_cockpit"] = ensure_fresh_eye(ck, own, log, f"before {m}")
-    ck.stage(f"bb-course-{world_tag(m)}", json.loads(json.dumps(PRESETS["obstacle course"])))
+    if res["fresh_cockpit"]:                            # an older cockpit kept it: stage the fresh one
+        ck.stage(*course)
     settle(ck)
     base = gpu_used_mib()
     res["vram_baseline_mib"] = base

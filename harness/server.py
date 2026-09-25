@@ -16,24 +16,46 @@ Wire into a client (e.g. Claude Code .mcp.json):
     {"rocky": {"command": "python3", "args": ["-m", "harness.server"],
                "cwd": "<repo>/rocky"}}
 
-Tools: say, gesture, goto, stop, scan_summary, status, list_gestures, and
+Tools: say, gesture, move, goto, stop, scan_summary, status, list_gestures, and
 look / find_object where an eye exists and remember / where_is / recall /
 go_back_to / forget where the scene memory exists (a cockpit backend). map_query / patrol / dock are
 not stubbed — absent tool > lying tool. D052: the gesture and say docs are
 built from the backend's LIVE lists when the server starts (saved keyframe
 gestures and custom chord words included); gesture takes direction
-left|right for turn_in_place / sidestep.
+left|right for turn_in_place / sidestep. move (2026-09-25) is a relative move in
+the robot's frame (forward_m, left_m): the server reads the pose from the
+backend's status and calls the backend's own goto (harness.local_brain.move_via),
+so every backend gets it with goto's guards and results, unchanged; a cockpit
+backend runs it itself (/api/tool/move: its stop check between the pose read and
+the goto). move and goto refuse a boolean for a distance, as the cockpit does
+(pydantic's lax mode made move(forward_m=true) a 1 m walk).
 """
 from __future__ import annotations
 
 import os
 import sys
+from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import BeforeValidator
 
 from harness.backend import MockBackend, CHORD_WORDS, GESTURES, SIGNED
 from harness.intent import _accepts
-from harness.local_brain import GOTO_DOC
+from harness.local_brain import GOTO_DOC, MOVE_DOC, move_via
+
+
+def _no_bool(v):
+    """MCP arguments go through pydantic's lax mode, where true is 1.0: move(forward_m=true)
+    walked a metre and goto(true, 0) went to (1, 0), while the cockpit refuses a boolean
+    (validate_move / validate_goto). Refused here the same way; the schema stays 'number'."""
+    if isinstance(v, bool):
+        raise ValueError("meters as a number, got a boolean")     # noqa: TRY004 — pydantic reports a ValueError
+    return v
+
+
+Meters = Annotated[float, BeforeValidator(_no_bool)]
+# left_m: null reads as 0 (the default), as the cockpit's validate_move reads it
+LeftMeters = Annotated[float, BeforeValidator(lambda v: 0.0 if v is None else _no_bool(v))]
 
 
 def _lists(be):
@@ -83,8 +105,13 @@ def build_server(backend=None) -> FastMCP:
         return {"ok": False, "error": f"this backend cannot {name} {direction}"}
 
     @mcp.tool(annotations={"readOnlyHint": False}, description=(
+        MOVE_DOC + " One motion intent at a time; a newer move or goto preempts it."))
+    async def move(forward_m: Meters, left_m: LeftMeters = 0.0) -> dict:
+        return await move_via(be, forward_m, left_m)
+
+    @mcp.tool(annotations={"readOnlyHint": False}, description=(
         GOTO_DOC + " One motion intent at a time; calling goto again preempts."))
-    async def goto(x: float, y: float) -> dict:
+    async def goto(x: Meters, y: Meters) -> dict:
         return await be.goto(x, y)
 
     @mcp.tool(annotations={"readOnlyHint": False, "idempotentHint": True})

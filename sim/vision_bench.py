@@ -49,6 +49,7 @@ import json
 import math
 import os
 import re
+import signal
 import statistics
 import subprocess
 import sys
@@ -190,13 +191,56 @@ class Cockpit:
         return self.post("/api/tool/status")["pose"]
 
 
+PR_SET_PDEATHSIG = 1        # <linux/prctl.h>: the signal a process gets when its parent dies
+
+
+def parent_death_hook(sig=signal.SIGTERM):
+    """A Popen preexec_fn (Linux; None elsewhere or when libc's prctl cannot be
+    found): the child asks the kernel for `sig` when its parent dies, so a
+    bench killed with SIGKILL (no finally, no atexit) never leaves its cockpit
+    holding the port. libc and prctl are resolved HERE, in the parent: the hook
+    runs between fork and exec, where loading a library could deadlock on a
+    lock another thread held, so it only makes the one call. If the parent
+    died before that call (a reparented child would never get the signal) the
+    child exits at once. Never raises: without the call the child simply runs
+    as it did before. Linux ties the signal to the THREAD that forked, so call
+    Popen from a thread that lives as long as the child should (both benches
+    start their cockpit from the main thread). The setting survives exec and
+    is not inherited by the child's own children."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        import ctypes
+        try:
+            libc = ctypes.CDLL(None, use_errno=True)       # the running process's libc: no ldconfig call
+            prctl = libc.prctl
+        except (OSError, AttributeError):
+            libc = ctypes.CDLL("libc.so.6", use_errno=True)
+            prctl = libc.prctl
+        prctl.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+        prctl.restype = ctypes.c_int
+    except Exception:                                       # noqa: BLE001 — no hook, no harm
+        return None
+    parent, signum = os.getpid(), int(sig)
+
+    def hook():
+        try:
+            prctl(PR_SET_PDEATHSIG, signum, 0, 0, 0)
+            if os.getppid() != parent:                      # orphaned already: nobody will signal it
+                os._exit(1)
+        except Exception:                                   # noqa: BLE001 — never fail the spawn
+            pass
+    return hook
+
+
 def start_cockpit(port, world="obstacle course"):
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"))
     tmp = tempfile.gettempdir()
     env.setdefault("ROCKY_COCKPIT_CONF", os.path.join(tmp, "vision_bench_cockpit.json"))   # never ~/.config
     log = open(os.path.join(tmp, f"vision_bench_cockpit_{port}.log"), "w")
     proc = subprocess.Popen([sys.executable, os.path.join("sim", "cockpit.py"), "--port", str(port),
-                             "--world", world], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+                             "--world", world], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+                            preexec_fn=parent_death_hook())       # a SIGKILLed bench takes its cockpit along
     ck = Cockpit(f"http://127.0.0.1:{port}")
     t_end = time.monotonic() + 90
     while time.monotonic() < t_end:

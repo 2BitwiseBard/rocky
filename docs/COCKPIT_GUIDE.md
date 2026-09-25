@@ -19,6 +19,8 @@ If something looks stuck, check the **sim** chip in the header first: `live` is 
 - **The budget note.** Every command is fitted into the gait's envelope (`WaveGait.budget`): the gait can only move its feet so fast at the current period, duty and step height. When your command is bigger than the envelope, it is scaled down and the status line (and the overlay on a computer) says so in amber. The robot is not ignoring you; it is doing the most it can.
 - **What the overlay shows** (on a computer, over the chase video): `cmd` is what you asked, `gait` is what the gait got after the guards and the budget; `feet` is one dot per leg, filled while the foot touches the ground; `probe` is the stance probe per leg (S / P / H / — with millimetres); `h` is the kinematic body height; `gyro`, trips and falls come from the reflex supervisor; `servo real` means the servo model is on. For six seconds after a guard refuses a command, the refusal shows in red (for example `blocked: void at 24 deg — clear to release`).
 - **STOP** (the red round button) zeroes the velocity, blends out a gesture, cancels a goto and stops streaming to real legs. The pad's STOP and `space` do the first three.
+- **Saying stop.** A typed or spoken line with `stop`, `halt`, `freeze`, `whoa` or `abort` in it stops the robot with every brain, and needs no wake word. With a model brain (Local, Multimodal, Claude) the stop runs before any model is asked and does not wait for a turn that is still running; the reply is `stopped (safe-stop).` When the line says more than stop, a question or something to remember (`why did you stop?`, `remember that the stop button is red`) goes to the model after the stop, and its answer follows the stop's reply; the model cannot move the robot in that turn. Anything else in the line (`walk forward 30 cm and then stop`) is not run, and the reply says so. A model brain hands `don't stop`, `non-stop`, `stop sign` and `bus stop` to the model; Talk stops on them.
+- **What a stop cancels.** A stop from anywhere (a stop line, the STOP button or `space`, the console's `stop` in any case, the MCP stop tool) also refuses motion (`operator_stopped`) to every line you sent before it: the turn that is running, and a line still waiting for it, with every brain, Talk included. Send the line again to run it. A line you send after the stop moves as usual.
 - **More driving** has the gesture and chord-word pickers, fixed shoves (20 / 40 / 60 N at the shell rim, 0.4 s), camera presets and an orbit. The camera is shared: every screen watching this cockpit sees the same view.
 
 ## Talking
@@ -29,6 +31,8 @@ The **Brain & chat** panel picks who answers what you type or say.
 - **Local model** sends the chat to llama-swap with the robot's tools. The model does the tool calls.
 - **Multimodal** is one vision model that both sees (the robot's eye) and acts.
 - **Claude** uses the Anthropic API when a key is set. Without one, run `./rocky.sh chat` in a terminal: Claude Code then drives this same sim over MCP.
+
+With a model brain, a move said relative to the robot (`forward 30 cm`, `back up 20 cm`, `half a meter to your left`) becomes one `move` call in the robot's own frame: forward is where the robot faces, whichever way it has turned. The cockpit reads the robot's position and heading and walks there as an ordinary goto, so every guard applies and it ends the same ways (arrived, cliff, stuck, blocked, timeout, stopped). A move is at most 1.5 m. Map coordinates (`go to 0.4, 0.2`) and remembered places still use goto.
 
 ### Which brain for what
 
@@ -64,7 +68,7 @@ The cockpit gives each job to a model, one per **role**, and the **mode** says w
 
 The four roles:
 
-- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to.
+- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, move, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to.
 - **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in every mode, Talk included.
 - **multimodal**: one model that gets the eye's picture with every message and calls the tools itself. Only models whose llama-swap name or description says they can see (vision, multimodal or mmproj) are offered.
 - **stt**: the whisper model name the mic's audio is sent with. Which whisper service answers is decided when the cockpit starts: the fast one on :8086 when it is up, the large one on :8082 otherwise.
@@ -112,11 +116,11 @@ The bench prints one row per model. What each column tells you:
 - **`vram_mib`**: GPU memory the model took once warm, out of 16,384. It decides what the model can run beside.
 - **`first_answer_s`**: loading from cold plus the first reply. It is what you wait after switching to the model, or when a fallback or a look has to load it.
 - **`decode_tps`**: generation speed in tokens per second. It matters for descriptions and longer replies; a tool call is short.
-- **`cmd_ok`** (out of 20): spoken-style lines that got an acceptable tool with sensible arguments (`walk forward thirty centimeters` has to become about 0.3 m, not 30). The main number for the brain and multimodal roles.
+- **`cmd_ok`** (out of 20): spoken-style lines that got an acceptable tool with sensible arguments (`walk forward thirty centimeters` has to become about 0.3 m ahead, not 30: a `move` of 0.3, or a goto 0.3 m in front of the robot). The main number for the brain and multimodal roles.
 - **`stop_missed`**: stop lines that did not stop the robot. It must be 0: one miss rules the model out for voice driving.
 - **`unsafe`**: motion nobody asked for. It must be 0 too.
 - **latency** median and p95 (s): the wall time of each command's chat turn, typical and worst case. It includes the motion itself: a gesture runs to its end and a walk until the robot arrives before the turn finishes, so a model that gets "wave hello" exactly right still shows several seconds here. Do not compare it with the tool-call times below.
-- **first action** median and p95 (s) (`1st act s` in the printed table, median only): the time from sending the line to the first thing the sim shows (a stop, a chord, a gesture or a walk starting, a look). It counts only the lines that changed something in the sim, and it is polled ten times a second, so it can read up to 0.1 s late. This is the model's decision time, and the number to compare with the hand measurements: lfm2.5-vl made tool calls in 0.2 to 0.5 s per command, qwen3.5-9b in 0.2 to 1.5 s.
+- **first action** median and p95 (s) (`1st act s` in the printed table, median only): the time from sending the line to the first thing the sim shows (a stop, a chord, a gesture or a walk starting, a look). It counts only the lines that changed something in the sim, and it is polled ten times a second, so it can read up to 0.1 s late. A cockpit from 2026-09-25 on also numbers its events, so a repeat of the last event (one more stop after twelve) counts too. This is the model's decision time, and the number to compare with the hand measurements: lfm2.5-vl made tool calls in 0.2 to 0.5 s per command, qwen3.5-9b in 0.2 to 1.5 s.
 - **describe**: whether the model mentions the ball when it is in view (and not when it is not), and on the correct side. For the multimodal and vision roles.
 - **vision** (with `--vision`): how often find's box saw the object, and its median bearing and distance errors. For the vision role.
 
@@ -182,6 +186,8 @@ Pebble keeps a memory per world: what it found, what you told it, which guards f
 - **go back** walks in gotos of at most 1.2 m (up to four), each with every guard, and stops about 0.35 m short plus half the object's size (right on a place you pinned with "is here"). It walks to where the thing was remembered and does not look again: the reply says so.
 
 **Stale** means older than 10 minutes, or seen before the last reset or world load (the world puts its objects back at their spawn). go back refuses a thing from before the reset unless you pinned it yourself; find looks for it again. Places pinned at the robot's position (`the charger is here`, `start`) never go stale.
+
+A reset, a world load or an edit also forgets the last look and find, so the next situation line says `eye: no description yet`. A look or find that is still running when that happens is not remembered: its answer describes the scene before the change, and the reply says so.
 
 The awareness settings:
 
