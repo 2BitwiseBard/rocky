@@ -511,10 +511,12 @@ def test_main_refuses_the_owner_cockpit_before_any_network(monkeypatch):
 
 
 def test_help_smoke():
-    # the environment as it is: forcing MUJOCO_GL=egl made `import mujoco` fail on the CI
-    # runner (no libEGL) — --help needs no renderer at all (CI 4191811, 2026-09-25)
+    # --help needs no renderer: MUJOCO_GL=disable, because the pytest process carries
+    # MUJOCO_GL=egl (sim/cockpit.py sets it as a default at import) and the CI runner has no
+    # libEGL, so a child that inherits it dies inside `import mujoco` (CI 4191811 + 59a6e98)
     r = subprocess.run([sys.executable, os.path.join(ROOT, "sim", "brain_bench.py"), "--help"],
-                       capture_output=True, text=True, timeout=120, cwd=ROOT, env=dict(os.environ))
+                       capture_output=True, text=True, timeout=120, cwd=ROOT,
+                       env=dict(os.environ, MUJOCO_GL="disable"))
     assert r.returncode == 0, r.stderr
     for flag in ("--models", "--url", "--port", "--mode", "--commands", "--describe", "--vision",
                  "--keep-loaded", "--load-timeout", "--idle", "--speed", "--out"):
