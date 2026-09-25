@@ -882,3 +882,87 @@ def test_launcher_resolves_a_relative_file_from_the_callers_directory(env):
     s = json.loads(r.stdout.strip().splitlines()[-1])
     assert s["items"][0]["source"] == os.path.join(env.downloads, "Qwen3.5-4B-UD-Q4_K_XL.gguf")
     assert s["items"][0]["id"] == "qwen3.5-4b" and tree(env.tmp) == snap
+
+
+# ------------------------------------------------------------------ --uninstall (2026-09-25)
+def _install_three(env, capsys):
+    env.model("qwen3.5-4b/mmproj-Qwen3.5-4B-F16.gguf", qwen_mm("Qwen3.5-4B"))
+    env.dl("mmproj-F16.gguf", gemma_mm(), pad=77)
+    env.dl("Qwen3.5-4B-UD-Q4_K_XL.gguf", qwen("Qwen3.5-4B", "4B"), 200)
+    env.dl("gemma-4-12b-it-UD-Q4_K_XL.gguf", gemma(), 210)
+    env.dl("Qwen3.5-9B-UD-Q6_K_XL.gguf", qwen("Qwen3.5-9B", "9B"), 220)
+    code, out, _ = run(env, capsys)
+    assert code == 0, out
+
+
+def test_uninstall_cuts_exactly_one_stanza_and_its_manifest_entries(env, capsys):
+    _install_three(env, capsys)
+    before = env.text()
+    cfg_before = yaml.safe_load(before)
+    code, out, s = run(env, capsys, "--uninstall", "qwen3.5-9b-q6k")
+    assert code == 0, out
+    after = env.text(); cfg = yaml.safe_load(after)
+    assert "qwen3.5-9b-q6k" not in cfg["models"] and set(cfg_before["models"]) - set(cfg["models"]) == {"qwen3.5-9b-q6k"}
+    for other in cfg["models"]:
+        assert cfg["models"][other] == cfg_before["models"][other]
+    assert cfg["groups"] == cfg_before["groups"] and bi.MARKER in after
+    assert "Qwen3.5 9B, UNMEASURED" not in after            # the stanza's own comment header went with it
+    assert after.count("\n\n\n") == 0                      # no double blank line left behind
+    assert not any(e["filename"].startswith("qwen3.5-9b-q6k/") for e in env.mani()["models"])
+    assert any(e["filename"].startswith("qwen3.5-9b/") for e in env.mani()["models"])   # the sibling stays
+    assert os.path.isdir(os.path.join(env.models, "qwen3.5-9b-q6k"))                     # files kept by default
+    assert s["plan"]["manifest"] == ["qwen3.5-9b-q6k/Qwen3.5-9B-UD-Q6_K_XL.gguf",
+                                     "qwen3.5-9b-q6k/mmproj-Qwen3.5-9B-F16.gguf"]
+    assert os.path.isfile(s["config_backup"]) and os.path.isfile(s["manifest_backup"])
+    # the earlier stanzas are byte-identical text
+    for mid in ("qwen3.5-4b", "gemma-4-12b"):
+        a, b = bi.stanza_span(before, mid), bi.stanza_span(after, mid)
+        assert "".join(before.splitlines(True)[a[0]:a[1]]) == "".join(after.splitlines(True)[b[0]:b[1]])
+
+
+def test_uninstall_delete_files_removes_the_folder_but_not_the_hard_linked_sibling(env, capsys):
+    _install_three(env, capsys)
+    sib = os.path.join(env.models, "qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf")
+    code, out, s = run(env, capsys, "--uninstall", "qwen3.5-9b-q6k", "--delete-files")
+    assert code == 0, out
+    assert not os.path.exists(os.path.join(env.models, "qwen3.5-9b-q6k"))
+    assert os.path.isfile(sib) and bi.read_gguf_header(sib)
+    assert s["deleted"] == ["Qwen3.5-9B-UD-Q6_K_XL.gguf", "mmproj-Qwen3.5-9B-F16.gguf"]
+
+
+def test_uninstall_refuses_unknown_files_in_the_folder_and_unknown_ids(env, capsys):
+    _install_three(env, capsys)
+    with open(os.path.join(env.models, "qwen3.5-4b", "notes.bin"), "wb") as f:
+        f.write(b"x")
+    code, out, s = run(env, capsys, "--uninstall", "qwen3.5-4b", "--delete-files")
+    assert code == 1 and not s["ok"] and "notes.bin" in s["error"]
+    assert "qwen3.5-4b" in yaml.safe_load(env.text())["models"]         # nothing happened
+    code, out, s = run(env, capsys, "--uninstall", "nope")
+    assert code == 1 and "nothing to uninstall" in s["error"]
+
+
+def test_uninstall_dry_run_touches_nothing(env, capsys):
+    _install_three(env, capsys)
+    snap = (env.text(), env.mani(), tree(env.models))
+    code, out, s = run(env, capsys, "--uninstall", "gemma-4-12b", "--delete-files", "--dry-run")
+    assert code == 0 and s["dry_run"] and "DRY RUN" in out
+    assert (env.text(), env.mani(), tree(env.models)) == snap
+
+
+def test_uninstall_restart_waits_for_the_id_to_go(tmp_path, monkeypatch, capsys):
+    env = Env(str(tmp_path))
+    monkeypatch.setattr(bi, "HF_BIN", str(tmp_path / "no-such-hf"))
+    env.dl("Qwen3.5-4B-UD-Q4_K_XL.gguf", qwen("Qwen3.5-4B", "4B"), 200)
+    env.model("qwen3.5-4b/mmproj-Qwen3.5-4B-F16.gguf", qwen_mm("Qwen3.5-4B"))
+    assert bi.main(env.args()) == 0
+    capsys.readouterr()
+    calls = []
+    monkeypatch.setattr(bi.subprocess, "run", lambda cmd, *a, **k: (calls.append(cmd), types.SimpleNamespace(returncode=0, stderr=""))[1])
+    fake_vb = types.SimpleNamespace(listed_models=lambda: {"qwen3.5-9b"}, running_models=lambda: [])
+    monkeypatch.setitem(sys.modules, "vision_bench", fake_vb)
+    args = [a for a in env.args() if a != "--no-restart"] + ["--uninstall", "qwen3.5-4b"]
+    code = bi.main(args)
+    out = capsys.readouterr().out
+    s = json.loads(out.strip().splitlines()[-1])
+    assert code == 0 and calls == [["systemctl", "--user", "restart", "llama-swap"]]
+    assert "gone from /v1/models" in s["restart"]

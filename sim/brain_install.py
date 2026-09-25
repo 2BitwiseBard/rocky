@@ -1348,6 +1348,194 @@ def check_config(old, new_text, mid):
 
 
 # ------------------------------------------------------------------ CLI
+# ---------------------------------------------------------------- uninstall (2026-09-25)
+def stanza_span(text, mid):
+    """(start, end) line indexes of the stanza for mid in the config text: its comment
+    block (the contiguous '  #' lines right above the id line, the installer's
+    '# ---- added ...' header) through the last indented line of the mapping, plus
+    one trailing blank line. None when the id has no stanza."""
+    lines = text.splitlines(keepends=True)
+    key = f"  {yq(mid)}:"
+    try:
+        i = next(k for k, ln in enumerate(lines) if ln.rstrip("\n") == key)
+    except StopIteration:
+        return None
+    start = i
+    while start > 0 and lines[start - 1].startswith("  #"):
+        start -= 1
+    end = i + 1
+    while end < len(lines) and (lines[end].startswith("    ") or lines[end].startswith("      ")
+                                or lines[end].strip() == "" and end + 1 < len(lines)
+                                and lines[end + 1].startswith("    ")):
+        end += 1
+    if end < len(lines) and lines[end].strip() == "":
+        end += 1                                        # the blank line insert_stanza left after it
+    return start, end
+
+
+def remove_stanza(text, mid):
+    span = stanza_span(text, mid)
+    if span is None:
+        raise RuntimeError(f"no stanza {yq(mid)}: in the config")
+    lines = text.splitlines(keepends=True)
+    return "".join(lines[:span[0]] + lines[span[1]:])
+
+
+def check_config_removed(old, new_text, mid):
+    """The edited config parses, holds exactly one model less (mid), and groups /
+    selectors / macros are unchanged."""
+    new = yaml.safe_load(new_text)
+    if not isinstance(new, dict) or not isinstance(new.get("models"), dict):
+        raise RuntimeError("the edited config has no models: mapping")
+    old_ids, new_ids = set((old.get("models") or {})), set(new["models"])
+    if old_ids - new_ids != {mid} or new_ids - old_ids:
+        raise RuntimeError(f"the edit changed the model set by {sorted(old_ids ^ new_ids)}, not just {mid}")
+    for sect in ("groups", "selectors", "macros"):
+        if old.get(sect) != new.get(sect):
+            raise RuntimeError(f"the edit changed the {sect}: section")
+    for other in new_ids:
+        if old["models"][other] != new["models"][other]:
+            raise RuntimeError(f"the edit changed the stanza of {other}")
+
+
+DELETABLE = (".gguf", ".json", ".txt", ".md")
+
+
+class Uninstaller:
+    """`--uninstall ID`: the stanza out of the config, its entries out of the manifest,
+    with --delete-files the folder <models-dir>/<id>/ (only GGUFs, the hf cache and small
+    text files live there; anything else stops the delete), then a restart that waits for
+    the id to be GONE from /v1/models. Dated backups first, --dry-run touches nothing."""
+
+    def __init__(self, args):
+        self.mid = args.uninstall
+        self.models_dir = os.path.abspath(os.path.expanduser(args.models_dir))
+        self.config = os.path.abspath(os.path.expanduser(args.config))
+        self.manifest_path = os.path.abspath(os.path.expanduser(args.manifest))
+        self.delete_files = bool(args.delete_files)
+        self.no_restart = bool(args.no_restart)
+        self.folder = os.path.join(self.models_dir, self.mid)
+        self.plan_ = {}
+        self.result = {"ok": True, "id": self.mid}
+
+    def plan(self):
+        with open(self.config) as f:
+            self.old_text = f.read()
+        self.old = yaml.safe_load(self.old_text) or {}
+        with open(self.manifest_path) as f:
+            self.mani_raw = f.read()
+        self.mani = json.loads(self.mani_raw)
+        p = self.plan_
+        p["stanza"] = stanza_span(self.old_text, self.mid) is not None
+        p["in_config"] = self.mid in (self.old.get("models") or {})
+        p["manifest"] = [e.get("filename") for e in self.mani.get("models", [])
+                         if str(e.get("filename", "")).startswith(self.mid + "/")]
+        p["folder"] = os.path.isdir(self.folder)
+        files = []
+        blockers = []
+        if p["folder"]:
+            for d, _, fns in os.walk(self.folder):
+                for fn in fns:
+                    rel = os.path.relpath(os.path.join(d, fn), self.folder)
+                    files.append(rel)
+                    if not (rel.startswith(".cache" + os.sep) or rel.lower().endswith(DELETABLE)):
+                        blockers.append(rel)
+        p["files"], p["blockers"] = sorted(files), sorted(blockers)
+        if p["in_config"] and not p["stanza"]:
+            raise RuntimeError(f"'{self.mid}' is in the config but not as a stanza this tool can cut "
+                               f"(no '  {yq(self.mid)}:' line) — edit the config by hand")
+        if not (p["in_config"] or p["manifest"] or p["folder"]):
+            raise RuntimeError(f"nothing to uninstall: '{self.mid}' is not in the config, the manifest or "
+                               f"{tilde(self.models_dir)}")
+        if self.delete_files and blockers:
+            raise RuntimeError(f"refusing to delete {tilde(self.folder)}: it holds files this tool does not "
+                               f"know ({', '.join(blockers[:5])}) — move them out first")
+        if p["in_config"]:
+            self.new_text = remove_stanza(self.old_text, self.mid)
+            check_config_removed(self.old, self.new_text, self.mid)
+
+    def report(self, dry):
+        p = self.plan_
+        print(f"brain-install --uninstall {self.mid}  — {'DRY RUN: nothing below has been done' if dry else ''}")
+        print(f"  config    {tilde(self.config)}: {'stanza removed' if p['in_config'] else 'not present'}")
+        print(f"  manifest  {len(p['manifest'])} entr{'y' if len(p['manifest']) == 1 else 'ies'} removed"
+              + (": " + ", ".join(p["manifest"]) if p["manifest"] else ""))
+        if p["folder"]:
+            print(f"  files     {tilde(self.folder)}: {len(p['files'])} file(s), "
+                  f"{'DELETED' if self.delete_files else 'kept (add --delete-files to remove them)'}")
+        else:
+            print(f"  files     no folder {tilde(self.folder)}")
+        if p["in_config"]:
+            if dry:
+                print("  restart   would run: systemctl --user restart llama-swap (unloads EVERY model), then wait "
+                      f"for '{self.mid}' to leave /v1/models" + (" — skipped by --no-restart" if self.no_restart else ""))
+            elif self.no_restart:
+                print("  restart   skipped (--no-restart): run systemctl --user restart llama-swap")
+            else:
+                print("  restart   " + self.result.get("restart", ""))
+
+    def execute(self):
+        date = time.strftime("%Y%m%d")
+        p = self.plan_
+        if p["in_config"]:
+            bak = unique_path(f"{self.config}.bak-{date}-uninstall-{self.mid}")
+            shutil.copy2(self.config, bak)
+            atomic_write(self.config, self.new_text)
+            with open(self.config) as f:
+                check_config_removed(self.old, f.read(), self.mid)
+            self.result["config_backup"] = bak
+        if p["manifest"]:
+            bak = unique_path(f"{self.manifest_path}.bak-{date}-uninstall-{self.mid}")
+            shutil.copy2(self.manifest_path, bak)
+            keep = [e for e in self.mani.get("models", []) if e.get("filename") not in set(p["manifest"])]
+            self.mani["models"] = keep
+            atomic_write(self.manifest_path, json.dumps(self.mani, indent=2)
+                         + ("\n" if self.mani_raw.endswith("\n") else ""))
+            self.result["manifest_backup"] = bak
+        if p["folder"] and self.delete_files:
+            shutil.rmtree(self.folder)
+            self.result["deleted"] = p["files"]
+        if p["in_config"] and not self.no_restart:
+            self.result["restart"] = self._restart()
+
+    def _restart(self):
+        try:
+            from vision_bench import listed_models
+        except Exception:                          # noqa: BLE001
+            listed_models = None
+        r = subprocess.run(["systemctl", "--user", "restart", "llama-swap"], capture_output=True, text=True,
+                           timeout=120)
+        if r.returncode != 0:
+            self.result["ok"] = False
+            return f"systemctl failed ({r.returncode}): {r.stderr.strip()[-300:]}"
+        if listed_models is None:
+            return "restarted (the /v1/models check could not run)"
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < RESTART_WAIT_S:
+            if self.mid not in listed_models():
+                return f"restarted; '{self.mid}' gone from /v1/models after {time.monotonic() - t0:.1f} s"
+            time.sleep(1.0)
+        self.result["ok"] = False
+        return f"restarted, but '{self.mid}' is still listed after {RESTART_WAIT_S:.0f} s"
+
+
+def run_uninstall(args):
+    un = Uninstaller(args)
+    try:
+        un.plan()
+        if not args.dry_run:
+            un.execute()
+    except (OSError, ValueError, RuntimeError, yaml.YAMLError) as e:
+        print(f"brain-install --uninstall: {e}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"ok": False, "id": args.uninstall, "error": str(e)}))
+        return 1
+    un.report(args.dry_run)
+    if args.json:
+        print(json.dumps(dict(un.result, plan=un.plan_, dry_run=bool(args.dry_run)), ensure_ascii=False))
+    return 0 if un.result["ok"] else 1
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1366,9 +1554,14 @@ def main(argv=None):
     ap.add_argument("--no-restart", action="store_true", help="edit the config but do not restart llama-swap")
     ap.add_argument("--dry-run", action="store_true", help="print the plan, touch nothing")
     ap.add_argument("--json", action="store_true", help="end with a one-line JSON summary")
+    ap.add_argument("--uninstall", metavar="ID", help="remove a model this tool installed: its stanza, its "
+                    "manifest entries, with --delete-files its folder; then restart and wait for the id to go")
+    ap.add_argument("--delete-files", action="store_true", help="with --uninstall: delete <models-dir>/<ID>/")
     ap.add_argument("--settle", type=float, default=SETTLE_S,
                     help=f"seconds a file's size must hold still to count as complete (default {SETTLE_S:g})")
     args = ap.parse_args(argv)
+    if args.uninstall:
+        return run_uninstall(args)
 
     ins = Installer(args)
     try:

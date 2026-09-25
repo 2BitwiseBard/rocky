@@ -23,7 +23,8 @@
 #                                  ~/Downloads/*.gguf) -> /mnt/models/<id>/ + its mmproj + the
 #                                  restore manifest + an UNMEASURED llama-swap stanza, then
 #                                  restarts llama-swap (unloads EVERY model); --dry-run shows the
-#                                  plan and touches nothing, --no-restart skips the restart
+#                                  plan and touches nothing, --no-restart skips the restart;
+#                                  --uninstall ID [--delete-files] removes one it installed
 #   rocky.sh brain-bench --models ID[,ID]  bench brain models on the robot's jobs
 #                                  (sim/brain_bench.py: its own cockpit, never :8765)
 #   rocky.sh talk                  plain-text brain, no LLM (harness.intent REPL)
