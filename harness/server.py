@@ -18,9 +18,11 @@ Wire into a client (e.g. Claude Code .mcp.json):
 
 Tools: say, gesture, move, goto, stop, scan_summary, status, list_gestures, and
 look / find_object where an eye exists and remember / where_is / recall /
-go_back_to / forget where the scene memory exists (a cockpit backend). map_query / patrol / dock are
-not stubbed — absent tool > lying tool. D052: the gesture and say docs are
-built from the backend's LIVE lists (saved keyframe gestures and custom chord
+go_back_to / forget where the scene memory exists (a cockpit backend), and (F3) where_am_i /
+name_place / places / forget_place while the cockpit's place recognition is on (D057: the cockpit
+lists `places` in GET /api/capabilities; CockpitBackend / AutoBackend pass the flag on, the mock and
+the in-process sim never have it). map_query / patrol / dock are not stubbed —
+absent tool > lying tool. D052: the gesture and say docs are built from the backend's LIVE lists (saved keyframe gestures and custom chord
 words included); gesture takes direction left|right for turn_in_place /
 sidestep. move (2026-09-25) is a relative move in the robot's frame
 (forward_m, left_m): the server reads the pose from the backend's status and
@@ -39,7 +41,7 @@ as before (a cockpit backend without that method: POST /api/tool/<name>).
 What the registry cannot say stays here as per-tool adapters keyed by name:
 ADAPTERS (gesture's direction fallback for a backend without one, move
 through move_via, list_gestures' canon answer) and ARG_TYPES (the Meters that
-refuse a boolean). LiveTools keeps the backend's last capabilities snapshot
+refuse a boolean; F3: name_place's Flags that refuse anything else). LiveTools keeps the backend's last capabilities snapshot
 (a cockpit: GET /api/capabilities; before D056 the gesture + chord list
 routes): a tools/list whose snapshot is older than LIST_TTL_S (2 s) re-reads
 it and re-registers the tools whose text or schema changed (remove_tool +
@@ -51,6 +53,13 @@ failure is logged to stderr, never fatal, and a fetch that fails keeps the
 last list. Backends with nothing to follow (the mock, the in-process sim) stay
 static, exactly as before. ROCKY_MCP_LIVE=0 turns the refresh and the watcher
 off: the lists are then read once, at start, as before D056.
+
+F3 (D057 place tools): the `places` capability comes from the backend's capabilities() like the
+others, and a cockpit backend reads it from the snapshot it just fetched, so switching recognition
+on in the cockpit (POST /api/awareness {recognize: true}) adds the four place tools on the next
+tools/list (or watcher tick, with a list_changed notification) and switching it off removes them.
+name_place's new / rename refuse anything but a boolean (null = false), as the cockpit does; pydantic's
+lax mode would have read "yes" or 1 as true.
 """
 from __future__ import annotations
 
@@ -98,6 +107,19 @@ Meters = Annotated[float, BeforeValidator(_no_bool)]
 LeftMeters = Annotated[float, BeforeValidator(lambda v: 0.0 if v is None else _no_bool(v))]
 
 
+def _only_bool(v):
+    """name_place's new / rename: the cockpit (Brains.name_place) refuses anything but true / false
+    and reads null as false; pydantic's lax mode would take "yes", "1" or 1 as true. The same here."""
+    if v is None:
+        return False
+    if not isinstance(v, bool):
+        raise ValueError(f"true or false, got {v!r}")          # noqa: TRY004 — pydantic reports a ValueError
+    return v
+
+
+Flag = Annotated[bool, BeforeValidator(_only_bool)]
+
+
 # ---------------------------------------------------------------- per-tool adapters
 async def _gesture(be, name, direction=""):
     """direction left|right where the backend takes one; the canon's gesture turns / steps
@@ -128,7 +150,8 @@ ADAPTERS = {"gesture": _gesture, "move": _move, "list_gestures": _list_gestures}
 ADAPTER_NEEDS = {"gesture": ("gesture",), "move": ("status", "goto"), "list_gestures": ()}
 # argument types the registry's JSON types do not carry (the published schema is the same)
 ARG_TYPES = {("move", "forward_m"): Meters, ("move", "left_m"): LeftMeters,
-             ("goto", "x"): Meters, ("goto", "y"): Meters}
+             ("goto", "x"): Meters, ("goto", "y"): Meters,
+             ("name_place", "new"): Flag, ("name_place", "rename"): Flag}
 _PY_TYPES = {"string": str, "number": float, "integer": int, "boolean": bool, "object": dict, "array": list}
 
 
@@ -305,6 +328,7 @@ class LiveTools:
         flags = backend_capabilities(self.be)
         caps = C.build(self.gestures, self.lexicon, self.signed, has_eye="eye" in flags,
                        has_memory="memory" in flags, is_cockpit="cockpit" in flags,
+                       has_places="places" in flags,          # F3: the cockpit's recognition is on
                        envelope=self.envelope, robot=self.robot)
         if caps["version"] == self.version:
             return False

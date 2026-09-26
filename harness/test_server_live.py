@@ -6,6 +6,10 @@ tools/list and a watcher sends notifications/tools/list_changed when the list mo
 The cockpit here is FakeCockpit: its GET routes served in-process through a
 monkeypatched httpx.get (no socket is opened; nothing ever reaches :8765).
 
+F3: the D057 place tools come and go with the cockpit's place recognition — FakeCockpit's
+`recognize` is the cockpit's switch (its snapshot then lists `places`, as sim/cockpit.py's
+_caps_current does), and the next tools/list (or watcher tick) follows it.
+
     MUJOCO_GL=egl .venv/bin/python -m pytest harness/test_server_live.py -q
 """
 import json
@@ -22,8 +26,8 @@ import harness.capabilities as C                                               #
 from harness.backend import CHORD_WORDS, GESTURES, SIGNED, MockBackend           # noqa: E402
 from harness.cockpit_backend import AutoBackend, CockpitBackend                  # noqa: E402
 from harness.server import LiveTools, build_server, runnable                     # noqa: E402
-from harness.test_capabilities import (GOLDEN, REP_GESTURES, REP_LEXICON, _rows_from_mcp,  # noqa: E402
-                                       _rows_from_specs, _sha, rep_caps)
+from harness.test_capabilities import (ADDED_D057, GOLDEN, GOLDEN_D057, REP_GESTURES,  # noqa: E402
+                                       REP_LEXICON, _rows_from_mcp, _rows_from_specs, _sha, rep_caps)
 
 from mcp import types                                                            # noqa: E402
 from mcp.shared.memory import (                                                  # noqa: E402
@@ -47,12 +51,15 @@ class _R:
 class FakeCockpit:
     """A cockpit's GET routes, in-process. /api/capabilities answers what a D056 cockpit
     answers (harness.capabilities.build of its lists, every capability on); `modern=False`
-    is a cockpit from before D056 (404 there, the two list routes instead)."""
+    is a cockpit from before D056 (404 there, the two list routes instead). `recognize`:
+    the cockpit's place recognition (D057) — on, its snapshot lists `places` and the four
+    place tools, exactly as sim/cockpit.py's _caps_current builds it."""
 
     def __init__(self, gestures=REP_GESTURES, lexicon=REP_LEXICON, modern=True):
         self.gestures, self.lexicon = list(gestures), list(lexicon)
         self.envelope = None                 # None: the registry's default envelope
         self.modern = modern
+        self.recognize = False               # D057 place recognition (POST /api/awareness {recognize})
         self.down = False                    # connection refused
         self.status = 200                    # /api/capabilities status while up
         self.garbage = False                 # /api/capabilities answers something that is not a snapshot
@@ -62,7 +69,7 @@ class FakeCockpit:
 
     def snapshot(self):
         return C.build(self.gestures, self.lexicon, list(SIGNED), has_eye=True, has_memory=True,
-                       is_cockpit=True, envelope=self.envelope)
+                       is_cockpit=True, envelope=self.envelope, has_places=self.recognize)
 
     def get(self, url, timeout=None):
         if not url.startswith(URL):
@@ -147,13 +154,14 @@ async def test_auto_backend_lists_the_cockpits_tools(fake):
     auto = AutoBackend(url=URL, make_fallback=MockBackend)
     srv = build_server(auto)
     names = [t.name for t in await srv.list_tools()]
-    assert names == [t.name for t in C.REGISTRY if "mcp" in t.surfaces]     # all 15, registry order
+    # all 15, registry order (F3: the place tools only while the cockpit reports recognition on)
+    assert names == [t.name for t in C.REGISTRY if "mcp" in t.surfaces and "places" not in t.requires]
     assert srv.live.version == fake.snapshot()["version"]
     # no cockpit at all: still the 15 (its look / memory tools say they need the cockpit)
     fake.down = True
     srv2 = build_server(AutoBackend(url=URL, make_fallback=MockBackend))
     rows = _dump(await srv2.list_tools())
-    assert _rows_from_mcp(rows) == _rows_from_specs(C.to_mcp_specs(C.fallback_caps()))   # canon lists
+    assert _rows_from_mcp(rows) == _rows_from_specs(C.to_mcp_specs(C.fallback_caps(has_places=False)))  # canon
 
 
 async def test_a_backend_without_an_eye_lists_no_look_or_find_object(fake):
@@ -434,6 +442,14 @@ def test_every_backend_says_what_it_has():
     auto = AutoBackend(url="http://127.0.0.1:9", alive=lambda u: False, make_fallback=MockBackend)
     assert auto.capabilities() == {"cockpit", "eye", "memory"}               # any call may land on a cockpit
     assert auto.fetch_capabilities() is None                                 # no cockpit: nothing fetched
+    # F3: `places` only from what the cockpit reported (its last snapshot's capabilities list)
+    ck = CockpitBackend("http://127.0.0.1:9")
+    for snap, has in ((None, False), ({"capabilities": ["cockpit", "eye", "memory"]}, False),
+                      ({"capabilities": ["cockpit", "eye", "memory", "places"]}, True),
+                      ({"capabilities": "places"}, False), (["places"], False), ({"gestures": []}, False)):
+        ck.last_capabilities = auto.cockpit.last_capabilities = snap
+        want = {"cockpit", "eye", "memory"} | ({"places"} if has else set())
+        assert ck.capabilities() == want and auto.capabilities() == want, snap
     for be in (MockBackend(), CockpitBackend("http://127.0.0.1:9")):
         flags = C.backend_flags(be)
         caps = be.capabilities()
@@ -445,3 +461,210 @@ def test_live_tools_defaults():
     lt = LiveTools(MockBackend())
     assert (lt.ttl_s, lt.poll_s) == (2.0, 3.0)
     assert lt.gestures == GESTURES and lt.lexicon == CHORD_WORDS and lt.signed == SIGNED
+
+
+# ---------------------------------------------------------------- F3: the place tools
+def _names(srv):
+    return [t.name for t in srv._tool_manager.list_tools()]
+
+
+D056_MCP = [t.name for t in C.REGISTRY if "mcp" in t.surfaces and "places" not in t.requires]
+
+
+async def test_cockpit_tool_list_with_recognition_on_equals_the_snapshot(fake):
+    """The GOLDEN mcp pin with the four place tools ADDED: a full-capability cockpit that reports
+    `places` lists the D056 tools, unchanged, + where_am_i, name_place, places, forget_place."""
+    fake.recognize = True
+    srv = build_server(CockpitBackend(URL))
+    async with client_session(srv._mcp_server) as cs:
+        tools = (await cs.list_tools()).tools
+    rows = _dump(tools)
+    assert [t.name for t in tools] == D056_MCP + list(ADDED_D057)             # registry order
+    assert _rows_from_mcp(rows) == _rows_from_specs(C.to_mcp_specs(rep_caps(has_places=True)))
+    assert _sha(_rows_from_mcp(rows)) == GOLDEN_D057["mcp_rep"]
+    assert _sha(_rows_from_mcp([r for r in rows if r["name"] not in ADDED_D057])) == GOLDEN["mcp_rep"]
+    assert srv.live.version == fake.snapshot()["version"]
+    assert "places" in srv.live.caps["capabilities"]
+    by = {t.name: t for t in tools}
+    assert by["name_place"].inputSchema["required"] == ["name"]
+    assert by["forget_place"].annotations.destructiveHint is True
+    assert by["where_am_i"].annotations.readOnlyHint is True
+
+
+async def test_switching_recognition_on_and_off_moves_the_list(fake):
+    """The cockpit's switch (POST /api/awareness {recognize}) is a new capabilities version: the next
+    stale tools/list re-reads it and adds the four tools; the watcher tells the client; off removes them."""
+    be = CockpitBackend(URL)
+    be._tool = _no_post                                  # nothing leaves the process
+    srv = build_server(be)
+    live = srv.live
+    async with client_session(srv._mcp_server) as cs:
+        before = await _list(cs)
+        assert list(before) == D056_MCP                                    # recognition off (the default)
+        fake.recognize = True
+        await cs.list_tools()                                              # within ttl_s: not re-read yet
+        assert not set(ADDED_D057) & set(_names(srv))
+        _stale(srv)
+        after = await _list(cs)
+        assert list(after) == D056_MCP + list(ADDED_D057)
+        for name in D056_MCP:                                              # nothing else moved
+            assert after[name].model_dump() == before[name].model_dump(), name
+        r = await cs.call_tool("where_am_i", {})                           # registered and callable
+        assert json.loads(r.content[0].text) == {"ok": True, "tool": "where_am_i", "args": {}}
+    live.session = s = FakeSession()                   # (the client's session ended with its server run)
+    assert await live.poll_once() is False and s.sent == 0                 # already current: no notification
+    fake.recognize = False
+    assert await live.poll_once() is True and s.sent == 1                  # the watcher: off -> list_changed
+    assert _names(srv) == D056_MCP
+    fake.recognize = True
+    assert await live.poll_once() is True and s.sent == 2 and _names(srv) == D056_MCP + list(ADDED_D057)
+
+
+async def test_a_real_client_is_told_when_recognition_comes_on(fake):
+    be = CockpitBackend(URL)
+    sent = []
+
+    async def rec(name, /, **args):
+        sent.append((name, args))
+        return {"ok": True, "tool": name, "args": args}
+    be._tool = rec
+    srv = build_server(be)
+    srv.live.poll_s = 0.05
+    got = []
+
+    async def on_message(msg):
+        if (isinstance(msg, types.ServerNotification)
+                and isinstance(msg.root, types.ToolListChangedNotification)):
+            got.append(msg.root.method)
+
+    async with client_session(srv._mcp_server, message_handler=on_message) as cs:
+        assert not set(ADDED_D057) & set(await _list(cs))                 # starts the watcher
+        fake.recognize = True
+        with anyio.fail_after(5):
+            while not got:
+                await anyio.sleep(0.02)
+        tools = await _list(cs)
+        assert set(ADDED_D057) <= set(tools)
+        r = await cs.call_tool("name_place", {"name": "basement"})
+        assert json.loads(r.content[0].text)["args"] == {"name": "basement", "new": False, "rename": False}
+    assert got == ["notifications/tools/list_changed"]
+    assert sent == [("name_place", {"name": "basement", "new": False, "rename": False})]
+
+
+async def test_place_calls_forward_to_the_cockpit_with_the_executors_arguments(fake):
+    fake.recognize = True
+    be = CockpitBackend(URL)
+    sent = []
+
+    async def rec(name, /, **args):
+        sent.append((name, args))
+        return {"ok": True, "via": name}
+    be._tool = rec
+    srv = build_server(be)
+    async with client_session(srv._mcp_server) as cs:
+        for name, args in (("where_am_i", {}), ("places", {}),
+                           ("name_place", {"name": "master bedroom"}),
+                           ("name_place", {"name": "basement", "new": True}),
+                           ("name_place", {"name": "study", "rename": True, "new": None}),   # null = false
+                           ("forget_place", {"name": "all"})):
+            r = await cs.call_tool(name, args)
+            assert json.loads(r.content[0].text) == {"ok": True, "via": name}, (name, args)
+        n = len(sent)
+        # the cockpit refuses anything but a boolean for new / rename (Brains.name_place): so does MCP
+        for bad in ({"name": "x", "new": "yes"}, {"name": "x", "new": 1}, {"name": "x", "rename": "true"}):
+            r = await cs.call_tool("name_place", bad)
+            assert r.isError and "true or false" in r.content[0].text, bad
+        r = await cs.call_tool("forget_place", {})                          # name is required
+        assert r.isError
+        assert len(sent) == n                                               # nothing reached the cockpit
+    assert sent == [("where_am_i", {}), ("places", {}),
+                    ("name_place", {"name": "master bedroom", "new": False, "rename": False}),
+                    ("name_place", {"name": "basement", "new": True, "rename": False}),
+                    ("name_place", {"name": "study", "new": False, "rename": True}),
+                    ("forget_place", {"name": "all"})]
+
+
+async def test_an_older_cockpit_has_no_place_tools(fake):
+    fake.recognize = True                         # whatever it would say: a pre-D056 cockpit cannot report it
+    fake.modern = False
+    srv = build_server(CockpitBackend(URL))
+    assert _names(srv) == D056_MCP and "/api/gesture/list" in fake.gets
+    # a modern cockpit with recognition on, then an older one in its place (404): the tools go
+    fake.modern = True
+    be = CockpitBackend(URL)
+    srv = build_server(be)
+    assert set(ADDED_D057) <= set(_names(srv)) and be.capabilities() >= {"places"}
+    fake.modern = False
+    _stale(srv)
+    await srv.list_tools()
+    assert _names(srv) == D056_MCP and be.last_capabilities is None and "places" not in be.capabilities()
+    # a D056 cockpit (a snapshot, but no `places` in it) is the D056 list
+    fake.modern = True
+    fake.recognize = False
+    _stale(srv)
+    await srv.list_tools()
+    assert _names(srv) == D056_MCP
+
+
+async def test_a_failed_fetch_keeps_the_place_tools_it_had(fake):
+    """As every list (D056): a cockpit that stops answering does not take the tools away, and a
+    5xx on /api/capabilities (the list routes still answering) keeps the last reported flag."""
+    fake.recognize = True
+    srv = build_server(CockpitBackend(URL))
+    want = D056_MCP + list(ADDED_D057)
+    assert _names(srv) == want
+    fake.down = True
+    _stale(srv)
+    await srv.list_tools()
+    assert _names(srv) == want
+    fake.down, fake.status = False, 500
+    _stale(srv)
+    await srv.list_tools()
+    assert _names(srv) == want and srv.live.source_ok is True
+
+
+async def test_auto_backend_follows_recognition_and_answers_without_a_cockpit(fake):
+    alive = {"v": True}
+    auto = AutoBackend(url=URL, make_fallback=MockBackend, ttl=0.0, alive=lambda u: alive["v"])
+    sent = []
+
+    async def rec(name, /, **args):
+        sent.append((name, args))
+        return {"ok": True, "via": name}
+    auto.cockpit._tool = rec
+    srv = build_server(auto)
+    assert _names(srv) == D056_MCP                                         # recognition off
+    fake.recognize = True
+    assert await srv.live.poll_once() is False                             # no session yet: nobody to notify
+    assert _names(srv) == D056_MCP + list(ADDED_D057)
+    async with client_session(srv._mcp_server) as cs:
+        r = await cs.call_tool("forget_place", {"name": "here"})
+        assert json.loads(r.content[0].text) == {"ok": True, "via": "forget_place"}
+        alive["v"] = False                                                 # the cockpit is gone
+        _stale(srv)
+        assert set(ADDED_D057) <= set(await _list(cs))                     # the last list is kept ...
+        r = await cs.call_tool("where_am_i", {})
+        out = json.loads(r.content[0].text)                                # ... and the sim says it has none
+        assert out["ok"] is False and "cockpit" in out["error"] and "place" in out["error"]
+    assert sent == [("forget_place", {"name": "here"})]
+
+
+async def test_mock_and_sim_never_offer_place_tools(fake):
+    """No places without a cockpit that reports them — not even on a backend that has the methods."""
+    from harness.sim_backend import SimBackend
+
+    class Placey(MockBackend):
+        async def where_am_i(self):
+            return {"ok": True}
+
+        async def name_place(self, name, new=False, rename=False):
+            return {"ok": True}
+
+        async def places(self):
+            return {"ok": True}
+
+        async def forget_place(self, name):
+            return {"ok": True}
+    assert Placey().capabilities() == set() and "places" not in SimBackend.__new__(SimBackend).capabilities()
+    for be in (MockBackend(), Placey()):
+        assert not set(ADDED_D057) & set(_names(build_server(be)))

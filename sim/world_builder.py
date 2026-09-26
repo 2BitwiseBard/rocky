@@ -343,6 +343,68 @@ PRESETS = {
 }
 
 
+# ---- the place bench's rooms (sim/place_bench.py, 2026-09-25) --------------
+# Added after the presets above, which stay as they were. Three distinct rooms
+# the bench enrols (a, b, c), one it never enrols (d), and the same rooms with
+# one thing changed. The lidar's scan plane is ~0.18 m above the floor, so
+# what should shape a room's lidar signature is at least 0.2 m tall (walls
+# 0.25 m, the room base's walls 0.5 m); low things (the 6 cm box, the ramp,
+# the ball) are for the eye only. With the robot at its spawn (the origin,
+# facing +x):
+#   room a  the `room` base: 3.2 x 2.6 m walls, two pillars, a crate behind.
+#   room b  the same walls (the lidar's near-twin of a) + an inner wall ahead
+#           on the right and two tall boxes BEHIND the robot: the eye sees the
+#           wall, so a box put in front of it later is new to the eye.
+#   room c  a flat floor, obstacle-course style: a long wall on the right, one
+#           across ahead, a stub behind on the left; a low box, a ramp on the
+#           left, the ball ahead-left (the thing "room c - ball" takes away).
+#   room d  a hallway: two parallel 3 m walls 0.9 m apart, stairs ahead.
+#           The bench never enrols it (the "never seen" room).
+#   "+ chair"  a 0.2 x 0.2 x 0.25 m box ahead where there was none, in view
+#           of the eye at the spawn and after the bench's 30 deg second-look
+#           turn to the left.
+# The bench loads them under opaque world names: a name never tells the
+# robot where it is.
+_CHAIR = {"kind": "box", "size": [0.2, 0.2, 0.25]}
+_ROOM_B_OBJECTS = [
+    {"kind": "wall", "pos": [0.95, -0.45], "len_m": 0.9, "yaw_deg": 90},
+    {"kind": "box", "pos": [-0.55, 0.6], "size": [0.3, 0.2, 0.22], "yaw_deg": 20},
+    {"kind": "box", "pos": [-0.5, -0.7], "size": [0.2, 0.2, 0.22]}]
+_ROOM_C_OBJECTS = [
+    {"kind": "wall", "pos": [0.5, -0.65], "len_m": 2.2, "yaw_deg": 0},
+    {"kind": "wall", "pos": [1.6, 0.0], "len_m": 1.3, "yaw_deg": 90},
+    {"kind": "wall", "pos": [-0.7, 0.35], "len_m": 0.8, "yaw_deg": 90},
+    {"kind": "box", "pos": [0.9, -0.3], "size": [0.15, 0.15, 0.06]},
+    {"kind": "ramp", "pos": [0.1, 0.55], "len_m": 0.45, "rise_m": 0.05, "width_m": 0.4,
+     "landing_m": 0.2, "yaw_deg": 0},
+    {"kind": "ball", "pos": [0.75, 0.2], "radius_m": 0.05}]
+_ROOM_D_OBJECTS = [
+    {"kind": "wall", "pos": [0.4, 0.45], "len_m": 3.0, "yaw_deg": 0},
+    {"kind": "wall", "pos": [0.4, -0.45], "len_m": 3.0, "yaw_deg": 0},
+    {"kind": "stairs", "pos": [1.1, 0.0], "steps": 3, "rise_m": 0.015, "run_m": 0.15, "width_m": 0.5}]
+
+
+def _bench_room(base, objects, chair_at=None, drop_kind=None):
+    """A fresh (deep-copied) spec: `objects`, minus every `drop_kind`, plus a chair at chair_at."""
+    objs = [dict(o) for o in objects if o["kind"] != drop_kind]
+    if chair_at is not None:
+        objs.append(dict(_CHAIR, pos=list(chair_at)))
+    return {"base": base, "objects": [{k: (list(v) if isinstance(v, list) else v) for k, v in o.items()}
+                                      for o in objs]}
+
+
+PRESETS.update({
+    "room a": _bench_room("room", []),
+    "room b": _bench_room("room", _ROOM_B_OBJECTS),
+    "room c": _bench_room("flat", _ROOM_C_OBJECTS),
+    "room d": _bench_room("flat", _ROOM_D_OBJECTS),
+    "room a + chair": _bench_room("room", [], chair_at=(0.7, 0.05)),
+    "room b + chair": _bench_room("room", _ROOM_B_OBJECTS, chair_at=(0.65, 0.15)),
+    "room c + chair": _bench_room("flat", _ROOM_C_OBJECTS, chair_at=(1.25, 0.1)),
+    "room c - ball": _bench_room("flat", _ROOM_C_OBJECTS, drop_kind="ball"),
+})
+
+
 WORLDS_DIR = os.path.join(HERE, "worlds")
 
 

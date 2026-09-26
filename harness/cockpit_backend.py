@@ -35,6 +35,18 @@ signed gestures, version) — or, from a cockpit older than D056, the same lists
 from /api/gesture/list + /api/chord/list — and returns None when nothing
 usable answers, so the MCP server (harness/server.py LiveTools) keeps the list
 it had.
+
+F3 — the D057 place tools (`where_am_i`, `name_place`, `places`,
+`forget_place`) are forwarded like the memory tools (POST /api/tool/<name>),
+and `capabilities()` adds the registry's `places` flag ONLY while the cockpit's
+last snapshot lists it (its place recognition is on: POST /api/awareness
+{recognize: true} or cockpit.py --recognize). A cockpit from before D057 never
+lists it, one from before D056 has no snapshot at all (404: last_capabilities
+is cleared), so neither gets the place tools. The MCP server re-reads the
+snapshot on a stale tools/list and on every watcher tick, so the four tools
+come and go with the cockpit's switch. On AutoBackend with no cockpit
+answering, a place call says it needs the cockpit (the in-process sim has no
+places), as the memory tools do.
 """
 from __future__ import annotations
 import asyncio
@@ -48,6 +60,7 @@ DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
 AUTO_TTL_S = 3.0
 CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities (and the two list routes): event-loop routes, no sim thread
 COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capabilities.CAPABILITY_FLAGS
+PLACES = "places"          # F3: + this flag only while the cockpit reports its place recognition on
 FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
 GO_BACK_TIMEOUT_S = 200.0  # go_back_to: up to 4 goto legs of <= 40 s each
 
@@ -71,6 +84,14 @@ def _log(msg):
     print(f"[rocky-mcp] {msg}", file=sys.stderr, flush=True)     # stdout is the MCP stream
 
 
+def reported_flags(snap) -> set:
+    """F3: the flags a cockpit's snapshot reports that its proxy cannot know by itself — {"places"}
+    when the snapshot's `capabilities` list has it (recognition on), else nothing. A missing,
+    malformed or pre-D057 snapshot reports nothing: no place tools (absent tool > lying tool)."""
+    caps = snap.get("capabilities") if isinstance(snap, dict) else None
+    return {PLACES} if isinstance(caps, list) and PLACES in caps else set()
+
+
 class CockpitBackend:
     def __init__(self, url=DEFAULT_URL):
         self.url = url.rstrip("/")
@@ -89,9 +110,10 @@ class CockpitBackend:
             return {"ok": False, "error": f"cockpit unreachable: {e}"}
 
     def capabilities(self) -> set:
-        """D056: every registry capability — the cockpit has the eye (camera + vision
-        model), the scene memory and its own executor (/api/tool/<name>)."""
-        return set(COCKPIT_CAPABILITIES)
+        """D056: the cockpit has the eye (camera + vision model), the scene memory and its
+        own executor (/api/tool/<name>). F3: + "places" only while the last snapshot
+        fetch_capabilities read lists it (the cockpit's place recognition is on)."""
+        return set(COCKPIT_CAPABILITIES) | reported_flags(self.last_capabilities)
 
     def fetch_capabilities(self, timeout: float = CAPS_TIMEOUT_S) -> dict | None:
         """The cockpit's capabilities snapshot, GET /api/capabilities (D056):
@@ -100,11 +122,15 @@ class CockpitBackend:
         unusable (5xx, not a snapshot) -> {"gestures", "lexicon", "source"} from
         the two list routes, as before D056. None when nothing usable answers
         (unreachable, the list routes failing too): the caller keeps what it had.
-        Sync (the MCP server runs it in a thread)."""
+        A usable snapshot is kept as last_capabilities (capabilities() reads its
+        `places` flag, F3); a 404 clears it (an older cockpit: no place tools); a
+        5xx or an unusable answer keeps it. Sync (the MCP server runs it in a thread)."""
         try:
             r = httpx.get(f"{self.url}/api/capabilities", timeout=timeout)
         except Exception:
             return None                                   # nothing answers: keep the last list
+        if r.status_code == 404:
+            self.last_capabilities = None                 # a cockpit from before D056: no snapshot, no places
         if r.status_code == 200:
             try:
                 snap = r.json()
@@ -189,6 +215,23 @@ class CockpitBackend:
     async def forget(self, name: str) -> dict:
         return await self._tool("forget", name=name)
 
+    # ---- place recognition (D057, the cockpit's; sim/place_memory.py) — F3. The cockpit
+    # answers 'place recognition is off' for where_am_i / name_place while it is off; the MCP
+    # server offers these only while capabilities() has "places". where_am_i and name_place
+    # wait up to 30 s for a recognition that is running (cockpit PLACE_NAME_WAIT_S): the
+    # client's 120 s timeout covers it.
+    async def where_am_i(self) -> dict:
+        return await self._tool("where_am_i")
+
+    async def name_place(self, name: str, new: bool = False, rename: bool = False) -> dict:
+        return await self._tool("name_place", name=name, new=new, rename=rename)
+
+    async def places(self) -> dict:
+        return await self._tool("places")
+
+    async def forget_place(self, name: str) -> dict:
+        return await self._tool("forget_place", name=name)
+
     async def go_back_to(self, name: str) -> dict:
         """Up to GO_BACK_MAX_LEGS gotos inside the cockpit: allow GO_BACK_TIMEOUT_S."""
         try:
@@ -204,6 +247,8 @@ class CockpitBackend:
 
 _NO_MEMORY = {"ok": False, "error": "no scene memory here: it lives in the cockpit "
                                     "(./rocky.sh cockpit); the in-process sim has none"}
+_NO_PLACES = {"ok": False, "error": "no place recognition here: it lives in the cockpit "
+                                    "(./rocky.sh cockpit, recognition on); the in-process sim has none"}
 
 
 class AutoBackend:
@@ -246,11 +291,13 @@ class AutoBackend:
         return self.cockpit if alive else self._fb()
 
     def capabilities(self) -> set:
-        """D056: every registry capability, whether or not a cockpit answers right now
+        """D056: the cockpit's capabilities, whether or not a cockpit answers right now
         (any call may land on one; without one, look / find_object / the memory tools
         answer that they need the cockpit) — the MCP list is the same 15 tools as
-        before D056."""
-        return set(COCKPIT_CAPABILITIES)
+        before D056. F3: + "places" only while the cockpit's last snapshot lists it
+        (recognition on); with no cockpit answering, the list keeps what it had and a
+        place call answers that it needs the cockpit."""
+        return set(COCKPIT_CAPABILITIES) | reported_flags(self.cockpit.last_capabilities)
 
     def fetch_capabilities(self, timeout: float = CAPS_TIMEOUT_S) -> dict | None:
         """The cockpit's snapshot while one answers, else None (keep the last list)."""
@@ -365,6 +412,26 @@ class AutoBackend:
 
     async def go_back_to(self, name: str) -> dict:
         return self._tag(await self._mem("go_back_to", name=name))     # it moves: say which robot
+
+    # ---- place recognition (F3): the cockpit's, else an honest refusal (the sim has no places)
+    async def _place(self, tool, /, **args):
+        be = await self.pick()
+        fn = getattr(be, tool, None)
+        if not callable(fn):
+            return dict(_NO_PLACES)
+        return await fn(**args)
+
+    async def where_am_i(self) -> dict:
+        return await self._place("where_am_i")
+
+    async def name_place(self, name: str, new: bool = False, rename: bool = False) -> dict:
+        return await self._place("name_place", name=name, new=new, rename=rename)
+
+    async def places(self) -> dict:
+        return await self._place("places")
+
+    async def forget_place(self, name: str) -> dict:
+        return await self._place("forget_place", name=name)
 
     async def list_gestures(self) -> dict:
         be = await self.pick()

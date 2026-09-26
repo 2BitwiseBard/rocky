@@ -57,7 +57,10 @@ def derived_capabilities(be) -> set:
     methods show: 'eye' = it can look or find_object, 'memory' = it has the scene
     memory (where_is), 'cockpit' = it is a cockpit proxy (a callable _tool that
     POSTs /api/tool/<name>). The MCP server offers a registry tool only where its
-    `requires` are all here (absent tool > lying tool)."""
+    `requires` are all here (absent tool > lying tool). 'places' (D057, F3) is never
+    derived from methods: it means a cockpit's place recognition is ON, which only the
+    cockpit knows (GET /api/capabilities lists it; CockpitBackend / AutoBackend pass it
+    on) — the mock and the in-process sim have no places, so no place tools."""
     caps = set()
     if callable(getattr(be, "look", None)) or callable(getattr(be, "find_object", None)):
         caps.add("eye")
@@ -82,7 +85,7 @@ class MockBackend:
 
     # ------------------------------------------------------- capabilities
     def capabilities(self) -> set:
-        """None of its own (no eye, no memory, no cockpit): only what a subclass adds."""
+        """None of its own (no eye, no memory, no cockpit, no places): only what a subclass adds."""
         return derived_capabilities(self)
 
     # ---------------------------------------------------------------- say

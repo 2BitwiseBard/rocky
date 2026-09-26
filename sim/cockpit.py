@@ -65,17 +65,78 @@ makes a new version. The state feed (/api/state, /api/events) carries it as
 console logs each change. It is NOT an entry on the events feed: the `status`
 tool hands every model that feed's last five entries, and a tool the models
 already call must not answer differently because a list or the gait moved.
+
+Places (D057, 2026-09-25; OFF by default: awareness `recognize`, POST
+/api/awareness {recognize: true}, or --recognize). A world's name is ground
+truth a real robot never has, so with recognition on the scene memory is
+keyed by the place the robot RECOGNISES (sim/place_memory.py), not by the
+world. After a spawn (a world load, a reset; an edit keeps the robot where it
+is) the memory is a provisional RAM-only one (PLACE_PENDING_KEY); once the
+robot stands still (RECOG_SETTLE_S) it takes a lidar sweep (scan_signature,
+the sim's pose standing in for odometry — a perfect one) and a look (the
+vision role, Brains.look), embeds the description (sim.embed_fn, default
+Brains.embed: llama-swap's CPU 'embedding' model) and asks
+PlaceMemory.recognize. 'ambiguous' -> a second look after a 30 deg
+turn_in_place (the `turn` tool: one gesture, every guard) and the two are
+combined; 'new' -> the same second look first (the situation line says it is
+looking again), then a place is stored ("new place #k") from BOTH looks as
+samples (PlaceMemory.enroll_samples) and the memory bound to it; 'known' -> a
+visit, the memory bound to 'place-<id>' (what was sensed since the spawn is
+carried over), and the place is checked for changes BY THE EYE, not by the
+prose: every remembered object name and every thing the description mentions
+(LOOK_NOUNS, not a fixture) is one question to the vision model — the box
+question find_object and /api/look {find, method: "bbox"} ask
+(Brains.detect) — answered True (boxed; the box's floor geometry places it,
+sighting_to_map) / False (not there) / None (no answer, or its remembered
+spot out of the eye's 86 deg x 2 m view: unobservable), fed to
+place_memory.checked_objects. Any change takes the second look, which asks the
+same questions again, and only what BOTH looks agree on (confirm_diff) is
+declared or stored — one glance never declares a change, and a failed look
+or an unanswered question is never 'not there'. The situation line then
+starts with verdict_text (<= 90 chars), the state feed carries `place` (with
+`signals`: 'scan + description' | 'scan only' | ...), /api/memory `places`;
+a new place or a confirmed new object says curious_question (reactions,
+rate-limited as ever). Tools:
+where_am_i, name_place, places, forget_place; routes GET/POST /api/place.
+Recognition off = everything as before (memory keyed by world, no `place`,
+and the models' tool list is the D056 one: the place tools need the
+registry's `places` capability).
+Review fixes (2026-09-25): a look that FAILED has no objects (None, not []):
+it is never read as "nothing is there", so no change check runs on it and
+the answer says the verdict rests on the lidar. An edit (the robot was not
+moved) and place_check (talk mode's "this X has a new Y") are change checks
+of the bound place only — never a new place, never a rebind. name_place is
+a correction when the name is another place's or the recognised place's
+own name differs (rename=true renames instead), and "this is completely
+new" stores ONE place per visit; a correction takes back what the visit
+wrote into the wrongly recognised place (_place_take_back: its record from
+before the visit, its scene memory from the bind) and moves the records to
+the right one. While recognition is on, no memory record, status or
+scan_summary result names the world.
+Review fixes, round 2 (2026-09-25): both looks of a change check stand on
+one spot (the second turns in place), so a remembered spot hidden behind a
+box the eye drew in that look, or behind a nearer lidar return, is
+unobservable, never missing (look_hidden / look_view) — two 'not there'
+answers from one line of sight prove nothing. A thing the eye boxes but can
+never place (above the horizon: on a table; beyond 2 m) is kept by name as a
+place note (PLACE_UNPLACED_NOTE), so a later visit counts it present instead
+of 'new here' every time; placed later, it is stored, not declared. The
+answer carries per_look (each look's own parts, evidence, signals, runner-up
+and ranking) and signal_list, so a two-look verdict can be replayed.
 """
 from __future__ import annotations
 import argparse
 import asyncio
+import contextlib
 import copy
 import hashlib
 import io
 import ipaddress
 import json
+import math
 import os
 import queue
+import re
 import socket
 import sys
 import threading
@@ -119,7 +180,13 @@ from cockpit_brains import (Brains, TOOLS, SYSTEM, VISION_PROMPT, TOOL_NAMES,   
                             validate_goto, goto_range_error, local_ai_key as _local_ai_key,
                             cockpit_flags)
 # scene memory + situational awareness (the owner's "memory" and "awareness" asks)
-from scene_memory import SceneMemory, DEFAULT_DIR as MEMORY_DIR, fmt_age      # noqa: E402
+from scene_memory import (SceneMemory, DEFAULT_DIR as MEMORY_DIR, fmt_age,     # noqa: E402
+                          objects_from_description, same_thing, norm_name, LOOK_NOUNS)
+# D057: which place is this, from what the robot senses (not the world's name)
+import place_memory as pm                                              # noqa: E402
+from cockpit_brains import EYE_HFOV_DEG, EYE_FWD_M, place_scope, PLACE_TOOLS   # noqa: E402,F401
+from cockpit_brains import sighting_to_map, FIND_MIN_CONF, FIND_TRUSTED_M      # noqa: E402
+from cockpit_brains import floor_to_pixel                                      # noqa: E402
 
 V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (45.5 mm/s today)
 GOTO_CAP_S = 40.0            # a goto that has not ended by then ends as "timeout"
@@ -159,6 +226,48 @@ HW_GUARD_EVERY_S = 30.0      # a bus guard (nan, cut, lost ...) goes to the memo
 HEAT_SAY = 0.5               # the situation line mentions servo heat above this fraction of the budget
 AUDIO_DIR = os.path.join(ROOT, "audio")
 CHORD_SPEC_DIR = os.path.join(AUDIO_DIR, "custom")          # D051: chord words designed in the cockpit
+# ---- place recognition (D057; OFF by default — awareness 'recognize', --recognize). See recognize_place.
+PLACE_PENDING_KEY = "place-pending"   # the provisional scene memory (RAM only) until a verdict binds a place
+RECOG_SETTLE_S = 1.0                  # sim s after a spawn before the sweep + look (the robot stands still)
+RECOG_WAIT_S = 20.0                   # wall s a recognition waits for a standstill, then gives up (tried again)
+RECOG_RETRY_S = 5.0                   # an auto recognition that could not run is tried again after this
+RECOG_TIMEOUT_S = 180.0               # a recognition still 'running' after this is taken for dead (a lost loop)
+PLACE_TURN_DEG = 30.0                 # the second look's turn (+ = left, counter-clockwise): the `turn` tool
+PLACE_MATCH_M = 0.5                   # same name within this = the same object. UNMEASURED: a look description
+#                                       places things ~0.3 m off (median, scene_memory), so place_memory's 0.3 m
+#                                       MATCH_M would call half of them moved
+VIEW_MAX_M = 2.0                      # the eye 'could see' a floor point out to here (cockpit_brains.FIND_TRUSTED_M)
+VIEW_NEAR_M = 0.15                    # ... and not closer (the frame's bottom edge meets the floor ~0.18 m ahead)
+PLACE_EMBED_WAIT_S = 8.0              # the embedding call's own timeout is 5 s (cockpit_brains.EMBED_TIMEOUT_S)
+PLACE_NAME_WAIT_S = 30.0              # name_place waits this long for a recognition that is running
+PLACE_OFF = "place recognition is off"
+PLACE_OFF_HINT = ("the operator switches it on (cockpit awareness settings: POST /api/awareness "
+                  "{\"recognize\": true}, or start the cockpit with --recognize)")
+_STALE = "stale"                      # _place_observe / _place_second_look: the scene changed meanwhile
+# the change check asks the EYE, not the prose (B38 follow-up, 2026-09-25): per name, the question
+# find_object and /api/look {find, method: "bbox"} ask (Brains.detect: FIND_PROMPT, a box ->
+# pixel_to_floor -> sighting_to_map; 0.7-0.9 deg / 3 cm measured on the vision bench)
+PLACE_EYE_MAX = 10                    # questions (one vision-model call each) per look, at most ...
+PLACE_EYE_NEW = 5                     # ... this many of them about what the description mentions (asked
+#                                       first, as the look is taken), so the remembered names keep >= 5
+PLACE_FIXTURES = frozenset({"wall", "door"})   # part of the room (the lidar's business): never asked
+#                                       about, never 'added' or 'missing'
+# occlusion (review 2026-09-25): the second look turns IN PLACE, so both looks share one line of sight
+# to every spot — a thing hidden from the first is hidden from the second, and two 'not there' answers
+# would erase it. A remembered spot a look cannot see past something is unobservable, never missing:
+PLACE_HIDE_PAD = 0.02                 # ... its image point inside a box the eye drew this look (widened
+#                                       by this fraction of the frame each side; a floor point inside a
+#                                       box lies BEHIND that thing's foot), or
+PLACE_HIDE_LIDAR_DEG = 2.0            # ... a lidar return within this many degrees of its bearing (from
+PLACE_HIDE_LIDAR_M = 0.15             # the torso) and this much nearer than it (the stored spot is the
+#                                       thing's centre): something >= ~0.18 m tall stands in the way (the
+#                                       eye is 0.21 m up, so it cannot see over it to the floor behind)
+# the names the eye boxed at a place but could never place (a cup on a table, a lamp beyond 2 m): kept
+# as a place note, so a later visit counts them present, not 'new here' (review 2026-09-25). A note is
+# PlaceMemory's own persisted, per-place text (restored and forgotten with the place); place_memory has
+# no field for them yet.
+PLACE_UNPLACED_NOTE = "eye: boxed here, never placed: "
+_PLACE_NEW_WORDS = frozenset({"", "new", "new place", "a new place", "somewhere new", "new room", "a new room"})
 
 def memory_key(name, spec):
     """The scene-memory key (file name) of a world: a preset loaded as it
@@ -174,6 +283,445 @@ def memory_key(name, spec):
     if name in PRESETS and blob == json.dumps(PRESETS[name], sort_keys=True, default=str):
         return name
     return f"{name}-{hashlib.sha1(blob.encode()).hexdigest()[:8]}"
+
+
+# ---------------------------------------------------------- D057: place recognition helpers (pure)
+def eye_visible(pose, max_m=VIEW_MAX_M, near_m=VIEW_NEAR_M, hfov_deg=EYE_HFOV_DEG):
+    """visible(x, y) for place_memory.diff_objects: could a look from `pose` ({x, y,
+    yaw_deg}) have seen the floor point (x, y)? Inside the eye's horizontal field of view
+    (hfov_deg, ~86 deg, centred on the heading, from the eye EYE_FWD_M ahead of the torso)
+    and between near_m and max_m (~2 m: FIND_TRUSTED_M) from it. Occlusion is NOT modelled
+    here (a thing hidden behind another counts as visible): a change check reads a look
+    through look_view, which adds it (look_hidden)."""
+    yaw = math.radians(float(pose.get("yaw_deg", pose.get("yaw", 0.0)) or 0.0))
+    ex = float(pose["x"]) + EYE_FWD_M * math.cos(yaw)
+    ey = float(pose["y"]) + EYE_FWD_M * math.sin(yaw)
+    half = float(hfov_deg) / 2.0
+
+    def visible(x, y):
+        dx, dy = float(x) - ex, float(y) - ey
+        d = math.hypot(dx, dy)
+        if not near_m <= d <= max_m:
+            return False
+        b = (math.degrees(math.atan2(dy, dx) - yaw) + 180.0) % 360.0 - 180.0
+        return abs(b) <= half
+    return visible
+
+
+def eye_pixel(pose, x, y):
+    """Where the map floor point (x, y) appears in the eye image of a look from `pose`
+    ({x, y, yaw_deg}): (u right, v down, 0..1 of the frame; outside 0..1 = outside the frame),
+    or None behind the camera. cockpit_brains.floor_to_pixel, from the eye EYE_FWD_M ahead
+    of the torso (the inverse of the box -> floor geometry the eye's answers use)."""
+    yaw = math.radians(float(pose.get("yaw_deg", pose.get("yaw", 0.0)) or 0.0))
+    dx = float(x) - (float(pose["x"]) + EYE_FWD_M * math.cos(yaw))
+    dy = float(y) - (float(pose["y"]) + EYE_FWD_M * math.sin(yaw))
+    fwd, left = dx * math.cos(yaw) + dy * math.sin(yaw), -dx * math.sin(yaw) + dy * math.cos(yaw)
+    d = math.hypot(fwd, left)
+    if d < 1e-6:
+        return None
+    return floor_to_pixel(d, -math.degrees(math.atan2(left, fwd)))
+
+
+def look_hidden(look):
+    """why(x, y) for one look: None when nothing this look SENSED stands between the eye and
+    the floor point (x, y), else why it may be hidden —
+      'hidden behind the <name>'  the point's image lies inside a box the eye drew in this look
+                                  (look['eye'][name]: seen, with its bbox; widened PLACE_HIDE_PAD):
+                                  a floor point inside a thing's box is BEHIND that thing's foot;
+      'hidden (a lidar return in front)'  a return of the look's sweep (look['sweep']: body
+                                  angles + ranges from the torso) within PLACE_HIDE_LIDAR_DEG of
+                                  the point's bearing and PLACE_HIDE_LIDAR_M nearer than it.
+    Both looks of a change check stand on one spot (the second turns in place), so what hides a
+    spot from one hides it from the other: two 'not there' answers prove nothing there. Only
+    what the look sensed can hide: an occluder the eye was not asked about and the lidar does
+    not see (below its ~0.18 m plane) still counts as nothing (an upper bound on 'missing')."""
+    pose = look.get("pose") or {}
+    boxes = [(str(n), a["bbox"]) for n, a in sorted((look.get("eye") or {}).items())
+             if isinstance(a, dict) and a.get("seen") is True and isinstance(a.get("bbox"), (list, tuple))
+             and len(a["bbox"]) == 4]
+    sweep = look.get("sweep")
+    ang = rng = None
+    if sweep is not None and len(sweep[0]):
+        ang, rng = np.asarray(sweep[0], dtype=float), np.asarray(sweep[1], dtype=float)
+    yaw = math.radians(float(pose.get("yaw_deg", 0.0) or 0.0))
+
+    def why(x, y):
+        if not pose:
+            return None
+        uv = eye_pixel(pose, x, y) if boxes else None
+        if uv is not None:
+            u, v = uv
+            for n, (x1, y1, x2, y2) in boxes:
+                if x1 - PLACE_HIDE_PAD <= u <= x2 + PLACE_HIDE_PAD and y1 - PLACE_HIDE_PAD <= v <= y2:
+                    return f"hidden behind the {n}"
+        if ang is not None:
+            dx, dy = float(x) - float(pose["x"]), float(y) - float(pose["y"])
+            d = math.hypot(dx, dy)
+            th = math.atan2(dy, dx) - yaw
+            off = np.abs((ang - th + np.pi) % (2 * np.pi) - np.pi)
+            if np.any((off <= math.radians(PLACE_HIDE_LIDAR_DEG)) & (rng < d - PLACE_HIDE_LIDAR_M)):
+                return "hidden (a lidar return in front)"
+        return None
+    return why
+
+
+def look_view(look):
+    """visible(x, y) for one look's change check: in the eye's view (eye_visible: 86 deg,
+    0.15-2 m, from the look's pose) and not hidden behind anything the look sensed
+    (look_hidden). A 'not there' counts only where this is True."""
+    cone, hid = eye_visible(look["pose"]), look_hidden(look)
+    return lambda x, y: bool(cone(x, y)) and hid(x, y) is None
+
+
+def view_why(look, x, y):
+    """Why a look could not see the floor point (x, y): 'out of view' | look_hidden's reason |
+    None (it could)."""
+    if not eye_visible(look["pose"])(x, y):
+        return "out of view"
+    return look_hidden(look)(x, y)
+
+
+def boxed_unplaced(looks):
+    """The names the eye boxed (a confident 'seen: true') in these GOOD looks without placing
+    them in any of them (no floor spot within FIND_TRUSTED_M: beyond 2 m, above the horizon —
+    on a table —, or no box). Sorted."""
+    good = [lk for lk in looks or [] if lk.get("objects") is not None]
+    boxed = {n for lk in good for n, a in (lk.get("eye") or {}).items() if a.get("seen") is True}
+    placed = {n for lk in good for n in found_map(lk)}
+    return sorted(n for n in boxed if not any(same_thing(n, p) for p in placed))
+
+
+def unplaced_names(place):
+    """The names a place's notes record as boxed there but never placed (PLACE_UNPLACED_NOTE),
+    in the order recorded."""
+    out = []
+    for nt in (place or {}).get("notes") or []:
+        t = str((nt or {}).get("text") or "")
+        if t.startswith(PLACE_UNPLACED_NOTE):
+            for n in t[len(PLACE_UNPLACED_NOTE):].split(","):
+                n = norm_name(n)
+                if n and n not in out:
+                    out.append(n)
+    return out
+
+
+def _per_look_entry(r):
+    """One look's own recognition for the answer's per_look: its verdict and confidence, the
+    parts / evidence / signals (a list) it rests on, and its runner-up and ranking (with their
+    parts when PlaceMemory.recognize gives them) — what a later replay of a two-look verdict
+    under other thresholds needs."""
+    parts = r.get("parts") if isinstance(r.get("parts"), dict) else None
+    sig = r.get("signals")
+    if not isinstance(sig, (list, tuple)):
+        sig = [k for k in ("scan", "desc", "radio") if (parts or {}).get(k) is not None]
+    out = {k: r.get(k) for k in ("verdict", "place_id", "name", "confidence", "evidence", "yaw_drift_deg")}
+    out.update(parts=dict(parts) if parts else None, signals=list(sig),
+               second=dict(r["second"]) if isinstance(r.get("second"), dict) else None,
+               ranking=[dict(e) for e in r.get("ranking") or [] if isinstance(e, dict)])
+    return out
+
+
+def signal_list(rec):
+    """The senses a verdict rests on, as a list (['scan', 'desc'], ...): the result's
+    `signals`, else its non-None `parts`; [] for the operator's word or no parts."""
+    rec = rec or {}
+    if rec.get("by") == "operator":
+        return []
+    sig = rec.get("signals")
+    if isinstance(sig, (list, tuple)):
+        return [str(k) for k in sig]
+    parts = rec.get("parts") if isinstance(rec.get("parts"), dict) else {}
+    return [k for k in ("scan", "desc", "radio") if parts.get(k) is not None]
+
+
+def combine_recognitions(r1, r2):
+    """Two recognitions of one spot (the second after the PLACE_TURN_DEG turn) -> one, in
+    PlaceMemory.recognize's shape: per place the mean of its two confidences (a place missing
+    from one look's top 3 gets that look's lowest listed confidence: an upper bound for it,
+    so a runner-up is never under-counted), the verdict by place_memory's own thresholds
+    (KNOWN_T, MARGIN over a differently named runner-up, NEW_T). `per_look` keeps both;
+    `signals` = the senses either look compared (each look's own are in per_look, with its
+    parts, evidence, runner-up and ranking: _per_look_entry)."""
+    names, confs = {}, {}
+    for r in (r1, r2):
+        for e in r.get("ranking") or []:
+            names[e["place_id"]] = e["name"]
+    for pid in names:
+        cs = []
+        for r in (r1, r2):
+            rk = r.get("ranking") or []
+            hit = next((e["confidence"] for e in rk if e["place_id"] == pid), None)
+            if hit is None and rk:
+                hit = min(e["confidence"] for e in rk)
+            if hit is not None:
+                cs.append(float(hit))
+        confs[pid] = sum(cs) / len(cs) if cs else 0.0
+    per_look = [_per_look_entry(r) for r in (r1, r2)]
+    got = set()
+    for r in (r1, r2):
+        sig = r.get("signals")
+        if not isinstance(sig, (list, tuple)):
+            sig = [k for k in ("scan", "desc", "radio") if ((r.get("parts") or {}).get(k)) is not None]
+        got.update(sig)
+    signals = [k for k in ("scan", "desc", "radio") if k in got]
+    if not confs:
+        return dict(r2, per_look=per_look, signals=signals)
+    order = sorted(confs, key=lambda k: confs[k], reverse=True)
+    best = order[0]
+    c = confs[best]
+    sec = next((k for k in order[1:] if names[best] is None or names[k] != names[best]), None)
+    c2 = confs[sec] if sec is not None else 0.0
+    if c >= pm.KNOWN_T:
+        verdict = "known" if c - c2 >= pm.MARGIN else "ambiguous"
+    elif c < pm.NEW_T:
+        verdict = "new"
+    else:
+        verdict = "ambiguous"
+    base = r1 if r1.get("place_id") == best else r2
+    return {"verdict": verdict, "place_id": best, "name": names[best], "confidence": round(c, 3),
+            "second": ({"place_id": sec, "name": names[sec], "confidence": round(c2, 3)} if sec is not None
+                       else {"place_id": None, "name": None, "confidence": 0.0}),
+            "parts": base.get("parts"), "signals": signals, "evidence": base.get("evidence"),
+            "yaw_drift_deg": base.get("yaw_drift_deg"),
+            "ranking": [{"place_id": k, "name": names[k], "confidence": round(confs[k], 3)} for k in order[:3]],
+            "per_look": per_look}
+
+
+def apply_confirmed(stored, confirmed, match_m=PLACE_MATCH_M):
+    """A place's object snapshot with the CONFIRMED changes applied (confirm_diff's added /
+    missing / moved; pending ones never): the new snapshot to store. An addition the eye
+    boxed but never placed (no x, y) is declared by the caller, not stored."""
+    objs = [dict(o) for o in stored or []]
+
+    def take(name, x, y):
+        cand = [(math.hypot(float(o["x"]) - x, float(o["y"]) - y), i) for i, o in enumerate(objs)
+                if same_thing(o["name"], name)]
+        cand = [c for c in cand if c[0] <= match_m]
+        return objs.pop(min(cand)[1]) if cand else None
+    for m in (confirmed or {}).get("missing") or []:
+        take(m["name"], float(m["x"]), float(m["y"]))
+    for mv in (confirmed or {}).get("moved") or []:
+        o = take(mv["name"], float(mv["from"][0]), float(mv["from"][1])) or {"name": mv["name"], "confidence": 0.2}
+        objs.append(dict(o, x=float(mv["to"][0]), y=float(mv["to"][1])))
+    for a in (confirmed or {}).get("added") or []:
+        if a.get("x") is None or a.get("y") is None:
+            continue                                     # boxed twice but never placed: declared, not stored
+        objs.append({"name": a["name"], "x": float(a["x"]), "y": float(a["y"]),
+                     "confidence": float(a.get("confidence") or 0.2)})
+    return objs
+
+
+def split_seen_before(confirmed):
+    """A change check's confirmed diff (confirm_diff's {added, missing, moved, pending}) with
+    the additions marked seen_before (a thing this place's earlier looks boxed but never
+    placed, placed now: _place_eye_check) taken out of the changes: both looks agree ->
+    'placed' (stored at its spot, never declared new here); one look only -> dropped from
+    pending (one look placing it is no change either)."""
+    c = dict(confirmed or {})
+    c["placed"] = [dict(a) for a in c.get("added") or [] if a.get("seen_before")]
+    c["added"] = [a for a in c.get("added") or [] if not a.get("seen_before")]
+    c["pending"] = [o for o in c.get("pending") or [] if not (o.get("change") == "added" and o.get("seen_before"))]
+    return c
+
+
+def _mem_mark(mem):
+    """A SceneMemory's state at a place bind, so an operator's correction can put the wrongly
+    bound place's memory back (_mem_rollback). Reaches into SceneMemory's lock and tables:
+    scene_memory has no public snapshot / restore (a small API there would be cleaner).
+    `live` keeps the records present now alive, so their ids cannot be reused."""
+    with mem._lock:
+        return {"world": mem.world, "live": list(mem.obs),
+                "state": copy.deepcopy((mem.obs, mem._objects, mem._seq, mem._u, mem._epoch, mem.session_t0))}
+
+
+def _mem_rollback(mem, mark):
+    """Put a SceneMemory back to `mark` (same world only) -> the records added since (copies,
+    oldest first: the provisional memory's carried ones and everything after the bind), for
+    the right place. The file is saved by the next debounced save / world switch."""
+    with mem._lock:
+        if mem.world != mark["world"]:
+            return []
+        old = {id(o) for o in mark["live"]}
+        since = [dict(o) for o in mem.obs if id(o) not in old]
+        obs, objs, seq, u, ep, t0 = copy.deepcopy(mark["state"])
+        mem.obs, mem._objects = obs, objs
+        mem._seq, mem._u, mem._epoch, mem.session_t0 = seq, u, ep, t0
+        mem._changed()
+    return since
+
+
+def _pm_restore(pmem, pid, record):
+    """Put a place's record back as it was (a PlaceMemory.get copy taken before a visit): the
+    undo of a visit the operator says was to the wrong place. PlaceMemory has no public
+    restore, so this reaches into its lock and table (a restore(pid, record) there would be
+    cleaner). -> True when restored (False: the place is gone, or no record)."""
+    lock, table = getattr(pmem, "_lock", None), getattr(pmem, "_places", None)
+    if lock is None or not isinstance(table, dict) or not record:
+        return False
+    with lock:
+        if str(pid) not in table:
+            return False
+        table[str(pid)] = copy.deepcopy(record)
+        pmem._changed()
+    return True
+
+
+def _moved(a, b):
+    """Has the robot moved (STILL_M / STILL_DEG) between two poses?"""
+    return (math.hypot(float(a["x"]) - float(b["x"]), float(a["y"]) - float(b["y"])) > STILL_M
+            or abs((float(a["yaw_deg"]) - float(b["yaw_deg"]) + 180.0) % 360.0 - 180.0) > STILL_DEG)
+
+
+def _changes(d):
+    """Does a diff (diff_objects / confirm_diff) hold any change?"""
+    return bool(d) and any(d.get(k) for k in ("added", "missing", "moved"))
+
+
+_SIGNAL_WORDS = {"scan": "scan", "desc": "description", "radio": "radio"}
+
+
+def signals_text(rec):
+    """The senses a verdict rests on, in words: 'scan + description' | 'scan only' |
+    'description only' | 'radio only' | 'the operator's word' | 'no places to compare with'
+    (the first place) | 'no signal'. From the result's `signals` (PlaceMemory.recognize), else
+    its non-None `parts`."""
+    rec = rec or {}
+    if rec.get("by") == "operator":
+        return "the operator's word"
+    sig = rec.get("signals")
+    if not isinstance(sig, (list, tuple)):
+        parts = rec.get("parts") if isinstance(rec.get("parts"), dict) else {}
+        sig = [k for k in ("scan", "desc", "radio") if parts.get(k) is not None]
+    words = [_SIGNAL_WORDS.get(k, str(k)) for k in sig]
+    if not words:
+        return "no places to compare with" if rec.get("verdict") == "new" and not rec.get("place_id") \
+            else "no signal"
+    return f"{words[0]} only" if len(words) == 1 else " + ".join(words)
+
+
+def _is_fixture(name):
+    n = norm_name(name)
+    return bool(n) and n.split()[-1] in PLACE_FIXTURES
+
+
+def place_spots(objects):
+    """{name: [(x, y), ...]}: a place snapshot's remembered objects by (normalised) name, the
+    room's fixtures (PLACE_FIXTURES) left out — the names its change check asks the eye about."""
+    out = {}
+    for o in objects or []:
+        if not isinstance(o, dict):
+            continue
+        n, x, y = norm_name(o.get("name")), o.get("x"), o.get("y")
+        if n and not _is_fixture(n) and x is not None and y is not None:
+            out.setdefault(n, []).append((float(x), float(y)))
+    return out
+
+
+def place_candidates(text, exclude=()):
+    """What a look description mentions that the eye can be asked about (a thing that may be
+    new here): the LOOK_NOUNS (scene_memory) among place_memory.mentioned_names(text) — a negated
+    mention ('no ball') is not one — minus the room's fixtures and anything same_thing to a name
+    in `exclude`. The prose only proposes a question; the eye's box answers it. Sorted."""
+    out = []
+    for n in sorted(pm.mentioned_names(text or "")):
+        head = n.split()[-1] if n else ""
+        if head in LOOK_NOUNS and head not in PLACE_FIXTURES and not any(same_thing(n, e) for e in exclude):
+            out.append(n)
+    return out
+
+
+def seen_map(look, spots):
+    """One look's eye answers (look['eye'], filled by CockpitSim._place_ask) as the change
+    check's seen map {name: True | False | None}, for the snapshot's names (spots: place_spots)
+    and every name the look asked about:
+      True   the eye boxed it in this look (a parsed 'seen: true', confidence >= FIND_MIN_CONF);
+      False  the eye answered that it is not there — and, for a remembered object, at least one
+             of its stored spots this look could see (look_view: in the eye's 86 deg x 0.15-2 m
+             view from the look's pose, and not hidden behind a box the eye drew or a lidar
+             return: look_hidden);
+      None   nothing is claimed: the look failed (no description: every name), the question was
+             not asked or got no usable answer (the model erred, the answer did not parse, it was
+             unsure, the robot had moved), or a remembered object whose every stored spot is out
+             of this look's view or hidden (unobservable: 'not seen' there proves nothing)."""
+    eye = look.get("eye") or {}
+    failed = look.get("objects") is None
+    view = look_view(look) if not failed else None
+    out = {}
+    for n in list(spots) + [k for k in eye if k not in spots]:
+        a = None if failed else (eye.get(n) or {}).get("seen")
+        if a is False and spots.get(n) and not any(view(x, y) for x, y in spots[n]):
+            a = None
+        out[n] = a if a in (True, False) else None
+    return out
+
+
+def found_map(look):
+    """{name: {x, y, confidence}}: the look's PLACED sightings (the box's bottom edge on the
+    floor, cockpit_brains.sighting_to_map; a box beyond FIND_TRUSTED_M or above the horizon is
+    seen but not placed). A failed look places nothing."""
+    if look.get("objects") is None:
+        return {}
+    return {n: {"x": a["x"], "y": a["y"], "confidence": a.get("confidence", 0.5)}
+            for n, a in (look.get("eye") or {}).items()
+            if a.get("seen") is True and a.get("x") is not None and a.get("y") is not None}
+
+
+def eye_objects(looks, match_m=PLACE_MATCH_M):
+    """A new place's first objects from its looks' PLACED sightings (found_map), each kept once
+    (same name within match_m: the first look's position). A sighting another look contradicts
+    (that look could see the spot — look_view: in view, not hidden — and the eye said the thing
+    is not there) is left out: the looks disagree, so it is not stored."""
+    out = []
+    for i, lk in enumerate(looks):
+        for n, f in found_map(lk).items():
+            if any(same_thing(n, o["name"]) and math.hypot(f["x"] - o["x"], f["y"] - o["y"]) <= match_m
+                   for o in out):
+                continue
+            if any(j != i and other.get("objects") is not None
+                   and ((other.get("eye") or {}).get(n) or {}).get("seen") is False
+                   and look_view(other)(f["x"], f["y"]) for j, other in enumerate(looks)):
+                continue
+            out.append({"name": n, "x": f["x"], "y": f["y"], "confidence": f["confidence"]})
+    return out
+
+
+def looking_again_text(rec, why):
+    """The place clause while the robot turns for its second look (<= place_memory.VERDICT_MAX):
+    why 'new' | 'ambiguous' | '<n> change(s)' (a change check)."""
+    rec = rec or {}
+    c = float(rec.get("confidence") or 0.0)
+    lab = str(rec.get("name") or rec.get("place_id") or "?")[:24]
+    sec = rec.get("second") or {}
+    if why == "new":
+        s = (f"place: NEW? looking again (best {lab} {c:.2f})" if rec.get("place_id")
+             else "place: NEW? looking again (no places yet)")
+    elif why == "ambiguous":
+        s = f"place: {lab}? looking again ({c:.2f}"
+        s += (f", or {str(sec.get('name') or sec.get('place_id'))[:24]} {float(sec.get('confidence') or 0):.2f})"
+              if sec.get("place_id") else ")")
+    else:
+        s = f"place: {lab} ({c:.2f}) — looking again to confirm {why}"
+    return s[:pm.VERDICT_MAX]
+
+
+def eye_brief(look, spots=None):
+    """A look's eye check for the answer (the bench's per-visit record): {pose, seen, placed,
+    asked, why} — seen = seen_map, placed = found_map, why = the reasons a name stayed None
+    (a 'no' the look could not see behind or around says so: 'said no, but hidden behind the
+    box' / 'said no, but out of view')."""
+    eye = look.get("eye") or {}
+    seen = seen_map(look, spots or {})
+    why = {n: a["why"] for n, a in eye.items() if a.get("why")}
+    for n, v in seen.items():
+        if v is None and (eye.get(n) or {}).get("seen") is False and look.get("objects") is not None \
+                and n not in why and (spots or {}).get(n):
+            reasons = [view_why(look, x, y) for x, y in spots[n]]
+            why[n] = "said no, but " + (next((r for r in reasons if r and r != "out of view"), None)
+                                        or "out of view")
+    return {"pose": {k: look["pose"].get(k) for k in ("x", "y", "yaw_deg")},
+            "seen": seen, "placed": found_map(look),
+            "asked": sum(1 for a in eye.values() if a.get("asked")), "why": why}
 
 
 class SimDead(RuntimeError):
@@ -283,8 +831,15 @@ class CockpitSim(Playground):
         # scene memory: RAM only by default (tests, headless); main() turns persistence on.
         # Keyed by memory_key: a preset by its name, anything else by name + a hash of its spec
         self.memory = SceneMemory(memory_key(self.world_name, spec), directory=None, log=self.log)
+        # D057: sim.memory is the ACTIVE scene memory; _mem_main the persisted one (per world, or per
+        # recognised place while recognition is on); a provisional RAM-only one stands in until a verdict
+        self._mem_main = self.memory
+        self._mem_scratch = None
+        self.place_memory = pm.PlaceMemory(directory=None, log=self.log)   # main() turns persistence on
+        self.embed_fn = None                # text -> vector for place recognition (None: brains.embed)
+        self._place = self._place_blank()
         self._hw_guard_t = {}               # bus event kind -> when it last went to the memory
-        self.awareness = dict(interval_s=AWARENESS_S, curious=False, reactions=False)
+        self.awareness = dict(interval_s=AWARENESS_S, curious=False, reactions=False, recognize=False)
         self.situation = dict(text="", t=None)
         self._pose_cache = None             # the last pose the sim thread saw (for other threads)
         self._aw = dict(check_next=0.0, compose_next=0.0, last_react=-1e9, last_curious=-1e9,
@@ -480,9 +1035,12 @@ class CockpitSim(Playground):
         hands out copies), rebuilt when an input changed — the gesture or chord-word
         list, the gait, the eye or the memory. A rebuild with a new version bumps
         _caps_seq and logs one console line, once per change — never an events-feed
-        entry (the status tool returns that feed's tail to the models)."""
+        entry (the status tool returns that feed's tail to the models). Place recognition
+        switched on or off is such a change (D057: the place tools come and go with it)."""
         g = self.gait
-        flags = cockpit_flags(self)
+        # D057: the place tools exist (the registry's `places`) only while recognition is on, so
+        # switching it changes the version (caps_seq counts it) and, off, the snapshot is the D056 one
+        flags = dict(cockpit_flags(self), has_places=bool((self.awareness or {}).get("recognize")))
         key = (tuple(self.gesture_names), tuple(self.lexicon), tuple(SIGNED),
                tuple(float(getattr(g, k)) for k in GAIT_KEYS), tuple(sorted(flags.items())))
         with self._caps_lock:
@@ -633,6 +1191,15 @@ class CockpitSim(Playground):
             if e is not None:
                 self.log(f"job failed: {type(e).__name__}: {e}")
 
+    def flush_memories(self):
+        """Any thread: write the debounced saves now — the scene memory (the persisted one and
+        the active one) and the place memory (D057). Never raises."""
+        for m in (self._mem_main, self.memory, self.place_memory):
+            try:
+                m.flush()
+            except Exception as e:                       # noqa: BLE001
+                self.log(f"memory flush: {type(e).__name__}: {e}")
+
     def heartbeat(self):
         """Any thread: the sim thread's pulse (wall clock)."""
         now = time.time()
@@ -718,6 +1285,11 @@ class CockpitSim(Playground):
                 self._aware_tick()
             except Exception as e:                       # noqa: BLE001 — awareness is not physics
                 self._aware_failed(e)
+        if a.get("recognize"):
+            try:
+                self._place_tick()
+            except Exception as e:                       # noqa: BLE001 — recognition is not physics
+                self._place_tick_failed(e)
         if self._render_due or self._k % self.render_every == 0:
             self._render_safe()
 
@@ -1115,11 +1687,21 @@ class CockpitSim(Playground):
         # A memory error must never leave the world switch half done (the model is swapped).
         # carry only on an explicit EDIT (keep_pose=True: /api/world/add): a different spec under
         # the same name ('custom' again) is a different world with its own key and file
-        try:
-            self.memory.set_world(memory_key(name, spec), carry=bool(keep_pose))
-        except Exception as e:                           # noqa: BLE001
-            self.log(f"memory: world switch failed ({type(e).__name__}: {e}) — memory kept as it was")
-        self._memory_epoch(f"world '{name}' {'edited' if same_world else 'loaded'}: its objects are at "
+        if self.awareness.get("recognize"):
+            # D057: the memory follows the recognised place, not the world's name. A respawn at
+            # the origin leaves the robot not knowing where it is (a provisional memory until the
+            # verdict); an edit keeps its pose, so it keeps its place (its odometry says it did
+            # not move) and only looks again for what changed
+            self._place_spawned(f"world {'edited' if same_world else 'loaded'}", moved=not same_world)
+        else:
+            try:
+                self.memory.set_world(memory_key(name, spec), carry=bool(keep_pose))
+            except Exception as e:                       # noqa: BLE001
+                self.log(f"memory: world switch failed ({type(e).__name__}: {e}) — memory kept as it was")
+        # D057: with recognition on, the memory record does not name the world (ground truth a
+        # model could read back through recall; review 2026-09-25)
+        wname = "a world" if self.awareness.get("recognize") else f"world '{name}'"
+        self._memory_epoch(f"{wname} {'edited' if same_world else 'loaded'}: its objects are at "
                            "their spawn", spawn=not same_world)
         self._forget_scene(f"world '{name}' {'edited' if same_world else 'loaded'}")
         if self.walk is not None:
@@ -1162,6 +1744,8 @@ class CockpitSim(Playground):
         self.gesture = None
         self.push = None
         self._respawn(keep_righter=True)
+        if self.awareness.get("recognize"):
+            self._place_spawned("reset", moved=True)    # D057: carried to the spawn: where is it now?
         self._memory_epoch("reset: the robot and the world's objects are back at their spawn")
         self._forget_scene("reset")
         self.log("reset")
@@ -1226,11 +1810,13 @@ class CockpitSim(Playground):
         return dict(self.awareness, check_s=AWARE_CHECK_S, react_min_s=REACT_MIN_S,
                     curious_min_s=CURIOUS_MIN_S, new_obstacle_m=NEW_OBSTACLE_M)
 
-    def set_awareness(self, interval_s=None, curious=None, reactions=None):
+    def set_awareness(self, interval_s=None, curious=None, reactions=None, recognize=None):
         """Any thread. interval_s: seconds between situation updates while idle
         (0 = off; else 5..3600); curious: allow one unprompted look (a vision
         model call) per CURIOUS_MIN_S when the lidar scene changed; reactions:
-        speak a chord on a guard latch or a new obstacle (once per REACT_MIN_S)."""
+        speak a chord on a guard latch or a new obstacle (once per REACT_MIN_S);
+        recognize (D057): place recognition — the scene memory keyed by the place
+        the robot recognises instead of the world's name (see recognize_place)."""
         a = dict(self.awareness)
         if interval_s is not None:
             if isinstance(interval_s, bool):
@@ -1239,15 +1825,18 @@ class CockpitSim(Playground):
             if not np.isfinite(v) or v < 0:
                 raise ValueError("interval_s must be a finite number >= 0 (0 = off)")
             a["interval_s"] = 0.0 if v == 0 else float(np.clip(v, 5.0, 3600.0))
-        for k, v in (("curious", curious), ("reactions", reactions)):
+        for k, v in (("curious", curious), ("reactions", reactions), ("recognize", recognize)):
             if v is not None:
                 if not isinstance(v, bool):
                     raise ValueError(f"{k} must be true or false")
                 a[k] = v
+        was = bool(self.awareness.get("recognize"))
         self.awareness = a
         self._aw["compose_next"] = 0.0
         self._aw["fails"] = 0
         self.log("awareness: " + ", ".join(f"{k} {v}" for k, v in a.items()))
+        if bool(a.get("recognize")) != was:
+            self._place_switch(bool(a["recognize"]))
         return self.awareness_settings()
 
     def _lidar_summary(self):
@@ -1284,8 +1873,8 @@ class CockpitSim(Playground):
         return (f"lidar: nearest {shown} (+{len(close) - 3} more within 1.5 m); "
                 f"clear: {', '.join(clear) if clear else 'nothing'}")
 
-    def _eye_words(self, now):
-        """The eye clause: the last description (quoted, <= 80 chars), or —
+    def _eye_words(self, now, quote=64):
+        """The eye clause: the last description (quoted, <= `quote` chars), or —
         when find_object used the eye since — what it found."""
         lk = getattr(self.brains, "last_look", None)
         lf = getattr(self.brains, "last_find", None)
@@ -1293,7 +1882,7 @@ class CockpitSim(Playground):
             return (f"eye: last used by find_object ({lf['name']} {'found' if lf['found'] else 'not found'}, "
                     f"{fmt_age(now - lf['t'])})")
         if lk:
-            q = lk["text"] if len(lk["text"]) <= 64 else lk["text"][:63].rsplit(" ", 1)[0] + "…"
+            q = lk["text"] if len(lk["text"]) <= quote else lk["text"][:quote - 1].rsplit(" ", 1)[0] + "…"
             return f"eye ({lk.get('model')}, {fmt_age(now - lk['t']).replace('just now', 'now')}): \"{q}\""
         return "eye: no description yet"
 
@@ -1336,12 +1925,23 @@ class CockpitSim(Playground):
         if lk:
             look = dict(text=lk["text"], model=lk.get("model"), age_s=round(now - lk["t"], 1))
         mpose = {"x": pose["x"], "y": pose["y"], "yaw_deg": pose["yaw_deg"]}
-        mem = self.memory.summary(mpose, now=now, max_objects=3, short=True)
+        recognizing = bool(self.awareness.get("recognize"))
+        # D057: the place clause (up to pm.VERDICT_MAX) leads while recognition is on; to keep
+        # the line under 400 chars the memory names 2 objects instead of 3 and the eye quote
+        # is 24 chars, not 64 (review 2026-09-25: 446 chars with a full memory and a long look;
+        # measured after: 385 with a 90-char place clause)
+        mem = self.memory.summary(mpose, now=now, max_objects=2 if recognizing else 3, short=True)
         idle = self.idle_reason() is None
         state = self.sup.state
         px, py, pyaw = (0.0 if abs(v) < 0.005 else v for v in (pose["x"], pose["y"], pose["yaw_deg"]))
-        parts = [f"at ({px:.2f}, {py:.2f}) m facing {pyaw:.0f} deg in world '{self.world_name}'; "
-                 f"reflex {state}, {'idle' if idle else self.mode}"]
+        if recognizing:
+            # D057: the recognised place comes first (verdict_text, <= 90 chars) and the world's name
+            # is left out: it is ground truth a real robot never has, and a model would read it
+            parts = [self._place_text(),
+                     f"at ({px:.2f}, {py:.2f}) m facing {pyaw:.0f} deg; reflex {state}, {'idle' if idle else self.mode}"]
+        else:
+            parts = [f"at ({px:.2f}, {py:.2f}) m facing {pyaw:.0f} deg in world '{self.world_name}'; "
+                     f"reflex {state}, {'idle' if idle else self.mode}"]
         if guards:
             parts.append("GUARDS: " + "; ".join(guards))
         parts += [self._lidar_words(lid), mem]
@@ -1349,11 +1949,13 @@ class CockpitSim(Playground):
             parts.append(heat)
         if hw is not None:
             parts.append(bus)
-        parts.append(self._eye_words(now))
+        parts.append(self._eye_words(now, quote=24 if recognizing else 64))
         text = ". ".join(parts) + "."
         self.situation = dict(text=text, t=round(now, 2), pose=pose, world=self.world_name, state=state,
                               mode=self.mode, idle=idle, guards=guards, lidar=lid, look=look, memory=mem,
                               heat=th, bus=bus)
+        if recognizing:
+            self.situation["place"] = self._place_brief()
         return self.situation
 
     async def situation_now(self):
@@ -1450,6 +2052,1096 @@ class CockpitSim(Playground):
         except RuntimeError:                              # the loop is closed
             aw["curious_task"] = None
 
+    # ------------------------------------------------------ D057: place recognition
+    @staticmethod
+    def _place_blank():
+        """The place state (self._place). spawn_seq counts spawns (world loads, resets, edits,
+        recognition switched on); a result is for the spawn_seq it ran on (result_seq).
+        edit: the last spawn kept the robot's pose (a world edit) — its recognition is a change
+        check of the bound place, never a new verdict. spawn_wall: time.time() at that spawn.
+        binding: what binding the current place did, so an operator's correction can take it
+        back ({pid, pre: the place's record before this binding's first visit, own: the place
+        was stored on this binding, mark: the scene memory at the bind}); None when unbound."""
+        return dict(spawn_seq=0, spawn_t=0.0, spawn_wall=0.0, edit=False, result_seq=-1, result=None,
+                    status="off", reason="", bound=None, binding=None, running=None, samples=[], diff=None,
+                    looks=0, t=None, error=None, note=None, look_error=None, by=None, check_next=0.0,
+                    task=None, task_t=0.0, fails=0, phase=None, checks=None)
+
+    def _place_switch(self, on):
+        """set_awareness: recognition switched on (the robot does not know where it is: a
+        provisional memory, a recognition due) or off (the world-keyed memory, exactly as
+        before; the place state goes)."""
+        self._place = self._place_blank()
+        if on:
+            st = self._place
+            st.update(spawn_seq=1, spawn_t=self.t - RECOG_SETTLE_S, spawn_wall=time.time(), status="due",
+                      reason="place recognition switched on")
+            self._place_provisional()
+            self.log("place: recognition ON — the scene memory now follows the recognised place")
+            return
+        self._mem_scratch = None
+        self.memory = self._mem_main
+        try:
+            self._mem_main.set_world(memory_key(self.world_name, self.world_spec), carry=False)
+        except Exception as e:                           # noqa: BLE001
+            self.log(f"memory: back to the world's memory failed ({type(e).__name__}: {e})")
+        self.log("place: recognition OFF — the scene memory follows the world again")
+
+    def _place_provisional(self):
+        """Not in a known place (a respawn, recognition switched on, the place forgotten): a
+        fresh RAM-only scene memory stands in until a verdict binds one (_place_bind carries
+        what it recorded over). Never persisted: its key would name no place."""
+        self._mem_scratch = SceneMemory(PLACE_PENDING_KEY, directory=None, log=self.log)
+        self.memory = self._mem_scratch
+        self._place["bound"] = None
+        self._place["binding"] = None
+
+    def _place_spawned(self, why, moved):
+        """Sim thread (set_world, reset): a recognition is due once the robot stands still.
+        moved: it was put somewhere (a respawn at the origin) — provisional memory until the
+        verdict; an edit (pose kept) keeps its place, and its recognition is only a change
+        check of that place (never a new verdict, never another place: _recognize)."""
+        st = self._place
+        st.update(spawn_seq=st["spawn_seq"] + 1, spawn_t=self.t, spawn_wall=time.time(), edit=not moved,
+                  reason=why, status="due", diff=None, check_next=0.0, fails=0)
+        if moved:
+            self._place_provisional()
+        self.log(f"place: {why} — recognition due")
+
+    def _place_running(self, now=None):
+        """A recognition is running on a live loop (a dead loop's or a timed-out one is not)."""
+        r = self._place.get("running")
+        if r is None:
+            return False
+        loop, t0 = r
+        now = time.monotonic() if now is None else now
+        try:
+            alive = not loop.is_closed() and loop.is_running()
+        except Exception:                                # noqa: BLE001
+            alive = False
+        return alive and now - t0 < RECOG_TIMEOUT_S
+
+    def _place_settle_reason(self):
+        """Sim thread: None when a recognition may look now (standing still, NORMAL, idle,
+        RECOG_SETTLE_S after the spawn), else why not."""
+        if self.paused:
+            return "the sim is paused"
+        if self.t - self._place["spawn_t"] < RECOG_SETTLE_S:
+            return "settling after the spawn"
+        if self.sup.state != "NORMAL":
+            return f"reflex state is {self.sup.state}"
+        return self.idle_reason()
+
+    def _place_tick(self, now=None):
+        """Sim thread, from step() while recognition is on: when a recognition is due (a
+        spawn since the last result), none runs and the robot stands still, schedule
+        recognize_place on the event loop (the loop `call` last ran on)."""
+        st = self._place
+        if st["result_seq"] == st["spawn_seq"] or self.fatal:
+            return
+        now = time.monotonic() if now is None else now
+        if now < st["check_next"]:
+            return
+        st["check_next"] = now + 0.25
+        if self._place_running(now):
+            return
+        task = st["task"]
+        if task is not None and not task.done() and now - st["task_t"] < RECOG_TIMEOUT_S:
+            return                                       # scheduled, not started yet
+        if self._place_settle_reason() is not None:
+            return
+        loop = self._aloop
+        if loop is None or loop.is_closed():
+            return
+        coro = self.recognize_place(f"auto: {st['reason']}")
+        try:
+            st["task"] = asyncio.run_coroutine_threadsafe(coro, loop)
+            st["task_t"] = now
+        except RuntimeError:                             # the loop is closed
+            coro.close()
+            st["task"] = None
+
+    def _place_tick_failed(self, e):
+        st = self._place
+        st["fails"] = st.get("fails", 0) + 1
+        self.log(f"place tick failed ({type(e).__name__}: {e}) [{st['fails']}/{AWARE_FAILS_MAX}]")
+        if st["fails"] >= AWARE_FAILS_MAX:
+            self.awareness = dict(self.awareness, recognize=False)
+            self._place_switch(False)
+            self.log("place: recognition OFF after repeated failures (POST /api/awareness turns it back on)")
+
+    async def recognize_place(self, reason="operator", force=False, check=False):
+        """Any coroutine (the tick schedules it; POST /api/place {action: recognize} awaits it).
+        Which place is this? Waits out a recognition that is running; returns the current
+        spawn's result when there is one (force: look again anyway), else: wait for a
+        standstill, one sweep + one look (+ its embedding, + the eye's box answers on what it
+        mentions) -> PlaceMemory.recognize ->
+          ambiguous: a second look after a PLACE_TURN_DEG turn, the two combined;
+          new: the same second look (the situation line says so), then a place stored ('new
+                 place #k') from both looks, the scene memory bound to it;
+          known: a visit, the memory bound to it, the place checked BY THE EYE (_place_changes:
+                 per remembered / mentioned name a box question -> checked_objects) — a change
+                 takes the second look, and only what both looks agree on is declared and
+                 stored (confirm_diff).
+        After an edit (the robot was not moved), or with check=True (place_check), a place the
+        robot is bound to stays its place: the recognition is only that place's change check.
+        A look that failed (no description) is never taken for a look that saw nothing.
+        -> the where_am_i answer. Never raises; a spawn meanwhile discards it (the next one runs)."""
+        st = self._place
+        if not self.awareness.get("recognize"):
+            return {"ok": False, "recognize": False, "error": PLACE_OFF, "hint": PLACE_OFF_HINT}
+        t_end = time.monotonic() + RECOG_TIMEOUT_S
+        while self._place_running() and time.monotonic() < t_end:
+            await asyncio.sleep(0.05)
+        st = self._place
+        if not force and st["result"] is not None and st["result_seq"] == st["spawn_seq"]:
+            return self._place_answer()
+        st["running"] = (asyncio.get_running_loop(), time.monotonic())
+        st["status"] = "running"
+        seq = st["spawn_seq"]
+        try:
+            out = await self._recognize(st, seq, reason, check=bool(check))
+        except Exception as e:                           # noqa: BLE001 — never kill the caller
+            self.log(f"place: recognition failed ({type(e).__name__}: {e})")
+            st["error"] = f"{type(e).__name__}: {e}"
+            st["check_next"] = time.monotonic() + RECOG_RETRY_S
+            out = {"ok": False, "error": f"place recognition failed: {type(e).__name__}: {e}"}
+        finally:
+            st["running"] = None
+            st["phase"] = None
+            if st["status"] == "running":
+                st["status"] = "done" if st["result_seq"] == seq else "due"
+        return out
+
+    async def place_check(self, reason="operator"):
+        """Any coroutine: a change check of the place the robot is in, NOW (talk mode's 'this
+        master bedroom has a new chair' runs it after naming the place): one look, and a change
+        only when a second look from another angle agrees. The robot stays in its place (no new
+        verdict, no other place). -> the where_am_i answer."""
+        if not self.awareness.get("recognize"):
+            return {"ok": False, "recognize": False, "error": PLACE_OFF, "hint": PLACE_OFF_HINT}
+        if not self._place.get("bound"):
+            return {"ok": False, "error": "the robot is not in a known place: nothing to check against "
+                                          "(name it first)"}
+        return await self.recognize_place(reason, force=True, check=True)
+
+    async def _place_wait_settled(self, seq):
+        """None once the robot stands still after the spawn, else why it did not (in time)."""
+        t_end = time.monotonic() + RECOG_WAIT_S
+        while True:
+            if self._place["spawn_seq"] != seq:
+                return _STALE
+            why = await self.call(self._place_settle_reason)
+            if why is None:
+                return None
+            if why == "the sim is paused" or time.monotonic() > t_end:
+                return why
+            await asyncio.sleep(0.1)
+
+    def _place_scan(self):
+        """Sim thread: one puck sweep -> (the place signature, the pose, the sweep's returns as
+        (body angles rad, ranges m) — what look_hidden reads for tall things in the way). Map
+        heading = body angle + yaw; the sim's pose stands in for the robot's odometry (a
+        perfect one)."""
+        angles, ranges, _ = lidar_scan(self.model, self.data, self.torso)
+        pose = self.pose()
+        hit = np.isfinite(ranges)
+        sweep = (np.asarray(angles, dtype=float)[hit], np.asarray(ranges, dtype=float)[hit])
+        return pm.scan_signature(angles, ranges, np.radians(pose["yaw_deg"]), RANGE_MAX), pose, sweep
+
+    async def _place_observe(self, seq):
+        """(observation, None) or (None, why): a sweep, a look through the vision role
+        (Brains.look: remembered, last_look) and its embedding; why = _STALE when the scene
+        changed meanwhile, 'moved' when the robot moved while it looked. A look that FAILED
+        (the model erred, no eye frame, a stale scene) has objects None and look_error set:
+        it saw nothing, which is not the same as seeing that nothing is there — no change
+        check may read it as absence (review 2026-09-25: two failed looks erased a ball)."""
+        sig, pose, sweep = await self.call(self._place_scan)
+        look = await self.brains.look()
+        ok = isinstance(look, dict) and look.get("ok") and not look.get("stale_scene")
+        text = str(look.get("description") or "").strip() if ok else ""
+        emb = None
+        if text:
+            fn = self.embed_fn or self.brains.embed
+            try:
+                emb = await asyncio.wait_for(asyncio.to_thread(pm.embed_description, text, fn), PLACE_EMBED_WAIT_S)
+            except asyncio.TimeoutError:
+                emb = None
+        if self._place["spawn_seq"] != seq:
+            return None, _STALE
+        after = await self.call(self.pose)
+        if _moved(after, pose):
+            return None, "moved"
+        err = None
+        if not text:
+            err = (look.get("error") or look.get("note") or "") if isinstance(look, dict) else str(look)
+            if isinstance(look, dict) and look.get("stale_scene"):
+                err = "the look described a scene that is gone"
+            err = str(err or "no description").strip()[:120]
+        obs = {"sig": sig, "pose": pose, "sweep": sweep, "text": text, "emb": emb,
+               "objects": objects_from_description(text, pose) if text else None,
+               "model": look.get("model") if isinstance(look, dict) else None,
+               "look_error": err, "info": pm.scan_info(sig),
+               "mentioned": pm.mentioned_names(text) if text else set(), "eye": {}}
+        # what the description names is only a question: the eye's box answers it (and places
+        # it), asked NOW, while the robot still stands where it looked
+        why = await self._place_ask(seq, obs, place_candidates(text)[:PLACE_EYE_NEW])
+        if why is not None:
+            return None, why
+        return obs, None
+
+    async def _place_ask(self, seq, look, names, spots=None):
+        """Ask the eye about each name this look was not asked about yet, from where the look was
+        taken: Brains.detect(name, model=<the look's own vision model>, method="bbox") — the
+        question /api/look {find: name, method: "bbox"} and find_object ask (FIND_PROMPT: a box
+        -> pixel_to_floor -> sighting_to_map, the map spot). look["eye"][name] =
+          {seen: True, asked, x, y, confidence, bearing_deg, distance_m}  boxed; x, y None (+ why)
+               when the box's bottom edge gives no floor point within FIND_TRUSTED_M;
+          {seen: False, asked}   the eye answered that it is not there;
+          {seen: None, why}      no usable answer, or not asked.
+        A failed look asks nothing (every name None: it saw nothing, which is not 'not there').
+        spots ({name: [(x, y)]}, a snapshot's): a remembered object whose every spot is out of
+        this look's view and that its description does not name is not asked (a 'no' could not
+        be read either way). The robot no longer where the look was taken: not asked. At most
+        PLACE_EYE_MAX questions per look. -> None, or _STALE when a spawn came meanwhile."""
+        eye = look.setdefault("eye", {})
+        todo = []
+        for n in names or ():
+            n = norm_name(n)
+            if n and not _is_fixture(n) and n not in eye and n not in todo:
+                todo.append(n)
+        if not todo:
+            return None
+        if look.get("objects") is None:
+            for n in todo:
+                eye[n] = {"seen": None, "why": "the look failed"}
+            return None
+        cone = eye_visible(look["pose"])
+        ment = look.get("mentioned") or set()
+        asked = sum(1 for a in eye.values() if a.get("asked"))
+        for n in todo:
+            if self._place["spawn_seq"] != seq:
+                return _STALE
+            sp = (spots or {}).get(n)
+            if sp and not any(cone(x, y) for x, y in sp) and not any(same_thing(n, m) for m in ment):
+                eye[n] = {"seen": None, "why": "out of view"}
+                continue
+            if asked >= PLACE_EYE_MAX:
+                eye[n] = {"seen": None, "why": f"not asked (at most {PLACE_EYE_MAX} questions per look)"}
+                continue
+            if _moved(await self.call(self.pose), look["pose"]):
+                eye[n] = {"seen": None, "why": "not asked: the robot is no longer where this look was taken"}
+                continue
+            asked += 1
+            eye[n] = await self._place_eye_answer(n, look)
+        return _STALE if self._place["spawn_seq"] != seq else None
+
+    async def _place_eye_answer(self, name, look):
+        """One eye question (see _place_ask) -> look["eye"][name]. Only a parsed 'seen: false'
+        is a 'no'; an error, an unparsed answer, a 'seen: true' without a box or a bearing, or a
+        sighting below FIND_MIN_CONF is no answer (None)."""
+        try:
+            r = await self.brains.detect(name, model=look.get("model"), method="bbox")
+        except Exception as e:                           # noqa: BLE001 — no answer, never 'not there'
+            r = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        if not (isinstance(r, dict) and r.get("ok")):
+            err = r.get("error") if isinstance(r, dict) else r
+            return {"seen": None, "asked": True, "why": f"the eye did not answer ({err})"[:120]}
+        d = r.get("detection") or {}
+        out = {"asked": True, "model": r.get("model")}
+        if not d.get("parsed"):
+            return dict(out, seen=None, why=f"the answer did not parse: {str(r.get('raw') or '')[:60]!r}")
+        if not d.get("seen"):
+            if "(no bearing given)" in str(d.get("what") or ""):   # parse_detection's mark: it said seen
+                return dict(out, seen=None, why="said seen, but gave no box")
+            return dict(out, seen=False)
+        conf = float(d.get("confidence") or 0.0)
+        if conf < FIND_MIN_CONF:
+            return dict(out, seen=None, why=f"unsure (confidence {conf:.2f} < {FIND_MIN_CONF:g})")
+        out.update(seen=True, confidence=round(conf, 2), bearing_deg=d.get("bearing_deg"),
+                   distance_m=d.get("distance_m"), x=None, y=None,
+                   bbox=list(d["bbox"]) if d.get("method") == "bbox" and d.get("bbox") else None)
+        at = sighting_to_map(look["pose"], d) if d.get("method") == "bbox" else None
+        if at is None:
+            out["why"] = "boxed, not placed (no floor point)" if d.get("method") == "bbox" else \
+                "seen, not placed (no box)"
+        elif float(d["distance_m"]) > FIND_TRUSTED_M:
+            out["why"] = f"boxed, not placed (beyond {FIND_TRUSTED_M:g} m)"
+        else:
+            out.update(x=at["x"], y=at["y"])
+        return out
+
+    async def _place_second_look(self, seq, n0):
+        """(observation, None) after a PLACE_TURN_DEG turn (the `turn` tool: one gesture, the
+        standstill rule and every guard), or (None, why): an operator stop since the
+        recognition began, a refused turn, a spawn meanwhile (_STALE), the robot moving."""
+        if self.brains._operator_stopped(n0):
+            return None, "the operator stopped the robot: no turn for a second look"
+        n_prev = self.frames.get("eye", (0, b""))[0]
+        r = await self.brains.tool("turn", {"deg": PLACE_TURN_DEG})
+        if self._place["spawn_seq"] != seq:
+            return None, _STALE
+        if not (isinstance(r, dict) and r.get("ok")):
+            why = (r.get("error") or r.get("hint")) if isinstance(r, dict) else r
+            return None, f"the {PLACE_TURN_DEG:.0f} deg turn for a second look did not run ({why})"
+        if self._cams_live:
+            await self.brains._fresh_eye(n_prev)
+        obs, why = await self._place_observe(seq)
+        if obs is not None:
+            obs["turned_deg"] = r.get("turned_deg")
+        return obs, why
+
+    def _eye_visible(self, pose):
+        return eye_visible(pose)
+
+    @staticmethod
+    def _place_eye_check(stored, look, seen_before=()):
+        """One GOOD look's change check BY THE EYE -> place_memory.checked_objects(snapshot,
+        seen, visible=<what this look could see>) = {added, missing, unobservable, present}.
+        seen: the seen map (seen_map: True | False | None per name — a remembered object whose
+        every spot is out of view or hidden is None) carried in the look's eye answers (so an
+        'added' has the box's map spot, x, y); visible = look_view (in the eye's view and not
+        hidden behind a box it drew or a lidar return: an unobservable one says why). The
+        look's prose objects never decide: a description places things ~0.3 m off and names
+        what it cannot place.
+        seen_before: the names this place's earlier looks boxed but never placed
+        (unplaced_names). One boxed again is not new here: unplaced again -> 'present'; placed
+        now -> still 'added' (two looks must agree before its spot is stored) but marked
+        seen_before, so it is stored, never declared (_split_seen_before)."""
+        eye = look.get("eye") or {}
+        seen = seen_map(look, place_spots(stored))
+        arg = {n: dict(eye.get(n) or {}, seen=a) for n, a in seen.items()}
+        out = pm.checked_objects(stored, arg, visible=look_view(look))
+        if look.get("objects") is not None:
+            for o in out.get("unobservable") or []:
+                raw = [a.get("seen") for k, a in eye.items() if isinstance(a, dict) and same_thing(o["name"], k)]
+                if False in raw and True not in raw and o.get("why") in ("out of view", "no answer"):
+                    o["why"] = "said no, but " + (view_why(look, o["x"], o["y"]) or "out of view")
+        added = []
+        for a in out.get("added") or []:
+            if any(same_thing(a["name"], n) for n in seen_before or ()):
+                if a.get("x") is None or a.get("y") is None:
+                    out.setdefault("present", []).append(dict(a, why="boxed here before, never placed"))
+                    continue
+                a = dict(a, seen_before=True)
+            added.append(a)
+        out["added"] = added
+        return out
+
+    async def _place_looking_again(self, seq, text):
+        """Before the turn for a second look: the place clause says so (st['phase'] leads it
+        while the recognition runs), the situation line is composed again, an event."""
+        st = self._place
+        if st["spawn_seq"] != seq:
+            return
+        st["phase"] = str(text)[:pm.VERDICT_MAX]
+        self.events.append(("place", st["phase"][:80]))
+        self.log(st["phase"])
+        try:
+            await self.call(self.compose_situation)
+        except Exception as e:                           # noqa: BLE001 — the look goes on
+            self.log(f"place: situation not composed ({type(e).__name__}: {e})")
+
+    @staticmethod
+    def _place_in_play(rec):
+        """The places whose remembered objects a look asks the eye about: the recognised one
+        (known), the two best (ambiguous: either may be it), none for a new place."""
+        v = (rec or {}).get("verdict")
+        if v == "known":
+            return [rec["place_id"]] if rec.get("place_id") else []
+        if v == "ambiguous":
+            return [e["place_id"] for e in (rec.get("ranking") or [])[:2] if e.get("place_id")]
+        return []
+
+    def _place_spots_of(self, ids):
+        """place_spots of these places' snapshots, merged: {name: [(x, y), ...]}."""
+        out = {}
+        for pid in ids:
+            q = self.place_memory.get(pid) if pid else None
+            for n, sp in place_spots((q or {}).get("objects")).items():
+                out.setdefault(n, []).extend(sp)
+        return out
+
+    def _place_kept(self, pid, rec0, why):
+        """A change check of the place the robot is bound to (an edit: the robot was not moved;
+        or place_check): the verdict stays that place — never a new place, never another one —
+        with how alike it senses now (its score in rec0's ranking; below the top 3, the 3rd's
+        score: an upper bound) and a note when that is low. -> (rec, note)."""
+        q = self.place_memory.get(pid) or {}
+        rk = rec0.get("ranking") or []
+        conf = next((e["confidence"] for e in rk if e["place_id"] == pid), None)
+        upper = conf is None and bool(rk)
+        if conf is None:
+            conf = min((e["confidence"] for e in rk), default=0.0)
+        name = q.get("name")
+        sec = next((e for e in rk if e["place_id"] != pid and (name is None or e["name"] != name)), None)
+        same = rec0.get("place_id") == pid
+        rec = {"verdict": "known", "place_id": pid, "name": name, "confidence": round(float(conf), 3),
+               "second": dict(sec) if sec else {"place_id": None, "name": None, "confidence": 0.0},
+               "parts": rec0.get("parts") if same else None,
+               "signals": rec0.get("signals"),        # the senses this look compared (its words: signals_text)
+               "evidence": rec0.get("evidence") if same else None,
+               "yaw_drift_deg": rec0.get("yaw_drift_deg") if same else None,
+               "ranking": rk, "kept": why,
+               "robot": {k: rec0.get(k) for k in ("verdict", "place_id", "name", "confidence")}}
+        note = f"{why}: the robot was not moved, so it is still in {name or pid}"
+        if conf < pm.NEW_T:
+            note += (f" — it senses it only {'<= ' if upper else ''}{float(conf):.2f} alike now: "
+                     "this place changed a lot")
+        return rec, note
+
+    async def _place_changes(self, st, seq, n0, rec, looks, notes, keep):
+        """The change check of a known place BY THE EYE -> (diff, None), or (None, why) when the
+        scene changed meanwhile (_STALE / 'moved'). diff: {stored, d1, confirmed, look, checks}
+        — {fill: the good looks} when the place was never described (its first objects are the
+        eye's placed sightings), None when nothing could be compared (notes say why). Every GOOD
+        look (a description) is checked by the eye: each remembered name + each thing it
+        mentions is a question (_place_ask; the last look is asked now what it was not asked
+        yet — the robot still stands there), answered as a seen map -> checked_objects. A
+        failed look is not a look that saw nothing. A change takes a second look PLACE_TURN_DEG
+        further (unless two looks were taken already) that asks the same questions again; only
+        what both looks agree on is confirmed (confirm_diff), the rest is pending."""
+        pid = rec["place_id"]
+        q = self.place_memory.get(pid) or {}
+        stored = q.get("objects") or []
+        spots = place_spots(stored)
+        before = unplaced_names(q)                       # boxed here before, never placed: not new
+        good = [lk for lk in looks if lk["objects"] is not None]
+        if not good:
+            notes.append("no change check: no look described the scene")
+            return None, None
+        if not any(t for t in q.get("desc_texts") or []):
+            notes.append("no change check: this place was never described before (its objects start now)")
+            return {"fill": good}, None
+        if keep and float(q.get("created") or 0.0) >= float(st.get("spawn_wall") or 0.0):
+            notes.append(f"no change check: {q.get('name') or pid} was first stored on this visit "
+                         "(no earlier look to compare with)")
+            return None, None
+        why = await self._place_ask(seq, looks[-1], list(spots), spots)
+        if why is not None:
+            return None, why
+        diffs = [self._place_eye_check(stored, lk, before) for lk in good]
+        if len(good) == 1 and len(looks) == 1 and _changes(diffs[0]):
+            n = sum(len(diffs[0].get(k) or []) for k in ("added", "missing", "moved"))
+            await self._place_looking_again(seq, looking_again_text(rec, f"{n} change{'s' if n != 1 else ''}"))
+            second, why = await self._place_second_look(seq, n0)
+            if second is None and why in (_STALE, "moved"):
+                return None, why
+            if second is None:
+                notes.append(why)
+            else:
+                looks.append(second)
+                if second["objects"] is None:
+                    notes.append(f"the second look failed ({second['look_error']}): nothing confirmed")
+                else:
+                    # the same questions again, from the new angle
+                    why = await self._place_ask(seq, second, list(spots) + list(good[0].get("eye") or {}), spots)
+                    if why is not None:
+                        return None, why
+                    good.append(second)
+                    diffs.append(self._place_eye_check(stored, second, before))
+        d1 = diffs[0]
+        if len(diffs) >= 2:
+            confirmed = pm.confirm_diff(diffs[0], diffs[1], PLACE_MATCH_M)
+        else:                                            # one look only: nothing is declared
+            confirmed = {"added": [], "missing": [], "moved": [],
+                         "pending": [dict(o, change=k) for k in ("added", "missing", "moved")
+                                     for o in d1.get(k) or []]}
+        confirmed = split_seen_before(confirmed)
+        return {"stored": stored, "d1": d1, "confirmed": confirmed, "look": good[0],
+                "checks": [eye_brief(lk, spots) for lk in good]}, None
+
+    async def _recognize(self, st, seq, reason, check=False):
+        def interrupted(why):
+            st["check_next"] = time.monotonic() + (0.0 if why == _STALE else RECOG_RETRY_S)
+            msg = ("the scene changed while recognising (a world load, reset or edit): the next "
+                   "recognition follows" if why == _STALE else f"not recognised: {why}")
+            return {"ok": False, "error": msg, "status": "due"}
+        why = await self._place_wait_settled(seq)
+        if why is not None:
+            return interrupted(why)
+        n0 = self.brains._cmd_mark()
+        first, why = await self._place_observe(seq)
+        if first is None:
+            return interrupted(why)
+        pmem = self.place_memory
+        notes = []
+        if first["look_error"]:
+            notes.append(f"the look failed ({first['look_error']}): the verdict rests on the lidar alone")
+        elif first["emb"] is None:
+            notes.append("the description was not embedded (the embedding model did not answer): the "
+                         "verdict rests on the lidar alone")
+        looks = [first]
+        bound = st.get("bound")
+        keep = None
+        if bound is not None and pmem.get(bound) is not None and (check or st.get("edit")):
+            keep = "a change check" if check else "an edit"
+        rec = pmem.recognize(scan_sig=first["sig"], desc_emb=first["emb"])
+        # the remembered objects of the place(s) in play are asked about NOW, before any turn:
+        # the eye can only answer for the view it has
+        spots = self._place_spots_of([bound] if keep else self._place_in_play(rec))
+        why = await self._place_ask(seq, first, list(spots), spots)
+        if why is not None:
+            return interrupted(why)
+        if keep:
+            rec, kn = self._place_kept(bound, rec, keep)
+            notes.append(kn)
+        elif rec["verdict"] in ("ambiguous", "new"):
+            # ambiguous: a second look decides. new: a second look before anything is stored, so
+            # every place starts with two samples (the arrival and PLACE_TURN_DEG further)
+            await self._place_looking_again(seq, looking_again_text(rec, rec["verdict"]))
+            second, why = await self._place_second_look(seq, n0)
+            if second is None and why in (_STALE, "moved"):
+                return interrupted(why)
+            if second is None:
+                notes.append(why)
+            else:
+                looks.append(second)
+                if second["look_error"] and not first["look_error"]:
+                    notes.append(f"the second look failed ({second['look_error']})")
+                rec = combine_recognitions(rec, pmem.recognize(scan_sig=second["sig"], desc_emb=second["emb"]))
+                for n, sp in self._place_spots_of(self._place_in_play(rec)).items():
+                    cur = spots.setdefault(n, [])
+                    cur.extend(p for p in sp if p not in cur)
+                why = await self._place_ask(seq, second, list(spots) + list(first.get("eye") or {}), spots)
+                if why is not None:
+                    return interrupted(why)
+        diff = None
+        if rec["verdict"] == "known":
+            diff, why = await self._place_changes(st, seq, n0, rec, looks, notes, keep)
+            if why is not None:
+                return interrupted(why)
+        out = await self.call(lambda: self._place_commit(st, seq, rec, looks, diff, reason, notes, keep))
+        return out if out is not None else interrupted(_STALE)
+
+    def _place_enroll(self, looks, name, notes=None):
+        """Sim thread: a new place from this visit's looks -> its id. Every look is a sample
+        (PlaceMemory.enroll_samples: the arrival and the second look PLACE_TURN_DEG further —
+        two viewpoints from the start, the way _recognize takes them); the first objects are the
+        eye's placed sightings the looks do not contradict (eye_objects), never the prose's
+        guesses. What the eye boxed but could never place is remembered by name
+        (_place_note_unplaced), so a later visit counts it present, not new here."""
+        pmem = self.place_memory
+        objs = eye_objects(looks)
+        pid = pmem.enroll_samples(list(looks), objects=objs, name=name)
+        boxed = sorted({n for lk in looks if lk.get("objects") is not None
+                        for n, a in (lk.get("eye") or {}).items() if a.get("seen") is True})
+        unplaced = [n for n in boxed if not any(same_thing(n, o["name"]) for o in objs)]
+        kept = self._place_note_unplaced(pid, [n for n in boxed_unplaced(looks) if n in unplaced])
+        rest = [n for n in unplaced if n not in kept]
+        if notes is not None and kept:
+            notes.append(f"boxed, never placed (no floor spot within {FIND_TRUSTED_M:g} m): "
+                         f"{', '.join(kept[:4])} — kept by name, so a later visit counts it present")
+        if notes is not None and rest:
+            notes.append(f"boxed but not stored (the looks disagree): {', '.join(rest[:4])}")
+        return pid
+
+    def _place_note_unplaced(self, pid, names):
+        """Sim thread: remember at place `pid` the names the eye boxed there but could not place
+        (a PLACE_UNPLACED_NOTE place note: persisted with the place, restored by a correction's
+        take-back, forgotten with it), so a later visit counts them present instead of declaring
+        them 'new here' every time (review 2026-09-25: a cup on a table was new on every visit).
+        A name already recorded, a stored object's name, or a fixture is skipped. -> the names
+        added."""
+        pmem = self.place_memory
+        q = pmem.get(pid) if pid else None
+        if q is None:
+            return []
+        have = unplaced_names(q) + [o.get("name") for o in q.get("objects") or [] if o.get("name")]
+        new = []
+        for n in names or ():
+            n = norm_name(n)
+            if n and not _is_fixture(n) and not any(same_thing(n, h) for h in have + new):
+                new.append(n)
+        room = pm.TEXT_MAX - len(PLACE_UNPLACED_NOTE)
+        chunk = []
+        for n in new:
+            if chunk and len(", ".join(chunk + [n])) > room:
+                pmem.note(pid, PLACE_UNPLACED_NOTE + ", ".join(chunk))
+                chunk = []
+            chunk.append(n[:room])
+        if chunk:
+            pmem.note(pid, PLACE_UNPLACED_NOTE + ", ".join(chunk))
+        if new:
+            self.log(f"place: {q.get('name') or pid}: boxed, never placed, kept by name: {', '.join(new)}")
+        return new
+
+    def _next_new_name(self):
+        ks = [int(m.group(1)) for p in self.place_memory.places()
+              for m in [re.match(r"new place #(\d+)$", p.get("name") or "")] if m]
+        return f"new place #{max(ks, default=0) + 1}"
+
+    def _place_commit(self, st, seq, rec, looks, diff, reason, notes=(), keep=None):
+        """Sim thread (no spawn can slip in): store what the recognition concluded, bind the
+        scene memory, react, compose. None when a spawn came first or recognition went off.
+        keep (an edit / a change check): nothing is stored but CONFIRMED changes (or a never
+        described place's first objects), and the robot stays bound where it was."""
+        if st is not self._place or st["spawn_seq"] != seq or not self.awareness.get("recognize"):
+            return None
+        pmem = self.place_memory
+        s0 = looks[0]
+        verdict = rec["verdict"]
+        now = time.monotonic()
+        rec = dict(rec, looks=len(looks), by="robot")
+        notes = list(notes)
+        confirmed = None
+        checks = None
+        if verdict == "new":
+            pid = self._place_enroll(looks, self._next_new_name(), notes)
+            checks = [eye_brief(lk) for lk in looks if lk.get("objects") is not None]
+            self._place_bind(pid, own=True)
+            q = pmem.get(pid) or {}
+            near = f"nearest known {rec['name'] or rec['place_id']} {rec['confidence']:.2f}" if rec["place_id"] \
+                else "the first place"
+            self._react("curious_question", f"a new place: stored as {q.get('name')} ({near})", now)
+        elif verdict == "known":
+            pid = rec["place_id"]
+            pre = pmem.get(pid)                          # an operator's correction restores this (_place_take_back)
+            objs, vis, store, unplaced = None, None, not keep, []
+            if diff is None:
+                pass                                     # nothing was compared: the snapshot stays
+            elif "fill" in diff:                         # never described: the eye's placed sightings start it
+                lks = diff["fill"]
+                cones = [look_view(lk) for lk in lks]
+                objs, store = eye_objects(lks), True
+                vis = (lambda x, y, cones=cones: any(c(x, y) for c in cones))
+                checks = [eye_brief(lk) for lk in lks]
+                unplaced = [n for n in boxed_unplaced(lks) if not any(same_thing(n, o["name"]) for o in objs)]
+            else:
+                confirmed = diff["confirmed"]
+                checks = diff.get("checks")
+                if _changes(confirmed) or confirmed.get("placed"):   # only what both looks agree on is stored
+                    both = dict(confirmed, added=list(confirmed["added"]) + list(confirmed.get("placed") or []))
+                    objs, vis, store = apply_confirmed(diff["stored"], both), None, True
+                # an addition boxed by both looks but never placed is declared once, and kept by name
+                unplaced = [a["name"] for a in confirmed["added"] if a.get("x") is None or a.get("y") is None]
+                # no confirmed change: the snapshot stays as it is (a look rewrites nothing)
+            if store:
+                pmem.visit(pid, scan_sig=s0["sig"], desc_emb=s0["emb"], desc_text=s0["text"] or None,
+                           objects=objs, visible=vis)
+                if not keep and len(looks) > 1:          # the second look is another view of this place
+                    pmem.add_samples(pid, looks[1:])
+            if unplaced:
+                self._place_note_unplaced(pid, unplaced)
+            self._place_bind(pid, pre=pre)
+            if confirmed and confirmed["added"]:
+                names = ", ".join(sorted({o["name"] for o in confirmed["added"]}))
+                self._react("curious_question", f"new here: {names} (two looks agree)", now)
+        if checks is None:                               # ambiguous, or a known place nothing was compared on:
+            sp = self._place_spots_of(self._place_in_play(rec))                                # what it asked
+            checks = [eye_brief(lk, sp) for lk in looks if lk.get("objects") is not None] or None
+        notes = [n for n in notes if n and n != _STALE]
+        st.update(result=rec, result_seq=seq, status="done", t=time.time(), looks=len(looks), diff=confirmed,
+                  checks=checks, phase=None,
+                  samples=[{k: o.get(k) for k in ("sig", "emb", "text", "objects", "pose", "eye", "mentioned")}
+                           for o in looks],
+                  error=None, note="; ".join(notes) or None, by="robot", fails=0,
+                  look_error=next((o["look_error"] for o in looks if o.get("look_error")), None))
+        text = self._place_text()
+        self.events.append(("place", text[:80]))
+        self.log(f"{text} [{len(looks)} look{'s' if len(looks) > 1 else ''}; {reason}]"
+                 + (f" — {st['note']}" if st["note"] else ""))
+        try:
+            self.memory.remember({"kind": "look", "pose": looks[-1]["pose"],
+                                  "text": f"{text} ({len(looks)} look{'s' if len(looks) > 1 else ''})"})
+        except Exception:                                # noqa: BLE001
+            pass
+        try:
+            self.compose_situation()
+        except Exception as e:                           # noqa: BLE001
+            self.log(f"place: situation not composed ({type(e).__name__}: {e})")
+        return self._place_answer()
+
+    def _place_bind(self, pid, pre=None, own=False, carry=None):
+        """Sim thread: the scene memory is now the place's ('place-<id>', persisted with the
+        rest): what the provisional memory recorded since the spawn (or `carry`: records an
+        operator's correction took back from the wrong place) is carried over, after a new
+        epoch (what was seen here on an earlier visit may have moved). Binding the place it is
+        already bound to changes nothing (the binding keeps its first `pre`). pre / own: see
+        _place_blank's binding. -> True when bound."""
+        st = self._place
+        main = self._mem_main
+        if st.get("bound") == pid and self.memory is main:
+            return True
+        scratch = self.memory if self.memory is not main else None
+        recs = [dict(r) for r in reversed(scratch.last(scratch.cap))] if scratch is not None else []
+        recs += [dict(r) for r in carry or []]
+        try:
+            main.set_world(pid, carry=False)
+            mark = _mem_mark(main)
+            main.new_epoch()
+            for r in recs:
+                main.remember({k: r[k] for k in ("kind", "text", "pose", "objects", "t") if k in r})
+        except Exception as e:                           # noqa: BLE001 — keep what was there
+            self.log(f"memory: not bound to {pid} ({type(e).__name__}: {e})")
+            return False
+        self.memory = main
+        self._mem_scratch = None
+        st["bound"] = pid
+        st["binding"] = {"pid": pid, "pre": pre, "own": bool(own), "mark": mark}
+        return True
+
+    def _place_take_back(self):
+        """Sim thread: the operator says the robot is NOT in the place it is bound to. Undo what
+        this binding did to that place: one stored on this binding is forgotten (it was this
+        visit's mistake); a known one gets its record back as it was before (samples, objects,
+        visits) and its scene memory back to the moment of the bind. -> {pid, name, how:
+        'forgotten' | 'restored' | 'kept', records: what was recorded since the bind (for the
+        right place)}. Review 2026-09-25: a wrong 'known' used to leave the other room's sample,
+        objects and memory records in the wrong place, for good."""
+        st = self._place
+        pmem = self.place_memory
+        main = self._mem_main
+        pid = st.get("bound")
+        b = st.get("binding") or {}
+        q = pmem.get(pid) if pid else None
+        out = {"pid": pid, "name": (q or {}).get("name"), "how": "kept", "records": []}
+        if not pid or b.get("pid") != pid:
+            return out
+        mk = b.get("mark")
+        if mk is not None and self.memory is main and main.world == pid:
+            try:
+                out["records"] = _mem_rollback(main, mk)
+            except Exception as e:                       # noqa: BLE001 — the place record still goes back
+                self.log(f"memory: {pid} not rolled back ({type(e).__name__}: {e})")
+        if b.get("own"):
+            if pmem.forget(pid):
+                out["how"] = "forgotten"
+        elif b.get("pre") is not None and _pm_restore(pmem, pid, b["pre"]):
+            out["how"] = "restored"
+        st["binding"] = None
+        return out
+
+    def _place_current(self):
+        """The result for the current spawn, or None (none yet, or an older spawn's)."""
+        st = self._place
+        return st["result"] if st["result"] is not None and st["result_seq"] == st["spawn_seq"] else None
+
+    def _place_text(self):
+        """The situation line's place clause (<= pm.VERDICT_MAX): verdict_text of the current
+        result (a known place carries the confirmed changes), else what is going on; while the
+        robot turns for a second look, that it is looking again (st['phase'])."""
+        st = self._place
+        if st.get("phase") and self._place_running():
+            return st["phase"]
+        rec = self._place_current()
+        if rec is None:
+            return "place: recognising…" if st["status"] in ("due", "running") else "place: not recognised yet"
+        if rec.get("forgotten"):
+            return "place: unknown (forgotten; not looked for again until the next spawn)"
+        d = st.get("diff")
+        return pm.verdict_text(rec, d if _changes(d) else None)
+
+    def _place_brief(self):
+        """The state feed's `place`: {verdict, name, place_id, confidence, signals, text, status,
+        looks, by}. signals: what the verdict rests on in words (signals_text: 'scan +
+        description', 'scan only', 'description only', 'the operator's word')."""
+        st = self._place
+        rec = self._place_current()
+        out = {"verdict": None, "name": None, "place_id": st.get("bound"), "confidence": None, "signals": None,
+               "text": self._place_text(), "status": "running" if self._place_running() else st["status"],
+               "looks": st["looks"], "by": st.get("by")}
+        if rec is not None:
+            q = self.place_memory.get(st["bound"]) if st.get("bound") else None
+            out.update(verdict="unknown" if rec.get("forgotten") else rec["verdict"],
+                       confidence=rec.get("confidence"),
+                       signals=None if rec.get("forgotten") else signals_text(rec),
+                       name=(q or {}).get("name") if q else rec.get("name"))
+        else:
+            out["verdict"] = "recognising" if out["status"] in ("due", "running") else None
+        return _jsonable(out)
+
+    def _place_answer(self):
+        """where_am_i / recognize_place's answer: the current result + the place's summary.
+        For the bench's per-visit record it also carries signal_list (the senses as a list;
+        `signals` is the words), per_look (a two-look recognition: each look's own verdict,
+        confidence, parts, evidence, signals, runner-up and ranking — the top-level parts are
+        the base look's only), eye_checks (each look's eye answers: eye_brief), now_placed (a
+        thing boxed here before but never placed, placed by both looks now: stored, not new)
+        and boxed_never_placed (the bound place's names kept by name: _place_note_unplaced)."""
+        st = self._place
+        if not self.awareness.get("recognize"):
+            return {"ok": False, "recognize": False, "error": PLACE_OFF, "hint": PLACE_OFF_HINT}
+        rec = self._place_current()
+        brief = self._place_brief()
+        out = {"ok": True, "recognize": True, **brief, "memory_key": getattr(self.memory, "world", None),
+               "reason": st["reason"], "honesty": "a similarity (0-1) from the lidar sweep and the look's "
+                                                  "embedding, not a probability; the sim's revisits start from "
+                                                  "the spawn pose it learned from (an upper bound)"}
+        if rec is None:
+            out["detail"] = ("recognising: the robot looks once it stands still after the spawn"
+                             if brief["verdict"] == "recognising" else "no place recognised yet")
+            return _jsonable(out)
+        if rec.get("forgotten"):
+            out["detail"] = "the place the robot was in was forgotten; it looks again after the next spawn"
+            return _jsonable(out)
+        sec = rec.get("second") or {}
+        out.update(second=sec, parts=rec.get("parts"), evidence=rec.get("evidence"),
+                   signal_list=signal_list(rec),
+                   age_s=round(time.time() - st["t"], 1) if st.get("t") else None)
+        if rec.get("per_look"):
+            out["per_look"] = rec["per_look"]
+        v = rec["verdict"]
+        if v == "new":
+            out["nearest_known"] = {"place_id": rec.get("place_id"), "name": rec.get("name"),
+                                    "confidence": rec.get("confidence")}
+            out["detail"] = (f"a place I had not seen: stored as '{brief['name']}'"
+                             + (f" (the nearest place I know, {rec.get('name') or rec.get('place_id')}, is "
+                                f"{rec['confidence']:.2f} alike)" if rec.get("place_id") else " (the first place)"))
+        elif v == "known" and rec.get("kept"):
+            out["kept"] = rec["kept"]
+            out["detail"] = (f"{brief['name'] or brief['place_id']}: kept ({rec['kept']}; the robot was not "
+                             f"moved), {float(rec.get('confidence') or 0):.2f} alike now")
+        elif v == "known":
+            out["detail"] = (f"{brief['name'] or brief['place_id']}"
+                             + (" (named by the operator)" if rec.get("by") == "operator" else
+                                f", {rec['confidence']:.2f} alike"
+                                + (f"; next best {sec.get('name') or sec.get('place_id')} {sec.get('confidence', 0):.2f}"
+                                   if sec.get("place_id") else "")))
+        elif v == "ambiguous":
+            out["detail"] = (f"not sure: {rec.get('name') or rec.get('place_id')} {rec['confidence']:.2f} or "
+                             f"{sec.get('name') or sec.get('place_id')} {float(sec.get('confidence') or 0):.2f} "
+                             "— name_place settles it")
+        else:
+            out["detail"] = "nothing to compare (no sweep, no description)"
+        if st.get("look_error") and rec.get("by") != "operator":
+            out["look_error"] = st["look_error"]
+            out["detail"] += f"; scan only: the look failed ({st['look_error']})"
+        if rec.get("by") != "operator" and v in ("known", "new", "ambiguous"):
+            out["detail"] += f" [signals: {brief['signals']}; confidence {float(rec.get('confidence') or 0):.2f}]"
+        if st.get("checks"):
+            out["eye_checks"] = st["checks"]
+        d = st.get("diff")
+        if d is not None:
+            out["changes"] = {k: d.get(k) or [] for k in ("added", "missing", "moved")}
+            out["pending"] = d.get("pending") or []
+            if d.get("placed"):
+                out["now_placed"] = d["placed"]
+                out["detail"] += ("; placed now (boxed here before, never placed; not new): "
+                                  + ", ".join(sorted({o["name"] for o in d["placed"]})))
+            if d.get("pending"):
+                out["detail"] += (f"; {len(d['pending'])} change(s) seen by one look only: not declared"
+                                  + ("" if st["looks"] > 1 else " (no second look)"))
+        if st.get("note"):
+            out["note"] = st["note"]
+        if st.get("bound"):
+            out["place"] = next((p for p in self.place_memory.places() if p["id"] == st["bound"]), None)
+            kept = unplaced_names(self.place_memory.get(st["bound"]))
+            if kept:
+                out["boxed_never_placed"] = kept
+        return _jsonable(out)
+
+    # the tools' backends (cockpit_brains.Brains.where_am_i / name_place / places / forget_place)
+    async def place_where(self):
+        """where_am_i: the current recognition (waits for one that is running) + the place."""
+        if not self.awareness.get("recognize"):
+            return {"ok": False, "recognize": False, "error": PLACE_OFF, "hint": PLACE_OFF_HINT}
+        t_end = time.monotonic() + PLACE_NAME_WAIT_S
+        while self._place_running() and time.monotonic() < t_end:
+            await asyncio.sleep(0.05)
+        return self._place_answer()
+
+    async def place_name(self, name, new=False, rename=False):
+        """name_place (see _place_name_now). Waits for a running recognition."""
+        if not self.awareness.get("recognize"):
+            return {"ok": False, "recognize": False, "error": PLACE_OFF, "hint": PLACE_OFF_HINT}
+        nm = re.sub(r"\s+", " ", str(name if name is not None else "")).strip().strip(".!?,;:\"'")[:pm.NAME_MAX]
+        t_end = time.monotonic() + PLACE_NAME_WAIT_S
+        while self._place_running() and time.monotonic() < t_end:
+            await asyncio.sleep(0.05)
+        return await self.call(lambda: self._place_name_now(nm, bool(new), bool(rename)))
+
+    def _place_name_now(self, nm, new, rename=False):
+        """Sim thread. The operator says where the robot is:
+          bound, the place has no name (or a 'new place #k' one), or it was stored on this
+            visit, or rename=true -> it is renamed;
+          bound, but the name is ANOTHER place's -> a correction: this is that place (settled);
+          bound to a place the operator named differently -> a correction: a new place is
+            stored under the name (rename=true renames instead);
+          new=true -> a different, new place — but ONE per visit: a place this visit already
+            stored stays the one (renamed at most), never a second copy;
+          not bound (unsure / unknown) -> settled to the place of that name, else stored.
+        A correction takes back what this visit wrote into the wrongly recognised place
+        (_place_take_back) and moves the records since the bind to the right one."""
+        st = self._place
+        pmem = self.place_memory
+        cur = self._place_current()
+        samples = st["samples"] if cur is not None else []
+        bound = st.get("bound")
+        bq = pmem.get(bound) if bound else None
+        if bq is None:
+            bound = None
+        b = st.get("binding") if bound else None
+        own = bool(b and b.get("pid") == bound and b.get("own"))
+        prev = (bq or {}).get("name")
+        if new and rename:
+            return {"ok": False, "error": "new and rename contradict each other: new=true stores a different "
+                                          "place, rename=true renames this one"}
+        auto = bool(new) and nm.lower() in _PLACE_NEW_WORDS
+        if not nm and not auto:
+            return {"ok": False, "error": "name_place needs the place's name, in the operator's words"}
+        nothing = {"ok": False, "error": "nothing sensed here yet: the robot looks once it stands still after "
+                                         "the spawn — try again in a few seconds", "status": st["status"]}
+        prev_out, action, took = None, None, None
+        others = [i for i in pmem.find(nm) if i != bound] if nm and not auto else []
+        if new and bound is not None and own:
+            # this visit already stored this place as new: one place, not a second copy of it
+            prev_out = prev
+            if auto or (prev or "").lower() == nm.lower():
+                nm, action = prev or bound, "kept"
+            else:
+                pmem.name_place(bound, nm)
+                action = "renamed"
+            pid = bound
+        elif new or bound is None:
+            if not samples:
+                return nothing
+            if auto:
+                nm = self._next_new_name()
+            s0 = samples[0]
+            ids = [] if new else pmem.find(nm)
+            took = self._place_take_back() if bound is not None else None
+            carry = (took or {}).get("records")
+            if ids:
+                pid, action = ids[0], "settled"
+                pre = pmem.get(pid)
+                pmem.visit(pid, scan_sig=s0["sig"], desc_emb=s0["emb"], desc_text=s0["text"] or None)
+                if len(samples) > 1:
+                    pmem.add_samples(pid, samples[1:])
+                self._place_note_unplaced(pid, boxed_unplaced(samples))
+                self._place_bind(pid, pre=pre, carry=carry)
+            else:
+                pid, action = self._place_enroll(samples, nm), "stored"
+                self._place_bind(pid, own=True, carry=carry)
+        elif prev is not None and prev.lower() == nm.lower():
+            pid, action, prev_out = bound, "kept", prev
+        elif others and not rename:
+            # a correction: the robot took this for another place than the one the operator names
+            took = self._place_take_back()
+            pid, action = others[0], "settled"
+            pre = pmem.get(pid)
+            if samples:
+                s0 = samples[0]
+                pmem.visit(pid, scan_sig=s0["sig"], desc_emb=s0["emb"], desc_text=s0["text"] or None)
+                if len(samples) > 1:
+                    pmem.add_samples(pid, samples[1:])
+                self._place_note_unplaced(pid, boxed_unplaced(samples))
+            self._place_bind(pid, pre=pre, carry=took.get("records"))
+        elif rename or own or prev is None or re.match(r"new place #\d+$", prev):
+            pid, action, prev_out = bound, "renamed", prev
+            pmem.name_place(pid, nm)
+        else:
+            # the robot took this for a place the operator named otherwise: a different place
+            if not samples:
+                return dict(nothing, hint=f"to rename '{prev}' instead: name_place(name='{nm}', rename=true)")
+            took = self._place_take_back()
+            pid, action = self._place_enroll(samples, nm), "stored"
+            self._place_bind(pid, own=True, carry=took.get("records"))
+        also = [i for i in pmem.find(nm) if i != pid]
+        # the verdict now: the operator's (confidence 1.0, by 'operator'), except where it stays
+        # the robot's own (a rename / a kept name of the place it recognised: its verdict and
+        # confidence, with the name; 'new' stays new) and before this spawn's recognition ran
+        rec = {"verdict": "known", "place_id": pid, "name": nm, "confidence": 1.0, "by": "operator",
+               "second": {"place_id": None, "name": None, "confidence": 0.0}, "parts": None, "evidence": None,
+               "robot": None if cur is None else {k: cur.get(k) for k in ("verdict", "place_id", "name",
+                                                                          "confidence")},
+               "looks": st.get("looks", 0)}
+        if action in ("renamed", "kept") and cur is None:
+            rec = None
+        elif action in ("renamed", "kept") and cur.get("verdict") == "known" and cur.get("place_id") == pid:
+            rec = dict(cur, name=(pmem.get(pid) or {}).get("name") or nm)
+        elif action == "kept" and cur.get("verdict") == "new":
+            rec = None                                   # the robot's own 'new' stands
+        if rec is not None:
+            st.update(result=rec, result_seq=st["spawn_seq"], status="done", by=rec.get("by", "operator"),
+                      t=st.get("t") or time.time())
+        if action not in ("renamed", "kept"):
+            st["diff"] = None                            # changes against another place mean nothing here
+        wrong = ""
+        if took is not None and took["pid"]:
+            wrong = (f" — I had taken it for '{took['name'] or took['pid']}', "
+                     + ("which I had only just stored: dropped" if took["how"] == "forgotten" else
+                        "which is left as it was before this visit" if took["how"] == "restored" else
+                        "which keeps what it had"))
+            if action == "stored" and took["how"] == "restored" and took["name"]:
+                wrong += f" (if this IS '{took['name']}' under another name: name_place(name='{nm}', rename=true))"
+        detail = {"renamed": f"this place is now '{nm}'" + (f" (was '{prev_out}')" if prev_out else ""),
+                  "settled": f"settled: this is '{nm}', a place I knew" + (wrong or " (my recognition was not sure)"),
+                  "stored": f"stored a new place: '{nm}'" + wrong,
+                  "kept": (f"this place is already '{nm}'" if not new else
+                           f"this place is already stored as a new place on this visit: '{nm}' (one place, not two)")
+                  }[action]
+        if also:
+            detail += (f"; {len(also)} other place(s) carry that name too — recognition treats them as one "
+                       "(they never compete)")
+        self.events.append(("place", f"named: {nm}"))
+        self.log(f"place: {detail}")
+        try:
+            self.memory.remember({"kind": "user", "text": f"this place is {nm}", "pose": self._pose_cache})
+        except Exception:                                # noqa: BLE001
+            pass
+        try:
+            self.compose_situation()
+        except Exception:                                # noqa: BLE001
+            pass
+        return _jsonable({"ok": True, "place_id": pid, "name": nm, "previous_name": prev_out, "action": action,
+                          "detail": detail, "text": self._place_text(), "also_named": also,
+                          "took_back": None if took is None or not took["pid"] else
+                          {"place_id": took["pid"], "name": took["name"], "how": took["how"],
+                           "records_moved": len(took["records"])}})
+
+    async def place_list(self):
+        """places: every place (PlaceMemory.places(), newest visit first) + the current one."""
+        ps = self.place_memory.places()
+        cur = self._place.get("bound") if self.awareness.get("recognize") else None
+        name = next((p["name"] or p["id"] for p in ps if p["id"] == cur), None) if cur else None
+        return _jsonable({"ok": True, "recognize": bool(self.awareness.get("recognize")), "count": len(ps),
+                          "current_id": cur, "current": name,
+                          "places": [{k: p[k] for k in ("id", "name", "visits", "age_s", "objects", "object_names",
+                                                        "samples", "last_description")} for p in ps]})
+
+    async def place_forget(self, name):
+        """forget_place: a name or an id, 'here' (the current place) or 'all'; a pronoun forgets
+        nothing. The place the robot is in, forgotten: a provisional memory, no verdict until
+        the next spawn (it would only store the place again). A forgotten place's scene-memory
+        file stays on disk, unreachable; 'all' keeps places.json.bak."""
+        return await self.call(lambda: self._place_forget_now(name))
+
+    def _place_forget_now(self, name):
+        st = self._place
+        pmem = self.place_memory
+        scope, key = place_scope(name)
+        bound = st.get("bound") if self.awareness.get("recognize") else None
+        if scope == "unclear":
+            return {"ok": False, "error": f"forget which place? {name!r} names none — its name, 'here' or 'all'"}
+        if scope == "here":
+            if not bound:
+                return {"ok": False, "error": "the robot is not in a known place right now: name the place to forget"}
+            ids = [bound]
+            n = pmem.forget(bound)
+        elif scope == "all":
+            ids = [p["id"] for p in pmem.places()]
+            n = pmem.forget("all")
+        else:
+            ids = pmem.find(key) or ([key] if pmem.get(key) is not None else [])
+            n = pmem.forget(key)
+        here = bool(n) and bound in ids
+        if here:
+            self._place_provisional()
+            st.update(result={"verdict": "unknown", "place_id": None, "name": None, "confidence": 0.0,
+                              "forgotten": True}, result_seq=st["spawn_seq"], diff=None)
+        detail = (f"forgot {n} place{'s' if n != 1 else ''}" + (" (including the one the robot is in)" if here else "")
+                  if n else f"no place called {name!r}")
+        self.events.append(("place", f"forget {name}: {n}"))
+        self.log(f"place: {detail}")
+        if here:
+            try:
+                self.compose_situation()
+            except Exception:                            # noqa: BLE001
+                pass
+        return {"ok": bool(n) or scope == "all", "forgot": str(name), "places": n, "was_here": here,
+                "detail": detail}
+
     # ------------------------------------------------------ tool surface
     def pose(self):
         p = self.data.xpos[self.torso]
@@ -1502,8 +3194,11 @@ class CockpitSim(Playground):
         out = dict(t=round(self.t, 2), state=getattr(self.sup, "state", "?"), mode=self.mode,
                    world=self.world_name, tilt=0.0, events=[], event_seq=None, console=list(self.console)[-40:],
                    error=f"{type(e).__name__}: {e}", heartbeat=self.heartbeat())
-        for k, f in (("pose", self.pose), ("hw", self._hw_brief), ("situation", self._situation_brief),
-                     ("memory_objects", self.memory.to_map)):
+        fields = [("pose", self.pose), ("hw", self._hw_brief), ("situation", self._situation_brief),
+                  ("memory_objects", self.memory.to_map)]
+        if self.awareness.get("recognize"):
+            fields.append(("place", self._place_brief))
+        for k, f in fields:
             try:
                 out[k] = f()
             except Exception:                            # noqa: BLE001
@@ -1529,7 +3224,7 @@ class CockpitSim(Playground):
         tr = self.teach
         seq, ev = self.events.tail(12)       # event_seq moves even when the 12-event window looks the same
         caps_seq, caps_version = self._caps_brief()     # D056: the tool surface's version (not an event)
-        return dict(t=round(self.t, 2), pose=self.pose(), state=self.sup.state, mode=self.mode,
+        out = dict(t=round(self.t, 2), pose=self.pose(), state=self.sup.state, mode=self.mode,
                     cmd=[round(float(x), 2) for x in v], cmd_eff=[round(float(x), 2) for x in self.cmd_eff],
                     tilt=round(self.last["tilt"], 1),
                     height=round(self.last["height"] * 1000), kin_h=round(float(self.last.get("kin_h", 0.0)) * 1000),
@@ -1557,6 +3252,9 @@ class CockpitSim(Playground):
                     heartbeat=self.heartbeat(),
                     situation=self._situation_brief(), memory_objects=self.memory.to_map(),
                     awareness=dict(self.awareness))
+        if self.awareness.get("recognize"):
+            out["place"] = self._place_brief()          # D057: only while recognition is on
+        return out
 
     def _situation_brief(self):
         """The situation for the 10 Hz feed: text, age and the small fields."""
@@ -1679,6 +3377,8 @@ class CockpitSim(Playground):
                 out["nearest_obstacle_bearing_deg"] = round(float(bear[i]), 1)
             return out
         out = await self.call(do_scan)
+        if self.awareness.get("recognize"):
+            out.pop("world", None)                  # D057: the world's name is ground truth a real robot never has
         self.events.append(("scan", out.get("nearest_obstacle_m")))
         if out.get("nearest_obstacle_m") is not None:
             try:
@@ -1694,6 +3394,11 @@ class CockpitSim(Playground):
         out = {"ok": True, "mode": s["mode"], "pose": s["pose"], "reflex_state": s["state"],
                "tilt_deg": s["tilt"], "world": s["world"], "battery_v": 11.9,
                "last_events": [list(e) for e in s["events"][-5:]]}
+        if self.awareness.get("recognize"):
+            # D057: no world name while recognition is on (ground truth a real robot never has);
+            # the place the robot itself recognised instead
+            out.pop("world", None)
+            out["place"] = (s.get("place") or {}).get("text")
         sit = (s.get("situation") or {}).get("text")
         if sit:                                          # the awareness line (MCP clients get it here)
             out["situation"] = sit
@@ -2258,10 +3963,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         except Exception as e:                             # noqa: BLE001
             sim.log(f"hw disconnect on quit: {e}")
         sim.alive = False
-        try:
-            sim.memory.flush()                             # the debounced save, before the process goes
-        except Exception as e:                             # noqa: BLE001
-            sim.log(f"memory flush on quit: {e}")
+        sim.flush_memories()                               # the debounced saves, before the process goes
 
         def bye():
             time.sleep(0.4)
@@ -2627,10 +4329,15 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     def _memory_view(n=20):
         pose = sim._pose_cache
-        return _jsonable({"ok": True, "world": sim.world_name, "objects": sim.memory.to_map(),
-                          "observations": sim.memory.last(n), "summary": sim.memory.summary(pose),
-                          "situation": sim.situation, "awareness": sim.awareness_settings(),
-                          "stats": sim.memory.stats()})
+        out = {"ok": True, "world": sim.world_name, "objects": sim.memory.to_map(),
+               "observations": sim.memory.last(n), "summary": sim.memory.summary(pose),
+               "situation": sim.situation, "awareness": sim.awareness_settings(),
+               "stats": sim.memory.stats(),
+               # D057: the places the robot knows (+ the one it is in while recognition is on)
+               "places": sim.place_memory.places()}
+        if sim.awareness.get("recognize"):
+            out["place"] = sim._place_brief()
+        return _jsonable(out)
 
     async def memory_get(request):
         """GET /api/memory?n=20: the remembered objects (for the map), the last n
@@ -2670,18 +4377,52 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
                                        "situation": sim.situation}))
 
     async def awareness_post(request):
-        """POST /api/awareness {interval_s?, curious?, reactions?, refresh?}
-        (refresh: true composes a situation now)."""
+        """POST /api/awareness {interval_s?, curious?, reactions?, recognize?, refresh?}
+        (refresh: true composes a situation now; recognize: D057 place recognition)."""
         body = await _json_object(request)
         if body is None:
             return _not_json()
         try:
-            a = sim.set_awareness(body.get("interval_s"), body.get("curious"), body.get("reactions"))
+            a = sim.set_awareness(body.get("interval_s"), body.get("curious"), body.get("reactions"),
+                                  body.get("recognize"))
         except (TypeError, ValueError) as e:
             return JSONResponse({"ok": False, "error": str(e), "awareness": sim.awareness_settings()},
                                 status_code=400)
         sit = await sim.situation_now() if body.get("refresh") else sim.situation
-        return JSONResponse(_jsonable({"ok": True, "awareness": a, "situation": sit}))
+        out = {"ok": True, "awareness": a, "situation": sit}
+        if sim.awareness.get("recognize"):
+            out["place"] = sim._place_brief()
+        return JSONResponse(_jsonable(out))
+
+    async def place_get(_):
+        """GET /api/place (D057): the current recognition (where_am_i's answer) + every place."""
+        cur = sim._place_answer() if sim.awareness.get("recognize") else None
+        return JSONResponse(_jsonable({"ok": True, "recognize": bool(sim.awareness.get("recognize")),
+                                       "place": cur, "places": sim.place_memory.places()}))
+
+    async def place_post(request):
+        """POST /api/place (D057) {action: recognize {force?} (waits for the answer: a running one,
+        or one run now) | name {name, new?, rename?} | forget {name} | list}."""
+        body = await _json_object(request)
+        if body is None:
+            return _not_json()
+        act = str(body.get("action", ""))
+        if act == "recognize":
+            force = body.get("force", False)
+            if not isinstance(force, bool):
+                return JSONResponse({"ok": False, "error": "force must be true or false"}, status_code=400)
+            r = await sim.recognize_place("operator: /api/place", force=force)
+        elif act == "name":
+            r = await sim.brains.tool("name_place", {"name": body.get("name"), "new": bool(body.get("new", False)),
+                                                     "rename": bool(body.get("rename", False))})
+        elif act == "forget":
+            r = await sim.brains.tool("forget_place", {"name": body.get("name")})
+        elif act == "list":
+            r = await sim.brains.tool("places", {})
+        else:
+            return JSONResponse({"ok": False, "error": f"unknown action {act!r} (recognize | name | forget | "
+                                                       "list)"}, status_code=400)
+        return JSONResponse(_jsonable(r))
 
     async def capabilities_(_):
         """D056: what this cockpit can do right now (harness.capabilities); `version`
@@ -2726,6 +4467,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/hw", hw_status), Route("/api/hw", hw_action, methods=["POST"]),
         Route("/api/memory", memory_get), Route("/api/memory", memory_post, methods=["POST"]),
         Route("/api/awareness", awareness_get), Route("/api/awareness", awareness_post, methods=["POST"]),
+        Route("/api/place", place_get), Route("/api/place", place_post, methods=["POST"]),
     ]
 
     async def sim_dead(_request, exc):
@@ -2733,7 +4475,15 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     from cockpit_shared import routes as shared_routes
     routes += shared_routes(sim)          # GET/POST /api/ui, GET /api/ui/events (4 Hz SSE), GET /api/guide (docs/COCKPIT_GUIDE.md)
-    return Starlette(routes=routes, exception_handlers={SimDead: sim_dead},
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        # the server's loop, known before any request: the sim thread schedules work on it
+        # (a place recognition after a --recognize start with no browser open yet; D057)
+        sim._aloop = asyncio.get_running_loop()
+        yield
+
+    return Starlette(routes=routes, exception_handlers={SimDead: sim_dead}, lifespan=lifespan,
                      middleware=[Middleware(RequestGuard, extra_hosts=tuple(extra_hosts), check_host=check_host)])
 
 
@@ -2756,6 +4506,10 @@ def main(argv=None):
     ap.add_argument("--no-memory", action="store_true",
                     help="keep the scene memory in RAM only (default: sim/out/memory/<world>.json, "
                          "or ROCKY_MEMORY_DIR)")
+    ap.add_argument("--recognize", action="store_true",
+                    help="D057 place recognition: key the scene memory by the place the robot recognises "
+                         "(lidar + a look + its embedding) instead of the world's name; places in "
+                         "<memory dir>/places.json (off by default; POST /api/awareness {recognize} switches it)")
     args = ap.parse_args(argv)
     if not is_loopback(args.host) and not args.unsafe_lan:
         print(f"cockpit: refusing --host {args.host}: the cockpit has NO authentication — anyone who can reach "
@@ -2769,12 +4523,17 @@ def main(argv=None):
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
     sim.brain["mode"] = args.brain
     if not args.no_memory:
-        sim.memory.set_directory(os.environ.get("ROCKY_MEMORY_DIR") or MEMORY_DIR)
+        mem_dir = os.environ.get("ROCKY_MEMORY_DIR") or MEMORY_DIR
+        sim.memory.set_directory(mem_dir)
         st = sim.memory.stats()
         print(f"cockpit: scene memory {st['path']} ({st['observations']} observations, {st['objects']} objects)",
               flush=True)
+        sim.place_memory.set_directory(mem_dir)       # D057: <dir>/places.json
+        ps = sim.place_memory.stats()
+        print(f"cockpit: places {ps['path']} ({ps['places']} places, {ps['named']} named)", flush=True)
+    # recognition first (D057): with it on, the start epoch goes to the provisional memory
+    sim.set_awareness(args.awareness_s, args.curious, not args.no_reactions, bool(args.recognize))
     sim._memory_epoch(f"cockpit started in world '{sim.world_name}': its objects are at their spawn")
-    sim.set_awareness(args.awareness_s, args.curious, not args.no_reactions)
     sim.exit_on_fatal = True                     # D052: a dead sim thread ends the process (exit 1)
     threading.Thread(target=sim.run_forever, daemon=True).start()
     app = make_app(sim, check_host=not args.unsafe_lan)
@@ -2787,7 +4546,7 @@ def main(argv=None):
     # the server's handle_exit itself.
     server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning"))
     server.handle_exit = lambda *_: (sim.hw_disconnect() if sim.hw is not None else None,
-                                     sim.memory.flush(), os._exit(0))
+                                     sim.flush_memories(), os._exit(0))
     server.run()
 
 

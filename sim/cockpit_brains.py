@@ -119,6 +119,25 @@ SCENE (2026-09-25): a world load, edit or reset forgets the eye's context
 (the cockpit's _forget_scene). A look or find_object still running then
 comes back flagged stale_scene: it is returned, but it is not remembered and
 does not become last_look / last_find (the scene it describes is gone).
+
+PLACES (D057, 2026-09-25): with the cockpit's place recognition on (awareness
+`recognize`, sim/cockpit.py; sim/place_memory.py decides) the scene memory is
+keyed by the recognised place, not by the world's name. This module adds:
+embed(text) — llama-swap's OpenAI embeddings API, model 'embedding' (the
+always-warm CPU Qwen3-Embedding-0.6B), 5 s, None on any failure (Brains.embed
+keeps one client; the cockpit's default embedder); the four place tools
+where_am_i / name_place / places / forget_place, which run the sim's place_*
+methods (a group of their own, PLACE_TOOLS / PLACE_TOOL_DEFS after TOOL_NAMES
+/ EXTRA_TOOLS, so every list that existed before D057 is unchanged; offered
+to the models ONLY while recognition is on — the registry's `places`
+capability — so with it off a model's tool list is the D056 one, byte for
+byte; /api/tool/<name> still answers, saying it is off); PLACE_NOTE in the
+system prompt while recognition is on; and, while it is on, talk mode's place
+lines (place_intent: "I'm in the basement at home", "this is completely new",
+"call this place the study", "where am I", and "this master bedroom has a new
+chair", which names the place and then really checks with two looks:
+sim.place_check). A spoken forget_place('all') needs the wake word, like
+forget('all').
 """
 from __future__ import annotations
 
@@ -281,8 +300,18 @@ MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the ro
 # registry order (the cockpit appends them to build_tools' list). GATED: the tools a
 # spoken line runs only with the wake word (a frozenset; `stop` is never in it).
 _STATIC_CAPS = tool_registry.build(None, None, has_eye=True, has_memory=True, is_cockpit=True)
+# D057: the place-recognition tools (sim/place_memory.py, run by the cockpit). A group of their
+# own, appended after EXTRA_TOOLS in the model list and after TOOL_NAMES in the dispatch: every
+# list that existed before D057 (TOOLS, EXTRA_TOOLS, TOOL_NAMES, GATED, MEMORY_TOOLS) stays as it
+# was, byte for byte (test_cockpit_brains / test_harness pin them against the D056 snapshots).
+PLACE_TOOLS = ("where_am_i", "name_place", "places", "forget_place")
 EXTRA_TOOLS = [t for t in tool_registry.to_openai_tools(_STATIC_CAPS)
-               if t["function"]["name"] not in base_tool_names(look=True)]
+               if t["function"]["name"] not in base_tool_names(look=True)
+               and t["function"]["name"] not in PLACE_TOOLS]
+# the place tools need the `places` capability (recognition on): built from a snapshot with it on,
+# and offered by Brains.tools_for only while the cockpit's recognition is on
+_PLACE_CAPS = tool_registry.build(None, None, has_eye=True, has_memory=True, is_cockpit=True, has_places=True)
+PLACE_TOOL_DEFS = [t for t in tool_registry.to_openai_tools(_PLACE_CAPS) if t["function"]["name"] in PLACE_TOOLS]
 MEMORY_TOOLS = tool_registry.MEMORY_NAMES           # Brains.mem_<name> runs each
 
 # Brains.tool's dispatch set. Every name is a registry tool and every registry tool this
@@ -301,7 +330,8 @@ GATED = tool_registry.gated_names(_STATIC_CAPS)     # a spoken line needs the wa
 OWN_ROUTES = {"look": "look", "gesture": "_gesture", "list_gestures": "list_gestures",
               "compose_gesture": "compose_gesture", "check_gesture": "check_gesture",
               "save_gesture": "save_gesture", "find_object": "find_object", "turn": "turn",
-              "move": "move"}
+              "move": "move", "where_am_i": "where_am_i", "name_place": "name_place",
+              "places": "places", "forget_place": "forget_place"}
 SYNC_ROUTES = frozenset({"list_gestures"})          # a plain method (not awaited)
 
 
@@ -319,13 +349,14 @@ def registry_problems(brains, flags=None):
     cockpit_flags(brains.sim)) that Brains.tool refuses or cannot route, or a name
     Brains.tool runs that the registry does not know."""
     flags = cockpit_flags(brains.sim) if flags is None else flags
-    have = {f for f, key in (("cockpit", "is_cockpit"), ("eye", "has_eye"), ("memory", "has_memory"))
-            if flags.get(key)}
+    have = {f for f, key in (("cockpit", "is_cockpit"), ("eye", "has_eye"), ("memory", "has_memory"),
+                             ("places", "has_places")) if flags.get(key)}
+    dispatch = dispatch_names()
     out = []
     for spec in tool_registry.REGISTRY:
         if not spec.requires <= have:
             continue
-        if spec.name not in TOOL_NAMES:
+        if spec.name not in dispatch:
             out.append(f"{spec.name}: a registry tool this cockpit has, but Brains.tool refuses it")
             continue
         try:
@@ -333,8 +364,14 @@ def registry_problems(brains, flags=None):
         except AttributeError as e:
             out.append(f"{spec.name}: Brains.tool accepts it but has no route ({e})")
     out += [f"{n}: Brains.tool runs it, but the tool registry does not know it"
-            for n in TOOL_NAMES if n not in tool_registry.BY_NAME]
+            for n in dispatch if n not in tool_registry.BY_NAME]
     return out
+
+
+def dispatch_names():
+    """Every name Brains.tool runs: TOOL_NAMES (the D056 set) + PLACE_TOOLS (D057). Read at
+    call time, so a test that patches either tuple is seen."""
+    return tuple(TOOL_NAMES) + tuple(PLACE_TOOLS)
 
 # STOP FIRST (see the module doc). harness.intent decides what a stop is: plan() checks
 # its stop words before anything else in a line. These uses of a stop word are not an
@@ -474,6 +511,142 @@ def local_ai_key():
     return "none"
 
 
+# ------------------------------------------------------------ embeddings (D057 place recognition)
+EMBED_MODEL = "embedding"   # llama-swap's always-warm Qwen3-Embedding-0.6B (CPU, 1024-dim, ~50 ms): no GPU
+EMBED_TIMEOUT_S = 5.0
+EMBED_MAX_CHARS = 2000
+
+
+def embed(text, base_url=None, api_key=None, model=EMBED_MODEL, timeout_s=EMBED_TIMEOUT_S, client=None):
+    """text -> its embedding (a list of floats) from llama-swap's OpenAI embeddings API
+    (model 'embedding', timeout_s, no retries), or None: no text, a timeout, an HTTP error,
+    an empty or non-finite answer. Never raises: a missing embedding is a missing signal
+    (place_memory then recognises from the scan alone). Blocking: call it off the event
+    loop. client: an OpenAI client to use (Brains.embed keeps one; tests pass a fake)."""
+    t = str(text or "").strip()[:EMBED_MAX_CHARS]
+    if not t:
+        return None
+    try:
+        if client is None:
+            from openai import OpenAI
+            client = OpenAI(base_url=(base_url or os.environ.get("ROCKY_LLM_BASE_URL") or DEFAULT_BASE).rstrip("/"),
+                            api_key=api_key or local_ai_key(), timeout=float(timeout_s), max_retries=0)
+        r = client.embeddings.create(model=model, input=t)
+        v = [float(x) for x in r.data[0].embedding]
+    except Exception:                                       # noqa: BLE001 — a dead embedder is a skipped signal
+        return None
+    if not v or not all(math.isfinite(x) for x in v):
+        return None
+    return v
+
+
+# ------------------------------------------------------------ places (D057)
+PLACE_NOTE = ("Place recognition is on: each Situation line starts with 'place: ...', the robot's own "
+              "guess of which place it is in (from its lidar and its eye, never from a map name) with its "
+              "confidence. When the operator says where you are ('I'm in the basement', 'this is the "
+              "kitchen'), call name_place with that name; 'this is completely new' = name_place(name='new "
+              "place', new=true); 'call this place the study' = name_place(name='study', rename=true). "
+              "'new here: X' / 'missing: X' on that line are changes two looks agreed on: say them with the "
+              "confidence. where_am_i and places answer from memory.")
+_PLACE_WIPE = frozenset({"all", "everything", "all places", "every place", "all the places", "all of them"})
+_PLACE_HERE = frozenset({"here", "this", "this place", "this room", "the current place", "current place",
+                         "current", "where i am", "where we are", "where you are"})
+_PLACE_VAGUE = frozenset({"", "that", "it", "that place", "that room", "them", "those", "one", "place",
+                          "the place", "a place", "somewhere"})
+_PLACE_NEW = frozenset({"", "new", "new place", "a new place", "somewhere new", "new room", "a new room"})
+
+
+def place_scope(name):
+    """What forget_place(name) means. Pure. ('all', None) only for an explicit wipe word
+    ('all', 'every place'); ('here', None) for the place the robot is in ('here', 'this
+    place'); ('one', name) for a name or a place id; ('unclear', None) for nothing or a
+    pronoun ('that', 'it'): it must not forget anything."""
+    k = re.sub(r"\s+", " ", str(name or "")).strip().strip(".!?,;:\"'").lower()
+    if k in _PLACE_WIPE:
+        return "all", None
+    if k in _PLACE_HERE:
+        return "here", None
+    k2 = re.sub(r"^(?:the|my|our)\s+", "", k)
+    if k in _PLACE_VAGUE or k2 in _PLACE_VAGUE:
+        return "unclear", None
+    return "one", k2
+
+
+# talk mode's place lines (Brains._talk asks only while place recognition is on)
+_LEAD_RE = re.compile(r"^(?:(?:hey|hi|hello|ok|okay|so|well|yo|pebble|rocky|robot)\b[\s,!.:;-]*)+")
+_NAME_PAT = r"(?P<name>[a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2}?)"
+_PLACE_IN_RE = re.compile(r"^(?:i'?m|i\s+am|we'?re|we\s+are|you'?re|you\s+are)\s+(?:now\s+)?in\s+"
+                          r"(?:the\s+|my\s+|our\s+|a\s+|an\s+)?" + _NAME_PAT +
+                          r"(?:\s+(?:at|of|in)\s+(?:home|the\s+house|my\s+house|our\s+house))?(?:\s+now)?$")
+_PLACE_THIS_RE = re.compile(r"^(?:this|here)\s+is\s+(?:the|my|our)\s+" + _NAME_PAT + r"$")
+_PLACE_NEW_RE = re.compile(r"^(?:(?:this|here|it)(?:'s|\s+is)\s+(?:a\s+|an\s+|somewhere\s+)?"
+                           r"(?:completely\s+|totally\s+|brand\s+|all\s+|entirely\s+)?new"
+                           r"(?:\s+(?:place|room|spot))?(?:\s+to\s+you)?|you(?:'ve|\s+have)\s+never\s+been\s+here"
+                           r"(?:\s+before)?)$")
+_PLACE_HAS_RE = re.compile(r"^this\s+" + _NAME_PAT + r"\s+has\s+(?:a\s+|an\s+|some\s+)?new\s+"
+                           r"(?P<what>[a-z][a-z ]{0,30})$")
+_PLACE_RENAME_RE = re.compile(r"^(?:rename\s+(?:this|here|this\s+place|this\s+room)\s+(?:to|as)\s+"
+                              r"|call\s+(?:this\s+place|this\s+room)\s+)(?:the\s+|my\s+|our\s+)?" + _NAME_PAT + r"$")
+_PLACE_WHERE_RE = re.compile(r"^(?:where\s+am\s+i|where\s+are\s+we|(?:which|what)\s+(?:room|place)\s+is\s+this"
+                             r"|(?:which|what)\s+(?:room|place)\s+are\s+(?:we|you)\s+in"
+                             r"|do\s+you\s+know\s+(?:this\s+(?:place|room)|where\s+(?:you|we)\s+are)"
+                             r"|have\s+you\s+been\s+here(?:\s+before)?)$")
+_PLACE_LIST_RE = re.compile(r"^(?:(?:what|which)\s+places\s+do\s+you\s+know|list\s+(?:the\s+|your\s+|all\s+)?places"
+                            r"|what\s+places(?:\s+are\s+there)?)$")
+_PLACE_FORGET_RE = re.compile(r"^forget\s+(?:(?P<here>this|the\s+current)\s+(?:place|room)"
+                              r"|(?P<all>all|every)\s+(?:the\s+)?places?"
+                              r"|the\s+place\s+(?:called\s+|named\s+)?" + _NAME_PAT + r")$")
+# 'this is the way' / 'this is the right one' are not place names: a name with one of these
+# words, or a bare 'room' / 'place' / 'spot', is not taken
+_NOT_PLACE_WORDS = frozenset({"way", "one", "end", "best", "problem", "thing", "right", "moment", "same", "last",
+                              "first", "plan", "idea", "reason", "answer", "point", "question", "deal", "case",
+                              "time", "part", "worst", "stuff", "thing", "wrong", "only", "trouble"})
+_NOT_PLACE_NAMES = frozenset({"room", "place", "spot", "floor"})
+
+
+def _place_name_ok(name):
+    words = str(name or "").split()
+    return bool(words) and name not in _NOT_PLACE_NAMES and not (set(words) & _NOT_PLACE_WORDS)
+
+
+def place_intent(text):
+    """A talk-mode line about places -> (tool, args, extra) or None. Pure. Only while place
+    recognition is on (Brains._talk): 'where am i' / 'which room is this' -> where_am_i;
+    "i'm in the basement (at home)" / 'this is the kitchen' -> name_place(name); 'this is
+    completely new' -> name_place(new=true); 'call this place the study' / 'rename this
+    room to study' -> name_place(name, rename=true); 'this master bedroom has a new chair'
+    -> name_place('master bedroom') with extra {"check": "chair"} (Brains._talk then runs a
+    change check with two looks: sim.place_check); 'what places do you know' -> places;
+    'forget this place' / 'forget all places' / 'forget the place called X' -> forget_place.
+    A leading 'hey' / 'pebble,' is skipped. extra is None for every other line."""
+    low = str(text or "").lower().replace("\u2019", "'").strip()
+    low = _LEAD_RE.sub("", low).strip(" ,")
+    low = re.sub(r"[\s.!?]+$", "", low).strip()
+    if not low:
+        return None
+    if _PLACE_WHERE_RE.match(low):
+        return "where_am_i", {}, None
+    if _PLACE_LIST_RE.match(low):
+        return "places", {}, None
+    if _PLACE_NEW_RE.match(low):
+        return "name_place", {"name": "", "new": True}, None
+    m = _PLACE_FORGET_RE.match(low)
+    if m:
+        name = "here" if m.group("here") else "all" if m.group("all") else m.group("name")
+        return "forget_place", {"name": name}, None
+    m = _PLACE_HAS_RE.match(low)
+    if m and _place_name_ok(m.group("name")):
+        return "name_place", {"name": m.group("name")}, {"check": m.group("what").strip()}
+    m = _PLACE_RENAME_RE.match(low)
+    if m and _place_name_ok(m.group("name")):
+        return "name_place", {"name": m.group("name"), "rename": True}, None
+    for rx in (_PLACE_IN_RE, _PLACE_THIS_RE):
+        m = rx.match(low)
+        if m and _place_name_ok(m.group("name")):
+            return "name_place", {"name": m.group("name")}, None
+    return None
+
+
 def classify_models(entries):
     """llama-swap /v1/models `data` -> [{id, name, vision, loaded, selector,
     targets, strategy, quarantined}] for chat models. vision iff the id, name
@@ -594,6 +767,23 @@ def pixel_to_floor(u, v, height_m=EYE_HEIGHT_M, pitch_deg=EYE_PITCH_DEG):
     t = float(height_m) / -rz
     gx, gy = t * rx, t * ry
     return math.hypot(gx, gy), -math.degrees(math.atan2(gy, gx))
+
+
+def floor_to_pixel(dist_m, bearing_deg, height_m=EYE_HEIGHT_M, pitch_deg=EYE_PITCH_DEG):
+    """The inverse of pixel_to_floor: a floor point dist_m from the camera along
+    bearing_deg (image convention, negative = LEFT) -> where it appears in the
+    eye image, (u right, v down, 0..1 of the frame; outside 0..1 = outside the
+    frame), or None when it lies behind the camera. Same pinhole, pitch and
+    height as pixel_to_floor (a round trip is exact)."""
+    f = (EYE_H_PX / 2) / math.tan(math.radians(EYE_FOVY_DEG / 2))
+    b = -math.radians(float(bearing_deg))
+    gx, gy = float(dist_m) * math.cos(b), float(dist_m) * math.sin(b)      # ahead, left of the camera
+    p = math.radians(pitch_deg)
+    depth = gx * math.cos(p) + float(height_m) * math.sin(p)
+    if depth <= 1e-6:
+        return None
+    up = gx * math.sin(p) - float(height_m) * math.cos(p)
+    return 0.5 + (-gy / depth) * f / EYE_W_PX, 0.5 - (up / depth) * f / EYE_H_PX
 
 
 # Models that write a box y-first ([ymin, xmin, ymax, xmax]) whatever the prompt asks.
@@ -890,6 +1080,7 @@ class Brains:
         self.composed = None                                   # the last compose_gesture draft
         self.last_look = None                                  # {text, model, t, pose}: the awareness loop reads it
         self.last_find = None                                  # {name, found, detail, t, model}: ditto (find's looks)
+        self._embed_client = None                              # D057: the embeddings client (embed())
         self._load_conf()
         if not self.stop_first:
             self._log(f"brains: stop-first is OFF ({STOP_FIRST_ENV}=0): stop lines go to the model "
@@ -1149,15 +1340,72 @@ class Brains:
 
     # ------------------------------------------------------------------ tools
     def tools_for(self, look=True):
+        """The model's tool list: build_tools' own + EXTRA_TOOLS (the registry's OpenAI view,
+        cockpit + eye + memory), + (D057) the place tools ONLY while the cockpit's place
+        recognition is on (the registry's `places` capability). Off, the list is the D056 one,
+        byte for byte: no model sees a tool that could only answer 'recognition is off'."""
         s = self.sim
+        extra = EXTRA_TOOLS + (PLACE_TOOL_DEFS if self._recognize_on() else [])
         return build_tools(getattr(s, "gesture_names", None), getattr(s, "lexicon", None),
-                           signed=SIGNED, look=look, extra=EXTRA_TOOLS)
+                           signed=SIGNED, look=look, extra=extra)
 
     def system_for(self, multimodal=False, model=None):
         s = self.sim
         extra = (LOOK_NOTE + " " + COMPOSE_NOTE + UNITS_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
-                 + (" " + MEMORY_NOTE if self.memory is not None else "") + family_note(model))
+                 + (" " + MEMORY_NOTE if self.memory is not None else "")
+                 + (" " + PLACE_NOTE if self._recognize_on() else "") + family_note(model))
         return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
+
+    # ------------------------------------------------------------ places (D057)
+    def _recognize_on(self):
+        """Is the cockpit's place recognition on? (False for fakes without awareness settings.)"""
+        a = getattr(self.sim, "awareness", None)
+        return bool(a.get("recognize")) if isinstance(a, dict) else False
+
+    def embed(self, text):
+        """embed(text) against this brain's llama-swap (self.base, self.key, model 'embedding',
+        EMBED_TIMEOUT_S): a list of floats, or None. Blocking — the cockpit runs it in a thread.
+        The cockpit's default place-recognition embedder (CockpitSim.embed_fn overrides it)."""
+        if self._embed_client is None:
+            try:
+                from openai import OpenAI
+                self._embed_client = OpenAI(base_url=self.base, api_key=self.key, timeout=EMBED_TIMEOUT_S,
+                                            max_retries=0)
+            except Exception:                                  # noqa: BLE001 — no SDK: no embedding
+                return None
+        return embed(text, client=self._embed_client)
+
+    def _no_places(self):
+        return {"ok": False, "error": "no place memory here: place recognition lives in the cockpit "
+                                      "(./rocky.sh cockpit)"}
+
+    async def where_am_i(self):
+        """The cockpit's last place recognition + the place's summary (sim.place_where)."""
+        f = getattr(self.sim, "place_where", None)
+        return self._no_places() if f is None else await f()
+
+    async def name_place(self, name=None, new=False, rename=False):
+        """Name the current place (sim.place_name): name an unnamed one, settle an unsure one
+        to the place of that name, correct a wrong recognition (a name that is another place's
+        or differs from the recognised place's own), (new=true) store a new place under the
+        name, or (rename=true) rename the recognised place."""
+        f = getattr(self.sim, "place_name", None)
+        if f is None:
+            return self._no_places()
+        for k, v in (("new", new), ("rename", rename)):
+            if v is not None and not isinstance(v, bool):
+                return {"ok": False, "error": f"{k} must be true or false, got {v!r}"}
+        return await f(name, bool(new), rename=bool(rename))
+
+    async def places(self):
+        """Every place the robot knows (sim.place_list)."""
+        f = getattr(self.sim, "place_list", None)
+        return self._no_places() if f is None else await f()
+
+    async def forget_place(self, name=None):
+        """Forget a place by name, 'here' or 'all' (sim.place_forget); a pronoun forgets nothing."""
+        f = getattr(self.sim, "place_forget", None)
+        return self._no_places() if f is None else await f(name)
 
     def surface(self, voice=False, stops=None):
         return _Surface(self, voice, stops)
@@ -1167,8 +1415,8 @@ class Brains:
         argument or a failing tool comes back as {"ok": False, "error": ...}.
         by_model: a model turn's own call (_tool_loop, _claude) — its stop is
         counted in _model_stops, so it is not taken for an operator stop."""
-        if name not in TOOL_NAMES:
-            return {"ok": False, "error": f"no such tool {name!r}", "hint": ", ".join(TOOL_NAMES)}
+        if name not in dispatch_names():
+            return {"ok": False, "error": f"no such tool {name!r}", "hint": ", ".join(dispatch_names())}
         if args is None:
             args = {}
         if not isinstance(args, dict):
@@ -1181,6 +1429,10 @@ class Brains:
             return {"ok": False, "error": "voice_unconfirmed",   # a misheard line must not wipe the memory
                     "hint": "forgetting everything by voice needs the wake word ('pebble, forget "
                             "everything') or the typed chat"}
+        if voice and name == "forget_place" and place_scope(args.get("name", ""))[0] == "all":
+            return {"ok": False, "error": "voice_unconfirmed",   # nor every place the robot knows
+                    "hint": "forgetting every place by voice needs the wake word ('pebble, forget all "
+                            "places') or the typed chat"}
         if name in NOTED:
             try:
                 n0 = self._cmd_mark()
@@ -2098,7 +2350,30 @@ class Brains:
     async def _talk(self, text, allow, stops=None):
         """Talk mode (and a failed chain's fallback): intent's plan through the
         guarded surface. stops: the line's _TurnStops — its motion is refused once
-        the operator stopped the robot after sending it."""
+        the operator stopped the robot after sending it. D057: while place
+        recognition is on, a place line (place_intent: 'I'm in the basement',
+        'where am I', 'this is completely new') runs its place tool first; with
+        recognition off nothing here changed."""
+        pi = place_intent(text) if self._recognize_on() and not intent_stop(text) else None
+        if pi is not None:
+            tool, args, extra = pi
+            res = await self.tool(tool, args, voice=not allow)
+            reply = _place_reply(tool, res)
+            trace = [{"tool": tool, "args": args, "result": res}]
+            what = (extra or {}).get("check")
+            if what and isinstance(res, dict) and res.get("ok"):
+                # 'this master bedroom has a new chair': the robot says it checks, so it checks —
+                # a change check against the place just named (two looks; a single look
+                # declares nothing), never a new recognition that could rebind the place
+                chk = getattr(self.sim, "place_check", None)
+                if chk is None:
+                    reply += (f" I did not look for the new {what}: this robot has no change check "
+                              "(where_am_i shows what its last recognition saw).")
+                else:
+                    r2 = await chk(f"the operator: a new {what}")
+                    trace.append({"tool": "place_check", "args": {"what": what}, "result": r2})
+                    reply += " " + _place_check_reply(what, r2)
+            return {"reply": reply, "trace": trace, "mode": "talk"}
         p = intent_plan(text)
         results = await intent_execute(self.surface(voice=not allow, stops=stops), p, allow_motion=allow)
         if p["relative"] is not None:                 # execute() turned the delta into a goto
@@ -2374,6 +2649,59 @@ def _memory_reply(name, res):
     if name == "go_back_to":
         return res.get("detail") or "?"
     return json.dumps(res, default=str)[:300]
+
+
+def _place_check_reply(what, r):
+    """Talk mode's sentence for sim.place_check's answer (where_am_i's shape): what two looks
+    agreed on, with the place's confidence; what one look only saw; or why nothing was checked."""
+    if not isinstance(r, dict) or r.get("ok") is False:
+        err = r.get("error") if isinstance(r, dict) else r
+        return f"I could not check for the new {what}: {err}."
+    conf = r.get("confidence")
+    c = f" (place {float(conf):.2f})" if isinstance(conf, (int, float)) else ""
+    ch = r.get("changes") or {}
+    added = sorted({o.get("name") for o in ch.get("added") or [] if o.get("name")})
+    moved = sorted({o.get("name") for o in ch.get("moved") or [] if o.get("name")})
+    missing = sorted({o.get("name") for o in ch.get("missing") or [] if o.get("name")})
+    pend = r.get("pending") or []
+    looks = int(r.get("looks") or 0)
+    bits = []
+    if added:
+        bits.append("new here: " + ", ".join(added))
+    if moved:
+        bits.append("moved: " + ", ".join(moved))
+    if missing:
+        bits.append("missing: " + ", ".join(missing))
+    if bits:
+        out = f"Two looks agree{c}: " + "; ".join(bits) + "."
+    elif pend:
+        out = (f"Only one look saw a change ({', '.join(sorted({str(p.get('name')) for p in pend}))}): "
+               f"not declared{c}.")
+    elif r.get("changes") is None:
+        out = f"No change check ran{c}" + (f": {r['note']}." if r.get("note") else ".")
+        return out
+    else:
+        out = (f"I looked {'twice' if looks > 1 else 'once'} and saw no change{c}"
+               + ("" if looks > 1 else " (a change needs a second look to be declared)") + ".")
+    if r.get("note"):
+        out += f" ({r['note']})"
+    return out
+
+
+def _place_reply(name, res):
+    """Talk mode's sentence for a place tool result (D057)."""
+    if not isinstance(res, dict):
+        return f"{name}: {res}"
+    if res.get("ok") is False:
+        return f"{name}: {res.get('error')}" + (f" — {res['hint']}" if res.get("hint") else "")
+    if name == "places":
+        ps = res.get("places") or []
+        if not ps:
+            return "I know no places yet."
+        names = ", ".join(p.get("name") or p.get("id") for p in ps[:8]) + (f" +{len(ps) - 8}" if len(ps) > 8 else "")
+        cur = res.get("current")
+        return f"I know {len(ps)} place{'s' if len(ps) != 1 else ''}: {names}" + (f" (here: {cur})." if cur else ".")
+    return res.get("detail") or res.get("text") or json.dumps(res, default=str)[:300]
 
 
 def _no_const(c):

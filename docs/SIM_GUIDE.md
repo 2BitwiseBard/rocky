@@ -573,6 +573,455 @@ Honesty notes:
   memory at most once per kind per 30 s. `rate` and `reopen` are routine and
   are not recorded as guards.
 
+**Places: which room is this, from the senses (D057).** The scene memory
+above is keyed by the world's name, and the name is ground truth a real
+robot never has. `sim/place_memory.py` recognises a place from what the
+robot senses instead, and the owner names it ("hey, I'm in the basement at
+home", "hey, this is completely new", "hey, this master bedroom has a new
+chair"). Rooms are enough now; `parent` is reserved for a home → room → spot
+hierarchy later. The module is pure Python + numpy (no MuJoCo, no network:
+the caller hands it every sense, and the embedder is a function it is
+given). `PlaceMemory(directory)` keeps `<directory>/places.json` the way the
+scene memory keeps its files (atomic write, debounced, a file that does not
+load moved aside as `*.corrupt-<time>`, `places.json.bak` before a wipe; no
+directory = RAM only). A place is an id (`place-<6 hex>`), a name (none
+until you give one), its visits, up to 8 samples of each fingerprint (a new
+sample 0.98 alike an old one replaces it, otherwise the oldest goes), the
+objects seen there in the map frame, and notes.
+
+The three fingerprints:
+
+- **Scan**: `scan_signature(angles, ranges, yaw)` turns one lidar sweep into
+  72 numbers. The first 36 are the nearest return in each 10° of *map*
+  heading (the ray's body angle plus the robot's yaw); the last 36 are the
+  quantiles of all the ranges (a sorted range histogram, with no yaw in it
+  anywhere, so odometry yaw drift cannot touch it). Every value is
+  log-scaled into [0, 1] (1 = nothing within 6 m), so a near wall moving 10
+  cm counts more than a far one. `scan_similarity` compares the map part at
+  its best circular shift (a yaw offset of any size costs nothing, and the
+  winning shift estimates it: `scan_align`, 10° resolution, and a
+  rectangular room can alias it by 180°) and the histogram part directly: d
+  = 0.6 × d_map + 0.4 × d_hist, similarity = exp(−(d / 0.05)²).
+- **Description**: the cosine of two `look` descriptions' embeddings. The
+  cockpit's embedder is llama-swap's always-warm `embedding` model
+  (Qwen3-Embedding-0.6B, 1024 dimensions, on the CPU, about 50 ms: it never
+  loads anything on the GPU). Descriptions of rooms are never unrelated
+  texts, so the raw cosine is mapped onto a score (`desc_score`): 0.25 → 0
+  and 0.90 → 1 since this round, set by replaying the first place-bench
+  run's recorded looks (the THRESHOLDS note in `sim/place_memory.py`; the
+  run itself used 0.55 → 0). Measured there, the right room's description
+  scored cos 0.64 to 0.90+ (median 0.77: the model re-words the same view)
+  and a wrong room's 0.60 to 0.89 (median 0.79). They overlap completely:
+  **in these rooms the description does not tell one room from another.**
+  The shallower map only stops a re-worded description of the right room
+  from reading as a mismatch.
+- **Radio**: `{bssid: rssi_dBm}`, compared as a weighted Jaccard over the
+  access points (−100 dBm counts 0, −30 dBm counts 1, an access point one
+  side did not hear counts 0). **The sim never produces one**; every sim
+  caller passes `radio=None`. It is the real robot's Wi-Fi scan, and it
+  tells buildings apart much better than rooms, so it weighs little.
+
+`recognize(scan_sig, desc_emb, radio)` takes, for every place, the
+best-matching sample of each signal that both the place and the query have,
+and combines them: combined = Σ wᵢ sᵢ / Σ wᵢ with w_scan = 0.5 × (the share
+of map bins with a return, full at 25 %, never below 0.2 of the weight),
+w_desc = 0.35, w_radio = 0.15; evidence = min(1, Σ w / 0.5), capped at
+`SINGLE_EVIDENCE` = 0.45 when only one sense was compared; confidence = 0.5
++ (combined − 0.5) × evidence. Thin evidence pulls the score toward 0.5,
+"can't tell", and **one sense alone never says known**: a perfect lone
+sweep or a perfect lone description stops at 0.725, radio alone at 0.65 and
+an empty sweep alone at 0.60, all below the 0.75 that known needs. Each
+sense has a blind spot another covers: the lidar cannot tell rooms of one
+shape apart, descriptions of one kind of room read alike, and radio tells
+buildings apart, not rooms. A lone sense can still say *new* (a combined
+score under 0.5 stays under 0.5). Two senses: an informative sweep plus a
+description is full evidence; an empty sweep plus a description reaches 0.9
+of it, which is how a lidar-empty world can be recognised at all, on the
+description. So a failed look, or an embedding model that did not answer,
+leaves a scan-only answer that is at best *ambiguous*, and the answer says
+so: the result's `signals` lists the senses compared, and `verdict_text`
+adds `[scan only]` (or `[look only]`, `[radio only]`). The verdicts, on the
+best place against the runner-up (a place with another name):
+
+- **known**: best ≥ 0.75 and at least 0.08 ahead of the runner-up.
+- **new**: best < 0.5 (and `new` with no place id when nothing is stored
+  yet).
+- **ambiguous**: anything in between, including two places too close to
+  call.
+- **unknown**, confidence 0: no signal at all, or nothing the query and the
+  stored places have in common.
+
+`confidence` is always the best place's match score, on `new` too: 0.41 on
+`new` means "the nearest place I know is 0.41 alike". `verdict_text` is the
+situation line's clause (at most 90 characters): `place: basement (0.91)`,
+`place: NEW (best basement 0.41)`, `place: basement? (0.62, or bedroom
+0.58)`, `place: kitchen? (0.72, or bedroom 0.55) [scan only]`, `place:
+unknown (no signal)`, and on a known place with a confirmed change `place:
+bedroom (0.88) — new here: chair; missing: ball`.
+
+The two honesty rules the owner agreed to:
+
+1. **A single glance never declares a change.** `diff_objects(place,
+   objects_now, visible=..., mentioned=...)` sorts the place's stored
+   objects against what a look found now: *same* (the same name within
+   `match_m`), *moved*, *missing*, *unseen* and *added*. *Missing* and
+   *moved* need `visible(x, y)` to say the look could have seen the old
+   spot; otherwise the object is *unseen* and nothing is claimed, and a
+   thing of that name seen elsewhere is *added* with `maybe_moved_from`.
+   *Missing* also needs the look not to name the thing: `mentioned` (the
+   description, read by `mentioned_names`; negated mentions such as "no
+   ball" do not count) turns a stored thing the look named but could not
+   place into *unseen*. `confirm_diff(first, second)` keeps only what two
+   looks agree on (the name, and the position within `match_m`); what one
+   look alone reported stays *pending*. The module's default `match_m` is
+   0.3 m.
+2. **Every verdict carries its confidence.** `verdict_text` always prints
+   the number, and a change is only reported on a *known* place: a new or
+   ambiguous one has nothing trustworthy to compare with.
+
+**In the cockpit** place recognition is **off by default** (`--recognize`,
+`./rocky.sh cockpit --recognize`, or `POST /api/awareness {"recognize":
+true}`). Off, the memory is keyed by the world, and the situation line, the
+system prompt and the models' tool list are the D056 ones: the four place
+tools need the registry's `places` capability, which only recognition
+switched on gives, so the D055 / D055a brain-bench scores (measured on that
+list) still describe a cockpit with recognition off. The routes do not
+check the switch: `/api/tool/places` and `/api/tool/forget_place` still act
+on the stored places with recognition off (`where_am_i` and `name_place`
+answer that recognition is off), and `GET /api/memory` still carries
+`places`. As implemented in `sim/cockpit.py`:
+
+- **When it looks.** Every world load or reset makes a recognition due. Once
+  the robot stands still (1 s of sim time after the spawn, reflex NORMAL,
+  idle, not paused; it gives up after 20 s and tries again), it takes one
+  lidar sweep (`scan_signature`, with the sim's pose standing in for
+  odometry, a perfect one) and one look through the vision role
+  (`Brains.look`), embeds the description (`Brains.embed`: llama-swap's
+  `embedding` model, 5 s timeout, a failed embedding is a missing signal)
+  and calls `PlaceMemory.recognize`. The look loads the vision role if it
+  is not loaded (lfm2.5-vl unloads after 10 min idle, and loading it
+  unloads any model outside its `resident` group, such as a `qwen3.5-9b`
+  brain) and falls back to Gemma 12B, then 26B, if it fails, so with
+  recognition on a world load or reset can move models on the GPU. From
+  the same spot, before any turn, the eye is asked about the remembered
+  objects of the place or places in play (see **Changes**). A look that
+  failed has no objects (not an empty list): it is never read as "the eye
+  saw nothing there", asks the eye nothing, and the answer says the verdict
+  rests on the lidar alone.
+- **A world edit** keeps the robot's pose and its place: what follows is a
+  *change check* of the place the robot is bound to, never a new verdict
+  and never another place (`_place_kept`). The verdict stays that place
+  with how alike the robot senses it now, and a note when that is below 0.5
+  ("this place changed a lot"). Talk mode's "this X has a new Y" runs the
+  same check now (`place_check`).
+- **ambiguous** and **new** both take a second look after a 30° turn to
+  the left (the `turn` tool: one gesture, every guard; no turn when the
+  operator stopped the robot during the recognition), and the two
+  recognitions are combined (`combine_recognitions`: per place the mean of
+  the two looks' confidences, the verdict by the same thresholds). A place
+  still **new** after both is stored as `new place #k` with both looks as
+  samples (`enroll_samples`), so it knows two views from the start; its
+  first objects are the eye's placed sightings that the two looks do not
+  contradict (`eye_objects`). **known** records a visit. While the robot
+  turns, the place clause says so: `place: den? looking again (0.72, or
+  workshop 0.55)`, `place: NEW? looking again (best den 0.41)`, `place:
+  den (0.88) — looking again to confirm 1 change`.
+- **Changes are asked of the eye, not read from the prose** (this round,
+  after the first bench run). On a known place the change check is a set
+  of box questions: for each thing the place remembers (walls and doors
+  left out: they belong to the room, which is the lidar's business) and
+  each thing the look's description mentions (`place_candidates`: the
+  scene memory's object nouns among `mentioned_names`, negated mentions
+  left out; the prose only proposes the question), the cockpit asks
+  `Brains.detect(name, method="bbox")`, the question `/api/look {find:
+  NAME, method: "bbox"}` and `find_object` ask, through the look's own
+  vision model and while the robot still stands where it looked. A box is
+  projected onto the floor (`sighting_to_map`; the vision bench measured
+  0.7–0.9° bearing and 3 cm distance error in clean renders). Only a parsed
+  "not there" is a no, and only where one of the thing's stored spots lies
+  in that look's view (86°, 0.15–2 m from the eye); an error, an unparsed
+  or unsure answer (confidence below `FIND_MIN_CONF` = 0.4), a box with no
+  floor point within 2 m, or a spot out of view claims nothing. At most
+  `PLACE_EYE_MAX` = 6 questions per look, each one a vision-model call.
+  `place_memory.checked_objects` turns the answers into *added*, *missing*,
+  *present* and *unobservable* (presence per name, not per instance, so it
+  reports no *moved*). Any change takes the second look after the 30° turn,
+  which asks the same questions again, and only what both looks agree on
+  (`confirm_diff`: the name, and the position within `PLACE_MATCH_M` = 0.5
+  m when both looks placed it; the 0.5 m is unmeasured) is declared and
+  stored. One look's claim stays *pending* and the snapshot stays as it
+  was: a look with no confirmed change rewrites nothing. The prose objects
+  (`objects_from_description`) no longer decide anything. What each look
+  asked and heard is in the answer's `eye_checks`. None of this has been
+  through the place bench yet.
+- **The scene memory follows the place.** Until a verdict, a provisional
+  RAM-only memory (`place-pending`) stands in; a known or new place binds it
+  to `place-<id>`, saved as `<memory dir>/place-<id>.json` next to
+  `places.json`, and what the provisional memory recorded since the spawn is
+  carried over. An ambiguous verdict binds nothing until the operator names
+  the place. When the operator corrects a wrong recognition (`name_place`,
+  below), what the visit wrote into the wrongly recognised place is taken
+  back (`_place_take_back`: a place stored on this visit is dropped, a known
+  one gets its record from before the visit and its scene memory from the
+  moment of the bind) and the records since the bind move to the right
+  place.
+- **Where it shows.** The situation line starts with the place clause
+  (`place: recognising…` while it runs); the state feed carries `place`
+  (`verdict`, `name`, `place_id`, `confidence`, `signals`, `text`,
+  `status`, `looks`, `by`; `signals` in words: `scan + description`, `scan
+  only`, `the operator's word`); `where_am_i`'s `detail` ends with the same
+  (`[signals: scan + description; confidence 0.88]`); `GET /api/memory`
+  carries `places`. With **reactions** on, a new place and a confirmed new
+  object each say `curious_question` (the usual one reaction per 30 s). A recognition that is interrupted (no
+  standstill within 20 s, paused, moved while looking) or raises is tried
+  again every 5 s for as long as recognition is on; a failed look is not a
+  failure (the sweep decides alone, at best *ambiguous*). Only
+  `_place_tick` itself raising `AWARE_FAILS_MAX` = 3 times (counted since
+  the last spawn or result) switches recognition off, with a console line.
+- **Tools** (`harness/capabilities.py`, D056): `where_am_i` (the last
+  recognition and the place: it waits for one that is running and never
+  looks by itself), `name_place(name, new?, rename?)`, `places`,
+  `forget_place(name | 'here' | 'all')` (a pronoun forgets nothing;
+  `places.json.bak` before a wipe; a spoken 'all' needs the wake word).
+  They are offered to the cockpit's model brains, and by the MCP server
+  over a cockpit (`harness/server.py` through `CockpitBackend` /
+  `AutoBackend`, which forward them to `/api/tool/<name>`), only while
+  recognition is on: the cockpit's `GET /api/capabilities` then carries the
+  registry's `places` capability, and the MCP list follows it on the next
+  `tools/list` or watcher tick (3 s, with a list-changed notification);
+  switched off, the four leave both lists. The mock and the in-process sim
+  never have them; `/api/tool/<name>` always runs them. `name_place` names
+  an unnamed recognised place (or one stored on this visit); a name that is
+  another
+  place's, or that differs from the recognised place's own name, is a
+  **correction** (the robot was wrong: this is that place, or a new one
+  under the name, and the wrongly recognised place is put back as it was);
+  `rename=true` renames the recognised place instead ("call this place the
+  study"); `new=true` stores a different place, one per visit however
+  often it is said. While recognition is on, talk mode maps the owner's
+  sentences onto them (`place_intent` in `sim/cockpit_brains.py`: "where am
+  I", "I'm in the basement at home", "this is completely new", "call this
+  place the study", "this master bedroom has a new chair", "what places do
+  you know", "forget this place"), and the model brains' system prompt gets
+  a place note. "This master bedroom has a new chair" names the place and
+  then runs `place_check`, a change check of that place with the two-look
+  rule; the reply says what two looks agreed on, what one look alone saw
+  (not declared), or why nothing was checked.
+- **Routes.** `GET /api/place` (the current answer and every place) and
+  `POST /api/place {action: recognize {force?} | name {name, new?,
+  rename?} | forget {name} | list}`. `sim/tests/test_awareness.py` drives
+  the cockpit side headless with a fake eye (the module's own tests are
+  `sim/tests/test_place_memory.py`).
+
+Limits in MuJoCo, measured 2026-09-25 with the robot at the spawn pose (the
+scan plane is 0.179 m above the floor, from `PUCK_DZ` = 0.06 m above the
+torso; scratch scripts on `world_builder` + `sim_lidar.scan`, a sweep after
+1 s of standing, no cockpit, no model):
+
+| preset | rays with a return (of 360) | map bins with a return (of 36) |
+|---|---|---|
+| room | 360 | 36 |
+| obstacle course | 37 (its one 0.25 m wall) | 5 (0.14: 0.56 of a full sweep's weight) |
+| flat, cliff, rubble field, rough terrain, stairs, slope 8 deg, icy floor | 0 | 0 |
+| room a, room b, room a + chair, room b + chair | 360 | 36 |
+| room c, room c + chair, room c - ball | 208 | 23 |
+| room d | 292 | 30 |
+
+- **8 of the 9 general presets give the lidar nothing or next to nothing**:
+  seven return nothing above the scan plane, and the obstacle course only
+  its one wall. Every empty sweep matches every other, so in those worlds
+  recognition rests on the description, which did not tell the bench's
+  rooms apart (below): a verdict in a lidar-empty world is not measured and
+  not to be trusted. A sweep alone (empty or not) stops at *ambiguous* by
+  design. The place bench's rooms are built for the lidar (walls 0.25–0.5
+  m).
+- **MuJoCo rooms are simple**: flat-shaded walls and boxes on a checker floor,
+  a perfect ray-cast lidar, a clean 320 × 240 render. Every sim number here
+  is an upper bound for the real camera and the real puck, and none is
+  measured on a walking robot's tilted sweep.
+- **The description cannot break a lidar twin.** A room of the same shape
+  whose furniture the lidar sees alike, described the way the bench's looks
+  are (cos about 0.82), would read about 0.85 and come out *known*: the
+  replay in `sim/place_memory.py` says so, and no description map fixes it.
+  The eye's per-object answers are the sense that could; that is not
+  measured.
+- The scan similarity was calibrated on **synthetic** ray-cast rooms (360
+  rays, the `room` preset's 3.2 × 2.6 m walls and pillars; the helpers are
+  in `sim/tests/test_place_memory.py`): the same spot with 1 cm noise
+  0.9996; 0.1 m away 0.94–0.98; 0.3 m away 0.61–0.83 (median 0.71); 0.5 m
+  away 0.24–0.63, which is why a place keeps several samples; a room of
+  another shape (5 × 4 m, a 6 × 1.2 m corridor, open floor) 0.005 or less; a
+  3 × 3 m room up to 0.73; the same 3.2 × 2.6 m walls with other furniture
+  0.84 (the caster is 2D, so all of that furniture is lidar-visible).
+  **Rooms of one shape are near-twins to the lidar** unless much of the
+  furniture it sees differs (rooms a and b in MuJoCo, where b adds a 0.9 m
+  inner wall and two 0.22 m boxes: 0.49 alike at the spawn, 0.53 at the
+  bench's enrolment), and furniture below the 0.179 m plane is invisible to
+  it altogether. The description did not separate the bench's rooms (see
+  the first run), so what can is the radio on the robot, or the eye's
+  per-object answers (not measured).
+- Every world load puts the robot back at the origin facing +x, the spot it
+  first saw the place from, so a sim revisit is an **upper bound** for a
+  robot that comes back from anywhere.
+- Object positions are in the map frame of the visit. In the sim that is the
+  world frame, so they compare directly; a real robot's map frame restarts
+  every session, and `scan_align` gives only the yaw between two visits, not
+  the translation.
+
+**The place bench** (`sim/place_bench.py`, tests
+`sim/tests/test_place_bench.py`) scores the owner's three sentences from the
+senses alone: known, new, and known with a change. It measures the cockpit's
+own protocol above: it stages a world, waits and reads (`POST /api/place
+{action: recognize}`, then `where_am_i` and the state feed's `place`), and
+never looks or turns for the robot. Each trial starts from an empty place
+memory, enrols rooms a, b and c and names them the way a truthful owner
+would (den / workshop / playroom), then runs its cases: `a same pose`; `b
+named as a` and `a named as b` (each room loaded under the world name the
+OTHER room was enrolled with: a recogniser that used the name would answer
+the other room, flagged `name_leak`); `a moved + turned` (0.29 m away and a
+quarter turn, with recognition off while it walks there); `d never seen`
+(must be new); `b + chair` and `c - ball` (the change must be confirmed by
+the cockpit's second look, counted only when the changed spot was in the
+eye's view before and after the read; a change confirmed from a single look
+counts as a broken two-look rule). Every world is loaded under an opaque
+name (`pb-<8 hex>`) with a spec that differs on every visit, so nothing
+keyed by a name or a spec can carry a room across visits. It starts its own
+cockpit (default :8795, never :8765) behind a loopback fence that forwards
+only the vision model and the CPU `embedding` model, so a failing vision
+model cannot pull a 21 GB fallback onto the GPU.
+
+```bash
+.venv/bin/python sim/place_bench.py                          # own cockpit on :8795, 3 trials, lfm2.5-vl
+.venv/bin/python sim/place_bench.py --trials 1 --no-embed    # the scan + the look, no description embeddings
+.venv/bin/python sim/place_bench.py --dry-run --trials 1     # plumbing only: canned look, hashed embeddings, no GPU
+.venv/bin/python sim/place_bench.py --trials 1 --cases "d never seen,b + chair"   # rooms a-c are always enrolled
+```
+
+`--vision-model ID` picks the vision role it measures (default `lfm2.5-vl`;
+it loads if it is not loaded, which unloads any model outside its
+`resident` group, and the fence keeps the Gemma fallbacks off the GPU).
+`--no-embed` makes the fence refuse embeddings, so recognition runs on the
+sweep alone (the look still runs: it feeds the changes), which after the
+single-sense cap can answer *ambiguous* or *new* but never *known*.
+`--relook` turns 30° after each read and forces a fresh recognition, to see
+whether it agrees; it adds samples to the places, so it is off by default.
+`--url` points it at a cockpit you started (loopback, never :8765; not
+fenced, and each trial wipes its places with `forget_place all`, which
+keeps `places.json.bak`). It prints a table (a confusion matrix expected ×
+observed, the looks taken, change hits / false alarms / single-glance
+declarations, confidence per case, the read's wall time) and a per-read
+confidence table (the confidence, the per-sense parts, the evidence, the
+senses compared, the looks, the runner-up and the lead over it), writes
+`sim/out/place_bench.json` (`--out`: every read with the raw answers, its
+parts, evidence, signals and per-look results, the change check's per-name
+eye answers for each look, and the exact API calls; the place_memory
+thresholds are derived from these records) and prints a Markdown block for
+these docs. A `--dry-run` result is marked DRY RUN: plumbing, not a
+measurement. Leave the owner's cockpit alone while it runs, for the same
+GPU reasons as the brain bench.
+`sim/out/place_bench.json` is committed as the record of the last real run,
+like `sim/out/brain_bench.json`; a new run overwrites it, so commit it with
+the docs that quote it.
+
+**First run, 2026-09-25 19:39** (`sim/out/place_bench.json`): the bench's
+own fenced cockpit on :8795, vision `lfm2.5-vl`, description embeddings on
+(46 through the fence), 3 trials of the 7 cases, physics at 2.0×, and the
+cockpit's change check as it stood then (objects read from the look's
+prose).
+
+| case | expected | verdicts | correct | confidence median (min–max) | second look taken | changes (two looks agree) |
+|---|---|---|---|---|---|---|
+| a same pose | known a | known ×2, ambiguous ×1 | 2/3 | 0.82 (0.73–0.88) | 2/3 | none expected, none declared |
+| b named as a | known b | known ×2, ambiguous ×1 | 2/3 | 0.83 (0.73–0.85) | 2/3 | none expected, none declared |
+| a named as b | known a | known ×3 | 3/3 | 0.97 (0.89–1.00) | 3/3 | none expected, none declared |
+| a moved + turned | known a | known ×3 | 3/3 | 0.87 (0.84–0.87) | 3/3 | none expected, none declared |
+| d never seen | new | new ×3 | 3/3 | 0.29 (0.26–0.29) | 0/3 | none expected, none declared |
+| b + chair | known b | ambiguous ×2, known ×1 | 1/3 | 0.73 (0.67–0.78) | 2/3 | 0/3 found |
+| c - ball | known c | ambiguous ×2, known ×1 | 1/3 | 0.73 (0.70–0.76) | 2/3 | 0/3 found |
+
+- **15/21 correct and 0 wrong "known"**: a revisit was recognised (12) or
+  called ambiguous (6), never taken for another room; the never-seen room
+  was new 3/3, at 0.26–0.29, far below the 0.5 line. The name swap was
+  right 5/6 with no name leak. In the 15 visits where nothing had changed,
+  0 false alarms, and 0 changes were declared from one glance.
+- **The true matches sit at the threshold.** The 12 known verdicts scored
+  0.755–1.00 (median 0.86); the 6 ambiguous ones 0.67–0.735, just under
+  0.75.
+- **The scan carried it; the description is the weak sense.** Per sense
+  (each read's `parts`): the scan scored 1.00 at every same-pose revisit,
+  0.87 with the chair in the room (a 0.25 m box is lidar-tall), 0.79 after
+  the 0.29 m move and the quarter turn, and 0.00 for room d against every
+  stored room. The description (scores under the run's 0.55 → 0 map)
+  scored the right room 0.26–1.00 (cos 0.64 to 0.90+, median 0.77) over
+  the 18 revisits, while the never-seen room d's description scored
+  0.64–0.71 (cos 0.77–0.80) against its nearest stored room: in 9 of the
+  18 revisits the right room's description scored lower than that. Every
+  ambiguous verdict is a scan of 0.87–1.00 pulled below 0.75 by a
+  description score of 0.26–0.52 (cos 0.64–0.73). lfm2.5-vl mostly
+  describes the floor of a 320 × 240 frame ("The floor ahead is mostly
+  clear, with a few scattered dark specks"), and two looks at one spot can
+  read differently.
+- **Changes: 0/6 found, and why.** In trials 2 and 3 both changed rooms
+  came back ambiguous, and a change is only checked on a known place, so
+  the check never ran. In trial 1 both were known (one look each) and the
+  check found nothing, because it read the objects out of the look's prose
+  (`objects_from_description`), which places a thing only when one
+  sentence gives a direction AND a distance: lfm2.5-vl gives no metres ("A
+  white cube and a wall are within a few body lengths ahead"), so the
+  chair was never placed, and the ball had never been placed at enrolment,
+  so it could not go missing. The two-look rule did its job the other
+  way: in 8 of the 15 unchanged visits one look placed a phantom "wall"
+  from the prose (new or moved), the second look did not agree, and it
+  stayed pending.
+
+**Second run, the same evening (21:15), after the fix round** (description map
+re-set from the run above: `DESC_COS_FLOOR` 0.55 → 0.25; two looks stored at
+enrolment; the change check asks the eye for a box per remembered name instead
+of reading the prose):
+
+| case | expected | verdicts | confidence (median) | changes |
+|---|---|---|---|---|
+| a same pose | known a | known ×3 | 0.96 | none, none declared |
+| b named as a | known b | known ×3 | 0.95 | none, none declared |
+| a named as b | known a | known ×3 | 0.96 | none, none declared |
+| a moved + turned | known a | known ×3 | 0.87 | none, none declared |
+| d never seen | new | new ×3 | 0.34 | none, none declared |
+| b + chair | known b | known ×3 | 0.86 | 0/3 found |
+| c - ball | known c | known ×3 | 0.86 | 3/3 found |
+
+- **21/21 verdicts, 0 wrong "known", 0 false alarms**; every true match now
+  clears 0.75 with room to spare (0.84–0.98) and the never-seen room stays
+  new (0.33–0.37).
+- **Changes 3/6.** The removed ball was caught every time: the eye, asked
+  for a ball at its remembered spot, said no on both looks. The added chair
+  was never caught: the eye calls it a *box* (it is one), the first look
+  boxed it and the second look, from the same spot after the 30° turn,
+  denied it, so the two-look rule held it back. Naming (chair vs box) and
+  the confirming look from the same spot are the two open items (B38).
+- **Room b is "ambiguous" at enrolment (0.65–0.69) 3/3**: it shares room a's
+  walls and the description does not separate them; naming it settles it,
+  and it is recognised 3/3 afterwards. The never-seen room's lead over its
+  runner-up is only 0.01–0.06: "new" is right here but not by much.
+- **Timing**: arrival to verdict 3.7 s median, 4.9 s p95 at 2.0× physics
+  (settling, the sweep, the look, the embedding, and the turn + second
+  look when one is taken: 14 of the 21 visits). Enrolling room b came
+  back new once and ambiguous twice (0.53, 0.58: b shares a's walls), and
+  the bench then named it as a new place, as a truthful owner would.
+
+**What changed after it, this round, not re-measured.** (1) The
+description map was re-set from this run's records (0.25 / 0.90, above;
+`KNOWN_T` 0.75 and `MARGIN` 0.08 kept): replayed on the run's first looks,
+all 18 revisits come out known (the weakest 0.779, 0.029 over the line;
+under the old map 6 fell below it, the run's 6 ambiguous), the never-seen
+rooms at most 0.346 (new), and room b at its enrolment against room a
+0.560–0.676 (ambiguous 3/3, never known). That is a replay of recorded
+numbers from one run of three trials whose looks repeat, not a new
+measurement. (2) The change check asks the eye with box questions instead
+of reading the prose (**Changes** above), so the chair and the ball can be
+boxed and placed. (3) A new place takes a second look before it is stored.
+The place bench has not been re-run since the first run; its next run is
+what measures all three.
+
 **Hardening (D052).** The sim thread no longer dies silently: an exception
 out of a physics step limps the real legs, fails every waiting HTTP
 request with 503 (before, one exception froze every request forever) and
@@ -596,7 +1045,7 @@ The HTTP API under `/api/` is what the MCP proxy
 `/api/cmd {"line": "walk 45"}`,
 `/api/world {"preset": "stairs"}`, `/api/chat {"text": ..., "mode": "local"}`,
 `GET /api/model`, `GET /api/gait`, `POST /api/gesture/check|solve|teach`,
-`GET|POST /api/memory`, `GET|POST /api/awareness`.
+`GET|POST /api/memory`, `GET|POST /api/awareness`, `GET|POST /api/place` (D057).
 `sim/tests/test_cockpit_api.py` and `sim/tests/test_awareness.py` drive
 all of it headless.
 

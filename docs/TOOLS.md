@@ -6,8 +6,8 @@ Every tool a brain can call, from one registry (`harness/capabilities.py` `REGIS
 
 This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`harness/backend.py`) and every capability on. A running cockpit's lists also carry its saved keyframe gestures and custom chord words.
 
-- snapshot version: `99615678f55b` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
-- capabilities: cockpit, eye, memory
+- snapshot version: `80caad210791` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
+- capabilities: cockpit, eye, memory, places
 
 ## Summary
 
@@ -32,9 +32,13 @@ This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`h
 | `go_back_to` | motion | yes | memory | local brains, MCP |
 | `forget` | memory | no | memory | local brains, MCP |
 | `turn` | motion | yes | cockpit | cockpit executor only |
+| `where_am_i` | query | no | cockpit, places | local brains, MCP |
+| `name_place` | memory | no | cockpit, places | local brains, MCP |
+| `places` | query | no | cockpit, places | local brains, MCP |
+| `forget_place` | memory | no | cockpit, places | local brains, MCP |
 
 - **gated**: a spoken line runs it only with the wake word ('pebble, ...') or the operator's confirmation. `stop` is never gated.
-- **requires**: `eye` = a camera and a vision model, `memory` = the scene memory, `cockpit` = a running cockpit (`./rocky.sh cockpit`). A backend without it does not offer the tool (absent tool > lying tool).
+- **requires**: `eye` = a camera and a vision model, `memory` = the scene memory, `cockpit` = a running cockpit (`./rocky.sh cockpit`), `places` = the cockpit's place recognition switched on (`POST /api/awareness {"recognize": true}` or `--recognize`; D057), as the cockpit reports it in `GET /api/capabilities` (the MCP server follows it; the mock and the in-process sim have no places, so never this flag). A backend without it does not offer the tool (absent tool > lying tool).
 - **offered to**: local brains = the OpenAI tool list (and Claude mode); MCP = the `rocky` MCP server; cockpit executor only = callable at `/api/tool/<name>`, offered to no model.
 
 ## Envelope
@@ -390,3 +394,61 @@ Description (local brains and MCP):
 Description:
 
 > INTERNAL (never offered to a model): turn on the spot by about deg degrees (+ = left, counter-clockwise) with the turn_in_place gait, timed to the measured turn rate; find_object's scan turn, replayed by recordings. Reports the measured turn.
+
+### `where_am_i`
+
+- kind: query; gated: no; requires: cockpit, places; offered to: local brains, MCP; backend method: `where_am_i`
+- annotations: readOnlyHint=true
+- MCP arguments: none
+- note: D057: the cockpit's last place recognition (sim/place_memory.py, run by sim/cockpit.py) + the place's summary. Offered to the cockpit's models, and by the MCP server over a cockpit (CockpitBackend / AutoBackend: POST /api/tool/where_am_i), only while place recognition is on (capability places: POST /api/awareness {recognize: true} or cockpit.py --recognize; the MCP list follows it on its next refresh); /api/tool/where_am_i answers 'place recognition is off' otherwise.
+
+No parameters.
+
+Description (local brains and MCP):
+
+> Which place is the robot in? Its own recognition from the lidar and the eye (never a map name): verdict known | new | ambiguous | unknown with its confidence (0-1, a similarity), the place's name, how often it has been here, and the changes two looks agreed on (a single look never declares one). Needs place recognition on (the situation line then starts with 'place: ...'); off, it says so.
+
+### `name_place`
+
+- kind: memory; gated: no; requires: cockpit, places; offered to: local brains, MCP; backend method: `name_place`
+- annotations: readOnlyHint=false
+- MCP arguments: `name` string, `new` boolean = false, `rename` boolean = false
+- note: D057: names an unnamed recognised place (or one stored on this visit), settles an unsure one to the place of that name, or stores a new place from the last recognition's samples. A name that is another place's, or differs from the recognised place's own name, is a correction: what this visit wrote into the wrongly recognised place (samples, objects, scene-memory records) is taken back and moved to the right one; rename=true renames instead. new=true twice on one visit stores one place, not two; across visits it stores another each time (not idempotent). Not gated (it moves nothing). Cockpit brains and MCP over a cockpit (while recognition is on), /api/tool always. MCP: new / rename are booleans refused otherwise, as the cockpit refuses them (null = false).
+
+| parameter | type | required | description |
+|---|---|---|---|
+| `name` | string | yes | the place, in the operator's words: 'basement' |
+| `new` | boolean | no | true: this is a different, new place (not the one recognised) |
+| `rename` | boolean | no | true: rename the recognised place to this name (it is the same place) |
+
+Description (local brains and MCP):
+
+> Name the place the robot is in, in the operator's words: 'I'm in the basement' -> name_place(name='basement'); 'this master bedroom has a new chair' -> name_place(name='master bedroom'). It names the place the robot recognised when that place has no name yet; when the name is another place's, or the recognised place already has a different name, the operator is CORRECTING the robot: this is taken to be that other (or a new) place and the wrong one is left as it was. rename=true: give the recognised place this new name instead ('call this place the study'). new=true when the operator says this is a DIFFERENT place ('this is completely new'). Only for what the operator says; needs place recognition on.
+
+### `places`
+
+- kind: query; gated: no; requires: cockpit, places; offered to: local brains, MCP; backend method: `places`
+- annotations: readOnlyHint=true
+- MCP arguments: none
+- note: D057: PlaceMemory.places() + the current place. Cockpit brains and MCP over a cockpit (while recognition is on), /api/tool always.
+
+No parameters.
+
+Description (local brains and MCP):
+
+> The places the robot knows: names, visits, what was seen there, and which one it is in now (from memory: no looking, no walking).
+
+### `forget_place`
+
+- kind: memory; gated: no; requires: cockpit, places; offered to: local brains, MCP; backend method: `forget_place`
+- annotations: readOnlyHint=false, destructiveHint=true
+- MCP arguments: `name` string
+- note: D057: not gated, but the cockpit refuses a spoken forget_place('all') without the wake word (like forget). places.json.bak is written before a wipe; a forgotten place's scene-memory file stays on disk, unreachable. Cockpit brains and MCP over a cockpit (while recognition is on), /api/tool always.
+
+| parameter | type | required | description |
+|---|---|---|---|
+| `name` | string | yes | the place's name, 'here', or 'all' |
+
+Description (local brains and MCP):
+
+> Forget a place: its name, 'here' (the place the robot is in) or 'all'. A pronoun ('that', 'it') forgets nothing. Only when the operator asks.

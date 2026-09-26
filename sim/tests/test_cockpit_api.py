@@ -529,6 +529,35 @@ def _caps_state(c):
     return s["caps_version"], s["caps_seq"]
 
 
+def test_recognition_on_offers_the_place_tools_and_off_is_the_d056_list_again(cockpit_client):
+    """D057 review: with place recognition off, no model is offered a place tool (they could
+    only answer 'recognition is off'); on, the four come after the D056 tools, the version
+    moves once each way and the snapshot off is the one before, byte for byte."""
+    import cockpit_brains as cb
+    import harness.capabilities as C
+    sim, c = cockpit_client
+    a = _caps(c)
+    v0, n0 = _caps_state(c)
+    assert v0 == a["version"] and not set(cb.PLACE_TOOLS) & {t["name"] for t in a["tools"]}
+    names0 = [t["function"]["name"] for t in sim.brains.tools_for(look=True)]
+    assert not set(cb.PLACE_TOOLS) & set(names0)
+    assert "Place recognition is on" not in sim.brains.system_for()
+    try:
+        assert c.post("/api/awareness", json={"recognize": True}).json()["awareness"]["recognize"] is True
+        on = _caps(c)
+        assert on["capabilities"] == ["cockpit", "eye", "memory", "places"] and on["version"] != a["version"]
+        assert [t["name"] for t in on["tools"]] == list(C.TOOL_NAMES)
+        assert _caps_state(c) == (on["version"], n0 + 1)
+        assert C.to_openai_tools(on) == sim.brains.tools_for(look=True)
+        assert [t["function"]["name"] for t in sim.brains.tools_for(look=True)] == names0 + list(cb.PLACE_TOOLS)
+        assert "Place recognition is on" in sim.brains.system_for()
+        assert cb.registry_problems(sim.brains, dict(cb.cockpit_flags(sim), has_places=True)) == []
+    finally:
+        c.post("/api/awareness", json={"recognize": False})
+    assert _caps(c) == a and _caps_state(c) == (a["version"], n0 + 2)
+    assert [t["function"]["name"] for t in sim.brains.tools_for(look=True)] == names0
+
+
 def test_capabilities_endpoint_shape_and_a_stable_version(cockpit_client):
     import cockpit
     import cockpit_brains as cb
@@ -541,7 +570,9 @@ def test_capabilities_endpoint_shape_and_a_stable_version(cockpit_client):
     assert a["capabilities"] == ["cockpit", "eye", "memory"]
     assert a["gestures"] == sim.gesture_names and a["lexicon"] == sim.lexicon and a["signed"] == list(SIGNED)
     tools = {t["name"]: t for t in a["tools"]}
-    assert list(tools) == list(C.TOOL_NAMES) and set(tools) == set(cb.TOOL_NAMES)   # it runs every tool
+    # recognition off (the default): the D056 set exactly — TOOL_NAMES, pinned in test_cockpit_brains
+    # (D057's place tools need the registry's `places` capability: recognition on, see below)
+    assert list(tools) == [n for n in C.TOOL_NAMES if n not in cb.PLACE_TOOLS] and set(tools) == set(cb.TOOL_NAMES)
     assert {n for n, t in tools.items() if t["gated"]} == set(cb.GATED)
     assert tools["gesture"]["parameters"]["properties"]["name"]["enum"] == sim.gesture_names
     assert tools["say"]["parameters"]["properties"]["word"]["enum"] == sim.lexicon

@@ -7,7 +7,7 @@ harness/server.build_server (the FastMCP "rocky" server, whose texts partly diff
 and harness/cockpit_backend (the HTTP proxy). This module holds what they share, as
 data, and generates each surface from it:
 
-    caps = build(gestures, lexicon, signed, has_eye, has_memory, is_cockpit)
+    caps = build(gestures, lexicon, signed, has_eye, has_memory, is_cockpit[, has_places])
     to_openai_tools(caps)     # == local_brain.build_tools(...) today, byte for byte
     to_anthropic_tools(caps)  # == the cockpit's Claude-mode conversion of that list
     to_mcp_specs(caps)        # the MCP server's tools: name, description, input schema, annotations
@@ -63,7 +63,10 @@ from harness.backend import CHORD_WORDS, GESTURES, SIGNED   # noqa: E402  (pure:
 FORMAT = 1
 KINDS = ("voice", "motion", "query", "memory", "gesture_authoring", "meta")
 SURFACES = ("openai", "mcp", "internal")      # local brains (OpenAI + Claude mode) | MCP | executor only
-CAPABILITY_FLAGS = ("cockpit", "eye", "memory")
+CAPABILITY_FLAGS = ("cockpit", "eye", "memory", "places")   # places (D057): the cockpit's place
+#                                                           recognition is ON (awareness `recognize`):
+#   reported by the cockpit itself (GET /api/capabilities lists it; CockpitBackend / AutoBackend pass
+#   it on); never derived from a backend's methods — the mock and the in-process sim have no places
 LIVE = "$live"                                # parameter marker: {"$live": "gestures" | "lexicon"}
 LIVE_LISTS = ("gestures", "lexicon")
 
@@ -164,6 +167,27 @@ GO_BACK_DOC = ("Walk back to a remembered object or place ('go back to the ball'
 FORGET_DOC = ("Forget one named object (and every memory that mentions it), or everything with name "
               "'all'. A pronoun ('that', 'it') forgets nothing: name the thing. Only when the "
               "operator asks.")
+# D057 place recognition (sim/place_memory.py, run by the cockpit): which place is this, from the
+# lidar and the eye, never from the world's name. The cockpit's brains and (F3) the MCP server over a
+# cockpit, only while recognition is on (capability `places`): off, every tool list is the D056 one.
+WHERE_AM_I_DOC = ("Which place is the robot in? Its own recognition from the lidar and the eye (never a map "
+                  "name): verdict known | new | ambiguous | unknown with its confidence (0-1, a similarity), "
+                  "the place's name, how often it has been here, and the changes two looks agreed on "
+                  "(a single look never declares one). Needs place recognition on (the situation line then "
+                  "starts with 'place: ...'); off, it says so.")
+NAME_PLACE_DOC = ("Name the place the robot is in, in the operator's words: 'I'm in the basement' -> "
+                  "name_place(name='basement'); 'this master bedroom has a new chair' -> "
+                  "name_place(name='master bedroom'). It names the place the robot recognised when that place "
+                  "has no name yet; when the name is another place's, or the recognised place already has a "
+                  "different name, the operator is CORRECTING the robot: this is taken to be that other (or a "
+                  "new) place and the wrong one is left as it was. rename=true: give the recognised place this "
+                  "new name instead ('call this place the study'). new=true when the operator says this is a "
+                  "DIFFERENT place ('this is completely new'). Only for what the operator says; needs place "
+                  "recognition on.")
+PLACES_DOC = ("The places the robot knows: names, visits, what was seen there, and which one it is in now "
+              "(from memory: no looking, no walking).")
+FORGET_PLACE_DOC = ("Forget a place: its name, 'here' (the place the robot is in) or 'all'. A pronoun ('that', "
+                    "'it') forgets nothing. Only when the operator asks.")
 
 # harness/server.py FastMCP(instructions=...)
 MCP_INSTRUCTIONS = (
@@ -467,6 +491,54 @@ REGISTRY: tuple = (
         _obj({"deg": {"type": "number", "description": "degrees, + = left; 5..180 in magnitude"}}, ["deg"]),
         annotations=dict(_RW), gated=True, requires={"cockpit"}, surfaces=("internal",),
         note="In the cockpit executor (TOOL_NAMES, /api/tool/turn) and GATED, offered to no model."),
+    # ---- D057 place recognition (appended: every tool above keeps its place and its text)
+    ToolSpec(
+        "where_am_i", "query", WHERE_AM_I_DOC,
+        _obj(),
+        mcp_args=(),
+        annotations=dict(_RO), requires={"cockpit", "places"}, surfaces=("openai", "mcp"),
+        note="D057: the cockpit's last place recognition (sim/place_memory.py, run by sim/cockpit.py) + the "
+             "place's summary. Offered to the cockpit's models, and by the MCP server over a cockpit "
+             "(CockpitBackend / AutoBackend: POST /api/tool/where_am_i), only while place recognition is on "
+             "(capability places: POST /api/awareness {recognize: true} or cockpit.py --recognize; the MCP "
+             "list follows it on its next refresh); /api/tool/where_am_i answers 'place recognition is off' "
+             "otherwise."),
+    ToolSpec(
+        "name_place", "memory", NAME_PLACE_DOC,
+        _obj({"name": {"type": "string", "description": "the place, in the operator's words: 'basement'"},
+              "new": {"type": "boolean",
+                      "description": "true: this is a different, new place (not the one recognised)"},
+              "rename": {"type": "boolean",
+                         "description": "true: rename the recognised place to this name (it is the same place)"}},
+             ["name"]),
+        mcp_args=(MCPArg("name", "string"), MCPArg("new", "boolean", False), MCPArg("rename", "boolean", False)),
+        annotations={"readOnlyHint": False}, requires={"cockpit", "places"}, surfaces=("openai", "mcp"),
+        note="D057: names an unnamed recognised place (or one stored on this visit), settles an unsure one "
+             "to the place of that name, or stores a new place from the last recognition's samples. A name "
+             "that is another place's, or differs from the recognised place's own name, is a correction: "
+             "what this visit wrote into the wrongly recognised place (samples, objects, scene-memory "
+             "records) is taken back and moved to the right one; rename=true renames instead. new=true "
+             "twice on one visit stores one place, not two; across visits it stores another each time (not "
+             "idempotent). Not gated (it moves nothing). Cockpit brains and MCP over a cockpit (while recognition "
+             "is on), /api/tool always. MCP: new / rename are booleans refused otherwise, as the cockpit "
+             "refuses them (null = false)."),
+    ToolSpec(
+        "places", "query", PLACES_DOC,
+        _obj(),
+        mcp_args=(),
+        annotations=dict(_RO), requires={"cockpit", "places"}, surfaces=("openai", "mcp"),
+        note="D057: PlaceMemory.places() + the current place. Cockpit brains and MCP over a cockpit (while "
+             "recognition is on), /api/tool always."),
+    ToolSpec(
+        "forget_place", "memory", FORGET_PLACE_DOC,
+        _obj({"name": {"type": "string", "description": "the place's name, 'here', or 'all'"}}, ["name"]),
+        mcp_args=(MCPArg("name", "string"),),
+        annotations={"readOnlyHint": False, "destructiveHint": True}, requires={"cockpit", "places"},
+        surfaces=("openai", "mcp"),
+        note="D057: not gated, but the cockpit refuses a spoken forget_place('all') without the wake word "
+             "(like forget). places.json.bak is written before a wipe; a forgotten place's scene-memory "
+             "file stays on disk, unreachable. Cockpit brains and MCP over a cockpit (while recognition is on), "
+             "/api/tool always."),
 )
 
 BY_NAME = {t.name: t for t in REGISTRY}
@@ -599,16 +671,19 @@ def snapshot_version(caps: dict) -> str:
 
 
 def build(gestures=None, lexicon=None, signed=None, has_eye=False, has_memory=False,
-          is_cockpit=False, envelope=None, robot=None) -> dict:
+          is_cockpit=False, envelope=None, robot=None, has_places=False) -> dict:
     """The capabilities snapshot (a plain JSON dict) for one robot as it is now.
 
     gestures / lexicon: the LIVE lists (None or [] = no enum, as build_tools(None)).
     signed: the gestures that take direction left|right (default harness.backend.SIGNED).
     has_eye / has_memory / is_cockpit: which REGISTRY tools exist (ToolSpec.requires).
+    has_places (D057): the cockpit's place recognition is on (the place tools); off by default,
+    so every list built without it is exactly the D056 one.
     envelope / robot: default_envelope() / default_robot() when None.
     tools: the available tools in REGISTRY order, every text resolved, every enum filled.
     """
-    flags = sorted(f for f, on in (("cockpit", is_cockpit), ("eye", has_eye), ("memory", has_memory)) if on)
+    flags = sorted(f for f, on in (("cockpit", is_cockpit), ("eye", has_eye), ("memory", has_memory),
+                                   ("places", has_places)) if on)
     ctx = {
         "format": FORMAT,
         "capabilities": flags,
@@ -655,7 +730,7 @@ def backend_flags(be) -> dict:
 def fallback_caps(**kw) -> dict:
     """No cockpit: the canon lists (harness.backend), every capability on (documents every tool)."""
     args = dict(gestures=list(GESTURES), lexicon=list(CHORD_WORDS), signed=list(SIGNED),
-                has_eye=True, has_memory=True, is_cockpit=True)
+                has_eye=True, has_memory=True, is_cockpit=True, has_places=True)
     args.update(kw)
     return build(**args)
 
@@ -800,8 +875,11 @@ def to_markdown(caps: dict) -> str:
     add("- **gated**: a spoken line runs it only with the wake word ('pebble, ...') or the "
         "operator's confirmation. `stop` is never gated.")
     add("- **requires**: `eye` = a camera and a vision model, `memory` = the scene memory, "
-        "`cockpit` = a running cockpit (`./rocky.sh cockpit`). A backend without it does not "
-        "offer the tool (absent tool > lying tool).")
+        "`cockpit` = a running cockpit (`./rocky.sh cockpit`), `places` = the cockpit's place "
+        "recognition switched on (`POST /api/awareness {\"recognize\": true}` or `--recognize`; D057), "
+        "as the cockpit reports it in `GET /api/capabilities` (the MCP server follows it; the mock and "
+        "the in-process sim have no places, so never this flag). "
+        "A backend without it does not offer the tool (absent tool > lying tool).")
     add("- **offered to**: local brains = the OpenAI tool list (and Claude mode); MCP = the "
         "`rocky` MCP server; cockpit executor only = callable at `/api/tool/<name>`, offered to "
         "no model.")

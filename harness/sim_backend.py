@@ -138,7 +138,8 @@ class SimBackend:
 
     # ------------------------------------------------------------- tools
     def capabilities(self) -> set:
-        """D056: none (no eye, no scene memory, not a cockpit): the MCP server offers the
+        """D056: none (no eye, no scene memory, not a cockpit; F3: no places either — place
+        recognition lives in a cockpit with it switched on): the MCP server offers the
         eight base tools on it."""
         return derived_capabilities(self)
 

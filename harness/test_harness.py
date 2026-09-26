@@ -259,6 +259,57 @@ async def test_cockpit_proxy_gesture_passes_its_name():
     assert sent[-1] == ("http://127.0.0.1:1/api/tool/gesture", {"name": "wave"})
 
 
+@pytest.mark.asyncio
+async def test_cockpit_proxy_place_tools_post_the_executors_arguments():
+    """F3: the D057 place tools go to the cockpit's executor (POST /api/tool/<name>) with
+    Brains.where_am_i() / name_place(name, new, rename) / places() / forget_place(name)'s
+    arguments; the cockpit validates them (new / rename: booleans)."""
+    from harness.cockpit_backend import CockpitBackend
+    be = CockpitBackend("http://127.0.0.1:1")
+    sent = []
+
+    class _R:
+        def json(self):
+            return {"ok": True}
+
+    async def post(url, json=None):
+        sent.append((url.rsplit("/api/tool/", 1)[1], json))
+        return _R()
+    be.client.post = post
+    for call in (be.where_am_i(), be.places(), be.name_place("basement"),
+                 be.name_place("attic", new=True), be.name_place("study", rename=True), be.forget_place("all")):
+        assert (await call) == {"ok": True}
+    assert sent == [("where_am_i", {}), ("places", {}),
+                    ("name_place", {"name": "basement", "new": False, "rename": False}),
+                    ("name_place", {"name": "attic", "new": True, "rename": False}),
+                    ("name_place", {"name": "study", "new": False, "rename": True}),
+                    ("forget_place", {"name": "all"})]
+
+
+@pytest.mark.asyncio
+async def test_auto_backend_place_tools_need_the_cockpit():
+    """F3: AutoBackend runs the place tools on the cockpit while one answers; with none, the
+    in-process sim has no places and says so (a result, not a raise), like the memory tools."""
+    from harness.cockpit_backend import AutoBackend
+    alive = {"v": False}
+    auto = AutoBackend(url="http://127.0.0.1:1", make_fallback=MockBackend, ttl=0.0,
+                       alive=lambda url: alive["v"])
+    sent = []
+
+    async def fake_cockpit_tool(tool, /, **args):
+        sent.append((tool, args))
+        return {"ok": True, "via": "cockpit"}
+    auto.cockpit._tool = fake_cockpit_tool
+    for call in (auto.where_am_i(), auto.places(), auto.name_place("basement"), auto.forget_place("here")):
+        r = await call
+        assert r["ok"] is False and "cockpit" in r["error"] and "place" in r["error"]
+    assert sent == []
+    alive["v"] = True
+    assert (await auto.name_place("basement", new=True))["via"] == "cockpit"
+    assert (await auto.where_am_i())["via"] == "cockpit"
+    assert sent == [("name_place", {"name": "basement", "new": True, "rename": False}), ("where_am_i", {})]
+
+
 # ------------------------------------------------ move (relative, robot frame)
 @pytest.mark.asyncio
 async def test_move_schema_and_doc(server):

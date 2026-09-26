@@ -166,7 +166,7 @@ The **chord designer** builds new words. A word is one to four syllables; each s
 
 ## Worlds and guards
 
-The **World & map** panel loads presets (flat, room, cliff, obstacle course, rubble field, rough terrain, stairs, slope 8 deg, icy floor), adds objects at x / y, sets friction (0.8 is the foot pad's value) and slope, drops a rough patch ahead, builds a random course from a seed, and saves or loads your own worlds. The map shows the robot, the objects, lidar hits in blue, the goto target in cyan and a latched void as a red wedge. Tapping the map sends a goto. The lidar sees only what stands above its plane (about 0.18 m): a goto into low boxes or rubble ends `stuck`, into tall ones `blocked`.
+The **World & map** panel loads presets (flat, room, cliff, obstacle course, rubble field, rough terrain, stairs, slope 8 deg, icy floor, and the place bench's rooms: `room a` to `room d`, three `+ chair` variants and `room c - ball`), adds objects at x / y, sets friction (0.8 is the foot pad's value) and slope, drops a rough patch ahead, builds a random course from a seed, and saves or loads your own worlds. The map shows the robot, the objects, lidar hits in blue, the goto target in cyan and a latched void as a red wedge. Tapping the map sends a goto. The lidar sees only what stands above its plane (about 0.18 m): a goto into low boxes or rubble ends `stuck`, into tall ones `blocked`.
 
 The header chips that need you:
 
@@ -198,6 +198,79 @@ The awareness settings:
 - **reactions**: a chord when a guard latches or something new appears within 0.5 m, at most once per 30 s.
 
 How far to trust a position: a find sighting is the vision model's box projected onto the floor through the eye's measured pose. The vision bench measured the near edge within 3 cm (median) in clean sim renders out to 1.4 m; on the real camera it is unmeasured. A sighting farther than 2 m is kept as vague. A look description is a guess (0.30 m median error measured), a hint for the map only, never a place to walk to.
+
+## Where am I
+
+The memory above is kept per world, and a world's name is something the simulation knows and a real robot never will. With **place recognition** on, Pebble learns **places** from what it senses instead, and says which one it thinks it is in and how sure it is (D057). You name the places: "hey, I'm in the basement at home", "hey, this is completely new", "hey, this master bedroom has a new chair". Rooms are enough for now; a home made of rooms made of spots comes later.
+
+Three fingerprints, each used only when both the place and the moment have it:
+
+- **The room's shape**, from the lidar: the nearest return in each 10° of direction, plus the spread of all the ranges (that part does not care which way the robot faces).
+- **What the eye saw**: a **look** description turned into a vector by the `embedding` model llama-swap keeps warm on the CPU (about 50 ms; it loads nothing on the GPU). Two descriptions that read alike score high. In the sim's rooms, measured, a description of a different room reads about as alike as a new description of the same one, so this fingerprint helps little there (see [How far to trust a place in the sim](#how-far-to-trust-a-place-in-the-sim)).
+- **The Wi-Fi around it**, on the real robot only: which access points it hears, and how loud. The sim has no radio.
+
+**No fingerprint can say "known" on its own.** Each has a blind spot another covers: the lidar cannot tell two rooms of one shape apart, two rooms can read alike in a description, and Wi-Fi tells buildings apart, not rooms. With only one to compare (the look failed, the embedding model did not answer), the best it says is *ambiguous*, and the line says which one it had: `place: den? (0.72, or workshop 0.55) [scan only]`. It can still say *new* from one fingerprint.
+
+A place keeps up to 8 samples of each, so a place seen from a few spots is recognised from any of them.
+
+### Switching it on
+
+Recognition is **off by default**. Off, the memory is kept per world, the situation line, the model brains' instructions and their tool list are as before (the brain bench's D055 and D055a scores describe this cockpit), and nothing looks by itself after a spawn. Two things still reach the stored places with it off: `places` and `forget_place` sent to `/api/tool/…` from a shell read and delete them, and `GET /api/memory` lists them. Start the cockpit with `./rocky.sh cockpit --recognize`, or switch a running one from a shell (`false` switches it off):
+
+```bash
+curl -s -X POST http://127.0.0.1:8765/api/awareness -H 'Content-Type: application/json' -d '{"recognize": true}'
+```
+
+The page has no switch for it yet. What it does once on:
+
+- After every world load or reset, when the robot has stood still for a second, it takes one lidar sweep and one **look**, turns the description into a vector and compares both with every place it knows. The look goes to the vision role like any look, and loads it if it is not loaded: lfm2.5-vl unloads after 10 minutes idle, and loading it unloads any model outside its `resident` group (a `qwen3.5-9b` brain, for one). If lfm2.5-vl fails, the look falls back to Gemma 12B (about 11 GB) and then Gemma 26B (21 GB). So with recognition on, every world load or reset can move models on the GPU. Meanwhile the situation line says `place: recognising…`.
+- **A world edit** leaves the robot where it stands and in the place it was in: what follows is only a check of that place for changes (see [What changed here](#what-changed-here)), never a new place and never another one. If the edit changed much of what it senses, the answer says so (`it senses it only 0.42 alike now: this place changed a lot`).
+- **ambiguous** or **new**: it turns 30° to the left (an ordinary turn with every guard; no turn if you pressed STOP while it was recognising) and looks again; the two looks are combined. Meanwhile the line says so: `place: den? looking again (0.72, or workshop 0.55)`.
+- **new** (still new after the second look): the place is stored as `new place #1`, `#2` and so on, until you name it, with both looks, so it knows two views of it from the start. A new place and a confirmed new object each get a `curious_question` chord when **reactions** are on (still at most one reaction per 30 s).
+- **known**: a visit. What it sees now is compared with what the place holds (see [What changed here](#what-changed-here)).
+- **The memory follows the place.** Until a verdict, the robot keeps a provisional memory in RAM. Once a place is recognised or stored, what it recorded is carried into that place's memory, saved as `place-<id>.json` in the memory folder, next to `places.json` (the places themselves). After a load or reset, an ambiguous verdict claims no place, so the memory stays provisional until you name the place.
+- A recognition that is interrupted (the robot did not stand still within 20 s, the sim was paused, it moved while looking) or that hits an error is tried again every 5 s for as long as recognition is on, and that never switches it off. A look that fails is not a failure: the sweep decides alone (at best *ambiguous*), and the answer says `scan only: the look failed (…)`. A failed look is never read as "the eye saw nothing there". Only the step that schedules recognitions raising an error three times (a fault in the cockpit itself, counted since the last spawn or result) switches recognition off, with a line in the console.
+
+### The place verdicts
+
+- `place: basement (0.91)`: **known**. The best place scores 0.75 or more and leads the next one by 0.08 or more.
+- `place: NEW (best basement 0.41)`: **new**. Nothing it knows scores 0.5; the number is how alike the nearest known place is. Before the first place it says `place: NEW (no places yet)`.
+- `place: basement? (0.62, or bedroom 0.58)`: **ambiguous**. In between, or two places too close to call: it names both and does not pick.
+- `place: basement? (0.72) [scan only]`: ambiguous because only one fingerprint could be compared (here the lidar).
+- `place: unknown (no signal)`: nothing to compare, no sweep and no description.
+
+The number is always the best place's match score, 0 to 1: a similarity, not a probability. Places that share a name never compete with each other, so a basement stored twice is not ambiguous with itself. The verdict starts the situation line (the Memory panel, the phone's ticker, every chat turn) and rides on the state feed as `place`.
+
+### Telling it where it is
+
+In **Talk** mode, while recognition is on, these lines go to the place tools. The model brains are offered the same four tools (`where_am_i`, `name_place`, `places`, `forget_place`) while recognition is on, and not otherwise. An MCP client driving this cockpit (`./rocky.sh chat`, Claude Code) gets them too while recognition is on: its tool list follows the switch within a few seconds. None of them moves the robot, so they need no wake word, except a spoken "forget all places", which needs it like "forget everything".
+
+- `where am I` · `which room is this` · `have you been here before`: the verdict, its confidence, the place and the changes. It answers from the last recognition; it does not look again.
+- `I'm in the basement at home` · `this is the kitchen`: names the place. A recognised place with no name yet (or only `new place #k`) takes the name. When the robot was not sure, it settles on the stored place of that name, or stores a new one under it. **When the robot was sure and wrong, naming corrects it**: if it said `place: bedroom (0.81)` and you say `this is the kitchen`, it takes this to be the kitchen (the stored one, or a new place of that name), and the bedroom is put back as it was before this visit; what the visit wrote into the bedroom (its fingerprints, objects and memory records) goes to the kitchen. The reply says what it had taken the place for.
+- `call this place the study` · `rename this room to study`: renames the place it recognised (it was right about the place; only the name changes).
+- `this is completely new` · `you've never been here before`: stores a new place, even when the robot thought it knew this one. Said twice on one visit, it is still one place.
+- `this master bedroom has a new chair`: names the place `master bedroom`, then checks it for changes: a look, and when that look shows a change, the 30° turn and a second look. The reply says what two looks agreed on, what only one look saw (not declared), or why nothing was checked.
+- `what places do you know`: every place, its visits and what was seen there.
+- `forget this place` · `forget the place called kitchen` · `forget all places`: `forget that` forgets nothing. Forgetting all of them keeps the old file as `places.json.bak`; a forgotten place's memory file stays on disk, unused.
+
+From a shell: `GET /api/place` returns the current answer and every place; `POST /api/place` takes `{"action": "recognize"}` (add `"force": true` to look again now), `{"action": "name", "name": "kitchen"}` (add `"new": true` for a new place, `"rename": true` to rename the recognised one), `{"action": "forget", "name": "kitchen"}` or `{"action": "list"}`.
+
+### What changed here
+
+Two rules keep the robot honest about changes:
+
+1. **One glance never declares a change.** The robot asks the eye about each thing the place remembers and each thing the look's description mentions: one question per name, the same one **find** asks, answered with a box that is projected onto the floor. A thing is **new here** when the eye boxes something the place does not hold, and **missing** when the eye says a remembered thing is not there while its old spot is in view (86° wide, 0.15 to 2 m ahead of the eye). A spot out of view, an error or an unsure answer claims nothing. None of it is said until a second look, after the 30° turn, asks again and agrees; what only one look saw stays *pending*, and the place's list keeps what it had. Walls and doors belong to the room (the lidar's business) and are never asked about. At most six questions per look, each one a vision-model call, so a check takes a few seconds. The words of the description only suggest what to ask; they no longer decide anything.
+2. **Every verdict carries its confidence**, on the situation line and in every reply.
+
+Two looks agree on a thing when they give it the same name and, when both placed it, put it within 0.5 m of each other (not measured yet). A known place can carry its confirmed changes: `place: bedroom (0.88) — new here: chair; missing: ball`. Changes are only shown on a known place: a new or ambiguous one has nothing trustworthy to compare with.
+
+### How far to trust a place in the sim
+
+- **The lidar sees little in most worlds.** It only sees what stands above its plane (0.18 m above the floor). Of the nine general presets, `room` gives a full sweep, `obstacle course` only its one 0.25 m wall (37 of 360 rays), and the other seven nothing at all: 8 of the 9 give the lidar nothing or next to nothing. Every empty sweep looks like every other, so in those worlds the description does the recognising, and it did not tell the bench's rooms apart: a verdict in those worlds is not measured, do not trust it. The place bench's rooms (`room a` to `room d`) all have walls the lidar sees.
+- Two rooms of the same shape look much alike to the lidar: 0.84 alike with the same walls and other furniture the lidar can see, on synthetic rooms. How much of the visible furniture differs is what sets them apart: the bench's rooms a and b share their walls, b adds a 0.9 m inner wall and two 0.22 m boxes, and they are 0.49 alike. Furniture below the lidar's plane is invisible to it altogether.
+- **The description cannot tell a lidar twin apart.** A room of the same shape whose furniture the lidar sees alike, described the way the sim's looks read, comes out as the same place, *known*. Where the lidar cannot tell, the radio on the real robot or the eye's answers about single objects have to, and neither is measured.
+- **MuJoCo rooms are simple**: flat-shaded walls and boxes on a checker floor, a perfect lidar and a clean 320 × 240 render. Every world load also puts the robot back at the origin facing +x, the spot it first saw the place from, and the sim's pose stands in for odometry, a perfect one. A real robot comes back from anywhere with a real camera, so every result in the sim is an upper bound.
+- **The first place-bench run** (2026-09-25, lfm2.5-vl, 3 trials of 7 visits; the table is in `docs/SIM_GUIDE.md`): 15 of 21 visits right and **never the wrong room**. A room it had seen was recognised 12 times and called ambiguous 6 times; the room it had never seen was new 3 times of 3, at 0.26–0.29, far from the line. The right answers sat at the threshold (known 0.755 to 1.00, ambiguous 0.67 to 0.735), because the lidar matched perfectly and the description did not: lfm2.5-vl mostly describes the floor, and two looks at one spot read differently. **Changes were found 0 times of 6**: twice in three trials the changed room came back ambiguous, so it was never checked, and where it was checked the robot read things out of the description's words, which gave no distances ("a few body lengths"), so the chair was never placed. Since that run, this round: the description is scored from those records so that a re-worded look of the right room no longer counts against it (replayed on the recorded looks, all 18 revisits come out known), the change check asks the eye instead of the words, and a new place takes a second look before it is stored. None of the three is re-measured yet; the next bench run is.
 
 ## RL panel
 
