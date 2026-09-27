@@ -18,10 +18,13 @@ latch pads + magnets but had nothing to bite on — now the deck answers:
     pentagon edge at the az±34 spots — shell amended to one per web.)
   * power-entry grommet Ø9 at (52, -6) + two zip anchors (BUS_STARBOARD
     proposal adopted); the star-board bracket bolts to existing grid
-    holes (20,-20)/(40,-20) — nothing new needed there.
+    holes (0,20)/(0,40) — nothing new needed there (part_busboard's layout
+    audit ray-tests both against this deck).
 
 Deck frame = BODY frame (origin center). Deck TOP surface = leg-frame z -4
-(coxa plates are 4 mm; servo bases sit at leg z 0). Stations at 90 + 72i deg.
+(coxa plates are 4 mm; servo bases sit at leg z 0). Stations at
+robot.legs first_station_deg + i*360/count (90 + 72i), radius
+body.circumradius. The 6 mm thickness is B27 (OPEN: params body.deck_t says 4).
 Part is modeled z 0..T (print flat, dowel posts up); assembly -10..-4.
 """
 import numpy as np
@@ -32,10 +35,25 @@ from iface import leg_port_deck_features, IF
 P = params()
 PR = P["print"]
 R_DECK = 100.0
-T = 6.0
-STATIONS = [90 + 72*i for i in range(5)]
+T = 6.0                                   # B27 OPEN: params body.deck_t (4.0) is unread
+_LEGS = P["robot"]["legs"]
+STATIONS = [_LEGS["first_station_deg"] + i * 360.0 / _LEGS["count"]
+            for i in range(_LEGS["count"])]      # 90, 162, 234, 306, 378 (not wrapped, like pebble.xml)
+R_STATION = P["body"]["circumradius"]     # pentagon center -> leg station (110)
+STRAP_SLOTS = [(sx, sy) for sx in (-26, 26) for sy in (-22, 22)]   # 5 x 30 through-slots
+STRAP_SLOT_WH = (5.0, 30.0)
+GROMMET_XY, GROMMET_D = (52.0, -6.0), 9.0                          # power entry
+ZIP_ANCHORS = [(44.0, -14.0), (60.0, -14.0)]
 
-def _station_xy(ang_deg, leg_x, leg_y, rb=110.0):
+
+def grid_holes():
+    """Electronics grid: M3 thread-forming holes, 20 mm pitch, r < 56,
+    skipping the strap-slot neighbourhoods."""
+    return [(gx, gy) for gx in range(-40, 41, 20) for gy in range(-40, 41, 20)
+            if np.hypot(gx, gy) < 56 and not (abs(abs(gx) - 26) < 7 and abs(abs(gy) - 22) < 19)]
+
+
+def _station_xy(ang_deg, leg_x, leg_y, rb=R_STATION):
     a = np.deg2rad(ang_deg)
     c, s = np.cos(a), np.sin(a)
     return rb*c + c*leg_x - s*leg_y, rb*s + s*leg_x + c*leg_y
@@ -54,7 +72,7 @@ def pentagon_contains(px, py, margin=2.5):
 def body_deck():
     deck = extrude(RegularPolygon(R_DECK, 5, major_radius=True, rotation=90), T)
     for k, ang in enumerate(STATIONS):
-        tf = Rot(0, 0, ang) * Pos(110, 0, 0)
+        tf = Rot(0, 0, ang) * Pos(R_STATION, 0, 0)
         deck = leg_port_deck_features(deck, top_z=T, station_tf=tf)
         # station numbering (backlog B10): k+1 engraved dots by each port —
         # font-free, readable with a headlamp, survives every slicer
@@ -63,15 +81,12 @@ def body_deck():
     # leg-0 = "north" arrow (heading is software, but humans need a datum)
     deck -= Pos(0, 30, T - 0.5) * extrude(Triangle(a=10, b=10, c=10), 1.2)
     # battery straps: two parallel straps along +X at y = +/-22 (slots at x = +/-26)
-    for sx in (-26, 26):
-        for sy in (-22, 22):
-            deck -= Pos(sx, sy, T/2) * Box(5, 30, T+2)
+    for sx, sy in STRAP_SLOTS:
+        deck -= Pos(sx, sy, T/2) * Box(*STRAP_SLOT_WH, T+2)
     # electronics mounting grid: M3 thread-forming holes, 20 mm pitch, r < 56,
     # skipping strap-slot neighborhoods
-    for gx in range(-40, 41, 20):
-        for gy in range(-40, 41, 20):
-            if np.hypot(gx, gy) < 56 and not (abs(abs(gx)-26) < 7 and abs(abs(gy)-22) < 19):
-                deck -= Pos(gx, gy, T/2) * Cylinder(PR["screw_m3_tap"]/2, T+2)
+    for gx, gy in grid_holes():
+        deck -= Pos(gx, gy, T/2) * Cylinder(PR["screw_m3_tap"]/2, T+2)
 
     # ---- v0.4: shell attachment (I3) — the sectors' deck-side answers ----
     FIT = PR["clearance_fit"]
@@ -91,8 +106,8 @@ def body_deck():
         deck -= Rot(0, 0, ang - 25.5) * Pos(76.0, 0, T - 0.7 + 0.01) * \
             Cylinder(4.0, 1.4)
     # power-entry grommet + zip anchors (BUS_STARBOARD.md proposal)
-    deck -= Pos(52, -6, T / 2) * Cylinder(4.5, T + 2)
-    for zx, zy in ((44, -14), (60, -14)):
+    deck -= Pos(*GROMMET_XY, T / 2) * Cylinder(GROMMET_D / 2, T + 2)
+    for zx, zy in ZIP_ANCHORS:
         deck -= Pos(zx, zy, T / 2) * Cylinder(1.7, T + 2)
     return deck
 
@@ -136,13 +151,19 @@ if __name__ == "__main__":
     from part_coxa import coxa_yaw_base
     # pose: deck top at leg z=-4 -> deck body z in [-10,-4]; part modeled 0..6
     d_posed = Pos(0, 0, -10) * d
-    b0 = Rot(0, 0, STATIONS[0]) * Pos(110, 0, 0) * coxa_yaw_base()
-    b1 = Rot(0, 0, STATIONS[1]) * Pos(110, 0, 0) * coxa_yaw_base()
+    b0 = Rot(0, 0, STATIONS[0]) * Pos(R_STATION, 0, 0) * coxa_yaw_base()
+    b1 = Rot(0, 0, STATIONS[1]) * Pos(R_STATION, 0, 0) * coxa_yaw_base()
+    bad = 0
     for name, pair in [("adjacent coxa bases", b0 & b1),
                        ("deck x coxa base (docked: dowels in bores, lip in slot)",
                         d_posed & b0)]:
         v = 0.0 if pair is None else pair.volume
+        bad += v >= 1
         print(f"{name} intersection: {v:.2f} mm^3 ({'OK' if v < 1 else 'CLASH'})")
     bb = d.bounding_box()
+    bed_x, bed_y = PR["bed_mm"][:2]
+    fits = bb.size.X <= bed_x and bb.size.Y <= bed_y
+    bad += not fits
     print(f"deck bbox: {bb.size.X:.0f} x {bb.size.Y:.0f} mm "
-          f"({'FITS Prusa i3 250x210' if bb.size.X <= 250 and bb.size.Y <= 210 else 'TOO BIG'})")
+          f"({f'FITS bed {bed_x:.0f}x{bed_y:.0f}' if fits else 'TOO BIG'})")
+    raise SystemExit(1 if bad else 0)

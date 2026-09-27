@@ -1,4 +1,7 @@
-"""Render STL previews to PNG for visual inspection (headless matplotlib)."""
+"""Render STL previews to PNG for visual inspection (headless matplotlib).
+
+    python3 render.py coxa_fork coxa_yaw_base [--out DIR] [--elev E --azim A]
+"""
 import sys, os
 import numpy as np
 from stl import mesh as stlmesh
@@ -40,18 +43,17 @@ def render(stl_path, png_path, elev=22, azim=-60, title=""):
     print("rendered", png_path)
 
 if __name__ == "__main__":
-    jobs = [
-        ("servo_st3215_dummy", 20, -55, None),
-        ("coxa_yaw_base", 22, -60, None),
-        ("coxa_yaw_base", 18, 120, "coxa_yaw_base (rear)"),
-        ("coxa_fork", 22, -60, None),
-        ("coxa_fork", 30, 140, "coxa_fork (rear)"),
-        ("femur_link", 25, -75, None),
-        ("leg_skeleton_assembly", 18, -55, None),
-        ("leg_skeleton_assembly", 8, -90, "leg skeleton (side, -Y)"),
-    ]
-    for name, elev, azim, title in jobs:
-        suffix = "" if title is None else "_" + title.split("(")[-1].rstrip(")").replace(", ", "_").replace(" ", "_")
-        render(os.path.join(OUT, f"{name}.stl"),
-               os.path.join(OUT, f"{name}{suffix}.png"),
-               elev, azim, title or name)
+    import argparse
+    import tempfile
+    ap = argparse.ArgumentParser(
+        description="Render cad/out STLs to PNG for a quick look (not tracked outputs).")
+    ap.add_argument("names", nargs="+", help="STL basenames in cad/out, e.g. coxa_fork")
+    ap.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "pebble_renders"),
+                    help="PNG directory (default: a temp dir, never the tracked cad/out)")
+    ap.add_argument("--elev", type=float, default=22)
+    ap.add_argument("--azim", type=float, default=-60)
+    a = ap.parse_args()
+    os.makedirs(a.out, exist_ok=True)
+    for name in a.names:
+        render(os.path.join(OUT, f"{name}.stl"), os.path.join(a.out, f"{name}.png"),
+               a.elev, a.azim, name)

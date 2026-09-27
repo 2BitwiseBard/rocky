@@ -27,9 +27,17 @@ servo's horn (4x M3 x 6 from below, off the base) -> servo + fork slide into
 the base cup from +X -> 2 rim screws from above (idler face) + 2 from below
 the plate (horn face, deep pockets) -> hip servo slides into the fork's cup
 from +X -> 4 rim screws -> module hooks onto the deck (I1).
+
+Leg harness (D047 follow-up): the deck's frozen I1 cable pass-through (leg x
+-29) sits UNDER the yaw servo, and the D047 base covered it. The base now
+carries an 11 x 11 channel (harness_path): up out of the cutout and forward
+under the gearbox plateau, sideways to -Y under the cup's side wall, up
+beside the cup, over the top to the yaw servo's plugs. check_assembly
+asserts the path clear of every part at every yaw.
 """
 from build123d import *
 from common import params, export
+from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
 from servo_st3215 import servo_body, plug_envelope, horn_slot_cutter, spec, z_levels
 from servo_mount import servo_cup, cup_extents, cup_screw_columns, FRONT_X, T as CUP_T
 from leg_frame import (YAW_TF, HIP_TF, L1, Z_HIP, YB, HUB_Z0, HUB_Z1, Z_YAW_TOP, ZC_YAW,
@@ -58,9 +66,48 @@ REAR_TRIM_X = -33.9                   # nothing wider than BACK_HALF_W behind th
 
 _e = cup_extents()
 
+# leg harness route (see harness_path): -Y side, because the hip cup and the
+# hip servo's plugs sweep the +Y side at yaw +40. x -24..-13: the front face
+# is the fork's lower-hub radius (never inside the hub at any yaw) and the
+# rear face leaves 1.85 mm of plate round the dowel bore at (-28, -19).
+HARNESS_W = CABLE_CUTOUT_W                   # 11: the XT30 + JST-XH-5 pair's clear section
+HARNESS_X1 = -HUB_D / 2                      # -13
+HARNESS_X0 = HARNESS_X1 - HARNESS_W          # -24
+HARNESS_Z0 = -4.0                            # the deck top (the plate's underside)
+HARNESS_Z1 = HARNESS_Z0 + HARNESS_W          # 7: under the plateau fill (8.7), rails at 6.8 bridge it
+
 
 def _box(x0, x1, y0, y1, z0, z1):
     return Pos((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2) * Box(x1 - x0, y1 - y0, z1 - z0)
+
+
+def harness_path():
+    """The leg drop's route in the leg frame, deck cutout -> yaw servo plugs:
+    [(name, (x0, x1, y0, y1, z0, z1), travel axis)]. Every box has at least
+    an 11 x 11 section across its travel axis and overlaps the next one."""
+    h = HARNESS_W / 2
+    y_riser1 = -(_e["y_out"] + 0.2)                  # -15.9: just outside the cup's side wall
+    y_riser0 = y_riser1 - HARNESS_W                  # -26.9
+    pe = (YAW_TF * plug_envelope(P)).bounding_box()  # the yaw plugs + their wire bend
+    z_top0, z_top1 = pe.max.Z, pe.max.Z + HARNESS_W  # 57.4 .. 68.4
+    return [
+        ("up out of the deck cutout, forward under the plateau",
+         (CABLE_CUTOUT_X - h, HARNESS_X1, -h, h, HARNESS_Z0, HARNESS_Z1), "x"),
+        ("sideways under the cup's -Y side wall",
+         (HARNESS_X0, HARNESS_X1, y_riser0, h, HARNESS_Z0, HARNESS_Z1), "y"),
+        ("up beside the cup",
+         (HARNESS_X0, HARNESS_X1, y_riser0, y_riser1, HARNESS_Z0, z_top1), "z"),
+        ("over the top to the yaw plugs",
+         (HARNESS_X0, HARNESS_X1, y_riser0, pe.max.Y, z_top0, z_top1), "y"),
+    ]
+
+
+def harness_solid():
+    """Union of the harness_path boxes (the cable's keep-out)."""
+    out = None
+    for _, b, _ in harness_path():
+        out = _box(*b) if out is None else out + _box(*b)
+    return out
 
 
 # ---------------------------------------------------------------- base
@@ -89,6 +136,7 @@ def coxa_yaw_base():
         base -= Pos(x, y, (-5 + yaw_z(_e["z_hi_out"]) + CUP_T - 3) / 2) * \
             Cylinder(5.0 / 2, yaw_z(_e["z_hi_out"]) + CUP_T - 3 + 5)
         base -= Pos(x, y, 5) * Cylinder(S["case_screw"]["clear_d"] / 2, 30)
+    base -= harness_solid()                                  # the leg drop's channel
     return base
 
 
@@ -156,6 +204,10 @@ if __name__ == "__main__":
     check("base x (fork + hip servo) over yaw -40..40", worst, lambda v: v < 1, "OK", "CLASH")
     check("fork x yaw plug keep-out", _v(fork & (YAW_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")
     check("base x yaw plug keep-out", _v(base & (YAW_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")
+    harness = harness_solid()
+    check("base x leg harness path", _v(base & harness), lambda v: v < 1, "CLEAR", "BLOCKED")
+    worst = max(_v((Rot(0, 0, yaw) * (fork + hip_s)) & harness) for yaw in range(-40, 41, 10))
+    check("leg harness path x (fork + hip servo) over yaw -40..40", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
     check("fork x hip plug keep-out", _v(fork & (HIP_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")
     # assembly paths
     worst = max(_v((Pos(dx, 0, 0) * (fork + yaw_s)) & base) for dx in (1, 2, 5, 10, 20, 40))

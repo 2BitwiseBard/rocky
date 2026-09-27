@@ -9,7 +9,11 @@ Outputs:
   out/preview_skeleton.stl   all mechanical parts, 5 legs
   out/preview_shells.stl     carapace + limb fairings + closed-hand feet
   out/pebble_full_preview.png  color overlay render (the "cohesion" shot)
+
+Deterministic: the instanced meshes are written with a fixed STL header
+(numpy-stl's own save stamps the wall-clock time into it).
 """
+import struct
 import numpy as np
 from stl import mesh as stlmesh
 from build123d import *
@@ -103,11 +107,19 @@ def instance5(name, offset_x=None):
     out.update_normals()
     return out
 
+def save_stl(mesh, path, name):
+    """Binary STL with a fixed 80-byte header — byte-stable across runs."""
+    with open(path, "wb") as f:
+        f.write(f"{name} (pentapod_preview)".encode()[:80].ljust(80, b" "))
+        f.write(struct.pack("<I", len(mesh.data)))
+        f.write(mesh.data.tobytes())
+
+
 def concat(meshes, name):
     out = stlmesh.Mesh(np.concatenate([m.data for m in meshes]))
     out.update_normals()
     path = os.path.join(OUT, f"{name}.stl")
-    out.save(path)
+    save_stl(out, path, name)
     tris = len(out.vectors)
     print(f"saved {name}: {tris} tris")
     return path

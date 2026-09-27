@@ -86,3 +86,5 @@ if __name__ == "__main__":
     inter = blanks & struct
     v = 0.0 if inter is None else inter.volume
     print(f"dry-fit: blanks x printed structure = {v:.2f} mm^3 ({'OK' if v < 1.0 else 'CLASH'})")
+    if v >= 1.0:                       # a run_all_checks module: fail loudly
+        raise SystemExit(1)

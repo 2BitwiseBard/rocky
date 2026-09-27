@@ -1,5 +1,12 @@
-"""Generate the Print-Prep Pack PDF: per-part 3-view reference sheets with
-dimensions, slicer settings, and the printer-night checklist."""
+"""Generate the Print-Prep Pack PDF (cad/out/PRINT_PREP_PACK.pdf): per-part
+3-view reference sheets with dimensions, slicer settings, and the print-order
+checklist from docs/PRINT_PLAN_2026-09-22.md.
+
+Deterministic: the views are Agg PNGs and the PDF is written with reportlab's
+invariant mode, so regenerating an unchanged tree leaves every byte alone.
+
+    MPLBACKEND=Agg python3 gen_print_pack.py
+"""
 import os
 import numpy as np
 from stl import mesh as stlmesh
@@ -19,8 +26,9 @@ OUT = os.path.join(HERE, "out")
 
 # part, material, orientation, supports, walls/infill, qty, notes
 PARTS = [
-    ("hand_hub", "PLA first / PETG final", "hub top face DOWN (boss up)", "minimal (under lug ring)",
-     "4 walls / 30%", 1, "Print FIRST - mechanism validation. Ream pin holes 2.0mm."),
+    ("hand_hub", "PLA first / PETG final", "hub top face DOWN (boss up)",
+     "ON (tree/organic) under the collar windows + servo-pocket ceiling",
+     "4 walls / 30%", 1, "Hand set: a later tool, after the leg batches. Ream pin holes 2.0mm."),
     ("hand_cam", "CF-PLA or PETG", "flat", "none", "4 walls / 40%", 1,
      "Slot profile is v0.1 placeholder - expect to reprint after bench tuning."),
     ("hand_finger", "PLA first / PETG final", "on wedge side face", "under knuckle tab only",
@@ -29,7 +37,7 @@ PARTS = [
      "5 walls / 40%", 1, "D047: I1 plate + servo CUP (yaw servo shaft-down). 4 rim self-tappers hold the servo."),
     ("coxa_fork", "PETG", "lower hub DOWN (as assembled)", "under the upper plate",
      "5 walls / 40%", 1, "D047: C-fork rides horn (below) + idler (above). 4x M3 x 6 from below into the horn."),
-    ("femur_link", "CF-PLA (hardened nozzle)", "plate A outer face DOWN", "none", "6 walls / 40%", 1,
+    ("femur_link", "PETG (CF-PLA later)", "plate A outer face DOWN", "none", "6 walls / 40%", 1,
      "D047: plate A + bridge walls. Recesses up; 2x M3 x 8 clamps per coupler; 4x M3 x 8 for plate B."),
     ("femur_plate_b", "PETG", "outer face DOWN", "none", "5 walls / 40%", 1,
      "D047: idler-side plate. Pockets ride the hip + knee idlers; notch is the cable-plug side."),
@@ -39,15 +47,16 @@ PARTS = [
      "5 walls / 40%", 1, "D047: knee servo CUP + tube clamp. Pinch-bolt slit prints as-is; run an M3 through after."),
     ("coupon_cup", "PLA", "back wall DOWN", "none", "3 walls / 30%", 1,
      "D047 COUPON 1 — slide a blank/servo in, drive 4 rim screws. Proves every cup."),
-    ("coupon_yaw_hub", "PETG", "hub DOWN", "none", "4 walls / 30%", 1,
+    ("coupon_yaw_hub", "PLA", "hub DOWN", "none", "4 walls / 30%", 1,
      "D047 COUPON 2 — bolt to the horn: answers M2-or-M3 and the hole radius."),
     ("coupon_hip_hub", "PLA", "outer face DOWN", "none", "4 walls / 30%", 1,
      "D047 COUPON 3 — with horn_coupler: 2x M3 x 8 clamps, castellation fit."),
     ("coupon_idler", "PLA", "outer face DOWN", "none", "3 walls / 30%", 1,
      "D047 COUPON 4 — plate B tower on a blank_idler or the real idler."),
     ("servo_blank", "PLA", "bottom DOWN", "none", "2 walls / 15%", 3,
-     "D047 v0.3 stand-in measured from the STEP; glue a blank_idler into the Ø9 pocket."),
-    ("blank_idler", "PLA", "head nub DOWN", "none", "3 walls / 30%", 3, "Glues into servo_blank."),
+     "D047 v0.3 stand-in measured from the STEP; glue a blank_idler into the Ø6.2 pocket."),
+    ("blank_idler", "PLA", "disc DOWN (stub up)", "none", "3 walls / 30%", 3,
+     "Glues into servo_blank. The idler's centre screw head is omitted on purpose."),
     ("tibia_sea_outer", "PETG", "tube socket DOWN", "none", "4 walls / 35%", 1,
      "Verify slider glides in bore before gluing tube. Switch pocket: KW10-class."),
     ("tibia_sea_slider", "PETG", "flange DOWN", "none", "4 walls / 35%", 1,
@@ -89,26 +98,27 @@ styles = getSampleStyleSheet()
 h1 = styles["Title"]; h2 = styles["Heading2"]; body = styles["BodyText"]
 small = ParagraphStyle("small", parent=body, fontSize=8.5, leading=11)
 
-doc = SimpleDocTemplate(os.path.join(HERE, "..", "PRINT_PREP_PACK.pdf"),
-                        pagesize=letter, topMargin=40, bottomMargin=36)
+PDF = os.path.join(OUT, "PRINT_PREP_PACK.pdf")
+doc = SimpleDocTemplate(PDF, pagesize=letter, topMargin=40, bottomMargin=36,
+                        invariant=1)       # no timestamp / random id: byte-stable
 story = []
 story.append(Paragraph("Pebble — Print-Prep Pack (v0.5, D047)", h1))
 story.append(Paragraph(
-    "Project ROCKY · printer-night companion. All dimensions are CAD-nominal in mm; "
+    "Project ROCKY · print-plan companion. All dimensions are CAD-nominal in mm; "
     "servo-interface dims remain VERIFY until the caliper session. Global PETG start: "
     "240&deg;C / bed 85&deg;C / fan 30-50% / 0.2 mm layers / brim on structural parts. "
     "PLA: 210/60, full fan. CF-PLA: 225/60, HARDENED NOZZLE.", body))
 story.append(Spacer(1, 8))
 
-story.append(Paragraph("Printer-night checklist (in order)", h2))
+story.append(Paragraph("Print order (docs/PRINT_PLAN_2026-09-22.md)", h2))
 checklist = [
-    "1. Reassemble hot end from spares; check thermistor/heater leads seated.",
-    "2. PID tune (hot end + bed), then Live-Z first-layer calibration on the PETG you'll use.",
-    "3. E-steps / flow sanity cube; belt twang check.",
-    "4. Acceptance part: ONE hand_finger in PLA (20 min) - checks dimensions, overhangs, cooling.",
-    "5. Print the hand set in PLA (hub, cam, 3x fingers) -> assemble with M2 pins, tune by hand.",
-    "6. Print the four D047 coupons (cup, yaw hub, hip hub, idler) + 1 servo_blank -> fit them BEFORE any full leg part.",
-    "7. Log EVERYTHING in NOTES_INBOX.md: what stuck, what warped, measured hole sizes.",
+    "1. Calibrate the printer (PID, first layer, flow) on the filament you will use.",
+    "2. Batch 0: the fit ladder -> write the measured fits into params.yaml (print:).",
+    "3. Batch 1: the four D047 coupons (cup, yaw hub, hip hub, idler) + 1 servo_blank + 1 blank_idler "
+    "+ 1 horn_coupler, all PLA -> fit them BEFORE any full leg part.",
+    "4. Batch 2: one leg (coxa base + fork, femur link + plate B, couplers, knee carrier, SEA parts, "
+    "3 blanks) -> assemble in the order check_assembly.py asserts.",
+    "5. Log every result in NOTES_INBOX.md: what stuck, what warped, measured hole sizes.",
 ]
 for c in checklist:
     story.append(Paragraph(c, small))
@@ -138,4 +148,4 @@ for name, mat, ori, sup, wi, qty, note in PARTS:
     story.append(Spacer(1, 10))
 
 doc.build(story)
-print("PDF written:", os.path.join(HERE, "..", "PRINT_PREP_PACK.pdf"))
+print("PDF written:", PDF)

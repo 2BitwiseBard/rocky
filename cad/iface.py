@@ -15,6 +15,11 @@ IF = P["interfaces"]
 PR = P["print"]
 FIT = PR["clearance_fit"]
 
+# I1 cable pass-through in the deck (leg-local; frozen D020 convention): the
+# leg drop's XT30 + JST-XH-5 mate here. part_coxa.harness_path() starts on it.
+CABLE_CUTOUT_X = -29.0
+CABLE_CUTOUT_W = 11.0
+
 
 # ====================================================================== I1
 def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
@@ -44,15 +49,15 @@ def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
     deck -= tf * Pos(lp["hook_slot_x"], 0, top_z - 10) * \
         Box(lp["hook_slot_w"], lp["hook_lip_w"] + 2 * FIT, 24)
     # cable pass-through (existing deck convention: leg-local x=-29)
-    deck -= tf * Pos(-29, 0, top_z - 10) * Box(11, 11, 24)
+    deck -= tf * Pos(CABLE_CUTOUT_X, 0, top_z - 10) * Box(CABLE_CUTOUT_W, CABLE_CUTOUT_W, 24)
     return deck
 
 
 def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
-    """Apply the LEG side of the port to a coxa base plate solid (existing
-    part_coxa frame: plate z -4..+2 wait — v0.1 plate is z -4..0 top at 0):
-    dowel bores, captive-thumbscrew bores + head counterbores with retainer
-    lips, and the outboard hook lip. Pass the actual plate z-extents."""
+    """Apply the LEG side of the port to a coxa base plate solid (part_coxa
+    frame: the plate is z -4..0, top at 0): dowel bores, captive-thumbscrew
+    bores + head counterbores with retainer lips, and the inboard hook lip.
+    Pass the actual plate z-extents."""
     lp = IF["leg_port"]
     t = plate_top_z - plate_bot_z
     # dowel bores (through)
@@ -73,7 +78,7 @@ def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
     # reach-out to the slot, down-turn through it (deck is 6 thick), then a
     # foot pointing further inboard (-x) that hooks under the deck bottom
     lipw = lp["hook_lip_w"]
-    deck_t = 6.0
+    deck_t = 6.0                     # B27 OPEN: params body.deck_t (4.0) is unread
     lip = Pos(-47.2, 0, plate_bot_z + 1.0) * Box(4.4, lipw, 2)         # reach
     lip += Pos(lp["hook_slot_x"] - 0.4, 0,
                plate_bot_z - (deck_t + 1.6) / 2 + 2.0) * \

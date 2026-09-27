@@ -159,28 +159,30 @@ if __name__ == "__main__":
     print("rim screws top:", case_screw_positions("top"), "bot:", case_screw_positions("bot"))
     fails = []
     ref_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref", "STS3215_03a.step")
-    if os.path.exists(ref_path):
-        ref = import_step(ref_path)
-        # STEP frame: axis at x = 12.5 of a case centred at 0, z = 0 at the case mid-plane
-        ref = Pos(-12.5, 0, spec()["body_h"] / 2) * ref
-        # compare a hair-inflated model so no face is coincident with the STEP's
-        # (coincident faces make OCC booleans return garbage)
-        bc = servo_body(clearance=0.02)
-        common = bc & ref
-        vc = 0.0 if common is None else common.volume
-        ve, vm = bc.volume - vc, ref.volume - vc
-        missing = ref - bc
-        print(f"model vs STEP: model {b.volume/1000:.1f} cm^3, STEP {ref.volume/1000:.1f} cm^3, "
-              f"model-outside-STEP {ve:.0f} mm^3, STEP-outside-model {vm:.0f} mm^3")
-        # the model is a pocket-subtraction ENVELOPE: it may be fatter (chamfers,
-        # hole fill, slot hedge) but no real feature may poke out of it. Report
-        # the biggest missing blobs so a regression is visible.
-        if missing is not None:
-            for sol in sorted(missing.solids(), key=lambda q: -q.volume)[:4]:
-                bb = sol.bounding_box()
-                print(f"   STEP outside model: {sol.volume:6.1f} mm^3 at x {bb.min.X:.1f}..{bb.max.X:.1f} "
-                      f"y {bb.min.Y:.1f}..{bb.max.Y:.1f} z {bb.min.Z:.1f}..{bb.max.Z:.1f}")
-        if vm > 150: fails.append("STEP features outside the model")
-        if ve > 3000: fails.append("model much fatter than the STEP")
+    with open(ref_path, "rb") as f:            # a CI module: a missing reference is a failure
+        if f.read(40).startswith(b"version https://git-lfs"):
+            sys.exit(f"{ref_path} is a git-lfs pointer: run `git lfs pull` (the check needs the solid)")
+    ref = import_step(ref_path)
+    # STEP frame: axis at x = 12.5 of a case centred at 0, z = 0 at the case mid-plane
+    ref = Pos(-12.5, 0, spec()["body_h"] / 2) * ref
+    # compare a hair-inflated model so no face is coincident with the STEP's
+    # (coincident faces make OCC booleans return garbage)
+    bc = servo_body(clearance=0.02)
+    common = bc & ref
+    vc = 0.0 if common is None else common.volume
+    ve, vm = bc.volume - vc, ref.volume - vc
+    missing = ref - bc
+    print(f"model vs STEP: model {b.volume/1000:.1f} cm^3, STEP {ref.volume/1000:.1f} cm^3, "
+          f"model-outside-STEP {ve:.0f} mm^3, STEP-outside-model {vm:.0f} mm^3")
+    # the model is a pocket-subtraction ENVELOPE: it may be fatter (chamfers,
+    # hole fill, slot hedge) but no real feature may poke out of it. Report
+    # the biggest missing blobs so a regression is visible.
+    if missing is not None:
+        for sol in sorted(missing.solids(), key=lambda q: -q.volume)[:4]:
+            bb = sol.bounding_box()
+            print(f"   STEP outside model: {sol.volume:6.1f} mm^3 at x {bb.min.X:.1f}..{bb.max.X:.1f} "
+                  f"y {bb.min.Y:.1f}..{bb.max.Y:.1f} z {bb.min.Z:.1f}..{bb.max.Z:.1f}")
+    if vm > 150: fails.append("STEP features outside the model")
+    if ve > 3000: fails.append("model much fatter than the STEP")
     print(f"servo_st3215 checks: {'ALL CLEAN' if not fails else 'FAILED: ' + ', '.join(fails)}")
     if fails: sys.exit(1)

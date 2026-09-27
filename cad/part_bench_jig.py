@@ -114,13 +114,14 @@ if __name__ == "__main__":
     c = jig_column()
     export(b, "jig_base")
     export(c, "jig_column")
-    for name, part, maxx, maxy in (("base", b, 250, 210), ("column", c, 250, 210)):
+    bed_x, bed_y = PR["bed_mm"][:2]
+    for name, part in (("base", b), ("column", c)):
         bb = part.bounding_box()
         dims = sorted([bb.size.X, bb.size.Y, bb.size.Z], reverse=True)
-        fits = dims[0] <= 250 and dims[1] <= 210
+        fits = dims[0] <= bed_x and dims[1] <= bed_y
         print(f"jig_{name}: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} "
               f"-> print footprint {dims[0]:.0f} x {dims[1]:.0f} "
-              f"({'FITS Prusa bed' if fits else 'TOO BIG'})")
+              f"({f'FITS bed {bed_x:.0f}x{bed_y:.0f}' if fits else 'TOO BIG'})")
     inter = b & c
     v = 0.0 if inter is None else inter.volume
     print(f"base x column interference: {v:.1f} mm^3 "

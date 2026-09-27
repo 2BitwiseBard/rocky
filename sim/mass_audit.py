@@ -3,8 +3,9 @@
 
 The MJCF carried a hand-typed budget (M_TORSO 1.35, M_COXA 0.14, M_FEMUR
 0.03, M_TIBIA 0.17 kg) since session 2. This derives every link from the
-CURRENT cad/out STL volumes (x PLA density x the same fill factors
-print_estimate.py uses) plus the non-printed hardware in params.yaml
+CURRENT cad/out STL volumes (x PLA density x print_estimate.FILL, the
+per-part fill factors — NOT its batch list, so re-planning the print batches
+never moves a mass) plus the non-printed hardware in params.yaml
 `mass_hw` — and writes sim/mass_budget.json, which build_mjcf.py now reads.
 
 Honesty: fill factors are +-30 % and mass_hw is all VERIFY. This is the
@@ -19,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CAD = os.path.join(HERE, "..", "cad")
 sys.path.insert(0, CAD)
 from common import params                                    # noqa: E402
-from print_estimate import stl_volume_cm3, PLA, PLATES       # noqa: E402
+from print_estimate import stl_volume_cm3, PLA, FILL         # noqa: E402
 
 P = params()
 HW = P["mass_hw"]
@@ -28,16 +29,6 @@ HW = P["mass_hw"]
 SERVO_G = float(P["actuators"][P["leg"].get("servo", "st3215")]["mass_g"])
 CLAW_SERVO_G = float(P["actuators"][P["leg"].get("claw_servo", "scs0009")]["mass_g"])
 PETG = 1.27
-
-FILL = {}
-for plate in PLATES.values():
-    for name, qty, ff, layer in plate:
-        FILL[name] = ff
-FILL.setdefault("shell_cap", 0.6)
-FILL.setdefault("avionics_tray", 0.5)
-FILL.setdefault("battery_sled", 0.5)
-FILL.setdefault("belly_door", 0.5)
-FILL.setdefault("busboard_bracket", 0.6)
 
 
 def printed_g(name, material=PLA):

@@ -69,7 +69,7 @@ def frame_coupon():
 
 def dovetail_male_coupon():
     """Standalone I6 male segment on a thin base — fit-test against the shoe
-    tonight without printing the whole 116 mm shell sector."""
+    without printing the whole 116 mm shell sector."""
     base = Pos(0, 0, 1.5) * Box(34, 22, 3)
     return base + Pos(0, 0, 3) * Rot(0, 0, 90) * dovetail_male()
 

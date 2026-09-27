@@ -9,11 +9,24 @@ sense" after any params.yaml or interface change.
     python3 run_all_checks.py            # full tree, PARALLEL (default)
     python3 run_all_checks.py --serial   # one at a time (easier log reading)
     python3 run_all_checks.py part_shell part_deck   # subset
+    python3 run_all_checks.py --derived  # + regenerate the derived outputs
 
-Parallel notes (session 6): modules are already independent subprocesses,
-so they run N-at-a-time (N = cpu count, min 2). Each module only writes its
-OWN exports — no shared files, no races. Results print in completion order;
-the summary is the same either way. 188 s serial → ~half on 2 cores.
+Parallel notes: modules are already independent subprocesses, so they run
+N-at-a-time (N = cpu count, min 2). Each module only writes its OWN exports
+— no shared files, no races. Results print in completion order; the summary
+is the same either way. ~150 s wall on a laptop (part_hand is the long pole).
+
+The servo model is checked first against the reference STEP (servo_st3215:
+cad/ref/STS3215_03a.step); servo_mount and part_port_coupon are the only
+writers of servo_cup / port_coupon_* that check_printability audits;
+leg_assembly writes the posed dry-fit exports the viewer shows; and
+check_interference sweeps the yaw stage with the real servo solids.
+
+--derived (after a clean tree) rebuilds the outputs nothing checks but
+people look at: pentapod_preview (full-robot meshes + render), print_estimate
+(cad/out/print_estimate.json), gen_print_pack (cad/out/PRINT_PREP_PACK.pdf +
+views_*.png) and make_viewer (cad/pebble_viewer.html). All four write
+deterministic bytes, so an unchanged tree leaves git clean.
 
 Exit code = number of failing modules.
 """
@@ -24,30 +37,36 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 MODULES = [
+    "servo_st3215", "servo_mount", "part_port_coupon",
     "part_coxa", "part_femur", "part_tibia", "part_hand", "part_deck",
     "part_panel", "part_battery", "part_avionics", "part_bench_jig",
     "part_coupler", "part_footpad", "part_fit_ladder", "part_smallwins",
     "part_shell", "part_busboard", "part_stand", "part_tools",
     "part_clips", "part_dock", "part_servo_blank",
     "part_leg_coupons", "check_assembly",        # D046: joint coupons + joint suite
+    "leg_assembly", "check_interference",
 ]
+TIMEOUT_S = 900
 
 
 def run_one(m):
     t0 = time.time()
     try:
-        r = subprocess.run([sys.executable, f"{m}.py"],
-                           capture_output=True, text=True, timeout=900)
+        env = dict(os.environ, MPLBACKEND="Agg")
+        r = subprocess.run([sys.executable, f"{m}.py"], cwd=HERE, env=env,
+                           capture_output=True, text=True, timeout=TIMEOUT_S)
         ok = r.returncode == 0
         tail = (r.stdout + r.stderr).strip().split("\n")[-1][:90]
     except subprocess.TimeoutExpired:
-        ok, tail = False, "TIMEOUT (420 s)"
+        ok, tail = False, f"TIMEOUT ({TIMEOUT_S} s)"
     except FileNotFoundError:
         ok, tail = False, "missing file"
     return (m, ok, time.time() - t0, tail)
 
 
 POST = ["check_printability"]     # runs AFTER every module has exported (D038)
+DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer"]
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
@@ -75,6 +94,12 @@ def main():
     if mods == MODULES and "--no-post" not in args:
         for m in POST:
             record(run_one(m))
+    if "--derived" in args:
+        if any(not ok for _, ok, *_ in results):
+            print("derived outputs NOT rebuilt: the checks failed")
+        else:
+            for m in DERIVED:                  # in order: each reads the one before
+                record(run_one(m))
     bad = [m for m, ok, *_ in results if not ok]
     print(f"\n{len(results) - len(bad)}/{len(results)} modules pass "
           f"({time.time()-t00:.0f} s total)"

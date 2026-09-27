@@ -222,18 +222,18 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 3007.5,
-  "widest_overhang_step": 43.9,
+  "overhang_area": 2901.5,
+  "widest_overhang_step": 32.9,
   "widest_overhang_z": 9.5,
-  "widest_cantilever": 43.9,
+  "widest_cantilever": 32.9,
   "widest_cantilever_z": 9.5,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 6.22,
+  "thin_soft_area": 6.63,
   "hard": [],
   "warn": [
-   "overhang step 43.9 mm wide at z=9.5 (cantilever)",
-   "walls < 1.6 mm: 6.2 mm\u00b2 in a layer"
+   "overhang step 32.9 mm wide at z=9.5 (cantilever)",
+   "walls < 1.6 mm: 6.6 mm\u00b2 in a layer"
   ]
  },
  {
@@ -1178,7 +1178,7 @@
   "part": "busboard_bracket",
   "size": [
    46.0,
-   54.0,
+   44.0,
    11.0
   ],
   "bed_ok": true,
@@ -1213,7 +1213,7 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 1305.2,
+  "overhang_area": 1303.2,
   "widest_overhang_step": 10.0,
   "widest_overhang_z": 11.9,
   "widest_cantilever": 10.0,
@@ -1436,7 +1436,7 @@
   "part": "dock_block",
   "size": [
    26.0,
-   32.4,
+   32.2,
    20.0
   ],
   "bed_ok": true,
@@ -1445,10 +1445,10 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 1445.8,
-  "widest_overhang_step": 23.8,
+  "overhang_area": 1433.4,
+  "widest_overhang_step": 23.7,
   "widest_overhang_z": 18.9,
-  "widest_cantilever": 23.8,
+  "widest_cantilever": 23.7,
   "widest_cantilever_z": 18.9,
   "thin_hard_area": 2.21,
   "thin_hard_z": 16.1,
@@ -1456,7 +1456,7 @@
   "hard": [],
   "warn": [
    "deliberate flexure walls < 0.8 mm (2.2 mm\u00b2)",
-   "overhang step 23.8 mm wide at z=18.9 (cantilever)",
+   "overhang step 23.7 mm wide at z=18.9 (cantilever)",
    "walls < 1.6 mm: 6.6 mm\u00b2 in a layer"
   ]
  },

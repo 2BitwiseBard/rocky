@@ -25,10 +25,10 @@ Anatomy (body frame, deck TOP at z = -4 per the frozen conventions):
     an I5 XT30 spare tap through the cable notch.
   * B9 vent gills: three angled slots per side through the tier-1 wall,
     outside the arch, over the leg bays (servo airflow).
-  * attachment (I3): flange ring seats on the deck top with ONE
-    quarter-turn latch insert pocket per sector (az 0, r 75) + TWO magnet
-    pockets (az +/-28); deck-side strikes land in deck v0.4 (deck v0.3
-    predates this part — noted in TODO).
+  * attachment (I3): each sector foot carries ONE quarter-turn latch
+    insert pocket (az +27.5, r 74.5) and ONE magnet pocket (az -25.5,
+    r 76) — every web joint pairs neighbour A's latch with neighbour B's
+    magnet (D030); deck v0.4 carries the washer strikes.
   * top hatch: rocky cap, plug matches the seat outline with print
     clearance, five seat magnets (one per sector, az 0 — the only pattern
     compatible with 5 identical sectors).
@@ -319,6 +319,10 @@ def keepouts():
     # coxa base plate slab: Box(66, 44, 4) leg x -46..20 (+ cantilever to
     # the fork zone), y +/-22 (+2.5 margin), z -4..0 (+0.5)
     ko["coxa_plate"] = Pos(97.0, 0, -2.0) * Box(70, 49, 5.0)
+    # the leg harness route (part_coxa.harness_path): deck cutout -> up beside
+    # the yaw cup -> over the top to the yaw plugs, 11 x 11
+    from part_coxa import harness_solid
+    ko["leg_harness"] = Pos(110.0, 0, 0) * harness_solid()
     # the deck itself: R100 pentagon, corners AT stations, spans z -8..-4;
     # keep-out top 0.1 below the seating plane so contact is allowed
     ko["deck_slab"] = Pos(0, 0, DECK_TOP - 4.1) * \
@@ -357,5 +361,6 @@ if __name__ == "__main__":
         bb = p.bounding_box()
         print(f"  {n}: bbox {bb.size.X:.0f} x {bb.size.Y:.0f} x "
               f"{bb.size.Z:.0f} mm, {p.volume / 1000:.0f} cm^3 "
-              f"({'fits bed' if bb.size.X <= 250 and bb.size.Y <= 210 else 'TOO BIG'})")
+              f"({'fits bed' if bb.size.X <= PR['bed_mm'][0] and bb.size.Y <= PR['bed_mm'][1] else 'TOO BIG'})")
     print("ALL CLEAR" if ok else "FIX BEFORE PRINTING")
+    raise SystemExit(0 if ok else 1)

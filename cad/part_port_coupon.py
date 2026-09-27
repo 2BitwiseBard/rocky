@@ -8,7 +8,7 @@ iface.py code the real deck v0.3 + coxa v0.2 use — nothing re-modeled):
   port_coupon_plate : coxa-plate patch — dowel bores, thumbscrew bores +
                       head wells, the inboard hook lip
 
-The physical test (tonight, after the fit ladder):
+The physical test (after the fit ladder):
   1. present the plate at ~15°, drop the lip through the slot
   2. slide inboard until the foot hooks under
   3. pivot flat — dowels must enter their bores WITHOUT force
@@ -16,14 +16,14 @@ The physical test (tonight, after the fit ladder):
   5. tug every direction; note slop/binding in NOTES_INBOX
 
 If this dance works on the coupons, deck v0.3 + coxa v0.2 print with
-confidence. If it binds, session 5 fixes params, not printed parts.
+confidence. If it binds, fix params, not printed parts.
 """
 from build123d import *
 from common import params, export
 from iface import leg_port_deck_features, leg_port_plate_features, IF
 
 P = params()
-T_DECK = 6.0
+T_DECK = 6.0          # B27 OPEN: the deck thickness (params body.deck_t says 4, unread)
 
 
 def port_coupon_deck():
@@ -50,6 +50,8 @@ if __name__ == "__main__":
     v = 0.0 if inter is None else inter.volume
     print(f"coupon dock (dowels in bores, lip in slot): {v:.2f} mm^3 "
           f"({'OK' if v < 1 else 'CLASH'})")
+    if v >= 1:                            # a run_all_checks module: fail loudly
+        raise SystemExit(1)
     for name, part in (("deck", d), ("plate", p)):
         bb = part.bounding_box()
         print(f"  port_coupon_{name}: {bb.size.X:.0f} x {bb.size.Y:.0f} x "

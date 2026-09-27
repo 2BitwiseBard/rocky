@@ -1,17 +1,17 @@
-"""Fit ladder — the FIRST print after the Prusa refurb. Measures the printer.
+"""Fit ladder — the first print on a new or rebuilt printer. Measures the machine.
 
 Every clearance in params.yaml (fit 0.30, press 0.15, M3 tap 2.8, heat-set
-4.6) is a guess calibrated to "old Prusa, generally". Tonight's refurbed
-machine is a new animal. This one 25-minute plate answers, with actual
-plastic: which dowel bore slides, which M3 hole threads, which pocket grips
-an insert — and session 5 writes the MEASURED values back into params and
-regenerates everything.
+4.6) is a generic FDM guess; a given printer (and filament) prints its own
+fits. This one 25-minute plate answers, with actual plastic: which dowel
+bore slides, which M3 hole threads, which pocket grips an insert — and the
+MEASURED values go back into params (print:) before anything is regenerated.
 
 One plate, five labeled rows (tally dots above each feature, font-free):
   row E: (v2, session 6) the HARDWARE fits the v1 ladder missed —
          Ø2 hinge-pin holes at 2.00 / 2.10 / 2.20 (Ø2 filament = pin stock,
-         testable TONIGHT with no ordered parts), 683ZZ bearing PRESS
-         pockets at 6.85 / 6.95 / 7.05 x 3.4 deep (coxa crown seat), and
+         testable with no ordered parts), 683ZZ bearing PRESS pockets at
+         6.85 / 6.95 / 7.05 x 3.4 deep (the pre-D047 coxa crown seat; moot
+         since D047 removed the bearing, kept until the next ladder), and
          Ø10 carbon-tube sockets at 10.15 / 10.30 / 10.45 (tibia clamp,
          SEA outer, hand boss all ride this fit). Bearing/tube columns
          re-tested when Batch 0/1 arrives — the coupon keeps.

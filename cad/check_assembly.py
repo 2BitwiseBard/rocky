@@ -3,13 +3,15 @@ LEG-CHAIN joint be put together in order, and what holds it once it is.
 
 Joints (D047): J1 yaw horn+idler <-> fork, J2 hip horn <-> coupler <-> plate A
 and idler <-> plate B, J3 the same at the knee, J4 servo <-> cup (all three),
-J5 carrier <-> tube (pinch clamp, checked in part_tibia). Each joint:
+J5 carrier <-> tube (pinch clamp, checked in part_tibia). Plus the leg
+HARNESS: a clear 11 x 11 path from the deck's I1 cable pass-through to the
+yaw servo's plugs, against every part at every yaw. Each joint:
 alignment across both mating parts, driver access against EVERYTHING present
 when the screw is driven, thread/nut path, capture (a 2 mm nudge must meet
 material — or be a declared bolted direction), and the cable plugs' keep-out.
-Written against the v0.8.0 tree, where it found the coxa assembly deadlock
-and the unlocated femur link (NOTES_INBOX 2026-09-17); it must stay CLEAN
-from here on. Exit code = failures.
+It found the D046 coxa assembly deadlock and the unlocated femur link
+(NOTES_INBOX 2026-09-17); it must stay CLEAN from here on. Exit code =
+failures.
 """
 import sys
 from build123d import *
@@ -17,7 +19,8 @@ from common import params
 from servo_st3215 import horn_screw_angles, plug_envelope, spec
 from servo_mount import cup_screw_columns
 from leg_frame import YAW_TF, HIP_TF, KNEE_TF, L1, KNEE_X, Z_HIP
-from part_coxa import HUB_Z0, CB_DEPTH
+from part_coxa import HUB_Z0, CB_DEPTH, harness_path, harness_solid, HARNESS_W
+from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
 from part_coupler import RECESS_CLAMP_ANGS, TAP_R_POS, DISC_T, HEAD_CB_DEPTH
 from part_femur import (LINK_TF, YA0, YA1, T as FEM_T, BOSS_X, BOSS_ZC, RAIL_Y0, YB1, BOSS_H)
 from leg_assembly import build_dryfit
@@ -125,6 +128,29 @@ for hip in range(-70, 91, 10):
     moving = r * (link + plate_b)
     worst = max(worst, v(moving & fork), v(moving & bh), v(moving & base))
 check("femur (link + plate B) x fork/base/hip servo over hip -70..90", worst, lambda x: x < 1, "OK", "CLASH")
+
+print("== leg harness: deck I1 cable pass-through -> yaw servo plugs (XT30 + JST-XH-5)")
+segs = harness_path()
+_ax = {"x": 0, "y": 1, "z": 2}
+narrow = min(min(b[2 * k + 1] - b[2 * k] for k in range(3) if k != _ax[t]) for _, b, t in segs)
+check(f"narrowest section across the travel (>= {HARNESS_W:.0f} mm, as mm)", narrow,
+      lambda x: x >= HARNESS_W - 1e-6, "OPEN", "TOO TIGHT")
+_boxes = [Pos((b[0] + b[1]) / 2, (b[2] + b[3]) / 2, (b[4] + b[5]) / 2) *
+          Box(b[1] - b[0], b[3] - b[2], b[5] - b[4]) for _, b, _ in segs]
+worst = min(v(a & b) for a, b in zip(_boxes, _boxes[1:]))
+check("consecutive path segments overlap (continuous route)", worst, lambda x: x > 1, "CONTINUOUS", "BROKEN")
+harness = harness_solid()
+mouth = Pos(CABLE_CUTOUT_X, 0, -4 + 0.5) * Box(CABLE_CUTOUT_W, CABLE_CUTOUT_W, 1.0)
+check("path starts on the whole deck cutout (11 x 11 x 1 slab above it)", v(harness & mouth),
+      lambda x: x > CABLE_CUTOUT_W ** 2 - 1, "ON THE CUTOUT", "MISSES IT")
+check("path ends on the yaw plugs (plug keep-out lifted 1 mm meets it)",
+      v(harness & (Pos(0, 0, 1) * YAW_TF * plug_envelope(P))), lambda x: x > 1, "REACHES", "SHORT")
+check("path x base + yaw blank (static)", v(harness & (base + by)), lambda x: x < 1, "CLEAR", "BLOCKED")
+yaw_lo, yaw_hi = P["joints"]["pos_deg"]["yaw"]
+moving = fork + bh + bk + link + plate_b + carrier + df["coupler_hip"] + df["coupler_knee"]
+worst = max(v((Rot(0, 0, yaw) * moving) & harness) for yaw in range(yaw_lo, yaw_hi + 1, 10))
+check(f"path x the yawing leg (fork, femur, knee, blanks) over yaw {yaw_lo}..{yaw_hi}", worst,
+      lambda x: x < 1, "CLEAR", "BLOCKED")
 
 print()
 print("check_assembly:", "CLEAN" if not fails else f"{len(fails)} FAILURES")

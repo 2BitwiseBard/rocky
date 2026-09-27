@@ -27,6 +27,11 @@ BH_W, BH_H = AT["bulkhead_w"], AT["bulkhead_h"]            # 70 x 26
 
 # Pi 5 mounting: 58 x 49 hole rectangle, M2.5
 PI_HOLES = [(-29, -24.5), (29, -24.5), (-29, 24.5), (29, 24.5)]
+# where the tray sits on the deck (body frame): the ASSUMED layout of
+# docs/BUS_STARBOARD.md, a proposal until the deck layout freezes. The
+# star-board bracket's layout audit (part_busboard) keeps clear of it.
+TRAY_XY = (0.0, -38.0)
+RAIL_POSE_X = W / 2 + 5.3            # rail block centre off the tray centre (see __main__)
 
 
 def avionics_tray():
@@ -69,6 +74,18 @@ def avionics_tray():
     return tray
 
 
+def tray_footprint():
+    """The tray's plan envelope on the deck, tray-local: [(cx, cy, w, h)] —
+    plate + rail wings, both rail blocks with their bolt tabs, the latch
+    tongue. For layout audits (a keep-out, not a model)."""
+    rail_x0 = RAIL_POSE_X - 5.0                  # block 10 wide, tabs 8 more outboard
+    rail_x1 = RAIL_POSE_X + 7.0 + 4.0
+    return [(0.0, 0.0, W + 2 * RAIL, L),
+            ((rail_x0 + rail_x1) / 2, 0.0, rail_x1 - rail_x0, 56.0),
+            (-(rail_x0 + rail_x1) / 2, 0.0, rail_x1 - rail_x0, 56.0),
+            (0.0, L / 2 + 8, 30.0, 16.0)]
+
+
 def tray_rail():
     """Deck rail block: C-channel OPENING at its inner (+y local) face — the
     tray wing slides straight in. Bolt tabs on the closed side (outboard when
@@ -100,7 +117,7 @@ if __name__ == "__main__":
     # swallows the +x wing. Rot(z,90): local +y face -> posed -x (inboard).
     # Open face lands at plate edge + 0.3 clearance: x = 42.3 -> block center
     # x = 47.3; channel z center 5.4 -> offset so it hits the wing at z=2.
-    posed = Pos(W / 2 + 5.3, 0, (T - 1.0) - 5.4) * Rot(0, 0, 90) * rail
+    posed = Pos(RAIL_POSE_X, 0, (T - 1.0) - 5.4) * Rot(0, 0, 90) * rail
     inter = tray & posed
     v = 0.0 if inter is None else inter.volume
     print(f"tray wing x rail channel: {v:.2f} mm^3 ({'SLIDES' if v < 1 else 'BINDS'})")

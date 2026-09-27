@@ -1,11 +1,16 @@
-"""Self-contained HTML 3D viewer, v0.3 — the whole project, zero deps.
+"""Self-contained HTML 3D viewer (cad/pebble_viewer.html) — the whole
+project, zero deps.
 
-Modes: Full robot · Carapace v0 · Bench & field (stand stack, dock,
-tools, clips) · Leg assembly · Hand · Parts: mechanism · Parts: session
-4-5. Hand-rolled WebGL + orbit controls; STLs embedded base64; per-mode
-hint text. Browser-verify before delivery (D007).
+Modes: Full robot · Carapace · Leg dry-fit · Bench & field (stand stack,
+dock, tools, clips) · Leg assembly · Hand · Parts: leg & hand · Parts: body
+& electronics. Hand-rolled WebGL + orbit controls; STLs embedded base64;
+per-mode hint text. Browser-verify before delivery (D007): test_viewer.py.
+
+Inputs are cad/out STLs (run_all_checks, then pentapod_preview for the
+full-robot meshes); the assembled carapace ring is built here in memory
+from shell_sector x5 + shell_cap. Output bytes depend only on those inputs.
 """
-import base64, os, json
+import base64, os, json, struct
 import numpy as np
 from stl import mesh as stlmesh
 
@@ -15,6 +20,30 @@ OUT = os.path.join(HERE, "out")
 def b64(name):
     with open(os.path.join(OUT, f"{name}.stl"), "rb") as f:
         return base64.b64encode(f.read()).decode()
+
+
+def b64_mesh(mesh, name):
+    """Base64 of a binary STL built in memory (fixed header: byte-stable)."""
+    head = f"{name} (make_viewer)".encode()[:80].ljust(80, b" ")
+    return base64.b64encode(head + struct.pack("<I", len(mesh.data)) +
+                            mesh.data.tobytes()).decode()
+
+
+def shell_ring():
+    """The assembled carapace: shell_sector rotated 5x at 72 deg + the cap
+    (the sector is modelled in the body frame, so no radial offset)."""
+    sector = stlmesh.Mesh.from_file(os.path.join(OUT, "shell_sector.stl"))
+    parts = []
+    for i in range(5):
+        th = np.deg2rad(72 * i)
+        rz = np.array([[np.cos(th), -np.sin(th), 0], [np.sin(th), np.cos(th), 0], [0, 0, 1]])
+        m = stlmesh.Mesh(sector.data.copy())
+        m.vectors[:] = (m.vectors.reshape(-1, 3) @ rz.T).reshape(-1, 3, 3)
+        parts.append(m.data)
+    parts.append(stlmesh.Mesh.from_file(os.path.join(OUT, "shell_cap.stl")).data)
+    ring = stlmesh.Mesh(np.concatenate(parts))
+    ring.update_normals()
+    return ring
 
 def bbox(name):
     m = stlmesh.Mesh.from_file(os.path.join(OUT, f"{name}.stl"))
@@ -89,26 +118,27 @@ MODES = [
             dict(label="Skeleton / mechanics", color=[0.24, 0.24, 0.30],
                  data=b64("preview_skeleton"), offset=[0, 0, 0]),
          ]),
-    dict(id="shell", label="Carapace v0", target=[0, 0, 25], radius=430, grid_z=-15,
-         hint="Session 5: terraced rock tiers, leg arches, vent gills, LED "
-              "channel, I6 bars, latch feet — and 72°-periodic seams with a "
-              "chaining tongue-and-groove (print two sectors to feel it).",
+    dict(id="shell", label="Carapace", target=[0, 0, 25], radius=430, grid_z=-15,
+         hint="Terraced rock tiers, leg arches, vent gills, LED channel, I6 "
+              "bars, latch feet — and 72°-periodic seams with a chaining "
+              "tongue-and-groove (print two sectors to feel it).",
          items=[
             dict(label="Assembled (5 sectors + cap)", color=[0.55, 0.42, 0.75],
-                 data=b64("shell_ring_assembled"), offset=[0, 0, 0]),
+                 data=b64_mesh(shell_ring(), "shell_ring_assembled"), offset=[0, 0, 0]),
             dict(label="One sector (the print)", color=[0.66, 0.52, 0.84],
                  data=b64("shell_sector"), offset=[190, 0, 0]),
             dict(label="Hatch cap", color=[0.76, 0.62, 0.88],
                  data=b64("shell_cap"), offset=[-40, 195, -45]),
          ]),
-    dict(id="weekend", label="Print weekend", target=[70, 0, 15], radius=470,
+    dict(id="dryfit", label="Leg dry-fit", target=[70, 0, 15], radius=470,
          grid_z=-8,
          hint="D047 (2026-09-22): the leg chain rebuilt around the REAL servo "
               "(STEP-measured): yaw servo shaft-down in a cup, C-fork riding "
               "horn + rear idler, twin-plate femur (plate B on the idlers), knee "
               "cup, couplers re-cut for the 45-deg horn pattern. "
               "check_assembly.py proves the assembly ORDER and the cable-plug "
-              "keep-outs. Print the four coupons first.",
+              "keep-outs, and the coxa base carries the leg harness channel "
+              "from the deck's cable pass-through. Print the four coupons first.",
          items=[
             dict(label="Coxa base (I1 plate)", color=[0.49, 0.36, 0.75],
                  data=b64("coxa_yaw_base"), offset=[0, 0, 0]),
@@ -131,21 +161,21 @@ MODES = [
          ]),
     dict(id="bench", label="Bench & field", target=[110, -20, 40], radius=560,
          grid_z=-2,
-         hint="Session 5b/c: the maintenance stand (127 mm config shown — "
+         hint="The maintenance stand (127 mm config shown — "
               "stack joints are printed I6 dovetails), the walk-on charging "
               "dock (funnel rails, crouch-to-mate tower), and the first I2 "
               "bayonet tools + harness clips.",
          items=bench_items),
     dict(id="leg", label="Leg assembly", target=[55, 0, -5], radius=430, grid_z=-88,
-         hint="One leg, yaw axis at origin: coxa base + fork, femur link, "
-              "knee carrier, SEA cartridge, tube. The bench jig consumes the "
-              "identical I1 port geometry.",
+         hint="One leg, yaw axis at origin: coxa base + fork, the three "
+              "servos, couplers, femur link + plate B, knee carrier, tube. The "
+              "bench jig consumes the identical I1 port geometry.",
          items=[
             dict(label="Leg skeleton", color=[0.55, 0.44, 0.79],
                  data=b64("leg_skeleton_assembly"), offset=[0, 0, 0]),
          ]),
     dict(id="hand", label="Hand open/closed", target=[0, 0, 25], radius=260, grid_z=-40,
-         hint="v0.2.1: spiral cam, 0-55° sweep, graze-free across 14 poses. "
+         hint="Spiral cam, 0-55° sweep, graze-free across 14 poses. "
               "Closed, the three fingers ARE the walking foot (canon).",
          items=[
             dict(label="Hand closed (= foot)", color=[0.55, 0.44, 0.79],
@@ -153,12 +183,12 @@ MODES = [
             dict(label="Hand open", color=[0.66, 0.52, 0.84],
                  data=b64("hand_assembly_open"), offset=[55, 0, 0]),
          ]),
-    dict(id="parts", label="Parts: mechanism", target=[30, 0, 0], radius=420,
+    dict(id="parts", label="Parts: leg & hand", target=[30, 0, 0], radius=420,
          grid_z=-60,
-         hint="The session 1-2 core printables. Every part regenerates from "
+         hint="The leg chain and hand printables. Every part regenerates from "
               "params.yaml; run_all_checks.py verifies the whole tree.",
          items=parts_items),
-    dict(id="parts45", label="Parts: session 4-5", target=[20, 0, 0], radius=520,
+    dict(id="parts45", label="Parts: body & electronics", target=[20, 0, 0], radius=520,
          grid_z=-60,
          hint="Deck v0.4 (leg ports + shell strikes), battery sled, avionics "
               "tray, star-board bracket, carapace prints, harness clips.",
@@ -166,7 +196,7 @@ MODES = [
 ]
 
 html = r"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Pebble CAD v0.2 — Project ROCKY</title>
+<html><head><meta charset="utf-8"><title>Pebble CAD viewer — Project ROCKY</title>
 <style>
  html,body{margin:0;height:100%;font-family:system-ui,sans-serif;background:#17141f;color:#e8e2f5;overflow:hidden}
  canvas{display:block}
@@ -180,7 +210,7 @@ html = r"""<!DOCTYPE html>
 </style></head><body>
 <canvas id="gl"></canvas>
 <div id="hud">
- <h1>Pebble — CAD v0.3 <span style="font-size:11px;color:#9a8fc0">(session 6)</span></h1>
+ <h1>Pebble CAD viewer</h1>
  <div class="sub">Project ROCKY · radial pentapod · drag orbit · wheel zoom · right-drag pan</div>
  <div id="modeBtns"></div>
  <div id="itemBtns"></div>
@@ -363,4 +393,5 @@ html = html.replace("__MODES__", json.dumps(MODES))
 path = os.path.join(HERE, "pebble_viewer.html")
 with open(path, "w") as f:
     f.write(html)
-print("viewer written:", path, f"({os.path.getsize(path)/1e6:.1f} MB)")
+print(f"viewer written: {path} ({os.path.getsize(path) / 1e6:.1f} MB, "
+      f"{sum(len(m['items']) for m in MODES)} meshes in {len(MODES)} modes)")

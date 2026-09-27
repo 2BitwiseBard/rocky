@@ -34,7 +34,7 @@ RAIL_H = 26.0
 CAPTURE = 8.0                 # funnel half-entry beyond the bay half-width
 TOWER_X = 46.0                # plug tower center (robot noses up to it)
 PLUG_H = 52.0                 # plug face above plate — VERIFY vs real belly
-XT60_W_, XT60_H_ = 16.2, 8.6  # VERIFY panel-mount envelope (Amass XT60E-M)
+XT60_W_, XT60_H_ = I5["xt60_panel_mm"][:2]   # Amass XT60E-M envelope, params (VERIFY)
 
 
 def dock_base():

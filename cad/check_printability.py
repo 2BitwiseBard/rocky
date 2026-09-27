@@ -18,7 +18,7 @@ preview answers only if you happen to scroll to the right layer:
               morphological opening (erode + dilate by t/2) removes exactly
               the features thinner than t; the removed area is reported.
               < 0.8 mm = fewer than two perimeters → will not print.
-  bed         footprint vs the Prusa i3 (250 × 210 × 210).
+  bed         footprint vs params print.bed_mm (the reference printer, X × Y × Z).
 
 Usage:  python3 check_printability.py            # every registered part
         python3 check_printability.py hand_hub   # one part, verbose layers
@@ -32,6 +32,7 @@ import os
 import sys
 import numpy as np
 import trimesh
+import yaml
 from shapely.geometry import Polygon, MultiPolygon
 from shapely.ops import unary_union
 import warnings
@@ -48,7 +49,8 @@ THIN_HARD = 0.8            # < 2 perimeters at 0.4 mm: unprintable
 THIN_SOFT = 1.6            # < 4 perimeters: weak, worth knowing
 THIN_MIN_AREA = 2.0        # mm² for a single thin blob before it's a wall (feather-edges are ~0.2)
 ISLAND_MIN_AREA = 0.5      # mm² — below this it's tessellation noise
-BED = (250.0, 210.0, 210.0)
+with open(os.path.join(HERE, "params.yaml")) as _f:
+    BED = tuple(float(v) for v in yaml.safe_load(_f)["print"]["bed_mm"])   # X, Y, Z
 THIN_EVERY = 5             # sample thin walls every N layers (speed)
 
 

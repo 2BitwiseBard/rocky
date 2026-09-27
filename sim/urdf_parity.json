@@ -168,8 +168,8 @@
   "tol_mm": 0.5
  },
  "mass": {
-  "urdf_kg": 2.6704,
-  "mjcf_kg": 2.6704
+  "urdf_kg": 2.6567,
+  "mjcf_kg": 2.6567
  },
  "foot_sphere": {
   "r_mm": 6.5,

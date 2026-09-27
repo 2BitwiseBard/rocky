@@ -27,7 +27,7 @@ PL = IF["panel_latch"]
 PACK_L, PACK_W, PACK_H = BS["pack_l"], BS["pack_w"], BS["pack_h"]
 SLED_T = 3.0
 RAIL = 4.0                 # rail bar cross-section
-XT60_W, XT60_H, XT60_D = 16.4, 8.6, 16.0      # panel-mount body (VERIFY)
+XT60_W, XT60_H, XT60_D = BS["xt60_panel_mm"]  # panel-mount body, params (VERIFY)
 
 
 def battery_sled():
