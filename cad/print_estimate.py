@@ -1,7 +1,7 @@
 """Per-batch filament + time estimator for the print plan.
 
 Reads exported STLs, computes true part volumes, and estimates printed
-grams and wall-clock time per BATCH of docs/PRINT_PLAN_2026-09-22.md
+grams and wall-clock time per BATCH of docs/PRINT_PLAN.md
 (batch 0 fit ladder, 1 coupons, 2 one leg, 3 the body, then the deferred
 work). Estimates are honest approximations, not slicer truth:
 
@@ -85,7 +85,7 @@ FILL = {
     "jig_base": 0.4, "jig_column": 0.4,
 }
 
-# batch -> [(stl, qty, layer mm)], in docs/PRINT_PLAN_2026-09-22.md order.
+# batch -> [(stl, qty, layer mm)], in docs/PRINT_PLAN.md order.
 # foot_pad_tpu (TPU, optional) is left out: this estimator prices PLA.
 _ONE_LEG = [("coxa_fork", 1), ("horn_coupler", 2), ("femur_link", 1), ("femur_plate_b", 1),
             ("tibia_knee_carrier", 1), ("tibia_sea_outer", 1), ("tibia_sea_slider", 1)]

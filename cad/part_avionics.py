@@ -28,7 +28,7 @@ BH_W, BH_H = AT["bulkhead_w"], AT["bulkhead_h"]            # 70 x 26
 # Pi 5 mounting: 58 x 49 hole rectangle, M2.5
 PI_HOLES = [(-29, -24.5), (29, -24.5), (-29, 24.5), (29, 24.5)]
 # where the tray sits on the deck (body frame): the ASSUMED layout of
-# docs/BUS_STARBOARD.md, a proposal until the deck layout freezes. The
+# docs/WIRING_HARNESS.md (star board), a proposal until the deck layout freezes. The
 # star-board bracket's layout audit (part_busboard) keeps clear of it.
 TRAY_XY = (0.0, -38.0)
 RAIL_POSE_X = W / 2 + 5.3            # rail block centre off the tray centre (see __main__)

@@ -1,4 +1,4 @@
-"""Bus star-board bracket — see docs/BUS_STARBOARD.md.
+"""Bus star-board bracket — see docs/WIRING_HARNESS.md (star board).
 
 Holds the 40x30 perfboard star hub flat at 12 mm standoff: 4 posts (M3
 thread-forming, 34x24 pattern), two zip-tie wings for the r=62 loom ring.
@@ -106,7 +106,7 @@ if __name__ == "__main__":
     print(f"bracket: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} mm")
     # sanity: posts land on the 34x24 corner-drill pattern
     assert abs(POST_DX - 34) < 1e-9 and abs(POST_DY - 24) < 1e-9
-    print("post pattern matches BUS_STARBOARD.md drill spec (34 x 24)")
+    print("post pattern matches the WIRING_HARNESS.md star-board drill spec (34 x 24)")
     bad = 0
     for name, ok, detail in layout_audit(part):
         bad += not ok

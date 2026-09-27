@@ -1,6 +1,47 @@
 # Project ROCKY — Radial Pentapod Robot
 ## Master Plan v1.1 · July 2026
 
+> **Archived: the founding plan (v1.1, July 2026), kept as the project's origin and not maintained.**
+> The current state lives in [README.md](../../README.md) (status),
+> [docs/decisions.md](../decisions.md) (every decision since), [bom/BOM.csv](../../bom/BOM.csv)
+> (what to buy) and [docs/PRINT_PLAN.md](../PRINT_PLAN.md) (what to print). **Where this plan and a
+> decision disagree, the decision wins.** Code still cites it by section (§3.4 the sacrificial
+> coupler rule, §7 the risk table: `cad/part_coupler.py`, `driver/rocky_driver/bus.py`,
+> `bench/thermal_soak.py`, `cad/params.yaml`), which is why it is kept whole.
+>
+> ⚠ **Safety correction (D016): the SCS0009 hand servos are NOT on the 12 V rail.** They are
+> 4.8–6 V parts on their own 6 V UBEC (bom/BOM.csv B-11); only the bus DATA line and GND are
+> shared with the 12 V leg servos. The §4 diagram and the §3.3 wiring line below put them on the
+> 12 V rail, which would cook them; both are marked where they stand.
+
+### Superseded since v1.1
+
+| Item (section) | v1.1 said | Now | Source |
+|---|---|---|---|
+| Hand-servo power (§3.3, §4) | SCS0009 on the 12 V servo rail | own 6 V UBEC; bus DATA + GND shared | D016, BOM B-11 |
+| Coxa bearing (§3.2, App. A P1) | clevis on 683ZZ / MR128 bearings | one C-fork on the horn and the servo's rear idler; no 683ZZ, no cap, no axle | D047 |
+| Servo pocket (App. A) | ST3215 body 45.2 × 24 × 32 class | measured STEP: case 45.4 × 24.8 × 28.8 flat-to-flat, 1.5 mm rims with the screw holes, a rear idler | D047, `cad/ref/` |
+| CAD tool (§9, App. A) | Onshape / Fusion, or code-CAD | build123d; `cad/params.yaml` is the single source of truth | D004 |
+| Hip torque walking (§1) | 22–32 % of stall | 12–16 %; the sizing load is the self-righting knee push, 50 % of stall | D044 |
+| Continuous torque (§1) | "continuous-safe band ≈ 0.9–1.2 N·m" | the sim clips at the 2.94 N·m peak; 0.65 × stall (1.911 N·m) is a thermal budget over time | D052a |
+| Servo count (§6, §6.1) | 17 × ST3215 (STS3250 knees as an upgrade, D015/D044) + 6 × SCS0009 | 16 × ST3215 12 V (15 joints + 1 spare), no STS3250; 6 × SCS0009 (5 + 1 spare) | D058, BOM A-01, B-01, B-02 |
+| Bus master (§4) | Pi UART + adapter; the ESP32 servo board (~$25) an optional upgrade | the Pi + Bus Servo Adapter (A) is the bus master (D003); the ESP32 Servo Driver ($15.99) is a bench tool | D058, BOM A-02, A-03 |
+| IMU (§4, §6) | BNO085 over I²C | BNO085 on SPI | D058, BOM C-01 |
+| Camera (§3.1, §4, §6) | Camera Module 3 Wide on a pan turret | fixed, behind a shell gill; no pan servo | B16, BOM C-04 |
+| Lidar (§6, §6.1) | optional LD19-class, or a used vacuum-lidar pull | LDRobot D500 (45 g), phase C | D024 → D058, BOM C-02 |
+| Battery and power (§4, §6) | 2 × 3S 5200, fuse + switch + relay | one soft-case 3S 5200 ≤ 138 × 46 × 25 mm (hard cases miss the 30 mm bay); 15 A fuse + XT60 loop key; each leg's 12 V fanned out at the coxa | D058, BOM B-05, B-08, B-09, B-14 |
+| USB-UART dongle (§2, §6) | in batch 1 | not needed: the adapter is USB | `bom/README.md` |
+| Pi 5 8 GB (§4) | $125 | $175 (2026-09-26) | BOM B-03 |
+| Cost (§2, §6) | ≈ $975 core, ≈ $1,276 with every optional | bench kit $279.94; core robot (phases A–C) $1,257.91, 2026-09-26 prices | `bom/BOM.csv`, `bom/totals.py` |
+| Simulation (§5.3) | URDF → MJCF once; Gazebo for ROS tests | MJCF and URDF both generated from params + CAD masses, parity-checked in CI; no Gazebo | D039, D052, D053 |
+| ROS layout (§5.1) | a 9-package monorepo | `ros2/` has 5 packages (rocky_control, rocky_description, rocky_driver, rocky_gait, rocky_msgs); the sim, harness and cockpit live outside ROS | `ros2/README.md` |
+| Chord-speak (§5.4) | chord progressions, "resolving cadence" | chord syllables; no scale runs, no cadences | D028 |
+| Hands (§3.3) | the hand is the foot from the start | a plain TPU foot first, the iris hand later as a tool | B25 |
+| Brains (§5.4) | a quantized 7–8 B VLM on the laptop | measured on the robot's jobs: an all-in-one ~9B default, a ~4B small brain, a Gemma option (reference setup) | D055, [docs/BRAINS.md](../BRAINS.md) |
+| Timeline (§2, §9) | phases in weeks from July | as of 2026-09-26 nothing is ordered or assembled; CAD, sim and bench tooling run ahead of the hardware | README |
+
+---
+
 **The dream:** a fully autonomous, German-shepherd-sized, radially symmetric pentapod inspired by Rocky from *Project Hail Mary* — five identical limbs at 72°, a carapace body, no front or back, limbs that end in three-fingered hands that fold into feet, driven by local multimodal AI.
 
 **The strategy:** we get there by building a ~1:3 subscale prototype first — codename **Pebble** — that proves every hard subsystem (radial gait, transforming hands, ROS 2 control stack, sim-to-real, AI integration) for under $1,000, before a single expensive actuator is bought. Almost everything built for Pebble (URDF topology, gait engine, firmware protocol, AI layer) transfers to the full-scale robot unchanged; only the actuators and structure scale up.
@@ -70,7 +111,7 @@ Cumulative spend through Phase 4: **≈ $975 core / ≈ $1,276 with every option
 Each tibia ends in a **stowable 3-finger claw**, exactly like the movie still:
 - **Walking mode:** three fingers fold together into a closed cone — the cone tip *is* the foot, with a TPU pad. Loads pass through the closed structure and the spring shin, **not** through the finger servo.
 - **Hand mode:** leg lifts, wrist-less claw opens — one **SCS0009 micro bus servo** per hand drives all three fingers via a printed spiral-cam or bevel-ring linkage (like a drill chuck / iris). 120° finger spacing continues the radial-symmetry theme.
-- **Wiring is trivial** because the SCS0009 sits on the *same serial bus*: a short 3-wire jumper from the tibia servo down the shin. IDs 16–20. (This daisy-chain point from the Gemini doc was correct and we keep it.)
+- **Wiring is trivial** because the SCS0009 sits on the *same serial bus*: a short 3-wire jumper from the tibia servo down the shin. IDs 16–20. (This daisy-chain point from the Gemini doc was correct and we keep it.) **[Corrected, D016: the SCS0009 shares the bus DATA line and GND, not the 12 V rail; it is a 4.8–6 V part on its own 6 V UBEC.]**
 - Subscale grip strength is modest (2.3 kg·cm servo) — enough to pick up light objects, hold tools, gesture. Full-scale Rocky gets real grippers.
 - A pentapod bonus from the literature: radially symmetric multi-legged robots can *statically stand on 3 legs while 2 limbs manipulate* — Rocky's canonical "walk on some legs, work with others" behavior. Our 3-leg-stance torque math above is exactly this case, and it closes.
 
@@ -103,6 +144,7 @@ Filament strategy given current stock (plenty of PLA, carbon-fiber-filled PLA, s
    ├──► Servo power rail 12 V class ──► Bus Servo Adapter (A) ──► TTL bus
    │        (direct battery; ST3215 rated 6–12.6 V, 3S max 12.6 V ✓)
    │        Bus: 15× ST3215 (IDs 1–15) + 5× SCS0009 (IDs 16–20), daisy-chained per leg
+   │        [CORRECTED, D016: the SCS0009s are NOT on this rail: own 6 V UBEC, DATA + GND shared]
    └──► 5 V / 5 A buck ──► Raspberry Pi 5 (8 GB) + camera + IMU (I²C)
 ```
 

@@ -82,7 +82,7 @@ gait:                    # WaveGait(**rocky_model.gait_defaults()) — keys = it
                          # T 2.4/h 28 also pass check_gait (slower cadence, longer stride)
 
 reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults()) — keys = its kwargs
-  gyro_trip: 1.8         # rad/s |gyro_xy| that trips a brace (push_reflex_results.json calibration)
+  gyro_trip: 1.8         # rad/s |gyro_xy| that trips a brace (calibration: sim/experiments/results/pre_d052/push_reflex_results.json)
   gyro_calm: 0.9
   stall_s: 3.0           # D048 stall rule
   stall_tilt_deg: 10.0
@@ -199,7 +199,7 @@ bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
     - [13, 14, 15]             # leg 4
   hand_ids: [16, 17, 18, 19, 20]   # SCS0009, protocol 0, 5-6 V domain (D016!)
   soft_limits_deg: *joint_pos_deg   # D052 alias of joints.pos_deg (kept: older readers)
-  safety:                      # SafetyMonitor limits (master plan §7)
+  safety:                      # SafetyMonitor limits (founding plan §7, docs/archive/ROCKY_MASTER_PLAN_v1.1.md)
     temp_warn_c: 60
     temp_cut_c: 65
     volt_min_v: 9.9

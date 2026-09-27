@@ -2,7 +2,7 @@
 
 Design goal: several model options (vision-only, one multimodal, small or
 big) and commands that are followed reliably. This module holds all of it;
-sim/cockpit.py keeps thin wrappers (chat / tool / tool_look / llm_models /
+sim/cockpit.py keeps thin wrappers (chat / tool / tool_look / tools /
 the /api/chat, /api/brain, /api/models, /api/look, /api/voice routes).
 
 ROLES (state keys in brackets, persisted to ~/.config/rocky/cockpit.json,
@@ -207,7 +207,7 @@ _ROLE_ENV = {"model": "ROCKY_BRAIN_MODEL", "vision_model": "ROCKY_VISION_MODEL",
              "multimodal_model": "ROCKY_MULTIMODAL_MODEL", "claude_model": "ROCKY_CLAUDE_MODEL"}
 ROLE_DEFAULTS = {k: os.environ.get(_ROLE_ENV[k], v) if k in _ROLE_ENV else v
                  for k, v in REFERENCE_ROLES.items()}
-# D055 (2026-09-25, brain_bench, docs/BRAIN_MODELS_2026-09-24.md §Status), measured on the reference setup:
+# D055 (2026-09-25, brain_bench, docs/BRAINS.md), measured on the reference setup:
 # multimodal = the 9B (17/20, no missed stop, 0.9 s first action) then the 4B (16/20, 5.8 GB) then Gemma 12B
 # (17/20, slowest, 11.3 GB); vision = the 3B eye (0.9°, 0.4 s) then Gemma 12B (0.7°, 1.7 s) then the 26B
 # (0.6°, 2.8 s, 15 GB). ROCKY_FALLBACK_BRAIN / _VISION / _MULTIMODAL (comma-separated) replace a chain.

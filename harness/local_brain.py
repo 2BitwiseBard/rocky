@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """local_brain — a LOCAL LLM drives sim-Pebble through the harness tools.
 
-The VISION_PLAN brain rehearsal, fully offline: an Ollama model gets the
+The brain-stack rehearsal (docs/PERCEPTION_PLAN.md), fully offline: an Ollama model gets the
 same tools the MCP server exposes (say / gesture / move / goto / stop /
 scan_summary / status / list_gestures), you type to it, it decides which tools to call,
 and the SimBackend runs them on real MuJoCo physics with the reflex

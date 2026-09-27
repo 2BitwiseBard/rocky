@@ -15,7 +15,7 @@ Method (Bloesch-style, trimmed):
   measured world velocity r = R(q) v_body vs filter v -> standard EKF update
   (per-leg, so one slipping foot is one bad measurement, not a poisoned mean).
 
-Pure numpy; runs on the Pi later. The MuJoCo harness is sim/run_odom.py.
+Pure numpy; runs on the Pi later. The MuJoCo harness is sim/experiments/run_odom.py.
 """
 from __future__ import annotations
 import numpy as np

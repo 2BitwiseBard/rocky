@@ -1,11 +1,11 @@
-"""Contract tests for the Rocky-MCP harness (MCP_CONTRACT_v0.md).
+"""Contract tests for the Rocky-MCP harness (docs/SIM_GUIDE.md MCP section).
 
 Fast tests exercise the contract THROUGH a real in-process MCP
 client-server session (mcp.shared.memory) against the MockBackend. They
 are PLUMBING tests: the mock's guard is a scripted x threshold, so they
 prove the server carries vetoes, preemption and refusals through as
 results — not that the robot is safe. Guard supremacy on real physics is
-the slow test (and sim/run_cliff*.py).
+the slow test (and sim/experiments/run_cliff*.py).
 
     pytest harness/test_harness.py -m "not slow"    # milliseconds-fast set
     pytest harness/test_harness.py -m slow          # the physics proof (~2 min)

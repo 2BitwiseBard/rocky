@@ -4,7 +4,7 @@
 
 ## Status 2026-09-25
 
-The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 2026-09-24 and is now the default multimodal role. On 2026-09-25 three more files finished downloading into `~/Downloads`: `Qwen3.5-4B-Q8_0.gguf` (4,482,403,488 B), `gemma-4-12b-it-UD-Q6_K_XL.gguf` (10,685,012,800 B) and `Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,756,929,760 B). A brain-install dry run on copies of the config and manifest planned the ids `qwen3.5-4b`, `gemma-4-12b` and `qwen3.5-9b-q6k`. The 4B's and the 12B's mmproj files were already in their folders under `/mnt/models`; the 9B Q6 file gets a hard link of the 9B's mmproj. The installer and the bench below are how each one gets into llama-swap and gets its row. A pending row stays "not measured yet" until the bench has run on this machine.
+The research below picked Qwen3.5-9B. It was downloaded and measured by hand on 2026-09-24 and is now the default multimodal role. On 2026-09-25 three more files finished downloading into `~/Downloads`: `Qwen3.5-4B-Q8_0.gguf` (4,482,403,488 B), `gemma-4-12b-it-UD-Q6_K_XL.gguf` (10,685,012,800 B) and `Qwen3.5-9B-UD-Q6_K_XL.gguf` (8,756,929,760 B). A brain-install dry run on copies of the config and manifest planned the ids `qwen3.5-4b`, `gemma-4-12b` and `qwen3.5-9b-q6k`. The 4B's and the 12B's mmproj files were already in their folders under `$ROCKY_MODELS_DIR`; the 9B Q6 file gets a hard link of the 9B's mmproj. The installer and the bench below are how each one gets into llama-swap and gets its row. A pending row stays "not measured yet" until the bench has run on this machine.
 
 ### Measured
 
@@ -27,7 +27,7 @@ Notes on the table:
 - **The 9B row was measured by hand, not by the bench.** The commands, stop, unsafe and describe columns stay empty until `brain-bench --models qwen3.5-9b` runs. Its 57.7 t/s includes prefill; the bench's `decode_tps` comes from llama-server's own timings, so the two are not directly comparable.
 - **The find numbers from the same day are not the 9B's.** 3/3 finds, 0.7° median bearing error and 3 cm distance error were measured with lfm2.5-vl and gemma-4-26b-a4b as the vision role (`docs/SIM_GUIDE.md`, the vision bench table). The 9B's `--vision` row has not been measured.
 - **Known quirk (9B):** it read "thirty centimeters" as x = 30 until the system prompt stated that distances are metres (D054).
-- **The second 9B file** is UD-Q6_K_XL, not a duplicate, so it gets its own id, `qwen3.5-9b-q6k`, and its own row. (A UD-Q4_K_XL file of the same size would have been a duplicate of `/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf`: brain-install reports "duplicate of …" and leaves such a download where it is, for you to delete. A Q8_0 would have become `qwen3.5-9b-q8`.)
+- **The second 9B file** is UD-Q6_K_XL, not a duplicate, so it gets its own id, `qwen3.5-9b-q6k`, and its own row. (A UD-Q4_K_XL file of the same size would have been a duplicate of `$ROCKY_MODELS_DIR/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf`: brain-install reports "duplicate of …" and leaves such a download where it is, for you to delete. A Q8_0 would have become `qwen3.5-9b-q8`.)
 - **The downloaded quants are bigger than the research's.** Sections B2 and C1 below estimate UD-Q4_K_XL files. The 12B came as UD-Q6_K_XL (10.7 GB of weights against B2's 7.4 GB) and the 4B as Q8_0 (4.5 GB against C1's 2.9 GB), so expect their VRAM well above those estimates.
 - **Comparison bars:** lfm2.5-vl (the resident eye, 3B) makes tool calls in 0.2–0.5 s per command warm; the 9B took 0.2–1.5 s. Both are the model's tool-call time, measured by hand. Compare them with the bench's **first action** median and p95, not with its latency column: latency is the wall time of the whole `/api/chat` turn and includes the motion (a gesture runs to its end and a goto until the robot arrives), so a model that gets "wave hello" or "walk forward thirty centimeters" exactly right still shows several seconds there. A new model has to beat or match these bars on first action to be worth a role.
 
@@ -78,7 +78,7 @@ Two commands, run from the repo root once the browser says the download is compl
 
 The same tools without the launcher: `.venv/bin/python sim/brain_install.py …` and `.venv/bin/python sim/brain_bench.py …`. With no FILE, brain-install takes every finished `*.gguf` in `~/Downloads`. A GGUF whose architecture has no brain template (the flux image model in `~/Downloads`, an MTP draft head) is reported as skipped and left where it is.
 
-**What brain-install does.** It reads the GGUF header (family `qwen35`, `gemma4` or `lfm2`, base name, size) and derives the id: Qwen3.5-4B → `qwen3.5-4b`, gemma-4-12b-it → `gemma-4-12b` (`--id` overrides). It copies the file to `/mnt/models/<id>/`, checks the size and the header there, then deletes the copy in Downloads (`--copy` keeps it). It never overwrites a file. For a vision family it uses, in this order: the mmproj already in that folder; a generic `mmproj-F16.gguf` from Downloads that names the same base model; a hard link of the one another id's folder already holds for the same base model (same bytes, no extra disk; this is how `qwen3.5-9b-q6k` gets the 9B's); or else it fetches `mmproj-F16.gguf` from the model's Hugging Face repo (`--no-fetch` stops that). The file ends up as `mmproj-<basename>-F16.gguf`. It adds a `models.manifest.json` entry, backs up `config.yaml` to `config.yaml.bak-YYYYMMDD-<id>`, and inserts a stanza before the RETRIEVAL STACK block. The stanza's name says "vision (mmproj)" so the cockpit offers it as a vision model; its description starts with "UNMEASURED"; it uses 16k context, ttl 1800, Qwen3.5 with thinking off, Gemma 4 with the 140–280 image-token rule. It never edits `groups:`, `selectors:` or `macros:`, and it never loads the model.
+**What brain-install does.** It reads the GGUF header (family `qwen35`, `gemma4` or `lfm2`, base name, size) and derives the id: Qwen3.5-4B → `qwen3.5-4b`, gemma-4-12b-it → `gemma-4-12b` (`--id` overrides). It copies the file to `$ROCKY_MODELS_DIR/<id>/`, checks the size and the header there, then deletes the copy in Downloads (`--copy` keeps it). It never overwrites a file. For a vision family it uses, in this order: the mmproj already in that folder; a generic `mmproj-F16.gguf` from Downloads that names the same base model; a hard link of the one another id's folder already holds for the same base model (same bytes, no extra disk; this is how `qwen3.5-9b-q6k` gets the 9B's); or else it fetches `mmproj-F16.gguf` from the model's Hugging Face repo (`--no-fetch` stops that). The file ends up as `mmproj-<basename>-F16.gguf`. It adds a `models.manifest.json` entry, backs up `config.yaml` to `config.yaml.bak-YYYYMMDD-<id>`, and inserts a stanza before the RETRIEVAL STACK block. The stanza's name says "vision (mmproj)" so the cockpit offers it as a vision model; its description starts with "UNMEASURED"; it uses 16k context, ttl 1800, Qwen3.5 with thinking off, Gemma 4 with the 140–280 image-token rule. It never edits `groups:`, `selectors:` or `macros:`, and it never loads the model.
 
 **brain-install restarts llama-swap.** Every loaded model unloads: the resident pair, anything Open WebUI is using, the live cockpit's brain. The next request to each starts cold. `--no-restart` installs now and leaves the restart to you (`systemctl --user restart llama-swap`); the new id is listed only after a restart.
 
@@ -143,7 +143,7 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
   - Caveat: those scores are probably thinking-mode scores. With thinking off, accuracy is untested.
 - **Install:**
   ```bash
-  hf download unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-Q4_K_M.gguf --local-dir /mnt/models
+  hf download unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-Q4_K_M.gguf --local-dir $ROCKY_MODELS_DIR
   ```
   ```yaml
     "qwen3.5-9b-text":
@@ -180,7 +180,7 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
   - Chat personality is flat, which matters little here because Rocky replies in chord-speak anyway.
 - **Install:**
   ```bash
-  hf download unsloth/granite-4.1-8b-GGUF granite-4.1-8b-Q4_K_M.gguf --local-dir /mnt/models
+  hf download unsloth/granite-4.1-8b-GGUF granite-4.1-8b-Q4_K_M.gguf --local-dir $ROCKY_MODELS_DIR
   ```
   ```yaml
     "granite-4.1-8b":
@@ -207,7 +207,7 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
   - Correction to the candidate notes: llama.cpp uses the template embedded in the GGUF. The repo's separate `template` file is for Ollama and is never read.
 - **Install:**
   ```bash
-  hf download unsloth/Qwen3-14B-GGUF Qwen3-14B-Q4_K_M.gguf --local-dir /mnt/models
+  hf download unsloth/Qwen3-14B-GGUF Qwen3-14B-Q4_K_M.gguf --local-dir $ROCKY_MODELS_DIR
   ```
   ```yaml
     "qwen3-14b":
@@ -238,8 +238,8 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
 - **Grounding risk:** the pinned `clip.cpp:1634` warns that Qwen-VL needs at least 1024 image tokens for grounding. At about 80 tokens, questions like "where is X?" may be weak. Test `look` and `scan` both with and without `--image-min-tokens 256`–`1024`; more image tokens add prefill time.
 - **Install:**
   ```bash
-  hf download unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir /mnt/models \
-    && mv /mnt/models/mmproj-F16.gguf /mnt/models/mmproj-Qwen3.5-9B-F16.gguf
+  hf download unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir $ROCKY_MODELS_DIR \
+    && mv $ROCKY_MODELS_DIR/mmproj-F16.gguf $ROCKY_MODELS_DIR/mmproj-Qwen3.5-9B-F16.gguf
   # optional later: unsloth/Qwen3.5-9B-MTP-GGUF (+0.19 GB) → add --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-p-min 0.75
   ```
   ```yaml
@@ -276,8 +276,8 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
   - Keep `--image-max-tokens` at or below 280, and never above 512 without raising `-b/-ub`. That is the same rule noted in your gemma-4-26b-a4b entry.
 - **Install:**
   ```bash
-  hf download unsloth/gemma-4-12b-it-GGUF gemma-4-12b-it-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir /mnt/models \
-    && mv /mnt/models/mmproj-F16.gguf /mnt/models/mmproj-gemma-4-12b-it-F16.gguf
+  hf download unsloth/gemma-4-12b-it-GGUF gemma-4-12b-it-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir $ROCKY_MODELS_DIR \
+    && mv $ROCKY_MODELS_DIR/mmproj-F16.gguf $ROCKY_MODELS_DIR/mmproj-gemma-4-12b-it-F16.gguf
   ```
   ```yaml
     "gemma-4-12b":
@@ -310,10 +310,10 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
 - **Fallback if Qwen3.5's thinking handling misbehaves:** Qwen3-VL-8B-Instruct. It is instruct-only (no thinking), widely used, uses Hermes JSON tools, and needs about 8 GB.
 - **Install:**
   ```bash
-  hf download unsloth/Ministral-3-8B-Instruct-2512-GGUF Ministral-3-8B-Instruct-2512-UD-Q4_K_XL.gguf --local-dir /mnt/models
-  hf download unsloth/Ministral-3-8B-Instruct-2512-GGUF mmproj-F16.gguf --local-dir /mnt/models/.stage-ministral3 \
-    && mv /mnt/models/.stage-ministral3/mmproj-F16.gguf /mnt/models/mmproj-Ministral-3-8B-Instruct-2512-F16.gguf \
-    && rm -rf /mnt/models/.stage-ministral3
+  hf download unsloth/Ministral-3-8B-Instruct-2512-GGUF Ministral-3-8B-Instruct-2512-UD-Q4_K_XL.gguf --local-dir $ROCKY_MODELS_DIR
+  hf download unsloth/Ministral-3-8B-Instruct-2512-GGUF mmproj-F16.gguf --local-dir $ROCKY_MODELS_DIR/.stage-ministral3 \
+    && mv $ROCKY_MODELS_DIR/.stage-ministral3/mmproj-F16.gguf $ROCKY_MODELS_DIR/mmproj-Ministral-3-8B-Instruct-2512-F16.gguf \
+    && rm -rf $ROCKY_MODELS_DIR/.stage-ministral3
   ```
   ```yaml
     "ministral-3-8b":
@@ -345,8 +345,8 @@ I assumed a Raspberry Pi 5 or Jetson-class board, since the robot's computer isn
 - **Tools:** Qwen3-Coder XML format, same parser as your current brain. BFCL-V4 50.3, TAU2 79.9 (both thinking-mode scores). Multi-argument calls like `compose_gesture` are the risk.
 - **Install:**
   ```bash
-  hf download unsloth/Qwen3.5-4B-GGUF Qwen3.5-4B-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir /mnt/models \
-    && mv /mnt/models/mmproj-F16.gguf /mnt/models/mmproj-Qwen3.5-4B-F16.gguf
+  hf download unsloth/Qwen3.5-4B-GGUF Qwen3.5-4B-UD-Q4_K_XL.gguf mmproj-F16.gguf --local-dir $ROCKY_MODELS_DIR \
+    && mv $ROCKY_MODELS_DIR/mmproj-F16.gguf $ROCKY_MODELS_DIR/mmproj-Qwen3.5-4B-F16.gguf
   ```
   ```yaml
     "qwen3.5-4b":
@@ -371,7 +371,7 @@ I assumed a Raspberry Pi 5 or Jetson-class board, since the robot's computer isn
 - **Tools:** Pythonic calls between `<|tool_call_start|>` and `<|tool_call_end|>`, the same LFM2.5 parser as your lfm2.5-vl, whose tool calling you already verified. BFCL v3 49 is mediocre, so keep the tool list short with temperature 0.1. The parser does not accept dotted names or true/false/null inside arguments. Weak at casual chat.
 - **Install:**
   ```bash
-  hf download LiquidAI/LFM2.5-1.2B-Instruct-GGUF LFM2.5-1.2B-Instruct-Q4_K_M.gguf LFM2.5-1.2B-Instruct-QAD-Q4_0.gguf --local-dir /mnt/models
+  hf download LiquidAI/LFM2.5-1.2B-Instruct-GGUF LFM2.5-1.2B-Instruct-Q4_K_M.gguf LFM2.5-1.2B-Instruct-QAD-Q4_0.gguf --local-dir $ROCKY_MODELS_DIR
   ```
   ```yaml
     "lfm2.5-1.2b":
@@ -392,7 +392,7 @@ I assumed a Raspberry Pi 5 or Jetson-class board, since the robot's computer isn
 - **Tools:** same parser as C2. The model card says tool calling is **for text-only input**, so a turn that has both an image and tools is unverified. Plan on a two-step loop: describe the image, then act.
 - **Install:**
   ```bash
-  hf download LiquidAI/LFM2.5-VL-1.6B-GGUF LFM2.5-VL-1.6B-Q8_0.gguf mmproj-LFM2.5-VL-1.6b-Q8_0.gguf --local-dir /mnt/models
+  hf download LiquidAI/LFM2.5-VL-1.6B-GGUF LFM2.5-VL-1.6B-Q8_0.gguf mmproj-LFM2.5-VL-1.6b-Q8_0.gguf --local-dir $ROCKY_MODELS_DIR
   ```
   ```yaml
     "lfm2.5-vl-1.6b":
@@ -415,7 +415,7 @@ I assumed a Raspberry Pi 5 or Jetson-class board, since the robot's computer isn
 
 ## Suggested order of work
 
-1. **Download Qwen3.5-9B**: UD-Q4_K_XL + mmproj ≈ 6.9 GB; the Q4_K_M file is another 5.7 GB if you also want A1's text-only entry. /mnt/models has 146–153 GB free.
+1. **Download Qwen3.5-9B**: UD-Q4_K_XL + mmproj ≈ 6.9 GB; the Q4_K_M file is another 5.7 GB if you also want A1's text-only entry. $ROCKY_MODELS_DIR has 146–153 GB free.
 2. **Add two entries:** `qwen3.5-9b` (vision) and, if you want the pair option, `qwen3.5-9b-text` in a new `robot` group with an `lfm2.5-vl-eye` copy.
 3. **Acceptance test before switching the brain:**
    - 20 spoken-style commands against the real tool schema (say, gesture, goto, stop, look, scan, compose_gesture) with thinking off.

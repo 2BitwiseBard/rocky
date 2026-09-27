@@ -12,7 +12,7 @@ stays open:
 
 On rubble this same signal fires on bridged/late feet — there it feeds the
 stuck-watchdog; on commanded-flat ground it means the world ends. The
-arbitration lives in the caller (SENSING_PLAN.md §reflex-arbitration).
+arbitration lives in the caller (docs/PERCEPTION_PLAN.md, reflex arbitration).
 
 Terrain-aware option (D050): on rough ground or an obstacle course the
 same timing signal fires on bridged feet, bumps and blocked swings — none
@@ -21,11 +21,11 @@ depth sensor has: FEEL for the floor. The caller lowers a contactless
 planted foot step by step (sim/playground.py `_probe`, PROBE_MAX mm) and
 passes `probed_out[i]` = "this foot ran out of probe and still touched
 nothing"; a void then requires it too. Without it the detector behaves
-exactly as before (the harness's in-process sim backend, the run_cliff
-experiments).
+exactly as before (the harness's in-process sim backend, the
+sim/experiments/run_cliff*.py experiments).
 
 CliffReaction: halt drive, retreat ~1.6 cycles, stop, await orders.
-(The harness sim backend and run_cliff use it. The playground's always-on
+(The harness sim backend and sim/experiments/run_cliff.py use it. The playground's always-on
 guard does NOT since D052 P2: walking backwards along the void bearing lifts
 the next leg in the forward wave order while the void leg still hangs over the
 edge, so it plays the approach backwards instead, and a touchdown gate holds

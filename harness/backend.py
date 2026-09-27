@@ -1,4 +1,4 @@
-"""Robot backends for the Rocky-MCP harness (docs/MCP_CONTRACT_v0.md).
+"""Robot backends for the Rocky-MCP harness (docs/SIM_GUIDE.md MCP section; tools: docs/TOOLS.md).
 
 Two implementations of one contract:
 
@@ -46,7 +46,7 @@ GESTURES = ["jazz_hands", "fist_bump", "beckon",   # pebble_gestures.CANON
 # 20 cm sidestep-by-goto in the regex brain; the gait turns either way)
 SIGNED = ["turn_in_place", "sidestep"]
 
-EDGE_X = 0.35          # the mock world's void, same as sim/run_cliff.py
+EDGE_X = 0.35          # the mock world's void, same as sim/scenes.py (sim/experiments/run_cliff.py)
 SAFE_MARGIN = 0.18     # the detector historically stops ~185 mm short
 SPEED = 0.045          # m/s, the gait's V_X
 

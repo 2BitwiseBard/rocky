@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """intent — talk to Pebble in plain text, no LLM required.
 
-The deterministic layer of the VISION_PLAN brain stack: a regex/keyword
+The deterministic layer of the brain stack (docs/PERCEPTION_PLAN.md): a regex/keyword
 intent parser that maps operator text onto the SAME tools the MCP
 server and local_brain expose (say / gesture / goto / stop / scan_summary
 / status / look). Where local_brain needs a model server and a GPU, this

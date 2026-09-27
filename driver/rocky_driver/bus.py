@@ -5,7 +5,7 @@ IDs 1–15) and protocol 0 (SCS0009 hands, IDs 16–20). Family is chosen per
 call from the servo map you hand the constructor, so callers never think
 about endianness again.
 
-Safety posture baked in (master plan §7):
+Safety posture baked in (founding plan §7, docs/archive/ROCKY_MASTER_PLAN_v1.1.md):
   * every transaction retries on checksum error / timeout (bus noise)
   * telemetry reads decode fault bits and raise them to the caller
   * `SafetyMonitor` polls temp/volt/load and torque-cuts past limits
@@ -430,7 +430,7 @@ class FeetechBus:
 @dataclass
 class SafetyLimits:
     temp_warn_c: int = 60
-    temp_cut_c: int = 65          # master plan §7: auto-sit at 65 C
+    temp_cut_c: int = 65          # founding plan §7: auto-sit at 65 C
     volt_min_v: float = 9.9       # 3S at 3.3 V/cell under load
     volt_max_v: float = 12.9
     load_warn_pct: float = 60.0   # sustained-load warning (D015 margins)

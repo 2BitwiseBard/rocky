@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Thermal soak — how long can a servo hold a pose before it cooks?
 
-The master plan's #1 hardware risk (§7): femur servos overheating in long
+The founding plan's #1 hardware risk (§7, docs/archive/ROCKY_MASTER_PLAN_v1.1.md):
+femur servos overheating in long
 stands. This test holds a commanded pose under load and logs temperature /
 load / current / voltage at 1 Hz until steady-state or the 65 C cut.
 

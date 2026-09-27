@@ -16,8 +16,8 @@ latch pads + magnets but had nothing to bite on — now the deck answers:
     -25.5°, r 76 — under each sector's foot magnet. (The v0 shell wanted
     three magnets per web at r 77.5; their recesses would breach the
     pentagon edge at the az±34 spots — shell amended to one per web.)
-  * power-entry grommet Ø9 at (52, -6) + two zip anchors (BUS_STARBOARD
-    proposal adopted); the star-board bracket bolts to existing grid
+  * power-entry grommet Ø9 at (52, -6) + two zip anchors (star-board
+    proposal in docs/WIRING_HARNESS.md, adopted); the star-board bracket bolts to existing grid
     holes (0,20)/(0,40) — nothing new needed there (part_busboard's layout
     audit ray-tests both against this deck).
 
@@ -105,7 +105,7 @@ def body_deck():
         # Ø8 x 1.4 pocket in the top face, M3 washer glued in
         deck -= Rot(0, 0, ang - 25.5) * Pos(76.0, 0, T - 0.7 + 0.01) * \
             Cylinder(4.0, 1.4)
-    # power-entry grommet + zip anchors (BUS_STARBOARD.md proposal)
+    # power-entry grommet + zip anchors (star-board proposal, docs/WIRING_HARNESS.md)
     deck -= Pos(*GROMMET_XY, T / 2) * Cylinder(GROMMET_D / 2, T + 2)
     for zx, zy in ZIP_ANCHORS:
         deck -= Pos(zx, zy, T / 2) * Cylinder(1.7, T + 2)

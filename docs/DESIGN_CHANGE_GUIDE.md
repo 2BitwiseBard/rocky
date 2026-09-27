@@ -4,10 +4,10 @@ This guide covers changing Pebble's hardware design: a different servo, a
 longer link, a new foot, another material, or more joints or legs. It says
 what to edit, what to run, and which checks catch what you forgot.
 
-It describes what works **today** (2026-09-24, after D053: step 1 of
+It describes what works **today** (after D053, step 1 of
 [`ROBOT_AS_DATA.md`](ROBOT_AS_DATA.md)). The end state is "edit `params.yaml`,
-run one command, read the report". The in-between steps are listed, in
-order, in `DESIGN_BACKLOG.md` B36. When a step lands, this guide gets
+run one command, read the report". The in-between steps are
+`ROBOT_AS_DATA.md` §4 (backlog B36). When a step lands, this guide gets
 shorter.
 
 Contents:
@@ -32,14 +32,15 @@ links those numbers to the joint ranges (`joints.pos_deg`) and to the servo
 ids (`bus.leg_ids`, `bus.hand_ids`).
 
 ```bash
-cd ~/Development/rocky
+# from the repo root
 # 1. edit cad/params.yaml (and the CAD part file, if the change is geometry)
 
 # 2. does the description still make sense? (prints warnings; exits 1 on an error)
 .venv/bin/python gait/rocky_model.py
 
 # 3. regenerate, in this order (a future `rocky.sh regen` will do this, B36 step 9)
-./rocky.sh cad-check                                   # CAD CI; rewrites cad/out/*.stl
+./rocky.sh cad-check                                   # the 28 CAD checks; rewrites cad/out/*.stl
+./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer (32/32)
 .venv/bin/python sim/mass_audit.py                     # STL volumes + mass_hw -> sim/mass_budget.json
 MUJOCO_GL=egl .venv/bin/python sim/build_mjcf.py       # -> sim/pebble.xml
 .venv/bin/python ros2/rocky_description/generate_urdf.py   # -> urdf/pebble.urdf(.xacro)
@@ -47,10 +48,11 @@ MUJOCO_GL=egl .venv/bin/python sim/check_urdf_parity.py    # URDF == MJCF == ana
 
 # 4. what changed, and does it still work
 git diff --stat sim/ ros2/                             # expect pebble.xml / mass_budget.json to move
-MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py    # the robot fingerprint (was ceb63a1254c3)
+MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py    # the robot fingerprint (today 7d376178fe27)
 ./rocky.sh test                                        # the fast suite CI runs
 .venv/bin/python gait/pebble_gait.py                   # the gait's speed envelope + 4 checked commands
-.venv/bin/python gait/pebble_feasibility.py            # walk / strafe / turn / arc, PASS or FAIL
+.venv/bin/python gait/pebble_feasibility.py            # walk/strafe PASS; the raw 0.35 rad/s turn and arc
+                                                       # FAIL by design (above the envelope): compare with HEAD's
 MUJOCO_GL=egl .venv/bin/python sim/run_sim.py          # does it still walk (exits 1 on a fall)
 ```
 
@@ -75,6 +77,14 @@ What each tool refuses:
   agree with `params.yaml`.
 - **CI** regenerates everything and fails on any `git diff`.
 
+**Numbers CAD reads directly.** Besides the leg and body lengths, the CAD
+checks read `print.bed_mm` (the build volume the bed-fit checks use:
+250 × 210 × 210 mm for the reference printer; change it for yours) and
+`interfaces.battery_sled.xt60_panel_mm` (the XT60E-M body, 16.2 × 8.6 ×
+16.0 mm, that the battery sled's nose and the dock's carrier are cut for;
+VERIFY with calipers). Both change printed geometry, so they go through
+the whole loop.
+
 **Tests that pin today's numbers are meant to fail.** For example,
 `test_loader_numbers` asserts stall 2.94 N·m, and
 `test_default_walk_passes_and_budget_leaves_it_alone` asserts that the walk
@@ -91,9 +101,11 @@ checkpoints record it.
 (`sim/model_fingerprint.py`) covers masses, damping, forcerange, joint
 ranges, friction and geometry:
 - A checkpoint trained on a different fingerprint loads with a **warning**
-  (`rl_common.check_fingerprint`).
-- The 9 older checkpoints carry no fingerprint, so nothing warns about
-  them (`check_fingerprint` returns `'unknown'`).
+  (`rl_common.check_fingerprint`). `recover6_d052`, trained on
+  `ceb63a1254c3`, warns today.
+- The 4 older checkpoints (`recover1`, `recover5_v3_warm`, `robust_fwd2`,
+  `cmd_sample3`) carry no fingerprint, so nothing warns about them
+  (`check_fingerprint` returns `'unknown'`).
 
 Re-evaluate the righter after any change (`./rocky.sh eval-recover recover1`,
 then `--supervisor`) before you trust it. Refusing on a topology change
@@ -105,7 +117,10 @@ then `--supervisor`) before you trust it. Refusing on a topology change
 
 Example: the STS3250, which D015 sanctioned. It uses the same case and the
 same protocol as the ST3215, gives 4.90 N·m at 12 V (`sim/torque_audit.py`),
-and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment).
+and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment). The BOM
+buys none (D058): the worst load, the self-righting knee push, is 1.459 N·m,
+49.6 % of ST3215 stall (WARM) and 29.8 % of STS3250 (`sim/torque_audit.py`,
+2026-09-26).
 
 1. **Add an `actuators.<key>` block** next to `st3215` with every key
    `rocky_model.actuator()` reads:
@@ -146,9 +161,9 @@ and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment).
      validator warning are B36 step 2.
 6. **Driver.**
    - A servo on the same bus protocol (Feetech STS / SMS family) needs
-     nothing. `robot.py:60` and `hw_bridge.py:158` treat every leg id as
-     `Family.STS`, and `registers.COUNTS` / `SWEEP_DEG` are per family
-     (4096 / 360°).
+     nothing. `driver/rocky_driver/robot.py` and `sim/hw_bridge.py` treat
+     every leg id as `Family.STS`, and `registers.COUNTS` / `SWEEP_DEG` are
+     per family (4096 / 360°).
    - A servo on a different protocol, or with a different encoder, needs
      driver work, because the protocol is not data yet (B36 steps 2 and
      10). Check `rm.id_table()` for the counts and sweep the description
@@ -165,6 +180,11 @@ and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment).
      envelope.
    - A stronger servo widens the torque margins. The speed envelope moves
      with the no-load speed.
+   - The stuck-watchdog's retry ladder (`gait/pebble_watchdog.py`
+     `RetryPolicy`) re-derives itself from the new budget (D060): each
+     stage takes the shortest cycle time whose speed envelope is at least
+     20 mm/s, and `gait/test_watchdog.py` fails if a stage no longer
+     walks.
    - The RL envs' command scales are literals (`rocky_env.py:185, 203-208`).
      They need to come from the new envelope before a walker retrain.
 9. **Record the change.** Add a D-number, bump `params_rev`, and
@@ -179,7 +199,7 @@ Edit `leg.l1_coxa`, `leg.l2_femur`, `leg.l3_tibia` or `leg.hip_axis_z` in
 
 | Change | Follows automatically | Do by hand |
 |---|---|---|
-| **L1 / L2** | `cad/leg_frame.py` places the hip and knee servos from them. `run_all_checks` rebuilds and re-checks the leg. Then mass_audit, MJCF, URDF, gait IK and parity follow. | `part_bench_jig` KNEE_X is a literal 140 (= L1 + L2), and so is the `calib_gauge_knee` plumb line (B5). Change both. |
+| **L1 / L2** | `cad/leg_frame.py` places the hip and knee servos from them. `run_all_checks` rebuilds and re-checks the leg. Then mass_audit, MJCF, URDF, gait IK and parity follow. | `part_bench_jig`'s knee groove sits at a literal x = 140 (= L1 + L2), and so does the `calib_gauge_knee` plumb line (B5). Change both. |
 | **L3** | Gait IK, MJCF, URDF, spawn height (`rm.spawn_dz_mm`), feasibility. | **Nothing in CAD owns L3.** The tibia is a carbon tube between `part_tibia` and the SEA/hand, and no file computes the tube cut length (B36 step 8 adds the check). Work out the stack by hand: knee carrier socket, tube, SEA, hand cone, pad crown. Also update `mass_hw.tibia_tube` (5 g for "~120 mm"). |
 | **hip_axis_z** | Gait, MJCF, URDF. | It must equal the yaw-stack height CAD builds (`leg_frame.py` `Z_YAW_TOP` and the hub stack). Nothing asserts that yet. |
 
@@ -229,7 +249,7 @@ Today mass comes from **STL volume × density × fill factor**
 (`sim/mass_audit.py`) plus the non-printed hardware in `params.mass_hw`:
 - Density: `print_estimate.PLA` = 1.24 g/cm³, plus a local `PETG = 1.27` in
   `mass_audit.py`.
-- Fill factor: per part, from `print_estimate.PLATES`. Anything unlisted
+- Fill factor: per part, from `print_estimate.FILL`. Anything unlisted
   gets 0.6.
 
 Materials in params (`materials:` / `part_material:` / `part_fill:`) are
@@ -238,13 +258,12 @@ B36 step 7. Until then:
 1. **Change a part's material**: pass the density in `mass_audit.py`'s
    dicts, as `printed_g("femur_plate_b", PETG)` already does.
 
-   Known gap: the print plan (`docs/PRINT_PLAN_2026-09-22.md`) prints
+   Known gap: the print plan (`docs/PRINT_PLAN.md`) prints
    coxa_yaw_base, coxa_fork, horn_coupler, femur_link, tibia_knee_carrier
    and the SEA parts in **PETG**, but `mass_audit.py` weighs them as PLA.
    That is about 2.4 % light on those parts.
-2. **Change infill**: edit that part's fill factor in
-   `cad/print_estimate.py` `PLATES`. `mass_audit` builds its fill table from
-   `PLATES`.
+2. **Change infill**: edit that part's entry in `cad/print_estimate.py`
+   `FILL`, which `mass_audit` imports (`PLATES` is only the print batches).
 3. Run `sim/mass_audit.py`, then the rest of the §0 loop.
    `test_compiled_mass_equals_budget` passes by construction. Review the
    `sim/mass_budget.json` diff: it is the change.
@@ -309,46 +328,14 @@ literals in `sim/rl_common.py` and get generated in B36 step 10.
   - Worse, `pebble_gait` **silently ignores** the ankle. `leg_ik` is the
     closed-form 3-joint solver and still uses `leg.l3_tibia`.
 
-### What is still hard-coded, in the order to fix it
+### What is still hard-coded
 
-This is the migration in `ROBOT_AS_DATA.md` §4. Each step is its own
-commit and keeps the suite green.
-
-1. ~~Description in the loader; stations and actuator order in both
-   generators~~ (done, D053)
-2. **Generators build the chain**: bodies, joints, axes and offsets in
-   `build_mjcf.leg_xml` / `generate_urdf.leg_macro`, kp/kv/armature/protocol
-   from `actuators:`, and a generated `rocky.ros2_control.xacro`. Without
-   this an ankle never reaches MJCF, URDF or ROS.
-3. **Close the paths that fail open**:
-   - feasibility codes from joint names
-   - `check_urdf_parity`'s "20 joints"
-   - mock ids from `id_table()`
-   - the driver's broad `except` that falls back to 3-joint limits
-   - a bridge that refuses an uncovered id
-   - the generators' silent hand-budget fallback
-4. **Actuators by name** (`sim/model_index.py`) instead of `ctrl[:15]` /
-   `ctrl[15:20]` in the playground, both RL envs, `rl_common`, `sim_lidar`
-   and `servo_model`. **Do this before any topology change**: a 4th joint
-   would scramble the positional slices with no error.
-5. **Checkpoint safety**: stamp the topology hash into checkpoints, refuse
-   on mismatch, add `--accept-robot` to re-admit after a re-evaluation.
-6. **`gait/leg_kin.py`**: generic FK/IK with the analytic fast path chosen by
-   chain shape, and numeric IK with a redundancy rule, timed on the Pi. It
-   replaces the four FK copies.
-7. **Materials and mass layout** (a D-number).
-8. **CAD sync checks** (`cad/check_params_parity.py`): tibia stack, foot
-   literals, deck station count, sweeps.
-9. **`rocky.sh regen`** and the docs.
-10. **Only when you actually make the change**:
-    - the driver/bridge per-joint table
-    - reflex, gestures and keyframes beyond `(N, 3)`
-    - the `ArmGait` 4-leg special case
-    - `duty = 1 - 1/n`
-    - the RL obs builder, which needs a new obs version
-    - per-leg servo overrides
-    - **the deck and shell as an n-gon**, which is a CAD redesign because
-      the pentagon is built into `part_deck.py` / `part_shell.py`
+The remaining migration is `ROBOT_AS_DATA.md` §4 (backlog B36), one commit
+per step. Two rules matter before any topology change: step 4 (actuators
+by name) must land first, because a 4th joint would silently scramble the
+positional `ctrl[:15]` slices; and step 5 (refusing checkpoints on a
+topology change) must land together with `--accept-robot`. The deck and
+shell are pentagon CAD, so a 6th leg is a redesign.
 
 A sixth leg also needs a gait decision. `duty` 0.8333 keeps one leg in
 swing at a time; `0.5` is a tripod. And after any topology change, the
@@ -386,7 +373,8 @@ The leg is built to `params.yaml` as it stands. Before assembling:
 - [ ] `.venv/bin/python gait/rocky_model.py` shows no error. Every warning
       is read.
 - [ ] CAD part literals that mirror params are changed by hand (§2, §3).
-- [ ] `./rocky.sh cad-check` → `sim/mass_audit.py` → `sim/build_mjcf.py` →
+- [ ] `./rocky.sh cad-check` (`--derived` for the preview, print pack and
+      viewer) → `sim/mass_audit.py` → `sim/build_mjcf.py` →
       `generate_urdf.py` → `sim/check_urdf_parity.py`
 - [ ] `./rocky.sh test`. Pinned-number failures are updated deliberately,
       not loosened.

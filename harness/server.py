@@ -1,4 +1,4 @@
-"""Rocky-MCP tool server (docs/MCP_CONTRACT_v0.md) — FastMCP over stdio.
+"""Rocky-MCP tool server (docs/SIM_GUIDE.md MCP section; tools: docs/TOOLS.md) — FastMCP over stdio.
 
 The model proposes, the reflex layer disposes: every tool result is an
 ordinary value (vetoes included — a goto stopped by the cliff reflex

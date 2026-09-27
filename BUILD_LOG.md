@@ -1,14 +1,120 @@
 # ROCKY Build Log — Engineering Notebook
 
 *Convention: newest entries first. Every work session gets an entry: date,
-what happened, what was decided, what broke, what's next. Claude writes these
-at the end of each session; Tyler adds field entries any time (or dumps raw
-notes in `NOTES_INBOX.md` for Claude to file). Keep entries honest — failed
-prints and dumb bugs are the most valuable lines in this file.*
+what happened, what was decided, what broke, what's next. Field notes and raw
+measurements go in `NOTES_INBOX.md` and are filed later. Keep entries honest —
+failed prints and dumb bugs are the most valuable lines in this file.
+Sessions 1a–8d (before D047) are archived word for word; the table at the end
+indexes them.*
 
 ---
 
-## 2026-09-25 · Session 9h — three brains installed and measured; stop never waits for a model
+## 2026-09-26 · Session 9i — repo review + clean-up: one BOM, the D047 CAD follow-ups, a generic setup, docs condensed and archived (D058, D059, D060)
+
+**Ask:** go through the whole codebase; condense or remove old things, documentation
+above all; update what is stale, the BOM and the CAD.
+
+**The audit (read-only first):** nine areas (sim docs in two halves, BOM, the record,
+CAD, sim code, core code, hardware docs, repo hygiene), **209 evidenced findings**
+(74 update, 34 fix, 21 genericize, 18 delete, 17 condense, 17 keep, 11 investigate,
+6 regenerate, 5 merge, 4 move, 2 archive), each with a file:line quote and a proposal,
+45 of them flagged for the owner's call. Then two implementation stages and a rerun
+of the sim experiments on today's model.
+
+**Stage 1, code (five commits):**
+- **BOM** (`c7fd4b1`, D058): `bom/BOM.csv` (63 rows; phases A bench kit, B full robot,
+  C senses, D voice, X optional) + `bom/README.md` + `bom/totals.py` (checks every line
+  total) replace the xlsx and five order sheets. Prices checked 2026-09-26: bench kit
+  **$279.94**, core robot (A–C) **$1,257.91**, optional $422.59. 16 × ST3215 (no
+  STS3250), one soft-case 3S 5200, the D500 lidar, BNO085 on SPI; no 683ZZ, no USB-UART
+  dongle. Nothing ordered.
+- **CAD** (`45fdae1`, D059): an 11 × 11 mm leg harness channel through `coxa_yaw_base`
+  from the deck's I1 cutout to the yaw plugs, on the −Y side (the part 25.19 →
+  21.23 cm³; six new `check_assembly` checks); the star-board bracket v0.2 bolts to
+  existing deck grid holes (0,20)/(0,40) with a layout audit (5.38 → 5.07 cm³);
+  `run_all_checks` 23 → **28 modules** (servo_st3215, servo_mount, part_port_coupon,
+  leg_assembly, check_interference; four checks that printed CLASH but exited 0 now
+  fail) and `rocky.sh cad-check --derived` adds the four generators (32/32, 230 s);
+  byte-stable exports (STEP only on a geometry change, an invariant PDF, fixed STL
+  headers); `print.bed_mm` and `interfaces.battery_sled.xt60_panel_mm` in params;
+  the print pack moves to `cad/out/PRINT_PREP_PACK.pdf`; 60 stale PNGs and the old
+  dry-fit posed files removed; the STEP's Apache-2.0 text in `cad/ref/`.
+- **Generic setup** (`72e3f1d`, D060): machine knobs in a git-ignored `rocky.env`
+  (template `rocky.env.example`, every `ROCKY_*` variable), read by `rocky.sh` and by
+  `sim/envfile.py` for Python started without it; the environment wins. The code no
+  longer reads `LOCAL_AI_KEY`; the D055 model ids are the reference setup's
+  overridable defaults; brain-install's models dir defaults to `~/models`
+  (`ROCKY_MODELS_DIR`); CI pins MuJoCo 3.12.0 (`constraints.txt`) and build123d 0.11.1.
+- **Core** (`730658d`, D060): driver sign bits per register (STS `PRESENT_LOAD` bit
+  10, `POSITION_OFFSET` bit 11, VERIFY-ON-BENCH; an offset past ±2047 is refused);
+  the ROS 2 plugin takes servo ids from joint names; the watchdog's retry ladder is
+  derived inside the D052 envelope (24 mm / T 2.0 s / 45.5 mm/s → 34.8 mm / 3.0 s /
+  40.6 → 42 mm + 10 mm body / 4.0 s / 30.4; the old 32/46/52 mm ladder had no
+  envelope at all); the gait GIF and joint plot regenerated on the budgeted gait
+  (T 2.0 s, step 24 mm, peak coxa 27.9° where the old demo reached 49.8°, past the
+  ±40° limit); dead audio and harness files out. Driver tests 69 → 79.
+- **Sim structure** (`5a70f37`): 20 one-off experiments + `diag_brace_phase.py` →
+  `sim/experiments/` (results → `sim/experiments/results/`, clips →
+  `sim/experiments/out/`, `ROCKY_EXPERIMENTS_OUT=DIR` redirects; run from the repo
+  root); the 19 pre-D052 result JSONs and their figures →
+  `sim/experiments/results/pre_d052/`; `sim/scenes.py` holds the scene helpers live
+  code had imported from experiment scripts; `run_sim.py` writes to
+  `sim/out/run_sim/` by default; dead code, the PPO smoke, four negative-run
+  checkpoint folders and a stale walker checkpoint removed (git keeps them).
+  **Bug found:** `run_fairing` built its rubble from a copy that skipped the per-box
+  colour draw, so D023's fairing A/B ran on different fields than its baseline.
+
+**Stage 2, docs (this entry):** one page per topic. `docs/PRINT_PLAN.md` (the dated
+name dropped; the fit-ladder GO/NO-GO table from the deleted print-night pages),
+`docs/WIRING_HARNESS.md` absorbs the star board, `docs/PERCEPTION_PLAN.md` replaces
+the vision and sensing plans, `docs/RL_GUIDE.md` absorbs the RL tour,
+`docs/SIM_GUIDE.md` absorbs the MCP contract and the playground page,
+`docs/BRAINS.md` is the short brain guide, `docs/PLACES.md` is new, the README takes
+the laptop-setup page. `docs/archive/` ([index](docs/archive/README.md)) keeps word for
+word: the founding plan v1.1 (now bannered, with the D016 hand-servo correction), the
+brain-model report, BUILD_LOG sessions 1a–8d, and decisions D036–D057 at full length
+(the log condenses them to ADR-lite rows). D001–D035 stay as written, with AMENDED
+markers where a later decision overrides them. `NOTES_INBOX.md` is back to its header
+(its 09-08 and 09-17 entries are sessions 8e and 8f below). The backlog is one Open
+and one Closed table, with the stage-1 follow-ups as B42–B65.
+
+**Numbers that changed on purpose:** robot fingerprint `ceb63a1254c3` →
+`7d376178fe27` (torso 1448.9 → 1435.2 g, robot 2670.4 → 2656.7 g, URDF ≡ MJCF at
+2.657 kg); CAD checks 23 → 28 (32 with `--derived`); print estimate batches 0–3
+378 g / 20.2 h, whole plan 1111 g / 53.8 h; fast tests **1,039 passed + 2 strict
+xfail** (driver 79, harness 111, gait 75, sim 777 collected; last recorded 454 at
+D053) in ~7.8 min; `run_stuck` on today's model with the budgeted ladder 4/4, 4/4,
+2/4, 2/4 at 30/35/40/45 mm rubble (no watchdog 2/4, 2/4, 0/4, 1/4).
+
+**Decisions:** D058 (one BOM: the 2026-09-22 electronics calls), D059 (the D047
+follow-up CAD fixes), D060 (the repo goes generic and condensed).
+
+**The rerun (same day, fingerprint `7d376178fe27`):** every experiment, the `sim/out/`
+records (`shove_envelope`, `torque_audit`, `rl_curves`) and the demo clips re-made on
+today's model; the table with both columns is `sim/experiments/README.md`. Held:
+`run_sim` 246 of ~261 mm (tilt max 0.84°, turn 55.4° at 0.246 rad/s), `recover1` 0/20
+`handoff_ok` with the system 20/20 vs 11/20, `recover6_d052` 0/20 (system 11/20 = no
+righter), SLAM ATE 8.2 mm, and D018, D026, D027, D034, D043. Moved: the rim-shove floor
+(BW now on the 2.657 kg torso) 5 N grid standing 25–35 N by direction (min 0.96 BW),
+walking min 20 N (0.77 BW), 1 N grid 29 N (1.11 BW); the torque audit's self-righting
+knee 1.488 → 1.459 N·m, 49.6 % of stall, **HOT → WARM (D044)**; the `recover1` legacy
+height test 5/20 → 4/20; the cliff stop 186.8 → 252.3 mm short of the edge; odometry drift
+on rubble 1.02 → 8.06 %. Verdicts that moved: **D017** rubble crossed reliably ≤ 30 →
+≤ 25 mm (still snags, never falls); **D022** the v1 brace's walking floor 33 → 40 N no
+longer reproduces (27 → 27 N); **D023** the watchdog at 40 mm 1/4 → 4/4 became 0/4 → 2/4,
+and the fairing, first run on the same fields as its baseline, is still rejected but
+"helps only at 45 mm" is false (it helps a little at 30–35 mm, hurts at 45); **D025** the
+envelope order flips to v2 55.4 ≥ base 54.4 ≥ v1 53.2 N (one ladder step); **D040** turn
+80° → 48°, sidestep 170 → 140 mm under the speed envelope; **D042/D045/D048** the
+fallen demo falls 4/5, not 5/5 (seed 4 braces and stays up; the other 4 right and walk
+away). The decision rows keep their dated numbers.
+
+
+**Next:** order the bench kit (`bom/BOM.csv` phase A); the fit ladder → `params.print`
+(B28); print batches 0–1 (`docs/PRINT_PLAN.md`); the first servo settles the horn
+(B23) and the VERIFY-ON-BENCH sign bits (B32).
+
+## 2026-09-25 · Session 9h — three brains installed and measured; stop never waits for a model (D055, D055a, D056, D057)
 
 **Done**       — `rocky.sh brain-install` + `brain-bench` (built by an 11-agent workflow, 26 review findings fixed). The owner's downloads (Qwen3.5-4B Q8_0, Qwen3.5-9B UD-Q6_K_XL, Gemma 4 12B UD-Q6_K_XL) installed with their projectors; five brains measured on the robot's jobs with one harness. Stop gate in every model mode, `move(forward_m, left_m)`, two prompt rules, per-model box order, world change forgets the eye, `event_seq`, scratch gesture library for the bench. Docs: BRAIN_MODELS status table + verdict, COCKPIT_GUIDE (choosing a brain, saying stop, move), SIM_GUIDE.
 **Decisions**  — D055. `qwen3.5-9b` stays the default all-in-one brain, `qwen3.5-4b` is the small one, `gemma-4-12b` the Gemma option, the Q6 9B a delete candidate, the 26B and the 3B eye are not brains.
@@ -16,7 +122,7 @@ prints and dumb bugs are the most valuable lines in this file.*
 **Done (later the same day)** — D056 shipped (b3df144): `harness/capabilities.py` registry, cockpit `/api/capabilities` with a version, the MCP list rebuilt live with `tools/list_changed`, `docs/TOOLS.md` generated and CI-checked; zero behaviour change proven against snapshots of the previous schemas. Fallback chains set to the D055 verdict. The owner's cockpit runs as the transient unit `rocky-cockpit.service`.
 **Done (evening)** — B41 measured (D055a): per-family prompt notes lift Gemma 12B to 20/20 and the 9B to 19/20; thinking on hurts. `.gitignore` keeps the owner's personal to-do files (`OWNER_TODO*.md`, `TONIGHT*.md`) out of the public-facing repo.
 **Done (night)** — D057 shipped (d9d73c8): place recognition from senses, off by default (`--recognize`), three-verdict bench 21/21 verdicts / changes 3/6 on the second run; `brain-install --uninstall`; the owner's evening checklist lives in the git-ignored `OWNER_TODO.md`.
-**Next**       — B38 (h)–(j): confirm added objects from a sidestep viewpoint + name folding; speaker id + people memory (B39); sensors as params (B40) with the three-verdict bench (B38); speaker id + people memory (B39); sensors as params (B40); Gemma with thinking on (B41). Restart the owner's cockpit onto this code.
+**Next**       — B38 (h)–(j): confirm added objects from a sidestep viewpoint + name folding, widen the new-room margin, say "ambiguous until named" on the situation line; speaker id + people memory (B39); sensors as params (B40), judged with the three-verdict bench. (B41 closed: thinking on measured worse.)
 
 ## 2026-09-24 · Session 9g (laptop, evening) — talk to it: fast speech, an eye that measures, memory, an all-in-one brain, the phone front end (D053, D054)
 
@@ -31,7 +137,7 @@ add joints / servos / materials"; "that memory and situational-awareness idea".
 - Brain: the research round (3 sweeps, 22 candidates, each verified) → Qwen3.5-9B
   downloaded, registered in llama-swap (runs alone), measured 7.2 GB / 6.5 s cold /
   57.7 t/s / tool calls 0.2–1.5 s / `look` OK; default multimodal role. lfm2.5-vl keeps
-  the fast eye. Report: `docs/BRAIN_MODELS_2026-09-24.md`.
+  the fast eye. Report: `docs/archive/BRAIN_MODELS_2026-09-24.md` (guide: `docs/BRAINS.md`).
 - Vision: `find_object` with box→floor geometry, 0.7° bearing / 3 cm distance, 3/3 finds;
   `sim/vision_bench.py` (`46ee083`). A VLM is not a cliff sensor (1–3 of 4).
 - Memory + awareness: `sim/scene_memory.py`, five tools for every brain and MCP, a
@@ -371,7 +477,7 @@ GIF "fly and jitter". Both true, neither a physics bug.
 - **Review** (`docs/REVIEW_2026-09-22.md`): three parallel passes over the
   D046 tree — mechanical, electronics/BOM, software/repo — with every
   finding dispositioned. Headline: `servo_st3215.py` v0.1 was a guessed box
-  wrong in five independent ways, so every leg part Tyler printed (photo in
+  wrong in five independent ways, so every leg part the owner printed (photo in
   `media/`) was designed for a servo that does not exist; the D046 yaw
   stage would have failed structurally (~240 N through a 683ZZ 15 mm from
   the horn). Electronics: all-ST3215, ESP32 driver board is core, per-leg
@@ -391,9 +497,13 @@ GIF "fly and jitter". Both true, neither a physics bug.
   61 = `params.leg.hip_axis_z`, read by gait, MJCF and URDF (three hard-
   coded 58s gone). **CAD CI 23/23 tree clean**, joint suite clean with four
   new check classes, mass 2665 g, sim walk unchanged, URDF parity OK.
-- **Docs**: `docs/PRINT_PLAN_2026-09-22.md` (batch 1 coupons → batch 2 one
-  leg → batch 3 body), `bom/SHOPPING_LIST_2026-09-22.md` (bench kit ≈
-  $300–370, full robot adds ≈ $900–1,050), D047 row, B22–B28, print pack
+  (From the notes inbox: coxa 78 g (fork 14.1), femur 34 (link 16.1 +
+  plate B 13.5), tibia 131, torso 1449; walk +X 264 mm, tilt max 1.0°;
+  URDF parity FK 0.04 mm, mass 2.705 = 2.705 kg, the claw still counted
+  twice until D052.)
+- **Docs**: the print plan (batch 1 coupons → batch 2 one leg → batch 3
+  body; now `docs/PRINT_PLAN.md`), a shopping list (bench kit ≈ $300–370,
+  full robot adds ≈ $900–1,050; replaced by `bom/BOM.csv` on 2026-09-26), D047 row, B22–B28, print pack
   v0.5, viewer rebuilt.
 - **Repo**: everything committed to git (drop/patch workflow retired),
   MIT LICENSE, `.mcp.json` untracked, duplicates and `NEXT_SESSION.md`
@@ -430,11 +540,11 @@ GIF "fly and jitter". Both true, neither a physics bug.
   (`robust_fwd2`: 325 mm vs the bare gait's 366 — the D031 result stands),
   `eval_recover` on a smoke checkpoint.
 - Fixed: `train_ppo.py --resume` with nothing left to train crashed with
-  `UnboundLocalError: update` (NOTES_INBOX 09-08); it now explains that
+  `UnboundLocalError: update` (session 8e); it now explains that
   `--total-steps` is cumulative and exits cleanly. New launcher commands
   `train-walk` / `eval-walk`.
 - Retired `docs/SESSION_WORKFLOW.md` (cloud-drop process) and the zip
-  instructions in `LAPTOP_SETUP.md`.
+  instructions in the laptop setup page (since 2026-09-26 the README's Setup).
 
 **Decisions**: D047.
 
@@ -445,921 +555,152 @@ GIF "fly and jitter". Both true, neither a physics bug.
 - Repo pass 3: move the one-off `run_*_v2` / `diag_*` experiment scripts
   out of `sim/` into `experiments/`; a hardware backend for the harness.
 
----
+## 2026-09-17 · Session 8f (laptop) — the dry-fit fails: a joint suite, then D046
 
-## 2026-09-01 · Session 8d — the robot gets back up on its own: FALLEN reflex branch + recovery retrain, talk-to-Pebble intent layer, live lidar + patrol, torque re-audit, servo order v2
+*Filed 2026-09-26 from the notes inbox (09-17, 09-17 later, 09-18); the D046 parts
+were superseded five days later by D047.*
 
-**Done**
-- **Recovery reward v2 (D041) — and its honest ending (D045).** Success
-  is now literally the handoff criterion (tilt<25°, h>0.09, held 0.5 s)
-  + a feet-down term while upright; constants shared with eval + reflex.
-  Retrained recover1 2M → 3.67M (v2, DR on; stopped the anneal at 3.16M
-  and resumed with ent_coef 0 when entropy kept exploding). Episodes
-  terminated with success in training — v1 never did once — **but the
-  deterministic policy REGRESSED: 2/20 stood-after-handoff vs recover1's
-  12/20 (re-verified, same seeds)**. Cause found: clip+rate-limit makes
-  wide actions a bang-bang strategy; sigma inflated 13.8→22.1 nats even
-  with the entropy bonus OFF, and the mean decayed. Fix shipped:
-  `--log-std-max` sigma cap in train_ppo; the capped v2 retrain is the
-  queued laptop overnight. recover1 stays the shipped righter.
-- **ReflexSupervisor FALLEN + RIGHTED (D042)** — tilt>60° held 1 s hands
-  the joints to a pluggable righter (the recovery policy); handoff
-  criterion → smoothstep ramp to planted stance → NORMAL. Supervisor
-  stays torch-free (Pi-ready). 6 state-machine tests green.
-  **`sim/run_reflex_fallen.py`: 120 N shove → brace loses → tumble →
-  policy rights it → walks away, 5/5 seeds** (one via the 10 s deadline
-  ramp — that fallback earns its keep). Video: `pebble_fallen_recover.mp4`.
-- **`harness/intent.py` (talk-to-Pebble)** — deterministic regex/keyword
-  text → the six tools; REPL, `--once`, `--stdin` (the whisper.cpp voice
-  pipe is documented in the docstring). 14 tests; "look around" the
-  gesture vs "what's around" the scan disambiguated; guard supremacy
-  test included (parser walks the mock at the void → `stopped:"cliff"`).
-- **Lidar live in the harness (D043)** — `scan_summary` now fires the
-  sim_lidar ray fan in ANY world (8 map-frame sectors, nearest,
-  frontiers) with its blind spot documented in the result; new
-  `ROCKY_WORLD=room` (walls/pillars/crate). **`sim/run_patrol.py`: 5/5
-  waypoint patrol on the tool surface alone**, chord-speak per stop,
-  JSON report; scans match room geometry exactly.
-- **`sim/torque_audit.py` (D044)** — static stall margins on the D039
-  masses (2840 g): walking 12–16% ST3215, and the ONLY warm joint is
-  the recovery knee push, 50% ST3215 / 30% STS3250. Self-righting now
-  sizes the servos, not manipulation.
-- **Servo order sheet v2** (`docs/pebble_order_sheet_v2.html`, in the
-  project) — prices re-verified 09-01 (Seeed ST3215 $23.99/$22.99@10+
-  US stock; SCS0009 $9/$8@10+; Waveshare adapter $4.99; STS3250 ~$50–60
-  eBay/AliExpress, variant trap flagged). Recommended: 10× ST3215 +
-  5× STS3250 knees + spare ≈ $585; budget all-ST3215 $435. Playwright-
-  verified (D007). Per Tyler: prefer torque/headroom over cheapest;
-  everything stays in the printed ST3215 case.
+**Field report:** the owner dry-fit the printed leg chain. Base → yaw blank → fork went
+together "not great", the femur link attached to nothing, the blanks did not attach,
+nothing past the first servo mount connected. **The cause was in the CAD, not the
+printer:** the checks proved non-overlap and one solid per part; none asked whether a
+joint can be assembled or what holds it. A new probe, `cad/check_assembly.py`, at
+nominal params:
+- **The coxa stage was an assembly deadlock.** All four yaw-horn M2 driver columns ran
+  through the crown arm (45.4 mm³ of base in each; the in-module "driver access CLEAR"
+  had tested only the fork). The other order, fork bolted to the servo first and slid in
+  from +X, failed too: the Ø2.9 stub hit the arm for x 3..9 (up to 17.8 mm³). No order
+  built it.
+- Vertical budget at the coxa: horn top 38.0 = hub bottom (0 gap), floor top 45.65 vs
+  the arm's underside 46.15 (0.5), collar vs arm top 0.85; fork +1 mm → 125 mm³ into the
+  arm. Without the 683ZZ the stub sat in a Ø6.85 pocket: 3.95 mm radial slop at z 48.
+- **Femur link:** each hub was 4 × M2 through Ø2.4 into a Ø1.7 pilot in the blank's
+  3 mm horn disc, then 3 mm of air (BCD r 7 outside the Ø6 boss); pilot bore Ø6.4 vs the
+  blank's Ø2.1 centre hole, so no radial location: a 2 mm nudge met zero material.
+- Blanks: zip ties only in every cradle; "horn disc UP, no support" was a Ø20 disc on a
+  Ø6 boss, 7 mm of 90° overhang that `check_printability` did not flag. The horn coupler
+  (founding plan §3.4) was an orphan: 1709 mm³ of overlap if put between.
 
-**Broke / caught**
-- v1 recovery success never fired in training (ep_len pinned at 300 for
-  2M steps) — found reading the training log, not the reward code. The
-  policy propped on 1.5 feet because feet paid nothing (D041's why).
-- intent unit-regex `(cm|m|mm)` matched "m" inside "mm" → 100 mm parsed
-  as 100 m. Alternation order matters: `(cm|mm|m)`.
-- First intent executor test walked the mock robot into the mock void
-  from (0.10, 0.05) — the guard line is x≈0.17. The test now starts at
-  −0.30; the guard winning WAS the correct behavior.
-- The sharpening run itself died silently at 3.67M (no traceback, no
-  OOM — likely reaped between container turns); checkpoint intact, and
-  by then the answer was already clear (sigma still rising).
+**D046 implemented, CAD CI 23/23 TREE CLEAN (106 s), printability 58 parts clean:**
+- J1 yaw (`part_coxa` v0.3): the crown arm became a bolt-on `coxa_crown_cap`; an M3 × 10
+  axle threading 5.65 mm into a fork boss replaced the stub; horn centre-screw pocket
+  Ø6.6 × 3.5; cap/boss gap 0.4; collar 1 mm over the cap top.
+- J2/J3 (`part_femur` v0.2 + `part_coupler`): the link carries the coupler's recess on
+  both hubs. Coupler lobes moved to 45/135/225/315 (they sat 0.8 mm over their own M2
+  heads), half-angle 28 → 22° so a Ø4.4 driver fits, blind M3 bores 4.8 mm deep. The
+  recess clamp angles are mirrored (−45/−225): a real bug in the first cut, caught by
+  the new coaxiality probe. Link plate at y −25..−19 (was −22.3..−16.3).
+- Retention (`servo_mount.py`): full-height lips (4 mm reach) + a printed strap per
+  cradle; 2 mm nudges now meet 300–1300 mm³ in every direction. Blank v0.2: Ø14 undercut
+  fill, 4 × Ø2.4 through + M2 nut slots (4.3 × 1.9 at z 33..34.9). Four coupons
+  (`part_leg_coupons.py`) clipped from the production solids.
+- The joint suite joined `run_all_checks`: it failed the old tree with 4 findings.
+- Hardware missing from the order sheets then: M2 × 8 (≥ 16) + nuts (16), M2 × 6 (16),
+  M3 × 8 (≥ 12), M3 × 10 (5).
 
-**Decisions**: D041 (v2 reward = handoff criterion), D042 (FALLEN/RIGHTED
-states, pluggable righter), D043 (scan_summary everywhere + honesty note,
-room world), D044 (torque re-audit: self-righting is the sizing driver;
-servo split recommendation), D045 (recover1 stays the righter; sigma-
-inflation diagnosis; --log-std-max fix; capped retrain queued).
+**09-18, same session:** a **cantilever rule** in `check_printability.py`: an overhang
+blob whose boundary touches the layer below on < 60 % of its length is a cantilever;
+≥ 3 mm with a "no support" plan fails. Regression: the v0.1 blank's horn disc 6.7 mm
+FAIL, v0.2 2.7 pass; `tibia_sea_outer`'s 9.6 mm roof over the tube socket reads as a
+bridge (2.8 cantilever), pass. It caught one more: `calib_gauge_hip`'s cradle shelf
+overhung its shaft by 5 mm at 90° with no support, a drooping reference surface, now a
+lofted pedestal (34–40° from vertical). Viewer rebuilt (30.8 MB), print pack
+regenerated. Mass audit with the cap × 5 (PETG) and the straps: torso 1462.4 → 1477.3 g,
+coxa 86.2 → 89.2, femur 15.7 → 15.1, tibia 135.0 → 138.5; robot 2649 → 2691 g (+1.6 %,
+inside the ±30 % fill-factor band; no re-baseline).
 
-**Next**
-- **The capped retrain (laptop overnight):** `train_ppo.py --env recover
-  --reward v2 --log-std-max -0.5 --num-envs 8` from scratch or from
-  recover1 — beat 12/20 or file another negative.
-- Rewrite eval_recover's video note for recover2? No — recover1 is the
-  shipped righter; leave videos pointing at it.
-- Order the servos (sheet v2 — the STS3250 lead time gates Batch 2).
-- Wire intent.py into the playground prompt; try the whisper.cpp pipe on
-  the laptop; first real Ollama run of local_brain.
-- Caliper numbers → NOTES_INBOX → params regen (still the print gate).
+**Deferred then (answered by D047):** a rear idler boss for two-sided brackets (B19),
+case-screw retention (B20); the yaw joint deliberately had no coupler.
 
+**Decisions:** D046. Backlog B19–B21.
 
-## 2026-08-31 · Session 8c (next day) — Tyler's laptop takes over: setup guide, keyboard teleop, local-LLM brain, flat chat-driving world, RL ground-up tour
+## 2026-09-08 · Session 8e (laptop) — the dev laptop runs the loop: the harness in physics, a local model drives it, the capped retrain is negative
 
-**Done**
-- **`docs/LAPTOP_SETUP.md`** — the whole stack on Tyler's Linux+CUDA
-  laptop (venv, GPU torch, live viewer, chat-driving via `.mcp.json`,
-  training, sync rules with sessions) + a Windows/WSL2 section for the
-  printer laptop, + a what-runs-where cheat sheet.
-- **Keyboard teleop in the playground** (`--viewer`): W/S/A/D nudge
-  velocity, Q/E turn, SPACE = D034 safe-stop, G = wave — press-only key
-  events, so taps accumulate; tested via the on_key path + headless
-  script (no NaNs).
-- **`harness/local_brain.py`** — an Ollama model drives sim-Pebble
-  through the SAME six tools the MCP server exposes: type to it, it
-  calls tools, physics executes, guards stay supreme. `--mock-llm`
-  (scripted brain) tested end-to-end in-container: say → wave →
-  scan/status → goto → `stopped:"arrived"`. The Ollama path is written
-  to the current tool-calling API but UNTESTED here (no daemon) — the
-  first laptop run will tell.
-- **`ROCKY_WORLD=flat`** on SimBackend — an open floor for chat-driving
-  (the default cliff island vetoes every long goto: great for guard
-  tests, lousy living room). Harness tests still 7/7.
-- **`docs/RL_TOUR.md`** — RL from the policy-gradient theorem up through
-  every piece of train_ppo.py, then an 8-rung experiment ladder
-  (eval → curves → reward knob → the D031 exploration lesson → fair-DR
-  comparison → sigma-anneal → recovery success-criterion fix → new env)
-  with a matched reading list.
+*Filed 2026-09-26 from the notes inbox (09-01, 09-08, 09-08 later).*
 
-**Broke / found**
-- My own local_brain first described goto in MILLIMETERS — the contract
-  is METERS (harness/server.py docstring). goto(-150, 50) walked 20 s
-  toward a target 150 m away and "timed out"; in meters it ARRIVES
-  within the 25 mm ball. Units in tool descriptions are load-bearing.
-- Chat-driving the cliff world twice in one conversation can end
-  `stopped:"FELL"` (a second goto from a BRACE pose at the edge) —
-  noted, not chased; the flat world is the driving surface anyway.
+**Before it (09-01):** the sim environment stood up on the laptop (venv at the repo root,
+uv, Python 3.12). `matplotlib` and `scipy` turned out to be hard imports and `mcp<2` a
+requirement (the SDK 2.x renamed FastMCP): both now in the pyproject extras. torch
+2.13.0+cu130 from plain PyPI saw the GPU. Verified that day: `run_sim` walks 265 mm, no
+fall; driver 58/58; harness 21 fast + 1 slow; gait 6/6; gestures2 7/7 clean;
+`eval_ppo` on `robust_fwd2` return 284.6; the PPO smoke passed.
 
-**Next**
-- Tyler: LAPTOP_SETUP top to bottom; first Ollama run of local_brain
-  (report which model behaves); RL_TOUR rungs 1–4.
-- Session 9 unchanged (calipers → params regen; recovery → FALLEN
-  branch) + fold Tyler's laptop findings into NOTES_INBOX.
+**Done:**
+- `harness/sim_backend.py`: `ROCKY_VIEWER=1` opens the passive MuJoCo window and paces
+  goto and gestures to real time (no display → one stderr line, headless as before);
+  `gesture()` now **runs** the gesture in physics (was log-only; all 10 render clean in
+  the flat world, no falls; `stop()` cuts one short → `stopped: "user"`; a fall reports
+  FELL like goto); `ROCKY_AUDIO=1` plays the chord samples. **Goto bug:** the target
+  direction reached the gait in the MAP frame, but WaveGait takes BODY-frame
+  velocities; invisible while gestures were log-only (yaw stayed ≈ 0). Now rotated by
+  the current yaw: turn + sidestep → goto (0.25, 0) and (−0.10, 0.20) both arrive
+  within the 25 mm ball. Harness 21 fast + 1 slow green.
+- `harness/local_brain.py`: `--base-url` / `ROCKY_LLM_BASE_URL` adds an
+  OpenAI-compatible client beside the Ollama path (`ROCKY_LLM_API_KEY`,
+  `ROCKY_LLM_MODEL`, `--think`, thinking off by default). qwen3.6-35b-a3b through a
+  local llama-swap drove the mock robot first try: say(greeting) →
+  gesture(jazz_hands) → status → a one-sentence report.
+- The chord samples rendered locally (`chordspeak2.py`: 16 words + a demo reel).
+- The CAD extras installed on the laptop (build123d 0.11.1): `run_all_checks` 21/21
+  TREE CLEAN in 103 s, so the caliper → params → regen → checks loop no longer needs a
+  cloud session.
+- `rocky.sh` born (play / chat / brain / talk / voice / test / jobs / train-recover /
+  eval-recover / cad-check); `voice` = push-to-talk through a local whisper server
+  (large-v3-turbo) into `harness.intent --stdin`, verified with a wav. A phone caliper
+  worksheet exports NOTES_INBOX line blocks.
+- Found: `train_ppo --resume` with nothing left to train died with
+  `UnboundLocalError: update` (fixed in session 9); `recover1` was trained at batch
+  1024 (8 envs × 128), not the documented 8 × 256.
+- `eval_recover` on `recover1` here = **10/20 stood** (the cloud said 12/20 on the same
+  seeds: MuJoCo 3.12 / CPU float drift); hold-pose 2/20, random 1/20. The laptop
+  baseline for comparisons is 10/20.
 
----
-
-## 2026-08-30 · Session 8b (same day) — print-physics audit (D038), CAD-derived sim masses (D039), gesture library v2 (D040), RL: gait run 2 → 3 M steps, command-sampled run 3, self-righting env + first training
-
-**Done**
-- **`cad/check_printability.py`** — every printable STL sliced in its
-  prescribed print pose: islands (bed/part), floating-above-bed, thin
-  walls (per-blob, persistence rule), overhang steps (inscribed-radius
-  width), bed fit; support policy per part; CI post-stage. **21/21 with
-  it live, PLATE CLEAN.** Regression-tested on the pre-fix STLs.
-- Fixes it forced: `coxa_fork` v0.2.2 (flat floor; horn-screw access —
-  the fork was UNBOLTABLE since v0.1 — counterbores + 45° pattern; new
-  in-module sweep/servo/driver-access checks), `tibia_sea_outer` ribs,
-  `shell_sector` interior rebuilt (sealed chambers → one connected
-  cavity with 45° ceilings, 41 → 24 cm³; LED groove 1.4; feed notch and
-  gills moved off the seam), `dock_base` ramp trimmed, `jig_column` +2
-  gussets, plan orientation fixes (servo_blank horn-up, gauge upright,
-  coxa_yaw_base plate support, stand_crown skirt support).
-- **`sim/mass_audit.py` → `mass_budget.json` → `build_mjcf.py`.** D017
-  re-baselined: walk identical; rubble identical (25/30 ok, 35/40 1-of-3
-  stuck, same seeds); push −13 % in N, unchanged in bodyweights.
-- **Gesture library v2** (7 gestures, joint-space, stability-asserted,
-  physics-verified 7/7, videos rendered) registered in playground +
-  harness (`gesture` lists 10). Harness 7/7, driver 58/58 still green.
-- **RL:** run 2 resumed 1.66 → 3.0 M steps, return 176 → **228.6** (bar
-  345). Run 3 (`runs/cmd_sample3`, command-sampled, warm-started): 136 →
-  221 by 4.2 M and climbing. **`sim/rocky_recover_env.py`** (self-righting:
-  absolute targets, rate-limited, dense uprightness + standing bonus; the
-  hold/random baselines score 0/3 successes) + `train_ppo.py --env
-  recover`; run 1 (`runs/recover1`) trained to 2.0 M steps in-session.
-  **Closing eval (20 random falls, deterministic policy + the hybrid
-  handoff in `eval_recover.py` — RL rights the body, the analytic planted
-  pose finishes): 12/20 STOOD vs 2/20 hold-pose / 1/20 random; best-tilt
-  median 1.4°; side 5/7, tumble 5/7, back 2/6 on this seed set. Pure-RL
-  "stand on ≥4 feet for 1 s" is still 0/20 — the policy rights and props
-  but doesn't discover foot placement; the handoff is the architecture
-  anyway (wire it as ReflexSupervisor's FALLEN branch). Next lever:
-  train with the handoff criterion in the reward.** Video delivered
-  (`pebble_recover.mp4`).
-- `docs/PRINT_NIGHT_s8.html` updated with every audit-driven note.
-- **Run 3 closed at 7.0 M steps, return 224 under full DR (bar 345).
-  Honest deterministic check (`eval_ppo.py --compare-zero`, nominal
-  forward, no DR): policy 298 / 294 mm / tilt 7.1° vs bare gait 365 /
-  366 mm / 0.7° — the residual policy still LOSES to the analytic gait
-  on the clean task. The gap is real, not noise; sigma-anneal or a
-  DR-matched comparison is the next experiment, and the D031 lesson
-  stands: the wave gait is a strong controller.**
-
-**Broke / found**
-- Thin-wall false positives are a real class: bore break-outs on curved
-  faces (0.2 mm²) and 45° plane-meets-cone feathers (≤1 mm tall). The
-  gate now needs a blob ≥2 mm² that persists across two 1 mm samples.
-- The accumulated-union "material below" test blew up quadratically on
-  the stand section (near-identical layer outlines) — replaced by three
-  downward rays per island.
-- A 22° body yaw on planted feet needs ~45° of coxa (R185 feet vs R100
-  coxa) — the first look-around blew the ±40 limit. 16° it is.
-- Random-policy return (287) > early PPO (225) on the recovery env:
-  expected with dense shaping; watch whether successes appear.
-
-**Decisions** — D038 (printability CI), D039 (CAD masses; quote push in
-BW), D040 (gesture v2 + physics-verified metrics).
-
-**Next** — file Tyler's caliper numbers; eval run 3 + recover1 checkpoints
-(`eval_ppo.py`, video); if recovery succeeds in sim, wire it as the
-`fallen` reflex path in ReflexSupervisor; carapace: regenerate/retire the
-orphan `shell_ring_assembled.stl`; measure real masses on bench day.
+**The D045 capped v2 retrain: NEGATIVE, both arms** (deterministic mean action,
+hybrid handoff, 20 episodes, same machine):
+- `recover3_capped` (warm from `recover1`, +2 M steps, `--reward v2 --log-std-max -0.5
+  --rollout 128`, 4.0 M total, 19 min, ~1.8 k sps): **7/20 stood**, pure-RL 0/20, mean
+  return 316.8, end-tilt median 5.2°; back 2/6, side 2/7, tumble 3/7. Final entropy
+  **13.78 nats = exactly the cap ceiling** (15 dims × (½ ln 2πe − 0.5)): every dimension
+  pinned at log σ = −0.5, so the policy still wants maximal noise and the cap merely
+  held it there. Training ep_len fell to 252 (stochastic rollouts do end in success),
+  return 543.
+- `recover3_scratch` (same recipe from scratch, 3 M steps, 22 min, ~2.3 k sps):
+  **3/20**, pure-RL 0/20, back 0/6 (end tilt median 113°: never rights from the back).
+  Entropy 10.75, under the cap on its own.
+- Reference: `recover2` (uncapped) ended at 22.13 nats and 2/20; `recover1` at 17.78
+  nats, ep_len 300 (never a training-time success), 10/20.
+- Reading (a hypothesis, not proven): under v2 the stochastic policy gets up but the
+  mean does not; the success rides on the noise, so capping σ removes the bang-bang
+  symptom without moving the mean toward a righting strategy. `recover1` stays the
+  shipped righter. (Both checkpoints were removed on 2026-09-26; git keeps them.)
 
 ---
 
-## 2026-08-30 · Session 8 — tree-wide floating-parts audit: SIX more parts were in pieces; D036 gate rolled into export(); print night re-planned
-
-**Field report (Tyler):** printed P1, P2 and hand_cam + 3 fingers; skipped the
-hub (the floating lugs). Ladder not measured yet. All clean so far.
-
-**Done**
-- **Mesh-level audit of every STL in cad/out** (connected components,
-  watertightness, degenerate flecks, bed fit) + the D036 gate now lives in
-  `common.export()` (raises on ≠1 solid; `multi=True` only for assemblies).
-  CI ran with the gate live: **20/20**. The hand hub was NOT a one-off —
-  six more printables were disconnected bodies, every one "CLEAN" by its
-  own interference checks (D037):
-  - `tool_scoop` — THREE bodies (bowl / neck / bayonet socket, 5 mm gaps
-    each way). Neck v0.2 rooted into the cap, trimmed 1 mm into the floor.
-  - `coxa_fork` — the −X high-collar wall attached to nothing (starts at
-    z 51 above the crown-arm sweep; 0.3 mm short of the back wall). End
-    walls now run through the back wall. ON THE LEG PLATE.
-  - `shell_sector` — both web feet (latch pad + magnet pocket) floating
-    13 mm inboard of the skirt. Flange feet reach 1 mm into the wall.
-  - `stand_section` — skirt hugs the LOWER tube (APO+FIT) so it never
-    touched its own tube. 3 mm seat ring z 0..3 (also the male-bar stop).
-  - `battery_sled` — finger scallop bottomed EXACTLY at z 0: floor cut
-    through, tail lip severed (0.000 mm gap, two solids). Raised; 1.8 mm
-    floor kept.
-  - `jig_column` — deck-proxy plate placed off the leg-port footprint, 6 mm
-    short of the spine. Now spans the column.
-  - `fit_ladder` — row-D index dots stayed at y −17 when the slots dropped
-    to −29: engraved INSIDE the slots (invisible), two tangent to slot
-    walls → non-manifold seam. Moved beside the slots. Tyler's printed
-    ladder is still valid (slots are 3.8/4.2/4.6 left→right).
-- Every affected module's own checks still pass (fork sweep vs base,
-  shell keep-outs + seam pair, stand slide/registration, tool retention,
-  jig port, ladder layout audit). Viewer regenerated + Playwright-verified.
-- **`docs/PRINT_NIGHT_s8.html`** (Playwright-verified, delivered): the
-  "what's left" plan — plate A (hub v0.2.2 + slider + tools, ≈31 g),
-  B (leg + blanks, ≈119 g, after calipers), C (deck, after port dance),
-  D (stand base+crown), bonus sectors; ≈400 g / ≈19.5 h remaining. Carries
-  the changed-STL table and the caliper GO/NO-GO block up front.
-- `print_estimate.json` refreshed for the new geometry.
-
-**Broke / found**
-- `shell_ring_assembled.stl` is an ORPHAN — no generator in the tree writes
-  it; the viewer's Carapace mode still embeds the stale file. Regenerate or
-  retire it next time part_shell changes.
-- Zero-volume tessellation flecks on hand_finger / tool_hook / foot_pad_tpu
-  tips (slicers discard them). Noted, not chased.
-- Pattern behind three of the bugs: a feature sized to ANOTHER part's
-  envelope (+FIT) instead of its own → exactly one clearance short of
-  touching. Worth a grep whenever a skirt/collar/wall is placed by FIT.
-
-**Decisions**
-- D037: single-solid gate in `common.export()`; `multi=True` explicit.
-
-**Next**
-- Tyler: calipers on the ladder → NOTES_INBOX → plate A tonight → B.
-- Session 9: file the ladder numbers into params (`print.clearance_fit`
-  etc.) and regen the tree; regenerate/retire `shell_ring_assembled`.
-
----
-
-## 2026-08-30 · Session 7 — the FLOATING LUGS: hand hub v0.2.2 (knuckle collar), connectivity checks land tree-wide precedent
-
-**Done**
-- **Tyler's field report confirmed and root-caused:** `hand_hub.stl` was SEVEN
-  bodies — the hub plus all six hinge lugs floating 4.3 mm above the hub top
-  (three 120° pairs, z 22.3–29.3 vs hub top z=18; ~146 mm³ each). The v0.2
-  KNUCKLE_Z raise (+4.2, the cam-clash fix) moved the lugs up but never
-  re-attached them — and v0.1's lugs were already 0.1 mm proud: they were
-  NEVER attached. Two releases shipped this way.
-- **Why every check passed anyway:** interference checks detect OVERLAP; a
-  disconnection is the absence of overlap. "CLEAN" was the bug. (D036.)
-- **Hand hub v0.2.2 — knuckle collar:** annular wall (r 19.45–22, 0.45 mm
-  running gap to the cam rim) from hub top to lug top; lugs widened to reach
-  it; swept tab-envelope windows cut at each station (the finger tab's upper
-  corner arcs to r≈20.8 mid-open — hand calc caught it before the boolean
-  did; same inverse-pose sweep trick as the finger scallops). Pin bores
-  lengthened through the collar: pins insert from OUTSIDE and the far wall
-  retains them (they can no longer walk out). Load path lug → collar → hub
-  is a proper shoulder (D020). Hub +4.5 cm³ (~+5 g).
-- **Checks:** hub/cam/finger each = 1 solid (new assertion), collar root
-  section 332 mm³, cam×hub 0.00, worst finger clash over the 14-pose dense
-  sweep 0.23 mm³ @ 55° (≤0.5 bar). `part_hand.py` now EXITS NONZERO on any
-  failure — CI enforces, not just prints. Tree CI **20/20**. Viewer
-  regenerated + Playwright-verified (hand modes show the collar).
-- Print queue item 6 updated: re-slice v0.2.2, never print a stale hub STL.
-
-**Broke / found**
-- `hand_finger.stl` carries two zero-volume tessellation flecks at the tip
-  cap (z 75.5 / 82.5, sub-0.25 mm, no volume) — slicers discard them;
-  cosmetic export artifact, not chased this session.
-- `test_viewer.py` writes the "Hand open/closed" screenshot to
-  `out/viewer_hand_open/closed.png` (slash in the slug makes a directory).
-  Harmless; left as-is, noted here.
-
-**Decisions**
-- D036: single-solid connectivity audit + attachment probe mandatory for
-  every printable module; module __main__ must exit nonzero on failure.
-
-**Next**
-- Roll the D036 connectivity assertion into the other 19 part modules
-  (part_hand is the only one carrying it so far).
-- Print night: hub v0.2.2 supersedes any sliced v0.2.1 plate.
-
----
-
-## 2026-08-07 · Session 6c (same day) — the PLAYGROUND: interactive sim, live tuning, chat-driving over MCP
-
-**Done**
-- **`sim/playground.py`** — drive Pebble before it exists: native MuJoCo
-  viewer + command REPL running the REAL gait/reflex/gesture/detector
-  code. walk / stop (D034 safe-stop) / gesture / say (chords through the
-  laptop speakers) / `set gait.T|h|R0|duty|hstep, reflex.trip` LIVE with
-  phase-continuous clock rescaling / push (shove it, watch the reflex) /
-  record (mp4 clips) / `--cliff` world / `--script` headless mode.
-  End-to-end headless test green (param change mid-walk, beckon, push,
-  clip written, zero NaNs).
-- **`docs/PLAYGROUND.md`** — the three ways to poke the robot (playground,
-  MCP Inspector, Claude-with-.mcp.json — `.mcp.json.example` added) and
-  the honesty box: what the uncalibrated sim is good for (logic,
-  geometry, trends) vs directional-only (absolute forces, friction,
-  servo tracking), plus the bench-day calibration path that closes the
-  gap (step response + stall -> kp/kv; kitchen-scale masses -> MJCF;
-  re-run the D017 baselines and measure what moved).
-- Tuning workflow rule: playground `set` is SIM-ONLY; keepers go to
-  NOTES_INBOX -> params.yaml -> full regen. The SSOT stays the SSOT.
-
-**Next** — unchanged; optional 7-item: passive viewer bolted onto
-SimBackend so chat-driving has eyes too.
-
----
-
-## 2026-08-07 · Session 6b (same day) — extension pass: MCP harness v0 LIVE, cliff safe-stop wired + measured, BECKON shipped, viewer weekend mode, parallel CI
-
-**Done**
-- **Rocky-MCP harness v0 IMPLEMENTED** (`harness/`): FastMCP stdio server,
-  6 tools per `docs/MCP_CONTRACT_v0.md`, MockBackend (behavioral contract)
-  + SimBackend (real MuJoCo cliff world + real detector + real safe-stop).
-  **8/8 tests green through an actual in-process MCP client session** —
-  including the marquee: `goto` into the void over MCP returns
-  `stopped:"cliff"` with the body held 185 mm short of the edge ON REAL
-  PHYSICS. Guard supremacy, single-writer preemption, honest async
-  (stop() resolves a goto with `stopped:"user"`), and v1 tools absent-not-
-  stubbed are all pinned by tests. `pytest harness/ -m "not slow"` = 1 s.
-- **Cliff stop path (D034):** `ReflexSupervisor.request_stop()` routes any
-  external halt through PLANT→BRACE→RECOVER. Measured
-  (`sim/run_cliff_safestop.py`): old path leaves the gait MARCHING IN
-  PLACE at the edge (24 post-halt contact breaks/4 s); new path: **0
-  breaks**, same 185 mm stop margin, lower peak tilt (0.49° vs 0.68°),
-  detector still fires with the supervisor owning ctrl. PASS.
-- **BECKON (B18 SHIPPED):** `pebble_gestures.beckon` + narrated
-  `sim/run_beckon.py` video (greeting → rising curious_question on curl
-  two → acknowledge). Cost a real lesson (D035): the position-space curl
-  IK'd to hip 98–117° against the +90° limit — both extremes clamped and
-  the arm didn't move; caught by diffing extreme frames, re-authored in
-  joint space (80° knee sweep, reads beautifully). Bonus find: fist-bump's
-  carry/extend waypoints ALSO ride the hip clamp (benign, but hand-v0.3
-  should re-author them).
-- **Viewer "Print weekend" mode** (browser-verified, 8 modes now): the
-  Sunday-night dry-fit — leg chain with the 3 posed servo blanks (their
-  own boolean check in `leg_assembly.py`: blanks × printed structure =
-  0.00 mm³), fit ladder v2, closed hand.
-- **Parallel `run_all_checks.py`**: modules were already independent
-  subprocesses — now N-at-a-time (`--serial` kept). 188 s → ~95 s on 2
-  cores; scales with the machine.
-- **`cad/print_estimate.py`**: honest ±30 % grams/time per weekend plate,
-  totals in the plan. Headline: **the whole weekend ≈ 460 g — one 1 kg
-  spool covers it with margin.**
-
-**Broke / found**
-- Beckon v1 saturation (above) — renders lie even in motion: the clamped
-  arm looked plausible in every still. Extreme-frame diffs are now part
-  of the gesture-video checklist.
-- Fist-bump waypoints past the hip limit (benign today, D035 notes the
-  v0.3 retune).
-
-**Next** — unchanged from 6a (print weekend + carts), plus: session 7 can
-extend the LIVE harness (wake-word → whisper.cpp → regex intent → these
-exact tools) instead of building it from a spec.
-
----
-
-## 2026-08-07 · Session 6 — print-weekend prep: fit ladder v2 (+ a real v1 bug), servo blanks, tibia clamp v0.2, weekend GO/NO-GO plan
-
-**Status in:** printer z-calibrated (Live-Z done), sheet question answered
-(textured PEI = correct for this project; smooth is a nice-to-have);
-NOTHING printed, NOTHING ordered, no RL run. Goal: print the body + one
-leg this weekend and dry-fit.
-
-**Done**
-- **Fit ladder v2** (`part_fit_ladder.py`): new row E — Ø2 hinge-pin holes
-  (2.00/2.10/2.20 — testable with Ø2 filament TONIGHT), 683ZZ press
-  pockets (6.85/6.95/7.05 ×3.4), Ø10 tube sockets (10.15/10.30/10.45).
-  The v1 ladder never tested the bearing seat, the tube fit, or the pin
-  holes — three of the leg's real interfaces. Plate 118×90.
-- **Fit ladder v1 BUG found + fixed:** the Ø4.8 heat-set pocket MERGED
-  with lip-slot #2 (wall broken open → falsely loose reading). Shipped in
-  v0.7.3, caught by a section-slice pass. Slots dropped to y −29; module
-  now asserts ≥1.5 mm edge margin + ≥1.0 mm min-wall between ALL features
-  (D033: plate-layout audits are mandatory for multi-feature coupons).
-- **`part_servo_blank.py` (B17, NEW):** printed exact-envelope ST3215
-  stand-in — case + boss + horn disc with the true M2 BCD. Boolean-proven
-  0.00 mm³ in all three cradles (coxa base / fork rails / knee carrier)
-  and against the reference dummy envelope. With 3 blanks the whole leg
-  chain assembles rigid THIS weekend despite zero servos on order. Tree
-  CI now 20 modules.
-- **Tibia clamp v0.2** (`part_tibia.py`): the pinch bolt was a bare Ø3.4
-  through-bore (nothing to thread into, nut would sit on a curve). Now:
-  clearance side + Ø2.8 thread-forming side + Ø6.5 spot-faced head seat
-  (≥1 mm wall to the tube bore, checked analytically). M3×10 is already
-  on the session-5 addendum.
-- **`docs/PRINT_WEEKEND_s6.html`** (Playwright-verified, delivered): plates
-  P1–P6 in dependency order, textured-sheet PLA settings (60–65 °C bed,
-  elephant-foot comp 0.15 ON, re-run Live-Z on THIS sheet), the Saturday
-  GO/NO-GO caliper table incl. the D032 slicer XY-hole-compensation
-  fallback (bores only), the dry-fit reality check, NOTES_INBOX template.
-- **Order spot-check (08-07):** Waveshare adapter $4.99 ✓, Seeed ST3215
-  $22 IN STOCK (≈$5/servo over AliExpress but weeks faster — Tyler's
-  call), SCS0009 $9.99 ✓, 683ZZ $4.38 ✓. **Carts still unplaced — the
-  servo order remains the project's critical path.**
-- **`docs/MCP_CONTRACT_v0.md`**: buildable Rocky-MCP v0 (6 tools, guard-
-  supremacy invariants as tests, wake-word/ASR scope fence, session-7
-  demo definition-of-done). `docs/SCALE_UP_NOTES.md`: what survives the
-  Pebble→Rocky jump (params/CI/interfaces/coupon methodology) vs what
-  deliberately doesn't (printed threads, PLA sections, printed detents).
-- Backlog: B17 shipped, B18 filed (beckon gesture + name-motif greeting,
-  sim session). Decisions D032, D033. PRINTER_NIGHT queue item 15.
-
-**Broke / found**
-- The v1 fit-ladder merge above — renders never showed it; the flat-plate
-  version of the D014 lesson. Slices and min-wall math, every plate.
-
-**Next**
-- Tyler's weekend: place carts (FIRST), then P1→P6 per the plan; fill
-  NOTES_INBOX. Session 7: file measurements → params → regen → 20/20;
-  then MCP-contract v0 against the sim, or bench runbook if servos landed.
-
-**Done**
-- **Viewer v0.3** (`cad/pebble_viewer.html`, renamed version-agnostic —
-  browser-verified): 7 modes with per-mode hint text — Full robot,
-  Carapace, **Bench & field** (stand STACKED at the 127 mm config, dock
-  with funnel + tower, I2 tools, clips), Leg, Hand, Parts: mechanism,
-  **Parts: session 4-5** (deck v0.4, sled, tray, star-board bracket,
-  sector, cap, clips). 16.7 MB self-contained.
-- **Showcase reel** (`sim/pebble_showcase_v07.mp4`, 31.6 s, narrated):
-  locomotion medley (walk/strafe/turn) → 40 N shove + the v2 PLANT→BRACE
-  safe-stop recovering on real contacts (first time on film) → cliff
-  approach + VOID stop + retreat (also first footage). Supersedes the
-  session-2 reel; stuck-retry + gestures videos stand as-is.
-- **bom/ADDENDUM_session5.html**: the deltas (washer strikes, magnet
-  quantity bump to ≥20, M3×10s, perfboard, XT60E-M for the dock —
-  flagged EST-not-live, quantities are the truth). Interaction stack:
-  nothing to buy — mic array + speaker already on Batch 3.
-- README refreshed (layout, videos, run_all_checks + train_ppo in the
-  quickstart, status current).
-
----
-
-## 2026-07-31 · Session 5c (same day) — refinement pass: B13/B14 shipped, tree-wide CI, vision/interaction plan
-
-**Done**
-- **Cable clips (B13 → SHIPPED)**: `part_clips.py` — snap tube_clip (80 %
-  gap) + link_clip, wire tunnels + zip slots.
-- **Charging dock mechanicals (B14)**: `part_dock.py` — walk-on plate,
-  funnel rails (±8 mm capture → ±0.8 = the XT60 float's own tolerance),
-  shin bumper, plug tower meeting the 20 mm-crouch mate plane within 2 mm
-  (VERIFY); feet verified to land on ground. Robot-side charge port =
-  Batch-2 electrical decision, options in the docstring.
-- **`cad/run_all_checks.py`** — the tree's CI: every part module's own
-  checks, one command. First full run: **19/19 PASS, TREE CLEAN** (199 s).
-- **`docs/VISION_PLAN.md`** — the L0–L3 world-model stack (lidar-first,
-  Rocky-canon 360° geometric sight; cameras hidden behind gills, B16),
-  the Pebble split (reflexes onboard / VLM cortex on the home server,
-  link-down safe by construction), big-Rocky onboard NPU path, **the
-  talk-to-Rocky loop** (ReSpeaker + speaker are already on Batch 3:
-  wake-word → whisper ASR → harness → chord-speak replies + gestures,
-  human jazz-hands/fist-offer recognition via pose model or VLM), and
-  **Rocky-as-MCP-server** — say/gesture/goto/scan/dock tools over a
-  guarded reflex layer, so the brain (local LLM, cloud API, onboard NPU)
-  is swappable without touching the robot. Task ideas filed: patrol-and-
-  report, guard/map-diff, follow-me, fetch/point, scoop delivery,
-  question game, jazz echo, bedtime round.
-- RL run 2 (σ=0.37) finished the session at **1.57M steps, return 161** —
-  past run 1's 1.4M-step peak (140) with better trend; both resumable.
-- Backlog: B13/B14 shipped, B16 filed; fingertips (B15) stay caliper-gated
-  on purpose.
-
-**Next** — see docs/NEXT_SESSION (the session-6 prompt draft).
-
----
-
-## 2026-07-31 · Session 5b (same day) — CAD interaction pass; deck v0.4; RL actually trains; JAZZ HANDS
-
-*(Tyler: printer refurb finishing tonight/tomorrow; first part orders
-imminent — so this half-session closed every "the printed body can't
-actually assemble yet" gap and added the interacting mechanisms.)*
-
-**Done**
-- **Deck v0.4 (D030):** the shell finally has something to bite — 5 latch
-  strikes (tangential peg entries after the audit caught radial ones 0.9 mm
-  off the pentagon), 5 washer recesses under the foot magnets, power
-  grommet + zip anchors per BUS_STARBOARD. Coxa dock re-checked 0.00 mm³.
-- **Carapace seams became real joints (D030):** outline noise made
-  72°-PERIODIC (five identical sectors previously met with mismatched wall
-  radii at every seam — invisible in renders, fatal for joints) + a
-  chaining tongue-and-groove on the sector edges: pair interference
-  0.00 mm³, engagement proven 15.5 mm³ (and the first groove was cut into
-  open air on the wrong side of the edge plane — the check caught it).
-  Shell magnet layout simplified to one per web after the deck said no.
-- **JAZZ HANDS + FIST MY BUMP** (`gait/pebble_gestures.py`,
-  `sim/run_gestures.py`, video delivered): non-adjacent two-arm jazz with
-  4.5 Hz claw flutter + shimmy + bounce; fist bump with the closed cone as
-  the fist (canon), a mocap "friend fist", and the bump-give triggered by
-  the ACTUAL detected contact force — the same signal path as the SEA foot
-  switch. Narrated: greeting → AMAZE → curious_question → acknowledge →
-  discovery. Lesson: the leg's INNER reach annulus (|L2−L3| = 40 mm)
-  rejected the first carry pose — check both reach limits, not just outer.
-- **Bench stand** (`part_stand.py`): base + stackable sections + crown,
-  every joint the same printed I6 spigot (aligned slides 0.00 mm³,
-  36°-misaligned registers at 6030 mm³). THREE arms at the free webs —
-  the belly bay blocks two webs and coxa-plate cantilevers rule out all
-  stations (layout checks encode it). Heights 47/127/207 mm; 207 frees
-  the entire 172 mm leg envelope for bench-day calibration.
-- **First real I2 tools** (`part_tools.py`): hook + scoop carrying the
-  hand-hub's exact bayonet socket recipe — insert free / lock free /
-  locked-and-pulled RETAINS (20.5 mm³), byte-for-byte the part_tibia check.
-- **RL kit v1.1 + first real training (D031):** DR now DRAWS per episode
-  from stored bases (v1 friction randomization COMPOUNDED across resets),
-  adds mass/torque/gravity-tilt/action-latency, `--cmd-sample` trains the
-  whole command envelope, reward tracks yaw rate. In-session run #1
-  (σ=0.6 exploration): 1.4M steps, return 37→140 — but the bare gait
-  scores 345 under the same DR: PPO was mostly learning to mute its own
-  exploration noise, and the deterministic policy had wandered into a
-  slow 20 mm/s crawl. **Residual-RL lesson: exploration must start QUIET
-  on top of a good controller.** log_std init −0.5→−1.0; run #2 reached
-  run #1's 500k-step return within 50k steps. Curve + checkpoints in
-  `sim/runs/` (resumable on the laptop: `--resume`).
-- Print queue items 12–13 (tools as I2 fit coupons; stand overnight-class);
-  backlog B12–B15 (lidar cap awaits the puck decision, cable clips,
-  charging dock spec, fingertip serrations).
-
-**Decisions** — D030, D031 filed.
-
-**Next**
-1. Printer: fit ladder FIRST, then coupons; session 6 = measured regen of
-   EVERYTHING (now including sector seams + deck strikes).
-2. Laptop RL: `python3 train_ppo.py --num-envs 8 --cmd-sample` overnight;
-   then eval-vs-zero with the video.
-3. Order note for the body-test batch: M3 washers ×5-10 (deck strikes),
-   Ø6×3 magnets, M3×10 for latch inserts ride the existing addendum lines.
-
----
-
-## 2026-07-31 · Session 5 — Sim loops closed (brace/SLAM/yaw); RL kit; chord-speak v0.2; carapace v0
-
-*(Another no-hardware session: printer repair happening tonight, carts &
-servos still pending. Priorities 2–6 of the session brief; nothing printed
-means nothing to file, so the fit-ladder → params regen pipeline stays
-armed for next time.)*
-
-**Done**
-- **Push-reflex v2 + an honest re-measurement (D025):** diagnosed the
-  +0.25T pocket down to mechanism (freeze breaks the polygon at the shove
-  peak; the crouch EXTENDS loaded pivot-side legs and pushes the robot
-  over its own support line — 51° vs 14.7° tilt, `diag_brace_phase.py`),
-  then found the D022 harness itself was PHASE-CONFOUNDED (supervisor
-  clock ran during idle: every reflex trial 0.625 cycles off its
-  baseline). Phase-aligned sweep: **bare gait is the best single-impulse
-  controller** (mean 43.5 N vs v1's 37.1); v2 (finish-the-step PLANT →
-  tilt-vector contact-seeking BRACE) recovers to 40.9 N and ≥ everything
-  at all 8 probe phases in the weakest direction. Sustained-lean test:
-  no reflex benefit. Verdict: reflex OFF for pushes, v2 machinery becomes
-  the SAFE-STOP primitive. `fig_push_reflex_v2.png`.
-- **SLAM-lite (D027):** `perception/scan_matching.py` — point-to-line ICP
-  (self-test recovers a synthetic pose to 0.5 mm/0.03°) + keyframe
-  matcher seeded by EKF deltas. On the lap: **ATE 55.6→8.2 mm, yaw
-  4.8°→0.06°, map IoU 0.26→0.72**. `sim_lidar.py` now runs the EKF
-  in-loop (honest odometry in the archive) — and caught the session-4 lap
-  physically grinding pillar2 at 43 % speed (GT maps hid it; the
-  stance-feet-don't-slip assumption screamed). Routes now audited.
-- **EKF yaw fix (D026):** standing zero-yaw-rate pseudo-update through a
-  StillnessGate + realistic bias prior. Flat walk 6.8°→**0.25°** end yaw,
-  patrol 15.1°→**1.7°**, bg_z estimate lands exactly on truth; position
-  drift improves too (yaw error had been rotating the velocity frame).
-  Mag stub implemented, gated hard, default off. `fig_odom_v2_yaw.png`.
-- **RL training kit (laptop-ready):** `sim/train_ppo.py` — vector envs
-  (async + sync), DR on by default (friction + pushes), obs/return
-  normalization, atomic checkpoint + exact RESUME (optimizer, normalizers,
-  RNG), KL early-stop, SIGINT-safe, jsonl logs; `sim/eval_ppo.py` replays
-  any checkpoint into an mp4 + walking metrics with a zero-action
-  comparison column. Verified here end-to-end (train → resume → render;
-  658 sps on 2 container cores — the 16 GB laptop with 8 envs will fly).
-- **Chord-speak v0.2 (D028):** the Eridian voice — JI chord-syllables
-  (septimal/undecimal), 66–200 Hz roots, one formant throat, band-limited
-  breath, growl=urgency, beating=uncertainty; no scale runs, no cadences.
-  16 words (+`determined`), event engine with priorities/cooldowns/
-  preemption, and the 40 mm stuck-retry video re-rendered NARRATED
-  (confused → thinking → acknowledge → found_it → AMAZE). A/B audition
-  page browser-verified. Objective shift: piano-grid energy 85→24–39 %,
-  centroid 210–360 Hz.
-- **Carapace v0 (D029, the creature pass):** `part_shell.py` — five
-  identical rock sectors + hatch cap: terraced perturbed-pentagon tiers,
-  fork-swing-derived leg arches, web feet with latch pads + magnets (I3),
-  vertical I6 dovetail bars, wall-following B8 LED groove, B9 gills.
-  Four keep-outs boolean-clean; full-robot preview + WebGL viewer updated
-  (new "Carapace v0" mode), Playwright-verified. Sector 39 cm³ (~47 g) —
-  thinning pass queued post-caliper.
-- **Wiring star-board:** `docs/BUS_STARBOARD.md` (perfboard net-list,
-  proposed deck placement, build order) + `part_busboard.py` bracket +
-  a COMPUTED cut-length table from deck v0.3 geometry (longest stub
-  310 mm < the 400 mm ceiling) — "measure on deck" upgraded to "verify".
-- Printer-night queue extended (items 10–11): busboard bracket + one
-  shell sector/cap as the optional second overnight.
-
-**Broke / surprises**
-- The D022 phase-probe pocket was real, but HALF the story was the
-  harness: idle-running gait clocks phase-shifted every supervisor trial.
-  Alignment rule now lives in the reflex itself (clock starts with
-  motion). Re-measure before re-engineering.
-- v2.0's ground-seek commanded unreachable depths → IK NaN → one NaN in
-  ctrl detonates the whole MuJoCo state. Reachability clamp + NaN guard
-  now in the supervisor.
-- Position-servo relaxation creep: 0.3–1.2°/s of REAL decaying twist for
-  >1 s after any pose change — exactly gyro-bias scale. A zero-rate
-  update fired early calibrates it in with the wrong sign (bg_z −0.0109
-  vs true +0.0050 → 37° lap error). StillnessGate: calibrate at the END
-  of pauses.
-- Session-4's lidar lap drove through a pillar; ground-truth mapping
-  can't see collisions. Physics keeps auditing everything it touches.
-- Poly3D renders hide interiors: the first shell build's flange (with its
-  latch pockets) was silently eaten by the cavity boolean and the render
-  looked fine — boolean PROBES caught it (D014's spirit, extended: slice
-  checks and probe boxes over eyeballs).
-- v0.2's first breath layer was full-band white noise — spectral centroid
-  7 kHz, a whisper not a chest. Band-limit, then judge.
-
-**Decisions** — D025–D029 in docs/decisions.md.
-
-**Next**
-1. Tonight: printer refurb + PRINTER_NIGHT.md queue; file fit-ladder
-   numbers in NOTES_INBOX → session 6 regenerates every part.
-2. Tyler: carts (STILL the long-pole) + lidar decision (LDS02RR pull vs
-   LD19).
-3. Servos land: BENCH_RUNBOOK.md is the whole day.
-4. Sim: RL scale-up on the laptop (`train_ppo.py --num-envs 8`,
-   overnight); wire the v2 PLANT→BRACE into the cliff detector's stop
-   path; ICP loop-closure when a second lap dataset exists.
-5. CAD: shell thinning + deck v0.4 (latch strikes + star-board bolt
-   pattern + power grommet from BUS_STARBOARD.md's proposal).
-
----
-
-## 2026-07-30 · Session 4 — Bench-readiness pack; ROS 2 scaffold; reflexes; D020 modularity; perception stack
-
-*(No-hardware session: printer still down, carts not yet placed — assumed
-no change since session 3. Everything below exists so that parts-arrival
-day is plug-and-play.)*
-
-**Done**
-- **rocky_driver v0** (`driver/`): dual-protocol Feetech bus driver (D016 —
-  protocol 0 SCS0009 big-endian + protocol 1 STS little-endian on one wire),
-  byte-level mock bus with motion/thermal/torque-limit models and fault
-  injection, SafetyMonitor (warn 60 °C / cut 65 °C), PebbleRobot calibration
-  bridge to gait-space. **58 tests green**, golden wire vectors included.
-  `pip install -e .` at repo root installs pebble_gait + rocky_driver anywhere.
-- **Bench pack** (`bench/`): bus_scan, assign_ids (one-at-a-time, 1–20),
-  calibrate_centers (+dir nudge test), pose_check acceptance, register_dump
-  (+diff), thermal_soak (auto-cut, plots), torque_step (D015 margin check) —
-  every one rehearses with `--mock`, and the rehearsal already caught a
-  calibration sign bug before it could eat a bench evening. BENCH_RUNBOOK.md
-  = the day-servos-land script, gates + failure table included.
-- **ROS 2 scaffold** (`ros2/`): URDF/xacro GENERATED from params.yaml (D004),
-  parity-checked against the MJCF + analytic FK (0.05 mm / 0.000 mm worst,
-  masses to 1 g — `sim/check_urdf_parity.py`); rocky_msgs, gait node
-  (Twist-compatible), controllers.yaml, launch files; hardware backends:
-  mock / topic-based (tested Python driver — recommended) / C++ skeleton.
-- **Push-recovery reflex** (`gait/pebble_reflex.py`, D022): walking floor
-  33→40 N; two sim-taught lessons (don't slide loaded feet, ramp the crouch)
-  and one honest negative (stance reflex is counterproductive — gated off).
-- **Stuck watchdog + retry** (`gait/pebble_watchdog.py`, D023): 40 mm rubble
-  1/4 → 4/4 crossings; escalating stages (higher step → slower+taller →
-  reverse). Shin fairing evaluated in sim and REJECTED (helps only outside
-  the envelope, hurts the watchdog at 40 mm). Video: `sim/pebble_stuck_retry_40mm.mp4`.
-- **RL groundwork** (`sim/rocky_env.py`, `ppo_smoke.py`): gymnasium env with
-  residual-policy actions on top of the analytic gait (zero action = walks);
-  compact PPO loop runs end-to-end (KL sane, checkpoint roundtrip) — Phase-3
-  training is now a scale-up, not a build.
-- **Modularity D020** (`docs/INTERFACES.md` + `cad/iface.py` + params freeze):
-  six standard interfaces, ALL CAD'd and boolean-verified: leg-port rework of
-  coxa+deck (dock check 0.00 mm³), bench jig consuming the SAME port code,
-  battery sled + XT60 float dock + belly door, avionics tray + rails +
-  bulkhead, SEA bayonet tool socket (insert/lock free, retains under pull),
-  panel latch insert + shell sector + dovetail coupons. Renders in cad/out.
-- **Hand v0.2.1** (D021): the cam/skirt graze is dead — 0.00 mm³ across a
-  14-pose sweep; design open now 55° matching the software cap.
-- **Perception, sim-first** (`perception/`, D024): legged-odom EKF at
-  **1.0–6.8 % drift** (naive baseline 10–24 %); cliff detection PASS (stops
-  187 mm before a table edge the control robot walks off — trigger is
-  stance-without-contact, exactly D017's contact-timing advice); sim-lidar
-  (mj_ray fan) + frozen LaserScan contract + occupancy map demo; WiFi RSSI
-  fingerprint logger with k-NN demo (~1.8 m room-level prior).
-  `docs/SENSING_PLAN.md` = the layered world model + pod standard + I²C budget.
-- **Wiring harness plan** (`docs/WIRING_HARNESS.md`): per-leg drops, gauges,
-  the 6 V BEC domain, star-of-daisies topology, power budget, build order.
-- **Batch-3 addendum sheet** (`bom/ORDER_ADDENDUM_batch3.html`, live-verified
-  prices 07-30): lidar promoted to core via $17 LDS02RR pull; US-100 skirt;
-  ReSpeaker v2; BME688; PIR; mux; genuine-Amass connector kit; UBEC; ~$155
-  core. Mass audit: sensing payload 399 g (pull) / 251 g (LD19) vs 450 g
-  margin — both fit, tightly documented.
-- **Chord-speak v0** (`audio/`): 15 words synthesized (additive organ-bell,
-  chorus, reverb) with a consistent musical grammar; self-contained audition
-  page browser-verified + delivered. AMAZE!
-
-**Broke / surprises**
-- **Deck v0.2's mid-pair bolt holes were ~2 mm OFF the pentagon** (radial
-  91.6 vs boundary 89.5) — found by the new containment audit while laying
-  out the leg port; also those bolts were unreachable under the servo.
-  Nothing printed, zero filament lost, but the audit is now a permanent
-  check in part_deck. I1 layout: dowels (−28,±19), thumbscrews (−41,±17).
-- **The qpos-interleave gotcha bit AGAIN** (documented 07-29, still got me):
-  legged odometry read qpos[7:22] as 15 leg joints and measured 62 % drift
-  until joints were indexed by address (claw angles were feeding the FK).
-  Same latent bug fixed in rocky_env's observation. Lesson upgraded to:
-  *never slice qpos/qvel — always joint addresses, everywhere, no exceptions.*
-- Reflex v1 hurt before it helped (marched in place at idle, dragged loaded
-  feet outward, step-crouched): three separate sim lessons now encoded in
-  pebble_reflex docstrings.
-- Cliff detector v1 (depth-overshoot trigger) could never fire on stiff
-  position servos — the foot stops AT its command, ground or not. The
-  working signature is stance-commanded-but-no-contact.
-- torque_step mock rehearsal exposed that an under-torqued servo model must
-  not "re-chase" its goal each tick — mock realism patched until threshold
-  detection matched prediction (0.90 ratio).
-
-**Decisions** — D019 (filed from session-3 Q&A), D020–D024 in docs/decisions.md.
-
-**Next**
-1. Tyler: place Batch 0+1 carts (still the long-pole!) + the Batch-3
-   addendum's lidar decision (pull vs LD19); fix the Prusa (§3.5).
-2. Printer night: interface demo set first (latch insert ×2, coupler +
-   coupon, dovetail pair, thumb knobs) — they burn <40 g total and prove
-   D020's fits; then bench jig + calibration gauges + hand v0.2.1 set.
-3. Servos land: BENCH_RUNBOOK.md top to bottom; file every number in
-   NOTES_INBOX (esp. SCS0009 sweep + real register dumps).
-4. Sim: gait-phase-aware brace (the +0.25T weak pocket D022 found); PPO
-   scale-up on the laptop; slam_toolbox against sim-lidar bags.
-
----
-
-## 2026-07-29 · Session 3 — Robustness proven in sim; Batch 0+1 ordered (sheet); servo trade study
-
-**Done**
-- **Batch 0+1 order sheet built & delivered** (`bom/ORDER_SHEET_batch01.html`) —
-  vendor-cart layout, prices verified live 2026-07-29, running-total checkboxes.
-  Notable drift: bus adapter $4.99 & ESP32 driver $15.99 (both cheaper direct),
-  bench PSUs drifted UP (~$56–84), US carbon-tube stock is dry (AliExpress it).
-  KW10 switches pulled forward from Batch 3 (SEA foot needs them at the leg gate).
-- **Servo trade study** (3 parallel research agents, full findings in the sheet
-  + decision log): D015 keeps ST3215 for Batch 1, sanctions STS3250 as the
-  Batch-2 femur upgrade; found the ST3235 name-trap (30 kg·cm, not 35); QDD
-  price floor collapsed ($56–70 SteadyWin, $125 turnkey RobStride/Damiao —
-  Pupper V3 ships on $68 GIM4305s) → Rocky Jr math improves at the Phase-5 gate.
-- **D016 wiring bug found in the master plan:** SCS0009 hand servos are 4.8–6 V
-  devices and were drawn on the 12 V rail. Fix: shared TTL data/GND, separate
-  5–6 V power domain (BEC in Batch 2). Driver must speak protocol 0 (SCS) and
-  protocol 1 (STS) on the same bus.
-- **Terrain robustness sweep** (`sim/run_terrain.py`, fig_terrain.png): blind
-  wave gait crosses ≤30 mm rubble reliably; above that it SNAGS but never
-  falls (worst tilt 13° at 40 mm). Binding constraint = 32 mm step height.
-- **Push-recovery envelope** (`sim/run_push.py`, fig_push_envelope.png):
-  survives 46–53 N standing / 35–53 N walking (0.15 s shove, zero reflexes) —
-  ≥1.3× bodyweight from any direction. Quasi-static tip estimate (~30 N)
-  validates the harness. Pentapod geometry is intrinsically shove-proof.
-- **ADJACENT-ARM MANIPULATION WORKS** (`gait/pebble_manip_adjacent.py`,
-  `sim/run_manip_adjacent.py`, video `pebble_manip_adjacent_repositioned.mp4`):
-  crouch → step flanking feet to R280/±22° → lean 12 mm → raise both adjacent
-  limbs in a FOLDED carry pose. Tilt ≤5.1°, work margin +10 mm; the no-reposition
-  control falls exactly as D013 predicted. D018 logged.
-
-**Broke / surprises**
-- First terrain harness used a MuJoCo heightfield; near-degenerate prisms at
-  small amplitudes produced spurious deep capsule contacts (flat ground
-  "failed" while 16 mm passed). Replaced with a scattered-box rubble field.
-  Lesson: distrust a sweep whose control case misbehaves.
-- First adjacent-arm attempt used the reach-out arm_pose and TIPPED: two raised
-  legs reaching outboard drag the whole-robot CoM ~35 mm — more than the entire
-  static margin. Static support math with a fixed CoM is not enough; the sim
-  keeps earning its keep.
-- qpos layout gotcha: joints interleave per leg (yaw,hip,knee,claw)×5 while
-  ctrl is [15 leg][5 claw]. run_sim.py's v0.3-era indexing patched; init now
-  writes by joint address in new scripts.
-
-**Decisions** — D015–D018 (+ D011–D014 backfilled into docs/decisions.md).
-
-**Next**
-1. Tyler: place the carts (AliExpress + Waveshare today — lead time), fix the
-   Prusa (checklist §3.5 / PRINT_PREP_PACK.pdf), file results in NOTES_INBOX.
-2. Caliper session when servos land → params v1 → regenerate parts → hand v0.3.
-3. Sim: push-recovery REFLEX (crouch-on-impulse), gait-phase-aware push timing,
-   stuck-detection prototype (D017 says trigger on progress, not tilt).
-4. ROS 2 Jazzy scaffold; chord-speak prototype still queued as the fun one.
-
----
-
-## 2026-07-28 · Session 2 — PEBBLE WALKS IN PHYSICS (+ deck, print pack)
-
-**Done**
-- **MuJoCo simulation** (`sim/`): MJCF generated from params.yaml (masses from
-  the budget, position actuators clamped at the ST3215's 2.94 N·m, friction
-  contacts). Full sequence walk → strafe → turn-in-place on video.
-  Final metrics: 266 mm traveled vs 261 commanded (102%), 2 mm lateral drift,
-  body height ±0.38 mm, max tilt 1.05°, zero falls.
-- **The physics found a real bug the animation couldn't:** first sim run
-  walked in place (−37 mm). Instrumentation showed stance feet sliding
-  backward through the world. Root cause: swing-phase lift/land points were
-  REVERSED (foot flew ahead→behind, teleporting 58 mm at both stance
-  boundaries). The kinematic GIF looked fine at 12 fps. One-line fix in
-  `pebble_gait.py`; kinematics were verified frame-consistent to 0.0 mm
-  against MuJoCo before the fix was trusted. Lesson logged: cartoons lie,
-  contacts don't.
-- **Body deck v0.2** (`part_deck.py`): first attempt (R110 + ear tabs) failed
-  the bed-fit check — 289×275 mm can't fit a 250×210 Prusa bed in any
-  orientation, and it clashed with the coxa base (wrong z assumption). Redesign:
-  R100 pentagon (190×181, prints one-piece), coxa mounts by inner+mid bolt
-  pairs (mid pair added to `part_coxa.py`), outer 25 mm cantilevers past the
-  deck edge (negligible moment at this scale). Battery strap slots, per-station
-  cable pass-throughs, M3 electronics grid. All interference checks clean.
-- **Print-Prep Pack PDF**: per-part 3-view dimensioned sheets, per-part
-  material/orientation/supports/infill table, printer-night checklist.
-  First prints are the hand set in PLA (cheap mechanism validation).
-
-**Session-2 late additions (same day):**
-- **Hand v0.2 — the cross-sections don't lie.** Slice-view inspection revealed
-  the v0.1 "wedge" fingers were nearly FULL CONES with side gaps (build123d
-  `Cylinder(arc_size=...)` semantics ≠ assumption) — three of them could never
-  nest; the closed-cone render only looked right because the union hid the
-  overlap. Rebuilt with explicit half-space sector cuts (`sector_solid()`).
-  Also: real spiral cam (pin radius 9.00→16.44 mm over 60° cam / 65° finger,
-  slot widening with travel for pin tilt), cam raised clear of the hinge lugs,
-  pin-sweep relief pockets in the hub. Residual: ~7 mm³ skirt-vs-cam-rim graze
-  mid-swing (bbox x 9.8–19, y ±13, z 18.6–21.6) — bench-tune scale; commanded
-  open capped at 55° until v0.3 with measured servos.
-- **ARM MODES — the Rocky repertoire, in physics** (`run_sim_manip.py`,
-  `pebble_rocky_demo.mp4`, 31 s): 4-leg wave walk with a limb raised and
-  gesturing (duty 0.78, body auto-leans 16 mm away from the arm; max tilt
-  11.9°, upright throughout), then 3-leg stance with TWO arms + working
-  grippers (visual claw joints added to the MJCF).
-- **Physics lesson #2 of the day:** first 3-leg attempt FELL (tilt 43°).
-  Support-polygon math: with ADJACENT arms raised, the CoM sits ~57 mm OUTSIDE
-  the stance triangle — the required lean exceeds leg reach. NON-ADJACENT arms
-  (legs 0 & 2) leave a wide tripod with ~57 mm margin: 12 mm comfort lean +
-  10 mm crouch → tilt max 0.26° with both arms working. Choreography encoded:
-  lean → raise → work → lower → recenter.
-
-**Decisions**
-- D011: first prints in PLA even for parts that will finally be PETG — material
-  cost of iteration beats thermal correctness for bench prototypes.
-- D012: deck = R100 one-piece + coxa cantilever, NOT a split 289 mm plate.
-- D013: manipulation stance uses NON-ADJACENT arm limbs (support-polygon math);
-  adjacent-arm manip deferred until a foot-repositioning step exists.
-- D014: cross-section slice inspection joins renders + boolean checks as a
-  standard CAD verification tool (it caught the wedge bug the other two missed).
-
-**Broke**
-- Deck v0.1 (bed fit + z-clash) — caught by automated checks, zero filament lost.
-- Gait swing sign (above).
-
-**Next**
-1. Printer night: follow PRINT_PREP_PACK.pdf checklist; log to NOTES_INBOX
-2. Order Batch 0+1 (still the schedule long-pole!)
-3. Next session: fresh chat, "pick up ROCKY" — MuJoCo terrain tests, hand cam
-   spiral math, or start the ROS 2 scaffold
-
----
-
-## 2026-07-28 · Session 1b — CAD sprint: full leg + hand + gait engine
-
-**Done**
-- CAD v0.1→v0.3 in build123d (code-CAD, `params.yaml` single source of truth):
-  coxa yaw base + fork (bearing-supported, ±40° sweep verified clash-free),
-  femur twin-hub link, knee carrier, SEA foot cartridge (7 mm travel, switch
-  pocket), and the transforming hand — 3 cone-segment fingers that close into
-  the walking foot, SCS0009 + cam drive.
-- Full-robot cosmetic preview: shells-over-skeleton, stepped pentagonal
-  carapace, 5 legs instanced at 72°. Answers the "less roboty" goal — the
-  creature is bolt-on shells; the mechanism stays pure.
-- Self-contained WebGL viewer (4 modes). First version failed in the chat
-  preview (external three.js CDN blocked → "THREE is not defined"); rebuilt
-  with a hand-rolled renderer, now verified in headless Chromium before every
-  delivery. **Rule: interactive deliverables get browser-verified first.**
-- Gait engine v0 (`gait/pebble_gait.py`): closed-form IK (roundtrip 1e-14 mm),
-  omnidirectional 5-phase wave gait, duty 0.8 (always ≥4 feet down). Initial
-  defaults exceeded the coxa's validated sweep (50.7° > 40°) — retuned to
-  1.6 s cycle / 185 mm stance radius / 45 mm/s → coxa peaks 21.9°. Walk,
-  strafe, turn-in-place all reachable. Demo GIF in `gait/`.
-
-**Decisions** → see `docs/decisions.md` (D001–D009 logged)
-
-**Broke / gotchas**
-- Fork v0.1 side-rails clashed with the femur servo (wrong orientation
-  assumption) and the rear wall swept into the crown arm at ±40° yaw — both
-  caught by boolean interference checks before any print. Checks stay mandatory.
-- Chat-preview sandbox blocks external CDNs. Self-contained HTML only.
-
-**Next session**
-1. Tyler: order Batch 0+1 (see BOM), reassemble Prusa hot end, start PETG calibration
-2. When servos arrive: caliper session → params.yaml v1 (kill all VERIFY flags)
-3. First prints: hand (standalone mechanism test) + one coxa pair
-4. Claude: MuJoCo scene + URDF from params; port gait engine into sim;
-   pentagon body deck as a real printable part
-
----
-
-## 2026-07-27 · Session 1a — Project founded
-
-- Master plan written: Pebble (1:3 subscale) → full-scale gate → Rocky.
-  Phase gates 0–5, physics verified (torque/mass/power budgets computed).
-- Priced BOM: $975 core / $1,276 all-options, under the $1,500 envelope.
-  Owned gear credited (hot ends, PLA/CF-PLA/purple PETG, Xbox Elite pad).
-- Key corrections vs the earlier Gemini brainstorm: 12 V servo variant is
-  mandatory (7.4 V doesn't close torque); no per-leg MCUs at subscale (one
-  1 Mbps bus); servos do NOT hold static load indefinitely (thermal
-  monitoring + sleep pose designed in).
-- Vendor/deals strategy logged in plan §6.1 (Waveshare direct / AliExpress
-  official Feetech — verify 12V variant; rpilocator for Pi; vacuum-lidar hack;
-  never used LiPos).
+## Earlier sessions (2026-07-27 → 09-01) — archived
+
+Sessions 1a–8d describe the design era before D047 (the leg rebuilt around the measured
+servo). They are kept word for word in
+[docs/archive/BUILD_LOG_2026-07-27_to_2026-09-01.md](docs/archive/BUILD_LOG_2026-07-27_to_2026-09-01.md),
+with every measurement they recorded.
+
+| Session | Date | What happened | Decisions |
+|---|---|---|---|
+| 8d | 09-01 | FALLEN / RIGHTED reflex states; recovery reward v2 (`recover2` negative, the sigma cap); the talk-to-Pebble intent layer; live lidar `scan_summary` + a 5/5 patrol; torque re-audit on CAD masses; servo order v2 | D041–D045 |
+| 8c | 08-31 | the dev laptop takes over: setup guide, keyboard teleop, a local-LLM brain, the flat chat-driving world, the RL ground-up tour | — |
+| 8b | 08-30 | print-physics audit as a CI stage, sim masses from the CAD tree, gesture library v2; RL gait runs 2–3 and the first self-righting training | D038–D040 |
+| 8 | 08-30 | tree-wide floating-parts audit: six more printables were in pieces; the single-solid gate moves into `export()`; print night re-planned | D037 |
+| 7 | 08-30 | the hand hub's floating lugs: a knuckle collar (hand hub v0.2.2); connectivity checks tree-wide | D036 |
+| 6c | 08-07 | the playground: interactive sim, live tuning, chat-driving over MCP | — |
+| 6b | 08-07 | MCP harness v0 live, the cliff safe-stop wired and measured, the beckon gesture, viewer weekend mode, parallel CI | D034, D035 |
+| 6 | 08-07 | print-weekend prep: fit ladder v2 (and a real v1 bug), servo blanks, tibia clamp v0.2, a GO/NO-GO plan | D032, D033 |
+| 5c | 07-31 | cable clips and dock mechanicals, the tree-wide CAD CI (19/19), the vision/interaction plan, viewer v0.3, a showcase reel | — |
+| 5b | 07-31 | CAD interaction pass, deck v0.4, RL actually trains, jazz hands | D030, D031 |
+| 5 | 07-31 | sim loops closed (brace, SLAM, yaw), the RL kit, chord-speak v0.2, carapace v0 | D025–D029 |
+| 4 | 07-30 | bench-readiness pack, ROS 2 scaffold, reflexes, the six standard interfaces, the perception stack | D019–D024 |
+| 3 | 07-29 | robustness proven in sim, the batch 0+1 order sheet, a servo trade study | D015–D018 |
+| 2 | 07-28 | Pebble walks in physics; the deck; the first print pack | D011–D014 |
+| 1b | 07-28 | CAD sprint: the full leg, the hand, the gait engine | D001–D010 |
+| 1a | 07-27 | project founded: the founding plan ([docs/archive/ROCKY_MASTER_PLAN_v1.1.md](docs/archive/ROCKY_MASTER_PLAN_v1.1.md)) | — |
 
 ---
 

@@ -25,27 +25,13 @@ If something looks stuck, check the **sim** chip in the header first: `live` is 
 
 ## Talking
 
-The **Brain & chat** panel picks who answers what you type or say.
-
-- **Talk** is a regex intent parser, no model: instant, predictable, knows walking, turning, gestures, words and gotos. Best for voice.
-- **Local model** sends the chat to llama-swap with the robot's tools. The model does the tool calls.
-- **Multimodal** is one vision model that both sees (the robot's eye) and acts.
-- **Claude** uses the Anthropic API when a key is set. Without one, run `./rocky.sh chat` in a terminal: Claude Code then drives this same sim over MCP.
+The **Brain & chat** panel picks who answers what you type or say: **Talk**, a regex intent parser with no model (instant and predictable; it knows walking, turning, gestures, words and gotos, and it is the safest voice driver), or a model brain (**Local model**, **Multimodal**, **Claude**) that calls the robot's tools itself. What each mode and role does, and which model to pick: [Choosing a brain](#choosing-a-brain).
 
 With a model brain, a move said relative to the robot (`forward 30 cm`, `back up 20 cm`, `half a meter to your left`) becomes one `move` call in the robot's own frame: forward is where the robot faces, whichever way it has turned. The cockpit reads the robot's position and heading and walks there as an ordinary goto, so every guard applies and it ends the same ways (arrived, cliff, stuck, blocked, timeout, stopped). A move is at most 1.5 m. Map coordinates (`go to 0.4, 0.2`) and remembered places still use goto.
 
-### Which brain for what
-
-- **lfm2.5-vl** for fast tool calls: about 0.3 s per command (0.2 to 0.5 s measured), tool calls included, and it is already resident on the GPU beside the everyday driver. Pick it as the brain when you want voice commands to feel immediate.
-- **qwen3.6-35b-a3b** for conversation: the everyday driver, better at talk and multi-step requests, several seconds per turn.
-- **gemma-4-26b-a4b** for vision (the vision role, or as the multimodal model): the best image descriptions in the fleet, but it does not fit beside the resident pair, so the first **look** swaps models and can take from seconds to over a minute.
-- **qwen3.5-9b** is the default multimodal model: one model that sees and calls tools. Measured 2026-09-24: 7.2 GB on the GPU, 6.5 s from cold to its first answer, 0.2 to 1.5 s per spoken command. It runs alone, so using it unloads the resident pair. How to switch, and how to judge a new model: [Choosing a brain](#choosing-a-brain).
-
-The panel warns when brain and vision are not the qwen3.6-35b-a3b + lfm2.5-vl pair that shares the GPU, because then every look may swap models. Quarantined models never appear in the lists. Each role shows its fallback chain; when a model fails, the reply says which fallback answered.
-
 ### Hands-free
 
-Tick **hands-free** next to the mic and the page keeps the microphone open; the mic button turns green and shows 👂 (it is not a push-to-talk button while hands-free is on). A level meter cuts your speech into utterances (0.7 s of silence ends one, 12 s is the cap), and each utterance is transcribed by whisper (the fast base.en service answers in about 1 s; the large model takes 18 to 20 s). The voice gate below decides what happens with each transcript.
+Tick **hands-free** next to the mic and the page keeps the microphone open; the mic button turns green and shows 👂 (it is not a push-to-talk button while hands-free is on). A level meter cuts your speech into utterances (0.7 s of silence ends one, 12 s is the cap), and each utterance is transcribed by whisper (on the reference setup the fast base.en service answers in about 1 s and the large model takes 18 to 20 s). The voice gate below decides what happens with each transcript.
 
 ### The wake word
 
@@ -64,23 +50,37 @@ What "trusted" means: the brains refuse to move the robot on a voice line unless
 
 ## Choosing a brain
 
-The cockpit gives each job to a model, one per **role**, and the **mode** says which of them answers what you type or say. Both are set in **Brain & chat**: on a phone, the **Talk** tab; on a computer, the Talk group of the sidebar. The role choices are saved and come back when the cockpit restarts; the mode is not saved.
+The cockpit gives each job to a model, one per **role**, and the **mode** says which of them answers what you type or say. Both are set in **Brain & chat**: on a phone, the **Talk** tab; on a computer, the Talk group of the sidebar. The role choices are saved (`~/.config/rocky/cockpit.json`, or `ROCKY_COCKPIT_CONF`) and come back when the cockpit restarts; the mode is not saved (`--brain talk|local|multimodal|claude` picks it at start; the default is talk).
+
+The models come from any OpenAI-compatible server: `ROCKY_LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`), with its key in `ROCKY_LLM_API_KEY` or a file named by `ROCKY_LLM_KEY_FILE`. These, and every other machine setting, go in `rocky.env` in the repo (the template `rocky.env.example` lists each one with its default). The model ids in this guide are the **reference setup**: one laptop with a 16 GB GPU running llama-swap, measured in D055. Your server's ids replace them in the pickers or in `rocky.env`.
 
 The four roles:
 
-- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, move, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to.
-- **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in every mode, Talk included.
-- **multimodal**: one model that gets the eye's picture with every message and calls the tools itself. Only models whose llama-swap name or description says they can see (vision, multimodal or mmproj) are offered.
-- **stt**: the whisper model name the mic's audio is sent with. Which whisper service answers is decided when the cockpit starts: the fast one on :8086 when it is up, the large one on :8082 otherwise.
+- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, move, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to. Reference default: `tool-model`, a llama-swap alias for qwen3.6-35b-a3b.
+- **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in every mode, Talk included. Reference default: `vision-model`, an alias for lfm2.5-vl.
+- **multimodal**: one model that gets the eye's picture with every message and calls the tools itself. Only models whose name or description on the server says they can see (vision, multimodal, mmproj or VL) are offered. Reference default: qwen3.5-9b.
+- **stt**: the whisper model name the mic's audio is sent with. Which whisper service answers is `ROCKY_WHISPER_URL` (default :8082); when that is not set, `./rocky.sh cockpit` uses the fast one, `ROCKY_WHISPER_FAST_URL`, if it is set and answers at start.
 
 The four modes:
 
 - **Talk**: no model, a fixed phrase parser. Instant and predictable.
 - **Local model**: the brain role answers. When it wants to see, it calls look, which goes to the vision role.
 - **Multimodal**: the multimodal role sees and acts in one call, with no hand-off between two models.
-- **Claude**: the Anthropic API when a key is set; otherwise run `./rocky.sh chat` in a terminal.
+- **Claude**: the Anthropic API (model `ROCKY_CLAUDE_MODEL`, reference `claude-sonnet-5`; there is no picker for it). It needs the `anthropic` package (`pip install -e '.[cockpit]'`) and `ANTHROPIC_API_KEY`; without them, run `./rocky.sh chat` in a terminal: Claude Code then drives this same sim over MCP.
 
-Each picker marks a model **● warm** (loaded: it answers at once) or **○ cold** (the first message loads it, which takes seconds, or longer for a big model). Quarantined models never appear. A text-only model is refused as vision or multimodal, and the refusal shows in red under the pickers. A model installed while the page is open shows up after a page reload.
+Each picker marks a model **● warm** (loaded: it answers at once) or **○ cold** (the first message loads it, which takes seconds, or longer for a big model). Models listed in `ROCKY_QUARANTINED` (or marked QUARANTINED on the server) never appear. A text-only model is refused as vision or multimodal, and the refusal shows in red under the pickers. A model installed while the page is open shows up after a page reload.
+
+### Which brain for what
+
+Measured on the reference setup (D055, with the per-family prompt notes of D055a), 20 spoken commands each:
+
+- **Talk** (no model): instant and predictable, the safest voice driver.
+- **qwen3.5-9b**, the default multimodal model: sees and acts in one model. 19 of 20 commands right, no missed stop, 0.9 s to the first action (0.2 to 1.5 s per tool call); about 7 GB, and it runs alone.
+- **qwen3.5-4b**: the small all-in-one. 16 of 20, 5.8 GB.
+- **gemma-4-12b**: the Gemma option. 20 of 20, but slower to act (1.4 s) and bigger (11.3 GB).
+- **lfm2.5-vl**: the eye only (the vision role). Its boxes are sub-degree in 0.4 s, but as a brain it got 5 of 20 and missed both stops.
+- **qwen3.6-35b-a3b**: the Local-model brain for conversation and multi-step requests, several seconds per turn. It shares the GPU with lfm2.5-vl.
+- **gemma-4-26b-a4b**: a vision fallback with excellent boxes; too slow to drive the robot (42 s from cold, 15 of 20).
 
 From a shell on this machine, the same call the pickers make:
 
@@ -89,40 +89,40 @@ curl -s -X POST http://127.0.0.1:8765/api/brain -H 'Content-Type: application/js
   -d '{"mode": "multimodal", "multimodal_model": "qwen3.5-9b"}'
 ```
 
-The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model llama-swap offers and each role's fallback chain.
+The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model the server offers, each role's fallback chain and the co-resident pair.
 
 **One registry.** Every model mode (Local model, Multimodal, Claude) and Claude Code over MCP get their tools from one list, `harness/capabilities.py` (D056). Each tool is written there once: its name, its arguments, the text the model reads, whether a spoken line needs the wake word for it, and what it needs to exist (the eye, the memory, this cockpit). The gesture and chord-word lists inside the tools are this cockpit's current ones, so a gesture saved in the studio or a word saved in the chord designer can be called by name on the next message, and the MCP server's list follows them too, with no restart. Talk mode has no model and does not use the list. `docs/TOOLS.md` shows every tool, which ones need the wake word, and the envelope numbers the descriptions quote (a move is at most 1.5 m; a goto target should stay within ~1.5 m, which is what its 40 s covers, and one farther than 3 m is refused).
 
 ### When a model fails
 
-Each role has a fallback chain, shown under the pickers (for example multimodal: qwen3.5-9b → gemma-4-26b-a4b). A model that times out (90 s), returns an error or answers nothing is skipped, and the next one tries. The reply then starts with a note in brackets that names the model that answered and why the earlier ones did not, and the chat shows each skip as a ↪ line. When the multimodal chain runs out, the text brain answers without the picture (it can still call look). When no model answers, the Talk parser does, unless tools already ran: then the reply lists what ran, and nothing is done twice. When llama-swap is down, the pickers say so and only Talk works. A fallback can mean loading another model, so that reply can take much longer than usual.
+Each role has a fallback chain, shown under the pickers (on the reference setup, multimodal: qwen3.5-9b → qwen3.5-4b → gemma-4-12b; `ROCKY_FALLBACK_BRAIN`, `_VISION` and `_MULTIMODAL` replace a chain). A model that times out (90 s), returns an error or answers nothing is skipped, and the next one tries. The reply then starts with a note in brackets that names the model that answered and why the earlier ones did not, and the chat shows each skip as a ↪ line. When the multimodal chain runs out, the text brain answers without the picture (it can still call look). When no model answers, the Talk parser does, unless tools already ran: then the reply lists what ran, and nothing is done twice. When the model server is down, the pickers say so and only Talk works. A fallback can mean loading another model, so that reply can take much longer than usual.
 
 ### What fits on the GPU
 
-The card has 16 GB. Only the everyday pair stays loaded together: qwen3.6-35b-a3b as the brain and lfm2.5-vl as the eye (llama-swap's `resident` group). Every other chat model runs alone: loading it unloads the pair, and loading the pair again unloads it. The 9B, the 12B and the 35B never fit together.
+On the reference setup's 16 GB card only one pair stays loaded together: qwen3.6-35b-a3b as the brain (10.4 GB) and lfm2.5-vl as the eye (4.6 GB), llama-swap's `resident` group. Every other chat model runs alone: loading it unloads the pair, and loading the pair again unloads it. The 9B, the 12B and the 35B never fit together. `ROCKY_CORESIDENT` names the pair that fits together on your machine (empty: no check).
 
 - A multimodal model is one model and one load: nothing swaps while it works.
-- A brain and a vision model that are not the resident pair swap on every look, which takes seconds to minutes each time. The amber note under the pickers warns about it.
-- A new model never goes in the `resident` group. llama-swap does not check memory for a group, so a third member makes the next load fail with an out-of-memory error.
+- A brain and a vision model that are not the co-resident pair swap on every look, which takes seconds to minutes each time. The amber note under the pickers warns about it.
+- On llama-swap, a new model never goes in the `resident` group: llama-swap does not check memory for a group, so a third member makes the next load fail with an out-of-memory error.
 
 ### Adding and measuring a model
 
-A downloaded model goes in with `./rocky.sh brain-install` and is measured with `./rocky.sh brain-bench --models ID`. The steps and the table of measured models are in `docs/BRAIN_MODELS_2026-09-24.md`. Two things to know here: brain-install restarts llama-swap, so every loaded model unloads and this cockpit's next answer starts cold; and before each model's run the bench unloads every loaded GPU model, the one it measures included, so the load it times is cold.
+Both tools are for llama-swap. A downloaded model goes in with `./rocky.sh brain-install` (it files the GGUF under `ROCKY_MODELS_DIR`, finds its projector, adds a config stanza and restarts llama-swap; `--dry-run` shows the plan and touches nothing) and is measured with `./rocky.sh brain-bench --models ID`. The table of measured models and the full workflow: `docs/BRAINS.md`. Two things to know here: brain-install restarts llama-swap, so every loaded model unloads and this cockpit's next answer starts cold; and before each model's run the bench unloads every loaded GPU model, the one it measures included, so the load it times is cold.
 
-**Leave this cockpit alone while brain-bench runs.** The bench starts its own cockpit on :8792 and never sends anything to this one, but the two share the GPU. Do not type or talk to this cockpit (turn **hands-free** off), and do not ask it to look or find. Any request here that reaches a model loads that model and evicts the one being measured, and the bench's next line loads it back. That repeated swapping is what this GPU punishes (it is the pattern behind the 2026-09-01 lockout), and it spoils the bench's VRAM and latency numbers.
+**Leave this cockpit alone while brain-bench runs.** The bench starts its own cockpit on :8792 and never sends anything to this one, but the two share the GPU. Do not type or talk to this cockpit (turn **hands-free** off), and do not ask it to look or find. Any request here that reaches a model loads that model and evicts the one being measured, and the bench's next line loads it back. Rapid load and unload cycles on one consumer GPU are what some drivers handle worst, and they spoil the bench's VRAM and latency numbers.
 
 ### Reading a bench row
 
 The bench prints one row per model. What each column tells you:
 
-- **`vram_mib`**: GPU memory the model took once warm, out of 16,384. It decides what the model can run beside.
+- **`vram_mib`**: GPU memory the model took once warm (the reference card has 16,384). It decides what the model can run beside.
 - **`first_answer_s`**: loading from cold plus the first reply. It is what you wait after switching to the model, or when a fallback or a look has to load it.
 - **`decode_tps`**: generation speed in tokens per second. It matters for descriptions and longer replies; a tool call is short.
 - **`cmd_ok`** (out of 20): spoken-style lines that got an acceptable tool with sensible arguments (`walk forward thirty centimeters` has to become about 0.3 m ahead, not 30: a `move` of 0.3, or a goto 0.3 m in front of the robot). The main number for the brain and multimodal roles.
 - **`stop_missed`**: stop lines that did not stop the robot. It must be 0: one miss rules the model out for voice driving.
 - **`unsafe`**: motion nobody asked for. It must be 0 too.
 - **latency** median and p95 (s): the wall time of each command's chat turn, typical and worst case. It includes the motion itself: a gesture runs to its end and a walk until the robot arrives before the turn finishes, so a model that gets "wave hello" exactly right still shows several seconds here. Do not compare it with the tool-call times below.
-- **first action** median and p95 (s) (`1st act s` in the printed table, median only): the time from sending the line to the first thing the sim shows (a stop, a chord, a gesture or a walk starting, a look). It counts only the lines that changed something in the sim, and it is polled ten times a second, so it can read up to 0.1 s late. A cockpit from 2026-09-25 on also numbers its events, so a repeat of the last event (one more stop after twelve) counts too. This is the model's decision time, and the number to compare with the hand measurements: lfm2.5-vl made tool calls in 0.2 to 0.5 s per command, qwen3.5-9b in 0.2 to 1.5 s.
+- **first action** median and p95 (s) (`1st act s` in the printed table, median only): the time from sending the line to the first thing the sim shows (a stop, a chord, a gesture or a walk starting, a look). It counts only the lines that changed something in the sim (events are numbered, so a repeat of the last event counts too), and it is polled ten times a second, so it can read up to 0.1 s late. This is the model's decision time, the number to compare with the hand measurements on the reference setup: lfm2.5-vl made tool calls in 0.2 to 0.5 s per command, qwen3.5-9b in 0.2 to 1.5 s.
 - **describe**: whether the model mentions the ball when it is in view (and not when it is not), and on the correct side. For the multimodal and vision roles.
 - **vision** (with `--vision`): how often find's box saw the object, and its median bearing and distance errors. For the vision role.
 
@@ -156,7 +156,7 @@ Every change is judged by `gait/pebble_feasibility.py`, the same judge the gestu
 
 The footfall diagram draws one row per leg, filled while the foot is down; the white tick is the gait phase. The sliders set period T, duty, body height, stance radius, step height and the gyro trip threshold, live and sim-only. **check** runs the feasibility judge on the gait at the current command and at the envelope corners. Presets load from and save to `gait/gaits/` (`default` is params.yaml; `legacy_d050` has no envelope under the D052 budget).
 
-The **servo model** (on by default) makes the sim's joints behave like ST3215 servos on a bus: a 50 Hz hold, latency, a slew rate that drops under load, 4096-count quantisation. Turning it off gives the ideal actuator, which flatters every motion.
+The **servo model** (on by default) makes the sim's joints behave like ST3215 servos on a bus: a 50 Hz hold, 20 ms latency, a 4.7 rad/s slew and 4096-count quantisation. The torque-speed line itself lives in the model's joint damping and torque limit, so the slew does not drop under load; the console's `set servo.load_derate 1` brings back the old load-derated slew for an A/B. Turning the servo model off gives the ideal actuator, which flatters every motion.
 
 ## Sounds
 
@@ -193,7 +193,7 @@ A reset, a world load or an edit also forgets the last look and find, so the nex
 
 The awareness settings:
 
-- **situation** (0 to 60 s, 0 = off; the default is 20 s, `--awareness-s` on the command line): how often the robot composes its situation line while it stands idle: pose, guards, the nearest lidar returns, the nearest remembered things, servo heat, the bus. A chat turn always composes a fresh one; **now** composes one at once.
+- **situation** (0 to 60 s, 0 = off; the default is 20 s, `--awareness-s` on the command line or `ROCKY_AWARENESS_S`): how often the robot composes its situation line while it stands idle: pose, guards, the nearest lidar returns, the nearest remembered things, servo heat, the bus. A chat turn always composes a fresh one; **now** composes one at once.
 - **curious**: at most one unprompted look a minute when the lidar scene changed. It is a vision-model call, so it may load a model on the GPU. Off by default.
 - **reactions**: a chord when a guard latches or something new appears within 0.5 m, at most once per 30 s.
 
@@ -206,7 +206,7 @@ The memory above is kept per world, and a world's name is something the simulati
 Three fingerprints, each used only when both the place and the moment have it:
 
 - **The room's shape**, from the lidar: the nearest return in each 10° of direction, plus the spread of all the ranges (that part does not care which way the robot faces).
-- **What the eye saw**: a **look** description turned into a vector by the `embedding` model llama-swap keeps warm on the CPU (about 50 ms; it loads nothing on the GPU). Two descriptions that read alike score high. In the sim's rooms, measured, a description of a different room reads about as alike as a new description of the same one, so this fingerprint helps little there (see [How far to trust a place in the sim](#how-far-to-trust-a-place-in-the-sim)).
+- **What the eye saw**: a **look** description turned into a vector by the embedding model (`ROCKY_EMBED_MODEL`, default `embedding`; on the reference setup Qwen3-Embedding-0.6B, kept warm on the CPU: about 50 ms, and it loads nothing on the GPU). Two descriptions that read alike score high. In the sim's rooms, measured, a description of a different room reads about as alike as a new description of the same one, so this fingerprint helps little there (see [How far to trust a place in the sim](#how-far-to-trust-a-place-in-the-sim)).
 - **The Wi-Fi around it**, on the real robot only: which access points it hears, and how loud. The sim has no radio.
 
 **No fingerprint can say "known" on its own.** Each has a blind spot another covers: the lidar cannot tell two rooms of one shape apart, two rooms can read alike in a description, and Wi-Fi tells buildings apart, not rooms. With only one to compare (the look failed, the embedding model did not answer), the best it says is *ambiguous*, and the line says which one it had: `place: den? (0.72, or workshop 0.55) [scan only]`. It can still say *new* from one fingerprint.
@@ -223,7 +223,7 @@ curl -s -X POST http://127.0.0.1:8765/api/awareness -H 'Content-Type: applicatio
 
 The page has no switch for it yet. What it does once on:
 
-- After every world load or reset, when the robot has stood still for a second, it takes one lidar sweep and one **look**, turns the description into a vector and compares both with every place it knows. The look goes to the vision role like any look, and loads it if it is not loaded: lfm2.5-vl unloads after 10 minutes idle, and loading it unloads any model outside its `resident` group (a `qwen3.5-9b` brain, for one). If lfm2.5-vl fails, the look falls back to Gemma 12B (about 11 GB) and then Gemma 26B (21 GB). So with recognition on, every world load or reset can move models on the GPU. Meanwhile the situation line says `place: recognising…`.
+- After every world load or reset, when the robot has stood still for a second, it takes one lidar sweep and one **look**, turns the description into a vector and compares both with every place it knows. The look goes to the vision role like any look, and loads it if the server has unloaded it after its idle timeout; on the reference setup loading lfm2.5-vl unloads any model outside its `resident` group (a `qwen3.5-9b` brain, for one). If the vision model fails, the look falls back along the vision chain (reference: gemma-4-12b, about 11 GB, then gemma-4-26b-a4b, 21 GB). So with recognition on, every world load or reset can move models on the GPU. Meanwhile the situation line says `place: recognising…`.
 - **A world edit** leaves the robot where it stands and in the place it was in: what follows is only a check of that place for changes (see [What changed here](#what-changed-here)), never a new place and never another one. If the edit changed much of what it senses, the answer says so (`it senses it only 0.42 alike now: this place changed a lot`).
 - **ambiguous** or **new**: it turns 30° to the left (an ordinary turn with every guard; no turn if you pressed STOP while it was recognising) and looks again; the two looks are combined. Meanwhile the line says so: `place: den? looking again (0.72, or workshop 0.55)`.
 - **new** (still new after the second look): the place is stored as `new place #1`, `#2` and so on, until you name it, with both looks, so it knows two views of it from the start. A new place and a confirmed new object each get a `curious_question` chord when **reactions** are on (still at most one reaction per 30 s).
@@ -237,7 +237,7 @@ The page has no switch for it yet. What it does once on:
 - `place: NEW (best basement 0.41)`: **new**. Nothing it knows scores 0.5; the number is how alike the nearest known place is. Before the first place it says `place: NEW (no places yet)`.
 - `place: basement? (0.62, or bedroom 0.58)`: **ambiguous**. In between, or two places too close to call: it names both and does not pick.
 - `place: basement? (0.72) [scan only]`: ambiguous because only one fingerprint could be compared (here the lidar).
-- `place: unknown (no signal)`: nothing to compare, no sweep and no description.
+- `place: unknown (no signal)`: nothing to compare, no sweep and no description. `place: unknown (2 places not comparable)`: some stored places share no fingerprint with this moment (an empty sweep and a failed look, say), so it cannot rule them out and does not call the place new.
 
 The number is always the best place's match score, 0 to 1: a similarity, not a probability. Places that share a name never compete with each other, so a basement stored twice is not ambiguous with itself. The verdict starts the situation line (the Memory panel, the phone's ticker, every chat turn) and rides on the state feed as `place`.
 
@@ -259,18 +259,18 @@ From a shell: `GET /api/place` returns the current answer and every place; `POST
 
 Two rules keep the robot honest about changes:
 
-1. **One glance never declares a change.** The robot asks the eye about each thing the place remembers and each thing the look's description mentions: one question per name, the same one **find** asks, answered with a box that is projected onto the floor. A thing is **new here** when the eye boxes something the place does not hold, and **missing** when the eye says a remembered thing is not there while its old spot is in view (86° wide, 0.15 to 2 m ahead of the eye). A spot out of view, an error or an unsure answer claims nothing. None of it is said until a second look, after the 30° turn, asks again and agrees; what only one look saw stays *pending*, and the place's list keeps what it had. Walls and doors belong to the room (the lidar's business) and are never asked about. At most six questions per look, each one a vision-model call, so a check takes a few seconds. The words of the description only suggest what to ask; they no longer decide anything.
+1. **One glance never declares a change.** The robot asks the eye about each thing the place remembers and each thing the look's description mentions: one question per name, the same one **find** asks, answered with a box that is projected onto the floor. A thing is **new here** when the eye boxes something the place does not hold, and **missing** when the eye says a remembered thing is not there while its old spot is in view (86° wide, 0.15 to 2 m ahead of the eye). A spot out of view, a spot hidden behind something (inside a box the eye drew on that look, or behind a nearer lidar return), an error or an unsure answer claims nothing. None of it is said until a second look, after the 30° turn, asks again and agrees; what only one look saw stays *pending*, and the place's list keeps what it had. Walls and doors belong to the room (the lidar's business) and are never asked about. At most ten questions per look (up to five of them about names the description mentions, asked first), each one a vision-model call, so a check takes a few seconds. A thing the eye boxed but could never place (a cup on a table, a lamp beyond 2 m) is kept as a note on the place, so a later visit counts it present rather than new. The words of the description only suggest what to ask; they never decide anything.
 2. **Every verdict carries its confidence**, on the situation line and in every reply.
 
 Two looks agree on a thing when they give it the same name and, when both placed it, put it within 0.5 m of each other (not measured yet). A known place can carry its confirmed changes: `place: bedroom (0.88) — new here: chair; missing: ball`. Changes are only shown on a known place: a new or ambiguous one has nothing trustworthy to compare with.
 
 ### How far to trust a place in the sim
 
-- **The lidar sees little in most worlds.** It only sees what stands above its plane (0.18 m above the floor). Of the nine general presets, `room` gives a full sweep, `obstacle course` only its one 0.25 m wall (37 of 360 rays), and the other seven nothing at all: 8 of the 9 give the lidar nothing or next to nothing. Every empty sweep looks like every other, so in those worlds the description does the recognising, and it did not tell the bench's rooms apart: a verdict in those worlds is not measured, do not trust it. The place bench's rooms (`room a` to `room d`) all have walls the lidar sees.
+- **The lidar sees little in most worlds.** It only sees what stands above its plane (0.18 m above the floor). Of the nine general presets, `room` gives a full sweep, `obstacle course` only its one 0.25 m wall (37 of 360 rays), and the other seven nothing at all: 8 of the 9 give the lidar nothing or next to nothing. Every empty sweep looks like every other, so two empty sweeps are not compared at all: in those worlds only the description is, the robot never says *known* on its own (at best `[look only]` ambiguous) and you name the place. The description did not tell the bench's rooms apart, so a verdict in those worlds is not measured; do not trust it. The place bench's rooms (`room a` to `room d`) all have walls the lidar sees.
 - Two rooms of the same shape look much alike to the lidar: 0.84 alike with the same walls and other furniture the lidar can see, on synthetic rooms. How much of the visible furniture differs is what sets them apart: the bench's rooms a and b share their walls, b adds a 0.9 m inner wall and two 0.22 m boxes, and they are 0.49 alike. Furniture below the lidar's plane is invisible to it altogether.
 - **The description cannot tell a lidar twin apart.** A room of the same shape whose furniture the lidar sees alike, described the way the sim's looks read, comes out as the same place, *known*. Where the lidar cannot tell, the radio on the real robot or the eye's answers about single objects have to, and neither is measured.
 - **MuJoCo rooms are simple**: flat-shaded walls and boxes on a checker floor, a perfect lidar and a clean 320 × 240 render. Every world load also puts the robot back at the origin facing +x, the spot it first saw the place from, and the sim's pose stands in for odometry, a perfect one. A real robot comes back from anywhere with a real camera, so every result in the sim is an upper bound.
-- **The first place-bench run** (2026-09-25, lfm2.5-vl, 3 trials of 7 visits; the table is in `docs/SIM_GUIDE.md`): 15 of 21 visits right and **never the wrong room**. A room it had seen was recognised 12 times and called ambiguous 6 times; the room it had never seen was new 3 times of 3, at 0.26–0.29, far from the line. The right answers sat at the threshold (known 0.755 to 1.00, ambiguous 0.67 to 0.735), because the lidar matched perfectly and the description did not: lfm2.5-vl mostly describes the floor, and two looks at one spot read differently. **Changes were found 0 times of 6**: twice in three trials the changed room came back ambiguous, so it was never checked, and where it was checked the robot read things out of the description's words, which gave no distances ("a few body lengths"), so the chair was never placed. Since that run, this round: the description is scored from those records so that a re-worded look of the right room no longer counts against it (replayed on the recorded looks, all 18 revisits come out known), the change check asks the eye instead of the words, and a new place takes a second look before it is stored. None of the three is re-measured yet; the next bench run is.
+- **The last place-bench run** (2026-09-25 21:15, lfm2.5-vl, 3 trials of 7 visits): 21 of 21 verdicts right and **never the wrong room**. Every revisit was known at 0.84 to 0.98; the room it had never seen was new at 0.33 to 0.37 (the line is 0.5). A room that shares another's walls (room b) was ambiguous when first seen, 3 times of 3, until it was named. **Changes were found 3 times of 6**: the removed ball every time, the added chair never (the eye calls it a box, and the second look from the same spot denied it, so the two-look rule held it back). The bench itself, its first run and the design behind it: `docs/PLACES.md` in the repo.
 
 ## RL panel
 
@@ -278,11 +278,11 @@ Two looks agree on a thing when they give it the same name and, when both placed
 - **Walking** swaps the analytic wave gait for a PPO residual policy (±0.25 rad on the gait's targets, 50 Hz). The analytic gait still wins on a clean floor.
 - **stall s** and **deadline** tune the FALLEN handling. Stall: when the righter has not improved the robot's best tilt for this many seconds, the supervisor stops it and runs its planted ramp (which rights the robot from its back, the case no checkpoint solves). Deadline: the most seconds the righter gets before the ramp runs anyway.
 - The table lists the runs on disk: `obs` is the observation version the checkpoint expects, `rew` the reward version, `rate` its action rate limit, `steps` training steps in millions, `ret` the final training return, `robot` the fingerprint it was trained on (green when it matches this robot), `eval` the last evaluation note.
-- **Legacy checkpoints**: everything trained before D052 (obs v1, no fingerprint) is marked `legacy obs` and replayed as it was trained, but its numbers were earned on different physics. Re-evaluate before trusting one. Retrain with `./rocky.sh train-recover NAME`; audit with `python sim/audit_righter.py runs/NAME/latest.pt`.
+- **Legacy checkpoints**: everything trained before D052 (obs v1, no fingerprint) is marked `legacy obs` and replayed as it was trained, but its numbers were earned on different physics. Re-evaluate before trusting one. `recover6_d052` is the one run trained on the D052 contract (obs v2); it earned no clean handoff either (0 of 20, B34). Retrain with `./rocky.sh train-recover NAME`; audit from the repo root with `.venv/bin/python sim/audit_righter.py sim/runs/NAME/latest.pt`.
 
 ## Model and fingerprint
 
-What the sim believes the robot is: servo stall and continuous torque, speed budgets, soft limits, the gait and its envelope, body geometry, and the studio's slider ranges, all from `cad/params.yaml` through `gait/rocky_model.py`. The **fingerprint** is a short hash of those numbers; every checkpoint is stamped with the fingerprint it was trained on. The header chip turns amber (`?`) when a loaded checkpoint has no fingerprint (pre-D052) and red (`≠ ckpt`) when it was trained on another robot.
+What the sim believes the robot is: servo stall and continuous torque, speed budgets, soft limits, the gait and its envelope, body geometry, and the studio's slider ranges, all from `cad/params.yaml` through `gait/rocky_model.py`. The **fingerprint** is a short hash of those numbers; every checkpoint is stamped with the fingerprint it was trained on. The header chip turns amber (`?`) when a loaded checkpoint has no fingerprint (pre-D052) and red (`≠ ckpt`) when it was trained on another robot. Today's robot is `7d376178fe27`; `recover6_d052` was trained on `ceb63a1254c3`, before a CAD change took 13.7 g off the torso (D059), so it shows `≠ ckpt`.
 
 ## Recordings
 
@@ -305,7 +305,7 @@ The Hardware panel talks to the Feetech servo bus beside the sim. No real servo 
 
 ## Phone and remote
 
-Publish the cockpit to your tailnet with `./rocky.sh tailnet`, then open **https://ai-hub.tail54f481.ts.net:9445** on the phone (tailnet only; `./rocky.sh tailnet off` removes it). It must be https: browsers only allow the microphone on https or on localhost.
+Publish the cockpit to your tailnet with `./rocky.sh tailnet`, then open the address it prints, `https://<machine>.<tailnet>.ts.net:9445` (your machine's MagicDNS name; `ROCKY_TAILNET_PORT` changes the port), on the phone. It is tailnet only; `./rocky.sh tailnet off` removes it, and `sudo tailscale up` is needed once. It must be https: browsers only allow the microphone on https or on localhost.
 
 On a phone the page is one tab at a time with a bar at the bottom: **Drive**, **Talk**, **Make**, **World**, **Robot**. The header is one line you can swipe sideways; it starts with the title, then a red VOID or LATCHED chip when one is up, then **? guide**. When a guard blocks the robot, the Drive tab's status line says so and a **clear the guard** button appears right under it. The red **STOP** button floats on every tab; the page leaves room under the last control so STOP never sits on top of it once you scroll to the end. The console under the pad is a three-line ticker; tap it to expand. Video only streams while the Drive tab is showing, so the other tabs cost no bandwidth. Every **?** opens this guide in the Robot tab; a **← back** button at the top of the guide returns to the tab you came from.
 
@@ -318,10 +318,10 @@ On a computer the sidebar shows the same five groups as tabs across its top. **p
 
 - **Frozen video.** The page reconnects a stream after 3 s without a new frame. If it stays frozen, look at the **sim** chip: `stalled` or `no feed` means the server is in trouble, `DEAD` means the sim thread stopped (restart with `./rocky.sh cockpit`). On a phone, video only runs on the Drive tab and never in remote mode, by design. Reloading the page always reconnects.
 - **"recording too short".** The mic got less than about half a second of audio. Hold the 🎤 button while you speak, or tap once to start and tap again to stop; phones sometimes lose a long press to a scroll.
-- **"nothing heard".** Whisper returned no words. Speak closer to the phone and a little longer. If it keeps happening, check that the whisper service is up (`systemctl --user status whisper-fast` for the fast one on :8086, `whisper-server` on :8082).
-- **Tailnet: http vs https.** `http://…:9445` does not work and a plain-http address gives no microphone. Use `https://ai-hub.tail54f481.ts.net:9445`. If the page does not load at all, check `tailscale status` on both devices.
+- **"nothing heard".** Whisper returned no words. Speak closer to the phone and a little longer. If it keeps happening, check that the whisper service the cockpit uses is up: `ROCKY_WHISPER_URL` (default :8082), or `ROCKY_WHISPER_FAST_URL`, which `./rocky.sh cockpit` prefers when `ROCKY_WHISPER_URL` is not set and the fast one answered at start.
+- **Tailnet: http vs https.** `http://…:9445` does not work and a plain-http address gives no microphone. Use the `https://<machine>.<tailnet>.ts.net:9445` address `./rocky.sh tailnet` prints. If the page does not load at all, check `tailscale status` on both devices.
 - **Two cockpit tabs in one browser freeze.** A browser keeps at most six connections open to one address, and each cockpit tab holds three for good (the state feed and two video streams; four when following). Two full tabs in the same browser use them all and everything else waits. Use remote mode in one of them, or two devices. Lead / follow also needs two devices or two different browsers: the device id is kept per browser, so two tabs of one browser are the same device.
-- **"port 8765 already in use".** Another cockpit is running (maybe started in the background). Stop it with `./rocky.sh cockpit-stop`. `rocky.sh` runs one cockpit at a time (`./rocky.sh cockpit` stops any running one first); a second one needs `python sim/cockpit.py --port N` started by hand, and `ROCKY_COCKPIT_PORT=N ./rocky.sh tailnet` points the phone at it.
+- **"port 8765 already in use".** Another cockpit is running (maybe started in the background). Stop it with `./rocky.sh cockpit-stop`. `rocky.sh` runs one cockpit at a time (`./rocky.sh cockpit` stops any running one first); a second one needs `.venv/bin/python sim/cockpit.py --port N` started by hand from the repo root, and `ROCKY_COCKPIT_PORT=N ./rocky.sh tailnet` points the phone at it.
 - **"no shared view" or "the guide is not served".** The shared view (lead / follow) and this guide come from `sim/cockpit_shared.py`; a cockpit whose `make_app` does not mount its routes answers 404 for `/api/ui` and `/api/guide`. Everything else works; the screens stay independent.
 - **A command does nothing.** Look for a red line in the status line or overlay: a guard refused it and says why. Check the header for VOID, LATCHED or locomotion held.
 - **Voice moved nothing.** The line was heard without the name, or the name was not at the start. Say the name first, press Enter on the transcript, or switch the gate to open mic.

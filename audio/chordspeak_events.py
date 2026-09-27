@@ -3,8 +3,8 @@
 
 Maps runtime events to vocabulary words with priorities, per-word
 cooldowns and no-overlap scheduling, then renders a narration track for a
-timeline (sim video soundtrack today; the MAX98357A + 40 mm speaker on the
-Batch-3 sheet tomorrow — same engine, play instead of render).
+timeline (sim video soundtrack today; the MAX98357A + speaker of bom/BOM.csv
+D-01 tomorrow — same engine, play instead of render).
 
     from chordspeak_events import Narrator
     n = Narrator()

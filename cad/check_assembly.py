@@ -10,7 +10,7 @@ alignment across both mating parts, driver access against EVERYTHING present
 when the screw is driven, thread/nut path, capture (a 2 mm nudge must meet
 material — or be a declared bolted direction), and the cable plugs' keep-out.
 It found the D046 coxa assembly deadlock and the unlocated femur link
-(NOTES_INBOX 2026-09-17); it must stay CLEAN from here on. Exit code =
+(D046, docs/decisions.md); it must stay CLEAN from here on. Exit code =
 failures.
 """
 import sys

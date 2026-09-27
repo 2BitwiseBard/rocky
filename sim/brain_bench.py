@@ -153,7 +153,7 @@ by nobody (model None), so they are not-scored.
 Do not chat in the live cockpit while this runs: its models are
 unloaded here and a request there would swap the model under test out.
 Prints a table, writes --out (sim/out/brain_bench.json) and prints a
-Markdown block for docs/BRAIN_MODELS_2026-09-24.md.
+Markdown block for docs/BRAINS.md.
 
 Honesty: a MuJoCo render is far easier than a real camera; spoken lines
 are typed (no whisper errors); the robot starts each model's run in the same
@@ -1895,7 +1895,7 @@ def main(argv=None):
         log(f"(unloaded for the bench: {', '.join(before)} — llama-swap loads each again, cold, "
             "on its next request)")
     md = write_result(result, args.out, lines)
-    print("\nMarkdown for docs/BRAIN_MODELS_2026-09-24.md:\n")
+    print("\nMarkdown for docs/BRAINS.md:\n")
     print(md)
     print(f"\nwrote {os.path.relpath(os.path.abspath(args.out), ROOT)}")
     return result

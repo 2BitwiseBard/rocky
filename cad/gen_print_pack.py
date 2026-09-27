@@ -1,6 +1,6 @@
 """Generate the Print-Prep Pack PDF (cad/out/PRINT_PREP_PACK.pdf): per-part
 3-view reference sheets with dimensions, slicer settings, and the print-order
-checklist from docs/PRINT_PLAN_2026-09-22.md.
+checklist from docs/PRINT_PLAN.md.
 
 Deterministic: the views are Agg PNGs and the PDF is written with reportlab's
 invariant mode, so regenerating an unchanged tree leaves every byte alone.

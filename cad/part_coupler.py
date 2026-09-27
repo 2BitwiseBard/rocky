@@ -1,7 +1,8 @@
 """Sacrificial horn coupler, v2 (D047) — the $0.30 part that dies so the $24
 servo lives, re-cut for the REAL horn.
 
-Master plan §3.4 design rule: every servo horn interfaces through a printed
+Founding-plan §3.4 design rule (docs/archive/ROCKY_MASTER_PLAN_v1.1.md): every
+servo horn interfaces through a printed
 replaceable coupler. Load path: horn --(4 screws)--> coupler --(castellation
 shear lobes)--> driven part --(2x M3 clamp)--> retained. In a crash the lobes
 shear; you print a new 1-gram coupler instead of buying a servo.

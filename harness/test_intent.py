@@ -4,7 +4,7 @@ Parser tests are pure (plan() is a pure function); executor tests run
 against MockBackend — millisecond-fast. They are PLUMBING tests: the
 mock's "cliff" is a scripted x-threshold, so a green run proves the parser
 and executor pass vetoes through, not that the robot is safe (that is
-test_harness.py's slow physics test and sim/run_cliff*.py).
+test_harness.py's slow physics test and sim/experiments/run_cliff*.py).
 
     python3 -m pytest harness/test_intent.py -q
 """
