@@ -1,0 +1,45 @@
+{
+ "control": {
+  "detector": false,
+  "fell": true,
+  "body_overhang_mm": 4.4,
+  "voids": [],
+  "stop_x_mm": null
+ },
+ "detector": {
+  "detector": true,
+  "fell": false,
+  "body_overhang_mm": -170.7,
+  "voids": [
+   [
+    4.14,
+    2
+   ],
+   [
+    4.28,
+    2
+   ],
+   [
+    4.32,
+    4
+   ],
+   [
+    4.4,
+    2
+   ],
+   [
+    4.44,
+    4
+   ],
+   [
+    4.52,
+    2
+   ],
+   [
+    4.56,
+    4
+   ]
+  ],
+  "stop_x_mm": 252.3
+ }
+}

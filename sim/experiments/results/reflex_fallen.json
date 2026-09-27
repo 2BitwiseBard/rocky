@@ -1,0 +1,171 @@
+[
+ {
+  "seed": 0,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.23,
+    "PLANT"
+   ],
+   [
+    3.68,
+    "BRACE"
+   ],
+   [
+    4.3,
+    "RECOVER"
+   ],
+   [
+    4.42,
+    "FALLEN"
+   ],
+   [
+    9.28,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 4.418,
+  "t_righted": 9.282,
+  "walked_after_m": 0.473,
+  "thrown_m": 1.01,
+  "end_tilt": 0.4,
+  "end_h": 0.117
+ },
+ {
+  "seed": 1,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.25,
+    "PLANT"
+   ],
+   [
+    3.7,
+    "BRACE"
+   ],
+   [
+    4.34,
+    "RECOVER"
+   ],
+   [
+    4.45,
+    "FALLEN"
+   ],
+   [
+    9.32,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 4.452,
+  "t_righted": 9.316,
+  "walked_after_m": 0.471,
+  "thrown_m": 0.78,
+  "end_tilt": 0.4,
+  "end_h": 0.117
+ },
+ {
+  "seed": 2,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.15,
+    "PLANT"
+   ],
+   [
+    3.6,
+    "BRACE"
+   ],
+   [
+    4.37,
+    "FALLEN"
+   ],
+   [
+    9.19,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 4.37,
+  "t_righted": 9.194,
+  "walked_after_m": 0.476,
+  "thrown_m": 0.8,
+  "end_tilt": 0.3,
+  "end_h": 0.117
+ },
+ {
+  "seed": 3,
+  "fell": true,
+  "ok": true,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.2,
+    "PLANT"
+   ],
+   [
+    3.65,
+    "BRACE"
+   ],
+   [
+    4.43,
+    "FALLEN"
+   ],
+   [
+    9.28,
+    "RIGHTED"
+   ]
+  ],
+  "t_fallen": 4.428,
+  "t_righted": 9.284,
+  "walked_after_m": 0.474,
+  "thrown_m": 1.0,
+  "end_tilt": 0.3,
+  "end_h": 0.117
+ },
+ {
+  "seed": 4,
+  "fell": false,
+  "ok": false,
+  "trace": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    3.48,
+    "PLANT"
+   ],
+   [
+    3.53,
+    "BRACE"
+   ],
+   [
+    3.87,
+    "RECOVER"
+   ]
+  ],
+  "t_fallen": null,
+  "t_righted": null,
+  "walked_after_m": 0.0,
+  "thrown_m": 1.34,
+  "end_tilt": 0.4,
+  "end_h": 0.117
+ }
+]

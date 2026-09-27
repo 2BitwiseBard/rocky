@@ -1,7 +1,7 @@
 """RL runs at a glance (D048): a table of every checkpoint in sim/runs/ and a
 training-curve figure.
 
-  .venv/bin/python sim/rl_dashboard.py            # table + sim/out/rl_curves.png (the committed figure)
+  .venv/bin/python sim/rl_dashboard.py            # table + sim/out/rl_curves.png (the committed figure: tracked runs only)
   .venv/bin/python sim/rl_dashboard.py --table    # table only (what the playground's `rl` prints)
 
 Columns: env, reward version, rate limit, obs version, servo model it
@@ -99,7 +99,13 @@ def table(rows):
     return "\n".join(out)
 
 
-def curves(out_path):
+def _local(name):
+    """A git-ignored scratch run (sim/runs/_*/, sim/runs/smoke_*/): listed in the
+    table and the cockpit's live figure, left out of the committed one."""
+    return name.startswith(("_", "smoke_"))
+
+
+def curves(out_path, tracked_only=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -108,7 +114,7 @@ def curves(out_path):
             ("ent", "policy entropy (nats)"), ("sps", "steps / s")]
     for name in sorted(os.listdir(RUNS)):
         log = os.path.join(RUNS, name, "train_log.jsonl")
-        if not os.path.exists(log):
+        if not os.path.exists(log) or (tracked_only and _local(name)):
             continue
         recs = [json.loads(l) for l in open(log) if l.strip()]
         if not recs:
@@ -136,4 +142,4 @@ if __name__ == "__main__":
     a = ap.parse_args()
     print(table(summarize_runs()))
     if not a.table:
-        print("wrote", curves(os.path.join(HERE, "out", "rl_curves.png")))
+        print("wrote", curves(os.path.join(HERE, "out", "rl_curves.png"), tracked_only=True))

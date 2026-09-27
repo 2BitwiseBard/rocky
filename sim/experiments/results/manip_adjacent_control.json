@@ -1,0 +1,10 @@
+{
+ "tag": "control",
+ "tilt_max": 25.019217354317988,
+ "margin_min_work": NaN,
+ "coxa_max": 0.5273473908140395,
+ "fell_at": [
+  7.22,
+  "arms_up"
+ ]
+}

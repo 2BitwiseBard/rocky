@@ -1,0 +1,422 @@
+[
+ {
+  "amp": 30,
+  "seed": 0,
+  "watchdog": false,
+  "disp_x": 635,
+  "crossed": true,
+  "t_cross": 13.4,
+  "tilt_max": 7.5,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 30,
+  "seed": 1,
+  "watchdog": false,
+  "disp_x": 93,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.2,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 30,
+  "seed": 2,
+  "watchdog": false,
+  "disp_x": 453,
+  "crossed": true,
+  "t_cross": 15.4,
+  "tilt_max": 8.2,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 30,
+  "seed": 3,
+  "watchdog": false,
+  "disp_x": 557,
+  "crossed": true,
+  "t_cross": 17.8,
+  "tilt_max": 8.5,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 0,
+  "watchdog": false,
+  "disp_x": 527,
+  "crossed": true,
+  "t_cross": 17.1,
+  "tilt_max": 10.1,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 1,
+  "watchdog": false,
+  "disp_x": 112,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.1,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 2,
+  "watchdog": false,
+  "disp_x": 275,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 6.4,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 3,
+  "watchdog": false,
+  "disp_x": 337,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 8.6,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 0,
+  "watchdog": false,
+  "disp_x": 290,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 9.6,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 0,
+  "watchdog": true,
+  "disp_x": 382,
+  "crossed": true,
+  "t_cross": 21.1,
+  "tilt_max": 14.1,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    10.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    23.0,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 1,
+  "watchdog": false,
+  "disp_x": 110,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 1.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 1,
+  "watchdog": true,
+  "disp_x": 377,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 8.8,
+  "fell": false,
+  "stuck_events": [
+   [
+    4.5,
+    "STUCK -> high-step"
+   ],
+   [
+    8.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    20.0,
+    "recovered -> nominal"
+   ],
+   [
+    22.5,
+    "STUCK -> high-step"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 2,
+  "watchdog": false,
+  "disp_x": 277,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 2,
+  "watchdog": true,
+  "disp_x": 297,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 11.7,
+  "fell": false,
+  "stuck_events": [
+   [
+    12.5,
+    "STUCK -> high-step"
+   ],
+   [
+    16.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    23.51,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 3,
+  "watchdog": false,
+  "disp_x": 239,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 6.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 3,
+  "watchdog": true,
+  "disp_x": 245,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 13.1,
+  "fell": false,
+  "stuck_events": [
+   [
+    8.5,
+    "STUCK -> high-step"
+   ],
+   [
+    13.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    17.0,
+    "STUCK -> retreat"
+   ],
+   [
+    21.51,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 0,
+  "watchdog": false,
+  "disp_x": 147,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 4.2,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 0,
+  "watchdog": true,
+  "disp_x": 408,
+  "crossed": true,
+  "t_cross": 24.5,
+  "tilt_max": 12.0,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    12.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    24.0,
+    "recovered -> nominal"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 1,
+  "watchdog": false,
+  "disp_x": 102,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 1.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 1,
+  "watchdog": true,
+  "disp_x": 37,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 12.3,
+  "fell": false,
+  "stuck_events": [
+   [
+    4.5,
+    "STUCK -> high-step"
+   ],
+   [
+    8.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    13.0,
+    "STUCK -> retreat"
+   ],
+   [
+    17.01,
+    "STUCK -> retreat"
+   ],
+   [
+    21.01,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 2,
+  "watchdog": false,
+  "disp_x": 278,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 2,
+  "watchdog": true,
+  "disp_x": 256,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 11.2,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    14.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    17.5,
+    "STUCK -> retreat"
+   ],
+   [
+    21.01,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 3,
+  "watchdog": false,
+  "disp_x": 246,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 4.5,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 3,
+  "watchdog": true,
+  "disp_x": 226,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 11.7,
+  "fell": false,
+  "stuck_events": [
+   [
+    8.5,
+    "STUCK -> high-step"
+   ],
+   [
+    12.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    15.5,
+    "STUCK -> retreat"
+   ],
+   [
+    20.01,
+    "STUCK -> retreat"
+   ],
+   [
+    24.01,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ }
+]

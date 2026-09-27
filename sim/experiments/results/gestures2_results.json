@@ -1,0 +1,170 @@
+[
+ {
+  "gesture": "wave",
+  "total_s": 5.4,
+  "tilt_max_deg": 0.39,
+  "height_sag_mm": 8.1,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": -0.0,
+  "yaw_peak_deg": 0.0,
+  "disp_mm": [
+   -0.0,
+   1.2
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 1.14,
+  "track_max_deg": 18.3,
+  "feasible": true,
+  "feasibility": [
+   "PASS wave (static, 5.40 s): peak 3.29 rad/s at leg 0 yaw t=2.50s (loaded 3.0 / free 4.0 / hard 4.7); claw 1.3 rad/s; support >= 4; CoM margin 61 mm (origin 70); accel 0.07 g"
+  ],
+  "peak_rad_s": 3.29,
+  "ok": true,
+  "video": "pebble_gesture_wave.mp4"
+ },
+ {
+  "gesture": "bow",
+  "total_s": 3.2,
+  "tilt_max_deg": 4.31,
+  "height_sag_mm": 16.5,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": 0.0,
+  "yaw_peak_deg": 0.0,
+  "disp_mm": [
+   -0.0,
+   0.1
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 0.6,
+  "track_max_deg": 3.8,
+  "feasible": true,
+  "feasibility": [
+   "PASS bow (static, 3.20 s): peak 0.55 rad/s at leg 0 knee t=2.69s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 5; CoM margin 138 mm (origin 136); accel 0.00 g"
+  ],
+  "peak_rad_s": 0.55,
+  "ok": true,
+  "video": "pebble_gesture_bow.mp4"
+ },
+ {
+  "gesture": "look_around",
+  "total_s": 5.0,
+  "tilt_max_deg": 0.0,
+  "height_sag_mm": 0.1,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": -0.0,
+  "yaw_peak_deg": 16.2,
+  "disp_mm": [
+   -0.0,
+   -0.0
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 1.18,
+  "track_max_deg": 5.0,
+  "feasible": true,
+  "feasibility": [
+   "PASS look_around (static, 5.00 s): peak 0.94 rad/s at leg 2 yaw t=2.50s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 5; CoM margin 150 mm (origin 150); accel 0.02 g"
+  ],
+  "peak_rad_s": 0.94,
+  "ok": true,
+  "video": "pebble_gesture_look_around.mp4"
+ },
+ {
+  "gesture": "shake",
+  "total_s": 2.1,
+  "tilt_max_deg": 0.03,
+  "height_sag_mm": 2.6,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": 0.0,
+  "yaw_peak_deg": 0.0,
+  "disp_mm": [
+   0.0,
+   -0.0
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 0.86,
+  "track_max_deg": 4.0,
+  "feasible": true,
+  "feasibility": [
+   "PASS shake (static, 2.10 s): peak 1.34 rad/s at leg 0 yaw t=0.37s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 5; CoM margin 147 mm (origin 146); accel 0.17 g"
+  ],
+  "peak_rad_s": 1.34,
+  "ok": true,
+  "video": "pebble_gesture_shake.mp4"
+ },
+ {
+  "gesture": "sit",
+  "total_s": 4.2,
+  "tilt_max_deg": 0.0,
+  "height_sag_mm": 54.6,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": 0.0,
+  "yaw_peak_deg": 0.0,
+  "disp_mm": [
+   0.0,
+   -0.0
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 1.12,
+  "track_max_deg": 4.8,
+  "feasible": true,
+  "feasibility": [
+   "PASS sit (static, 4.20 s): peak 0.78 rad/s at leg 0 knee t=3.62s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 5; CoM margin 150 mm (origin 150); accel 0.00 g"
+  ],
+  "peak_rad_s": 0.78,
+  "ok": true,
+  "video": "pebble_gesture_sit.mp4"
+ },
+ {
+  "gesture": "turn_in_place",
+  "total_s": 4.8,
+  "tilt_max_deg": 0.74,
+  "height_sag_mm": 0.8,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": 48.0,
+  "yaw_peak_deg": 48.0,
+  "disp_mm": [
+   2.1,
+   -0.1
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 2.37,
+  "track_max_deg": 18.6,
+  "feasible": true,
+  "feasibility": [
+   "PASS turn_in_place (gait, 4.80 s): peak 3.63 rad/s at leg 2 yaw t=3.00s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 4; CoM margin 57 mm (origin 57)"
+  ],
+  "peak_rad_s": 3.63,
+  "ok": true,
+  "video": "pebble_gesture_turn_in_place.mp4"
+ },
+ {
+  "gesture": "sidestep",
+  "total_s": 4.8,
+  "tilt_max_deg": 0.85,
+  "height_sag_mm": 1.1,
+  "planted_break_s": 0.0,
+  "yaw_end_deg": -0.3,
+  "yaw_peak_deg": 4.0,
+  "disp_mm": [
+   10.2,
+   139.9
+  ],
+  "fell": false,
+  "servo_model": true,
+  "track_mean_deg": 1.98,
+  "track_max_deg": 15.7,
+  "feasible": true,
+  "feasibility": [
+   "PASS sidestep (gait, 4.80 s): peak 3.14 rad/s at leg 4 yaw t=3.72s (loaded 3.0 / free 4.0 / hard 4.7); claw 0.0 rad/s; support >= 4; CoM margin 53 mm (origin 52)"
+  ],
+  "peak_rad_s": 3.14,
+  "ok": true,
+  "video": "pebble_gesture_sidestep.mp4"
+ }
+]
