@@ -7,6 +7,7 @@
     "ROCKY_BACKEND: auto = the running cockpit (./rocky.sh cockpit, 127.0.0.1:8765) if one answers, else the",
     "in-process MuJoCo sim | cockpit = the cockpit or refuse to start | sim = in-process MuJoCo | mock =",
     "millisecond-fast contract, no physics (the default when unset).",
+    "ROCKY_COCKPIT_URL (default http://127.0.0.1:8765) points auto/cockpit at a cockpit on another port.",
     "With the in-process sim: ROCKY_WORLD flat|room|cliff; ROCKY_VIEWER=1 ROCKY_AUDIO=1 MUJOCO_GL=glfw add the",
     "live window and the speakers. With the cockpit these belong to the cockpit, not to this server."
   ],

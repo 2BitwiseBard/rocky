@@ -173,7 +173,7 @@ def test_request_guard_origin_content_type_and_host(cockpit_client):
                   headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 415
     assert c.post("/api/cmd", content='{"line": "walk 45"}', headers={"Content-Type": "text/plain"}).status_code == 415
     # tailscale serve keeps the public Host: same-origin through the proxy passes
-    ts = {"Host": "pebble-box.tail54f481.ts.net:9445", "Origin": "https://pebble-box.tail54f481.ts.net:9445"}
+    ts = {"Host": "robot.example-tailnet.ts.net:9445", "Origin": "https://robot.example-tailnet.ts.net:9445"}
     assert c.post("/api/gesture/check", json=GOOD, headers=ts).status_code == 200
     # DNS rebinding: evil.example resolving to 127.0.0.1 sends Host = Origin = evil.example
     reb = {"Host": "evil.example:8765", "Origin": "http://evil.example:8765"}

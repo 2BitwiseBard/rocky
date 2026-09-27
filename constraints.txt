@@ -1,0 +1,5 @@
+# CI only: pip install -e ".[...]" -c constraints.txt (see .github/workflows/ci.yml).
+# The versions the committed sim numbers (run_sim's walk band, the eval tables) were measured
+# with. pyproject.toml allows a range; CI tests exactly this. Bump it on purpose, in a commit
+# that also re-measures what the docs quote.
+mujoco==3.12.0

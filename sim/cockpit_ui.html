@@ -307,7 +307,7 @@
           <label>mode</label>
           <select id="mode">
             <option value="talk">Talk (regex intent, no model)</option>
-            <option value="local">Local model (llama-swap)</option>
+            <option value="local">Local model (LLM server)</option>
             <option value="multimodal">Multimodal (one vision model sees + acts)</option>
             <option value="claude">Claude (API key)</option>
           </select>
@@ -383,7 +383,7 @@
         <div class="note-warn" id="gait-budget"></div>
         <pre id="gait-report" class="report"></pre>
         <div class="small">Sim-only until it goes into params.yaml; `save` keeps a preset in gait/gaits/.</div>
-        <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label for="sv-on">servo model</label><input id="sv-on" type="checkbox"> <span class="small">ON by default (D052): bus-rate hold, latency, load-derated slew (rate × max(0.2, 1 − |τ|/stall)), 4096-count quantisation — what an ST3215 on the bus does to a target that the ideal sim actuator does not</span></div>
+        <div class="row" style="border-top:1px solid var(--line); padding-top:8px"><label for="sv-on">servo model</label><input id="sv-on" type="checkbox"> <span class="small">ON by default (D052): bus-rate hold, latency, a no-load slew (the torque-speed line is the MJCF's damping + forcerange; console `set servo.load_derate 1` = the old load-derated slew, for an A/B), 4096-count quantisation — what an ST3215 on the bus does to a target that the ideal sim actuator does not</span></div>
         <div class="row"><label>bus rate</label><input id="sv-hold" type="range" min="10" max="100" step="5" value="50" style="width:100px"><span id="sv-holdv">50 Hz</span>
           <label>latency</label><input id="sv-lat" type="range" min="0" max="120" step="5" value="20" style="width:80px"><span id="sv-latv">20 ms</span></div>
         <div class="row"><label>max speed</label><input id="sv-rate" type="range" min="1" max="8" step="0.1" value="4.7" style="width:100px"><span id="sv-ratev">4.7 rad/s</span>
@@ -985,24 +985,25 @@ for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('
 let pendingVoice = null;
 function roleOptions(list, cur) {
   const ids = list.map(e => e.id); if (cur && !ids.includes(cur)) list = [{id: cur, loaded: false, missing: true}, ...list];
-  return list.map(e => `<option value="${esc(e.id)}"${e.id === cur ? ' selected' : ''}>${esc(e.id)} ${e.missing ? '(not in llama-swap)' : e.loaded ? '● warm' : '○ cold'}${e.selector ? ' · selector' : ''}</option>`).join('');
+  return list.map(e => `<option value="${esc(e.id)}"${e.id === cur ? ' selected' : ''}>${esc(e.id)} ${e.missing ? '(not on the server)' : e.loaded ? '● warm' : '○ cold'}${e.selector ? ' · selector' : ''}</option>`).join('');
 }
 async function loadModels() {
   const m = await getj('/api/models');
   const cat = (m.catalog || []).filter(e => !e.quarantined), b = m.brain || {};
-  $('#model').innerHTML = roleOptions(cat, b.model) || '<option>(llama-swap not reachable)</option>';
+  $('#model').innerHTML = roleOptions(cat, b.model) || '<option>(model server not reachable)</option>';
   $('#vmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.vision_model);
   $('#mmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.multimodal_model);
   $('#stt').value = b.stt_model || (m.stt && m.stt.model) || '';
   $('#mode').value = b.mode;
   const fb = m.fallbacks || {};
-  $('#brain-fallbacks').textContent = (m.reachable ? '' : 'llama-swap NOT reachable — talk mode only. ') +
+  $('#brain-fallbacks').textContent = (m.reachable ? '' : 'model server NOT reachable — talk mode only. ') +
     Object.entries(fb).map(([r, c]) => `${r}: ${c.join(' → ')}`).join(' · ') + (m.quarantined && m.quarantined.length ? ` · quarantined (never used): ${m.quarantined.join(', ')}` : '');
   const byId = Object.fromEntries((m.catalog || []).map(e => [e.id, e]));
   const weights = id => { const e = byId[id]; return e && e.selector && e.targets && e.targets.length ? e.targets : [id]; };   // a selector resolves to its targets
-  const paired = weights(b.model).includes('qwen3.6-35b-a3b') && weights(b.vision_model).includes('lfm2.5-vl');
+  const pair = m.coresident || [];   // ROCKY_CORESIDENT: the brain + vision pair that fits the GPU together (none: no check)
+  const paired = pair.length < 2 || (weights(b.model).includes(pair[0]) && weights(b.vision_model).includes(pair[1]));
   $('#brain-pair').textContent = paired ? '' :
-    `brain ${b.model} + vision ${b.vision_model} are not the qwen3.6-35b-a3b + lfm2.5-vl pair that shares the GPU: every look may swap models (seconds to minutes).`;
+    `brain ${b.model} + vision ${b.vision_model} are not the ${pair[0]} + ${pair[1]} pair that shares the GPU (ROCKY_CORESIDENT): every look may swap models (seconds to minutes).`;
   $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
   return m;
 }

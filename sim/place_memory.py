@@ -2,15 +2,15 @@
 
 The scene memory (sim/scene_memory.py) is keyed by the world NAME, which is
 ground truth a real robot never has. This module is what replaces it: a
-place is recognised from what the robot senses, and the owner names it
+place is recognised from what the robot senses, and the user names it
 ("hey, I'm in the basement at home" / "hey, this is completely new" / "hey,
 this master bedroom has a new chair"). Rooms are enough now; a hierarchy
 (home -> room -> spot) comes later (`parent` is reserved for it).
 
 Pure Python + numpy: no MuJoCo, no network. Every sense arrives as an
 argument (the cockpit computes it): a lidar sweep, an embedding vector of a
-look description (the caller injects embed_fn, e.g. llama-swap's "embedding"
-model), a radio fingerprint.
+look description (the caller injects embed_fn, e.g. the cockpit's embedding
+model, ROCKY_EMBED_MODEL), a radio fingerprint.
 
 SIGNALS
   scan   scan_signature(angles, ranges, yaw, range_max) -> SIG_LEN floats:
@@ -80,7 +80,7 @@ RECOGNITION  recognize(scan_sig, desc_emb, radio) compares the query with
   one lidar-empty world from another no better than nothing. So the
   lidar-empty worlds (7 of the 9 original presets) are compared on the
   description alone and are NEVER "known" by the robot alone: at best
-  "ambiguous" 0.725 "[look only]", and the owner names the place
+  "ambiguous" 0.725 "[look only]", and the user names the place
   (name_place settles it). Review 2026-09-25: counting two empty sweeps
   as a 0.1-weight sense made that two senses — evidence 0.9 — and with
   the shallow description map every never-seen open-floor world read
@@ -106,7 +106,7 @@ RECOGNITION  recognize(scan_sig, desc_emb, radio) compares the query with
   score can be read without guessing its split.
 
 THRESHOLDS — MEASURED on sim/out/place_bench.json (2026-09-25 19:39: 3
-  trials, lfm2.5-vl looks, llama-swap's CPU Qwen3-Embedding-0.6B
+  trials, lfm2.5-vl looks, the reference setup's CPU Qwen3-Embedding-0.6B
   'embedding'; MuJoCo rooms a, b, c enrolled, d never; per read the parts
   are under runs[].tests[].reads[].recognize and runs[].enrol[].reads[]).
   That run used the old map (DESC_COS_FLOOR 0.55, DESC_COS_FULL 0.90), so a
@@ -159,7 +159,7 @@ THRESHOLDS — MEASURED on sim/out/place_bench.json (2026-09-25 19:39: 3
   KNOWN_T keeps 0.025 over the one-sense cap and 0.029 under the weakest
   true match; the grid's optimum (FLOOR 0.22, KNOWN_T 0.755: min slack
   0.030) is within a rounding step of this (0.025), and KNOWN_T / MARGIN
-  stay the numbers the cockpit and the owner already know. Limits: one run,
+  stay the numbers the cockpit and its users already know. Limits: one run,
   3 trials of 7 cases whose looks repeat (the model describes a frame nearly
   the same way each time), clean MuJoCo rooms and a perfect lidar — an upper
   bound for the real camera and puck. Every bench room has walls (scan
@@ -423,7 +423,7 @@ def desc_score(cos):
 
 def embed_description(text, embed_fn):
     """text -> a unit numpy vector through the injected embed_fn(text) ->
-    vector (the cockpit's call to llama-swap's 'embedding' model); None when
+    vector (the cockpit's call to its embedding model); None when
     there is no text or embed_fn fails (a missing signal, never an error)."""
     if not text or not str(text).strip() or embed_fn is None:
         return None

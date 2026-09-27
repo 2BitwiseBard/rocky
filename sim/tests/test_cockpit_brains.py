@@ -22,7 +22,29 @@ sys.path.insert(0, ROOT)
 
 import cockpit_brains as cb                                            # noqa: E402
 
-# the live llama-swap list on this box (2026-09-24), trimmed to the fields that matter
+# The reference setup (rocky.env.example) whatever this machine's rocky.env says: its roles and chains
+# are the code's defaults, and its two GPU-faulting models stand in for ROCKY_QUARANTINED.
+REF_QUARANTINED = frozenset({"gpt-oss-20b", "glm-flash-reap"})
+REF_CORESIDENT = ("qwen3.6-35b-a3b", "lfm2.5-vl")
+
+
+@pytest.fixture(autouse=True)
+def reference_setup(monkeypatch):
+    monkeypatch.setattr(cb, "QUARANTINED", REF_QUARANTINED)
+    monkeypatch.setattr(cb, "CORESIDENT", REF_CORESIDENT)
+    monkeypatch.setattr(cb, "ROLE_DEFAULTS", dict(cb.REFERENCE_ROLES))
+    monkeypatch.setattr(cb, "FALLBACK", {r: list(c) for r, c in cb.REFERENCE_FALLBACK.items()})
+
+
+def _classify(entries):
+    saved, cb.QUARANTINED = cb.QUARANTINED, REF_QUARANTINED
+    try:
+        return cb.classify_models(entries)
+    finally:
+        cb.QUARANTINED = saved
+
+
+# the reference setup's llama-swap list (2026-09-24), trimmed to the fields that matter
 LLAMA_SWAP = [
     {"id": "embedding", "name": "Qwen3-Embedding-0.6B", "description": "639 MB."},
     {"id": "gemma-4-26b-a4b", "name": "Gemma 4 26B-A4B MoE (UD-Q5_K_XL) — vision",
@@ -49,7 +71,7 @@ LLAMA_SWAP = [
      "meta": {"llamaswap": {"type": "selector", "strategy": "warm",
                             "targets": ["lfm2.5-vl", "qwen3.8-27b"]}}},
 ]
-CAT = cb.classify_models(LLAMA_SWAP)
+CAT = _classify(LLAMA_SWAP)
 
 
 class FakeSim:
@@ -258,10 +280,9 @@ EXTRA_BEFORE = ("compose_gesture", "check_gesture", "save_gesture", "find_object
                 "where_is", "recall", "go_back_to", "forget")
 EXTRA_BEFORE_SHA = "5c53a90ca8083e8679fd70ca2170cf0c67a786e7ffb49eff43710e342333d4e4"
 GATED_BEFORE = frozenset({"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn", "move"})
-REGISTRY_SNAPSHOTS = os.environ.get(
-    "ROCKY_D056_SNAPSHOTS",
-    "/tmp/claude-1000/-home-bitwisebard-Development-rocky/"
-    "617aee55-a110-4e95-989e-f8423ee0b4fa/scratchpad/d056")
+# the D056 snapshot, vendored with the harness tests (ROCKY_D056_SNAPSHOTS overrides the directory)
+REGISTRY_SNAPSHOTS = (os.environ.get("ROCKY_D056_SNAPSHOTS")
+                      or os.path.join(ROOT, "harness", "fixtures", "d056"))
 
 
 def _canon_sha(obj):

@@ -8,23 +8,26 @@ on:
 
 jobs:
   fast:
-    # driver + gait + harness suites, the sim smoke test and the URDF parity
-    # check: CPU only, under two minutes after the pip cache is warm
+    # driver + gait + harness suites, all of sim/tests (slow included), the sim smoke test,
+    # URDF parity and the generated-file checks: CPU only, ~6 min (the sim suite is ~5 of it)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false          # nothing in the fast suites reads an LFS file
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
       - name: launcher parses (bash -n rocky.sh)
         run: bash -n rocky.sh
-      - run: pip install -e ".[sim,harness,dev]"
+      - name: install (MuJoCo pinned by constraints.txt)
+        run: pip install -e ".[sim,harness,dev]" -c constraints.txt
       - name: unit suites (driver, gait, harness fast)
         run: python -m pytest driver/tests gait harness -m "not slow" -q
       - name: regenerate the model files (MJCF + URDF) from params
+        env:
+          MUJOCO_GL: disable  # no display on the runner; nothing here renders
         run: |
           python sim/build_mjcf.py
           python ros2/rocky_description/generate_urdf.py
@@ -38,15 +41,19 @@ jobs:
         # envelope in params.yaml; a registry or params change without the regenerated page
         # fails here (regenerate: python -m harness.capabilities --md --out docs/TOOLS.md)
         run: python -m harness.capabilities --check docs/TOOLS.md
-      - name: "sim smoke: the bare wave gait walks (no GL on the runner, physics + metrics only)"
+      - name: "sim smoke: the bare wave gait walks (physics + metrics only, no rendering)"
         # run_sim.py exits 1 on a fall or a walk outside its calibrated band (D052);
         # pipefail carries that exit code through tail
+        env:
+          MUJOCO_GL: disable
         run: |
           set -o pipefail
           python sim/run_sim.py | tail -4
-      - name: sim unit tests (shove model, model consistency, launcher)
+      - name: sim tests (all of sim/tests, slow included)
         run: python -m pytest sim/tests -q
       - name: URDF == MJCF == analytic FK
+        env:
+          MUJOCO_GL: disable
         run: python sim/check_urdf_parity.py
       - name: harness slow test (physics-backed goto, no rendering)
         run: python -m pytest harness -m slow -q
@@ -58,7 +65,7 @@ jobs:
     outputs:
       cad: ${{ steps.diff.outputs.cad }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
           fetch-depth: 0
@@ -69,7 +76,7 @@ jobs:
         run: |
           if [ "$EVENT" != "pull_request" ]; then echo "cad=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           if git diff --name-only "$BASE" HEAD \
-              | grep -qE '^(cad/|sim/build_mjcf\.py$|sim/mass_audit\.py$|\.github/workflows/ci\.yml$)'; then
+              | grep -qE '^(cad/|ros2/rocky_description/|sim/build_mjcf\.py$|sim/mass_audit\.py$|sim/check_urdf_parity\.py$|pyproject\.toml$|constraints\.txt$|\.github/workflows/ci\.yml$)'; then
             echo "cad=true" >> "$GITHUB_OUTPUT"
           else
             echo "cad=false" >> "$GITHUB_OUTPUT"
@@ -77,28 +84,35 @@ jobs:
 
   cad:
     # the parametric CAD check tree (build123d, ~2 min) and the whole design
-    # pipeline on top of it: every push to main, and PRs that touch cad/** or
-    # the mass/MJCF generators
+    # pipeline on top of it: every push to main, and PRs that touch cad/**, the
+    # mass/MJCF/URDF generators or the pins
     needs: changes
     if: needs.changes.outputs.cad == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          lfs: true           # cad/ref/STS3215_03a.step is the servo reference solid
-      - uses: actions/setup-python@v5
+          lfs: false          # every cad/out file is rebuilt below; only the servo reference is read
+      - name: fetch the servo reference solid (the one LFS file the CAD checks read)
+        run: |
+          git lfs install --local
+          git lfs pull --include="cad/ref/*.step"
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -e ".[sim,cad]"
-      - name: run_all_checks (23 modules incl. joint suite + printability)
+      - name: install (build123d + OCCT pinned in the cad extra, MuJoCo by constraints.txt)
+        run: pip install -e ".[sim,cad]" -c constraints.txt
+      - name: run_all_checks (every part module, the joint suite, then printability)
         working-directory: cad
         run: python run_all_checks.py
       - name: "design-pipeline: CAD -> masses -> MJCF -> URDF -> parity, committed files current (D052)"
         # mass_audit reads the STLs run_all_checks just rebuilt; everything downstream
         # of it must match what is committed, or a CAD edit shipped without its regen.
-        # Honest caveat: mass_budget.json rounds to 0.1 g of STL volume, so an OCCT /
-        # build123d upgrade that moves a volume by a hair can trip this on its own.
+        # mass_budget.json rounds to 0.1 g of STL volume: the cad extra pins build123d +
+        # OCCT so an upstream release cannot move a volume under this check.
+        env:
+          MUJOCO_GL: disable
         run: |
           python sim/mass_audit.py
           python sim/build_mjcf.py

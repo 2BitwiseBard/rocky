@@ -1,4 +1,4 @@
-"""brain_bench — the scoring, the describe scorer, the owner-port refusal, the
+"""brain_bench — the scoring, the describe scorer, the live-cockpit-port refusal, the
 Markdown row, the fence's pure parts, the event window, the fresh-eye rule,
 the --url restore and the SIGTERM cleanup. No cockpit, no GPU, no llama-swap:
 every response here is a dict shaped like Brains.chat's answer (and some
@@ -431,7 +431,7 @@ def test_same_model_on_the_degraded_text_path_is_not_scored():
 
 
 def test_model_that_ran_tools_then_failed_keeps_its_safety_record():
-    notes = ["qwen3.5-9b is not in llama-swap", f"{M} failed (HTTP 500: boom)",
+    notes = ["qwen3.5-9b is not on the model server", f"{M} failed (HTTP 500: boom)",
              "multimodal chain exhausted — text brain + look"]
     for fenced in (False, True):                              # skip notes are not failures: all calls are M's
         r = bb.score_command(CMD["what do you see"], resp([("goto", {"x": 1, "y": 0})], model=None,
@@ -462,7 +462,7 @@ def test_own_calls():
 
 
 def test_skip_notes_about_fenced_out_models_do_not_disqualify():
-    notes = ["qwen3.5-9b is not in llama-swap", "gemma-4-26b-a4b is not in llama-swap"]
+    notes = ["qwen3.5-9b is not on the model server", "gemma-4-26b-a4b is not on the model server"]
     reply = f"[{'; '.join(notes)} → answered by {M}] Stopped."
     r = bb.score_command(CMD["stop"], resp([("stop", {})], reply=reply, fallback=notes), M)
     assert r["verdict"] == "ok" and r["reply"] == "Stopped."
@@ -562,10 +562,14 @@ def test_summarize_describe():
     assert s["ok_str"] == "2/3" and s["side_ok"] == "1/1" and s["scored"] == 2
 
 
-# ------------------------------------------------------------------ the owner's cockpit
-@pytest.mark.parametrize("url", ["http://127.0.0.1:8765", "http://localhost:8765/", "http://[::1]:8765"])
-def test_refuse_owner_port(url):
-    assert "8765" in bb.refuse_url(url)
+# ------------------------------------------------------------------ the live cockpit
+LIVE = bb.LIVE_COCKPIT_PORT                               # ROCKY_COCKPIT_PORT, default 8765
+
+
+@pytest.mark.parametrize("url", [f"http://127.0.0.1:{LIVE}", f"http://localhost:{LIVE}/",
+                                 f"http://[::1]:{LIVE}"])
+def test_refuse_live_cockpit_port(url):
+    assert str(LIVE) in bb.refuse_url(url)
 
 
 def test_other_ports_are_fine():
@@ -573,24 +577,24 @@ def test_other_ports_are_fine():
     assert bb.refuse_url("http://localhost:8793/") is None and bb.refuse_url("http://[::1]:8792") is None
 
 
-@pytest.mark.parametrize("url", ["https://ai-hub.tail54f481.ts.net:9445",      # rocky.sh tailnet -> :8765
-                                 "http://ai-hub:8792", "http://100.101.102.103:8792",
+@pytest.mark.parametrize("url", ["https://robot.example-tailnet.ts.net:9445",   # rocky.sh tailnet -> :8765
+                                 "http://robot:8792", "http://100.101.102.103:8792",
                                  "http://192.168.1.20:8792", "localhost:8792", "127.0.0.1:8792", "ftp://127.0.0.1:1"])
 def test_refuse_anything_but_a_loopback_http_cockpit(url):
     assert bb.refuse_url(url) and "refusing" in bb.refuse_url(url)
 
 
-def test_main_refuses_the_owner_cockpit_before_any_network(monkeypatch):
+def test_main_refuses_the_live_cockpit_before_any_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("network touched")
     for name in ("listed_models", "running_models", "catalog", "start_cockpit", "unload"):
         monkeypatch.setattr(bb, name, boom)
     with pytest.raises(SystemExit) as e:
-        bb.main(["--models", M, "--url", "http://127.0.0.1:8765"])
-    assert "8765" in str(e.value)
+        bb.main(["--models", M, "--url", f"http://127.0.0.1:{LIVE}"])
+    assert str(LIVE) in str(e.value)
     with pytest.raises(SystemExit) as e:
-        bb.main(["--models", M, "--port", "8765"])
-    assert "8765" in str(e.value)
+        bb.main(["--models", M, "--port", str(LIVE)])
+    assert str(LIVE) in str(e.value)
 
 
 def test_help_smoke():
@@ -680,7 +684,7 @@ def test_stanza_info_and_files_cell():
     import yaml
     cfg = yaml.safe_load("""
 macros:
-  models_dir: /mnt/models
+  models_dir: /data/models
 models:
   "qwen3.5-9b":
     cmd: |
@@ -692,10 +696,10 @@ models:
 """)
     info = bb.stanza_info(cfg, "qwen3.5-9b")
     assert info["ctx"] == 16384
-    assert info["files"] == [("Qwen3.5-9B-UD-Q4_K_XL", "/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf"),
-                             ("mmproj-Qwen3.5-9B-F16", "/mnt/models/qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf")]
-    sizes = {"/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf": 5966095584,
-             "/mnt/models/qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf": 918166080}
+    assert info["files"] == [("Qwen3.5-9B-UD-Q4_K_XL", "/data/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf"),
+                             ("mmproj-Qwen3.5-9B-F16", "/data/models/qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf")]
+    sizes = {"/data/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf": 5966095584,
+             "/data/models/qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf": 918166080}
     assert bb.files_cell(info, sizes) == "Qwen3.5-9B-UD-Q4_K_XL (6.0 GB) + mmproj-Qwen3.5-9B-F16 (0.9 GB)"
     assert bb.stanza_info(cfg, "nope") == {"files": [], "ctx": None} and bb.files_cell({}) == "—"
 

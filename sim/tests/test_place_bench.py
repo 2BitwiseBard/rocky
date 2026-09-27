@@ -1,7 +1,7 @@
 """place_bench — the case table, the bench rooms (added presets only), the
 opaque world names, reading the place payload, the scoring (confusion
 matrix, change detection, the name-leak flag), the Markdown, the fence's
-rules (and a live dry-run fence on loopback), the owner-port refusal and a
+rules (and a live dry-run fence on loopback), the live-cockpit-port refusal and a
 --help smoke test. No cockpit, no GPU, no llama-swap.
 
 THE NAME-SWAP PROOF (test_*_name_swap_*): the bench's own trial loop
@@ -549,17 +549,21 @@ def test_own_cockpit_env_is_scratch_only(tmp_path, monkeypatch):
     assert own.env()["ROCKY_MEMORY_DIR"] != env["ROCKY_MEMORY_DIR"]     # a fresh memory per start
 
 
-# ------------------------------------------------------------------ the owner's cockpit
-def test_main_refuses_the_owner_cockpit_before_any_network(monkeypatch):
+# ------------------------------------------------------------------ the live cockpit
+def test_main_refuses_the_live_cockpit_before_any_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("network touched")
     for name in ("listed_models", "running_models", "unload", "PlaceFence", "OwnCockpit", "BenchCockpit"):
         monkeypatch.setattr(pb, name, boom)
-    for argv in (["--port", "8765"], ["--url", "http://127.0.0.1:8765"], ["--url", "http://localhost:8765/"]):
+    monkeypatch.setattr(pb, "QUARANTINED", frozenset({"gpt-oss-20b"}))   # ROCKY_QUARANTINED on the reference
+    live = pb.LIVE_COCKPIT_PORT                                          # ROCKY_COCKPIT_PORT, default 8765
+    for argv in (["--port", str(live)], ["--url", f"http://127.0.0.1:{live}"],
+                 ["--url", f"http://localhost:{live}/"]):
         with pytest.raises(SystemExit) as e:
             pb.main(argv)
-        assert "8765" in str(e.value)
-    for url in ("https://ai-hub.tail54f481.ts.net:9445", "http://100.101.102.103:8795", "http://192.168.1.20:8795"):
+        assert str(live) in str(e.value)
+    for url in ("https://robot.example-tailnet.ts.net:9445", "http://100.101.102.103:8795",
+                "http://192.168.1.20:8795"):
         with pytest.raises(SystemExit) as e:
             pb.main(["--url", url])
         assert "refusing" in str(e.value)
@@ -988,7 +992,7 @@ def test_senses_recogniser_passes_the_name_swap_and_the_changes():
             assert f'"{preset}"' not in blob, preset
     named = [b for m, p, b in ck.calls if p == "/api/tool/name_place"]
     assert [b["name"] for b in named] == [pb.PLACE_NAMES[lab] for lab in pb.ENROL_ROOMS]
-    # the owner's words follow the robot's verdict: a plain name after "new", new=true otherwise
+    # the user's words follow the robot's verdict: a plain name after "new", new=true otherwise
     firsts = [r["reads"][0]["parsed"]["verdict"] for r in run["enrol"]]
     assert [bool(b.get("new")) for b in named] == [v != "new" for v in firsts]
     # the bench never turned for a READ: every turn is the move's (the cockpit's own looks turn it)
@@ -1002,7 +1006,7 @@ def test_lidar_empty_worlds_are_never_known_as_another_through_the_fake():
     then the rubble field were ONE place ('known' 0.89, 0.95) whose objects each world
     overwrote. Two empty sweeps are not compared now: the look alone decides, capped below
     'known' — each world is 'ambiguous' [look only] after its second look, nothing is stored
-    into the first place, and even the flat itself is only 'ambiguous' (the owner names it).
+    into the first place, and even the flat itself is only 'ambiguous' (the user names it).
     Real MuJoCo sweeps: seven of the nine original presets give the puck nothing."""
     home = {"x": 0.0, "y": 0.0, "yaw_deg": 0.0}
     for preset in ("flat", "stairs", "rubble field", "rough terrain", "slope 8 deg", "icy floor", "cliff"):

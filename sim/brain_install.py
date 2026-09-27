@@ -3,10 +3,17 @@
     .venv/bin/python sim/brain_install.py --dry-run                 # the plan for ~/Downloads/*.gguf
     .venv/bin/python sim/brain_install.py                           # do it (+ restart llama-swap)
     .venv/bin/python sim/brain_install.py ~/Downloads/Qwen3.5-4B-UD-Q4_K_XL.gguf --no-restart
-    .venv/bin/python sim/brain_install.py /mnt/models/qwen3.5-4b/Qwen3.5-4B-UD-Q4_K_XL.gguf   # finish one
+    .venv/bin/python sim/brain_install.py ~/models/qwen3.5-4b/Qwen3.5-4B-UD-Q4_K_XL.gguf   # finish one
     rocky.sh brain-install --dry-run                                # the same, from the launcher
 
-The owner downloads brain candidates with a browser (Qwen3.5-4B / 9B, Gemma 4
+Defaults (each flag overrides; rocky.env.example): --downloads ROCKY_DOWNLOADS_DIR
+(~/Downloads), --models-dir ROCKY_MODELS_DIR (~/models), --config ROCKY_SWAP_CONFIG
+(~/.config/llama-swap/config.yaml), --manifest ROCKY_SWAP_MANIFEST (models.manifest.json
+beside it: the restore manifest, {"models": [...]}); the VRAM warning is for a
+ROCKY_GPU_VRAM_GB card (16, the reference setup's). llama-swap only: it runs as the
+systemd user unit `llama-swap`.
+
+Brain candidates get downloaded with a browser (Qwen3.5-4B / 9B, Gemma 4
 12B, ...) and every one needs the same five chores done by hand: move it off
 the OS disk, find or fetch its vision projector, record it in the restore
 manifest, write a llama-swap stanza that follows the family's hard-won rules,
@@ -46,7 +53,7 @@ SAFETY
   * a split GGUF (-00001-of-0000N, split.count > 1) is refused: install the
     shards by hand, together;
   * the same filename with the same size already under <models-dir> is a
-    duplicate: reported, never moved, never deleted (that is the owner's
+    duplicate: reported, never moved, never deleted (that is the user's
     call). If no stanza runs that installed copy (an earlier run stopped half
     way), the install is finished in place from it;
   * nothing moves until the install can complete: the plan finds the
@@ -54,8 +61,8 @@ SAFETY
     config (yaml.safe_load; groups/selectors/macros unchanged; exactly one
     model more), so a config problem fails its file in --dry-run too;
   * install = the projector first (a fetch is what fails most often), then
-    shutil.copyfile to a temp name beside the destination (Downloads and
-    /mnt/models are different drives), byte-size check, fsync, header +
+    shutil.copyfile to a temp name beside the destination (the downloads
+    folder and the models dir may be different drives), byte-size check, fsync, header +
     tensor-extent re-check, link into place (never overwrites), fsync of the
     folder, then the manifest and the config; the source is unlinked (unless
     --copy) only after all of that worked. A failure after the copy keeps the
@@ -70,7 +77,8 @@ SAFETY
     validated in memory again before it is written and re-checked after;
   * restart (unless --no-restart, and only when the config changed):
     `systemctl --user restart llama-swap` — it unloads EVERY model — then GET
-    /v1/models (bearer LOCAL_AI_KEY) until the new ids are listed, up to 60 s;
+    /v1/models (the LLM key: ROCKY_LLM_API_KEY / ROCKY_LLM_KEY_FILE) until the new
+    ids are listed, up to 60 s;
   * --dry-run prints the whole plan (moves, stanza text, manifest entries) and
     touches nothing. No prompts ever; exit 1 on any failure, 0 otherwise.
 """
@@ -95,16 +103,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import envfile                   # noqa: E402
+
+envfile.load()                   # <repo>/rocky.env when started without rocky.sh (the environment wins)
 HOME = os.path.expanduser("~")
-DEFAULT_DOWNLOADS = os.path.join(HOME, "Downloads")
-DEFAULT_MODELS_DIR = "/mnt/models"
-DEFAULT_CONFIG = os.path.join(HOME, ".config", "llama-swap", "config.yaml")
-DEFAULT_MANIFEST = os.path.join(HOME, ".config", "llama-swap", "models.manifest.json")
+
+
+def _env_path(name, default):
+    return os.path.expanduser(os.environ.get(name) or default)
+
+
+DEFAULT_DOWNLOADS = _env_path("ROCKY_DOWNLOADS_DIR", os.path.join(HOME, "Downloads"))
+DEFAULT_MODELS_DIR = _env_path("ROCKY_MODELS_DIR", os.path.join(HOME, "models"))
+DEFAULT_CONFIG = _env_path("ROCKY_SWAP_CONFIG", os.path.join(HOME, ".config", "llama-swap", "config.yaml"))
+DEFAULT_MANIFEST = _env_path("ROCKY_SWAP_MANIFEST",
+                             os.path.join(os.path.dirname(DEFAULT_CONFIG), "models.manifest.json"))
 HF_BIN = os.environ.get("ROCKY_HF_BIN", os.path.join(HOME, ".local", "bin", "hf"))
 SETTLE_S = 2.0                   # a file whose size changes over this recheck is still downloading
 RESTART_WAIT_S = 60.0
 FREE_MARGIN_B = 512 * 1024**2    # leave this much on the models drive after a copy
-VRAM_WARN_B = 14.0e9             # weights + projector above this cannot sit on the 16 GB card at -ngl 99
+GPU_VRAM_GB = float(os.environ.get("ROCKY_GPU_VRAM_GB") or 16)   # the reference setup's card
+VRAM_WARN_B = (GPU_VRAM_GB - 2.0) * 1e9   # weights + projector above this cannot sit on the card at -ngl 99
 PARTIAL_EXT = (".crdownload", ".part", ".partial", ".download")
 PARTIAL_SIBLING = PARTIAL_EXT + (".aria2",)   # X.gguf + X.gguf.part (Firefox) / X.gguf.aria2 (aria2c)
 MARKER = "RETRIEVAL STACK"
@@ -421,7 +440,7 @@ def partial_marker(path):
 
 def fsync_path(path):
     """fsync a file or a folder (the source is unlinked only after the copy is on
-    disk: Downloads and /mnt/models are different drives with no shared journal)."""
+    disk: the downloads folder and the models dir may be different drives with no shared journal)."""
     fd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(fd)
@@ -906,9 +925,10 @@ class Installer:
         if mtp:
             c.append(f"  # MTP draft on disk ({', '.join(mtp)}) — not enabled here; try it via the lab slot.")
         if size_m + size_p > VRAM_WARN_B:
-            c.append(f"  # WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit the 16 GB")
+            card = f"{GPU_VRAM_GB:g} GB"
+            c.append(f"  # WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit the {card}")
             c.append("  # card: expect a CUDA OOM at spawn; drop -ngl 99 (auto-fit) or pick a smaller quant.")
-            it.notes.append(f"WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit in 16 GB")
+            it.notes.append(f"WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit in {card}")
         if vision:
             name = f"{title} — vision (mmproj), rocky brain candidate"
             mm_size = f"{gb(size_p)} mmproj" if size_p else "mmproj (size once fetched)"
@@ -1159,7 +1179,8 @@ class Installer:
             time.sleep(1.0)
         self.restart.update(waited_s=RESTART_WAIT_S,
                             error=f"llama-swap did not list {', '.join(ids)} within {RESTART_WAIT_S:.0f} s "
-                                  "(is LOCAL_AI_KEY set? journalctl --user -u llama-swap)")
+                                  "(is the LLM key set: ROCKY_LLM_API_KEY / ROCKY_LLM_KEY_FILE? "
+                                  "journalctl --user -u llama-swap)")
 
     # ---------------- report
     def report(self, dry):

@@ -1,22 +1,30 @@
 """cockpit_brains (D052) — the cockpit's brains, out of cockpit.py.
 
-The owner asked for "multiple options for AI models — one for vision, or
-one just multimodal, a small or big one" and for commands that are
-followed reliably. This module holds all of it; sim/cockpit.py keeps thin
-wrappers (chat / tool / tool_look / llm_models / the /api/chat, /api/brain,
-/api/models, /api/look, /api/voice routes).
+Design goal: several model options (vision-only, one multimodal, small or
+big) and commands that are followed reliably. This module holds all of it;
+sim/cockpit.py keeps thin wrappers (chat / tool / tool_look / llm_models /
+the /api/chat, /api/brain, /api/models, /api/look, /api/voice routes).
 
-ROLES (state keys in brackets, persisted to ~/.config/rocky/cockpit.json):
-  brain      [model]            text + tools   default tool-model -> qwen3.6-35b-a3b
-  vision     [vision_model]     describes the eye   vision-model -> lfm2.5-vl
+ROLES (state keys in brackets, persisted to ~/.config/rocky/cockpit.json,
+ROCKY_COCKPIT_CONF). The model server is any OpenAI-compatible /v1
+(ROCKY_LLM_BASE_URL, default llama-swap on 127.0.0.1:8080). The defaults
+are the REFERENCE SETUP's (one 16 GB GPU running llama-swap, measured in
+D055); each is an environment variable (rocky.env.example), and a model
+picked in the cockpit is saved to the conf file:
+  brain      [model]            text + tools   ROCKY_BRAIN_MODEL, default
+                                tool-model (a llama-swap selector) -> qwen3.6-35b-a3b
+  vision     [vision_model]     describes the eye   ROCKY_VISION_MODEL, default
+                                vision-model (a selector) -> lfm2.5-vl
   multimodal [multimodal_model] ONE model sees the eye frame AND calls tools
                                 (brain mode 'multimodal'; off by default)
-                                                     gemma-4-26b-a4b
+                                ROCKY_MULTIMODAL_MODEL, default qwen3.5-9b
   claude     [claude_model]     brain mode 'claude' (needs ANTHROPIC_API_KEY)
-  stt        [stt_model]        whisper-server :8082
-Why that default pair: on this 16 GB card only qwen3.6-35b-a3b (10.4 G at
--ncmoe 26) and lfm2.5-vl (4.6 G) co-reside in llama-swap's `resident`
-group; any other brain + vision pair pays a model swap on EVERY look.
+  stt        [stt_model]        ROCKY_WHISPER_URL (rocky.sh cockpit: the fast
+                                server ROCKY_WHISPER_FAST_URL when it answers)
+Why the reference pair: on the reference 16 GB GPU only qwen3.6-35b-a3b
+(10.4 G at -ncmoe 26) and lfm2.5-vl (4.6 G) fit together (llama-swap's
+`resident` group); any other brain + vision pair pays a model swap on EVERY
+look. ROCKY_CORESIDENT names that pair on your machine (empty: no warning).
 
 MODES: talk (regex, harness/intent.py — no model) | local (brain + look
 tool) | multimodal (the eye JPEG rides in the user turn) | claude.
@@ -46,13 +54,15 @@ with the cockpit's fresh 'Situation: ...' line (sim.situation_now) in the
 USER turn — not the system prompt, which would re-prefill the tool list
 every turn on llama.cpp.
 
-FALLBACK: brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision
-lfm2.5-vl -> gemma-4-12b -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> qwen3.5-4b ->
+FALLBACK (the reference setup's; ROCKY_FALLBACK_BRAIN / _VISION / _MULTIMODAL):
+brain qwen3.6-35b-a3b -> qwen3.8-27b-iq4 -> talk; vision lfm2.5-vl ->
+gemma-4-12b -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> qwen3.5-4b ->
 gemma-4-12b -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
 and the reply SAYS which model answered and why the earlier ones did not.
-Quarantined models (gpt-oss-20b, glm-flash-reap: GPU faults) are never
-selected, whatever the UI sends.
+Quarantined models (ROCKY_QUARANTINED, default none; or a model whose name
+or description on the server says QUARANTINED) are never selected,
+whatever the UI sends.
 
 RELIABILITY (the D052 findings this fixes):
   * a tool that raises is a RESULT {"ok": false, "error": ...}, never a 500;
@@ -123,8 +133,9 @@ does not become last_look / last_find (the scene it describes is gone).
 PLACES (D057, 2026-09-25): with the cockpit's place recognition on (awareness
 `recognize`, sim/cockpit.py; sim/place_memory.py decides) the scene memory is
 keyed by the recognised place, not by the world's name. This module adds:
-embed(text) — llama-swap's OpenAI embeddings API, model 'embedding' (the
-always-warm CPU Qwen3-Embedding-0.6B), 5 s, None on any failure (Brains.embed
+embed(text) — the server's OpenAI embeddings API, model ROCKY_EMBED_MODEL
+(default 'embedding': the reference setup's always-warm CPU
+Qwen3-Embedding-0.6B), 5 s, None on any failure (Brains.embed
 keeps one client; the cockpit's default embedder); the four place tools
 where_am_i / name_place / places / forget_place, which run the sim's place_*
 methods (a group of their own, PLACE_TOOLS / PLACE_TOOL_DEFS after TOOL_NAMES
@@ -173,31 +184,46 @@ from harness.capabilities import (COMPOSE_DOC, FIND_DOC, REMEMBER_DOC, WHERE_IS_
 from harness.backend import SIGNED                                                    # noqa: E402
 from scene_memory import (objects_from_description, parse_note, fmt_age,               # noqa: E402
                           direction_words, forget_scope, GO_MIN_CONF, WORLD_MAX_M, SPAWN_NAME)
+import envfile                                                                        # noqa: E402
 
-DEFAULT_BASE = "http://127.0.0.1:8080/v1"
+envfile.load()            # <repo>/rocky.env for a cockpit or bench started without rocky.sh (env wins)
+DEFAULT_BASE = os.environ.get("ROCKY_LLM_BASE_URL") or "http://127.0.0.1:8080/v1"
 WHISPER_URL = os.environ.get("ROCKY_WHISPER_URL", "http://127.0.0.1:8082")
 WHISPER_PROMPT = ("Pebble, walk forward thirty centimeters. Pebble, stop. Wave. Bow. Sit. Shake. Turn left. Turn right. What do you see? Say hello.")   # vocabulary hint for the small model
 MIN_VOICE_BYTES = 1200      # a webm/opus container with no audio is ~200-900 bytes
 MIN_VOICE_S = 0.4           # shorter than a word: the hold was lost, not the speech
 CONF_PATH = os.environ.get("ROCKY_COCKPIT_CONF", os.path.expanduser("~/.config/rocky/cockpit.json"))
 MODES = ("talk", "local", "multimodal", "claude")
-QUARANTINED = frozenset({"gpt-oss-20b", "glm-flash-reap"})   # GPU faults (workstation CLAUDE.md)
+# models that must never run here (e.g. ones that fault the GPU): ROCKY_QUARANTINED, comma-separated
+QUARANTINED = frozenset(envfile.env_list("ROCKY_QUARANTINED"))
 SKIP_PREFIXES = ("embedding", "reranker", "lab")              # not chat models
 ROLE_KEYS = {"brain": "model", "vision": "vision_model", "multimodal": "multimodal_model",
              "claude": "claude_model", "stt": "stt_model"}
-ROLE_DEFAULTS = {"model": "tool-model", "vision_model": "vision-model",
-                 "multimodal_model": "qwen3.5-9b", "claude_model": "claude-sonnet-5",
-                 "stt_model": "whisper"}
-# D055 (2026-09-25, brain_bench, docs/BRAIN_MODELS_2026-09-24.md §Status): multimodal = the 9B (17/20, no
-# missed stop, 0.9 s first action) then the 4B (16/20, 5.8 GB) then Gemma 12B (17/20, slowest, 11.3 GB);
-# vision = the 3B eye (0.9°, 0.4 s) then Gemma 12B (0.7°, 1.7 s) then the 26B (0.6°, 2.8 s, 15 GB).
-FALLBACK = {"brain": ["qwen3.6-35b-a3b", "qwen3.8-27b-iq4"],
-            "vision": ["lfm2.5-vl", "gemma-4-12b", "gemma-4-26b-a4b"],
-            "multimodal": ["qwen3.5-9b", "qwen3.5-4b", "gemma-4-12b"]}
+# Defaults = the reference setup (one 16 GB GPU, llama-swap; 'tool-model' and 'vision-model' are its
+# selector aliases); every one is an environment variable, and a pick in the cockpit is saved to CONF_PATH.
+REFERENCE_ROLES = {"model": "tool-model", "vision_model": "vision-model", "multimodal_model": "qwen3.5-9b",
+                   "claude_model": "claude-sonnet-5", "stt_model": "whisper"}
+_ROLE_ENV = {"model": "ROCKY_BRAIN_MODEL", "vision_model": "ROCKY_VISION_MODEL",
+             "multimodal_model": "ROCKY_MULTIMODAL_MODEL", "claude_model": "ROCKY_CLAUDE_MODEL"}
+ROLE_DEFAULTS = {k: os.environ.get(_ROLE_ENV[k], v) if k in _ROLE_ENV else v
+                 for k, v in REFERENCE_ROLES.items()}
+# D055 (2026-09-25, brain_bench, docs/BRAIN_MODELS_2026-09-24.md §Status), measured on the reference setup:
+# multimodal = the 9B (17/20, no missed stop, 0.9 s first action) then the 4B (16/20, 5.8 GB) then Gemma 12B
+# (17/20, slowest, 11.3 GB); vision = the 3B eye (0.9°, 0.4 s) then Gemma 12B (0.7°, 1.7 s) then the 26B
+# (0.6°, 2.8 s, 15 GB). ROCKY_FALLBACK_BRAIN / _VISION / _MULTIMODAL (comma-separated) replace a chain.
+REFERENCE_FALLBACK = {"brain": ("qwen3.6-35b-a3b", "qwen3.8-27b-iq4"),
+                      "vision": ("lfm2.5-vl", "gemma-4-12b", "gemma-4-26b-a4b"),
+                      "multimodal": ("qwen3.5-9b", "qwen3.5-4b", "gemma-4-12b")}
+FALLBACK = {r: list(envfile.env_list(f"ROCKY_FALLBACK_{r.upper()}", chain))
+            for r, chain in REFERENCE_FALLBACK.items()}
+# the brain + vision pair that fits the GPU together (the UI warns about any other pair: every look
+# would swap models); ROCKY_CORESIDENT="brain-id,vision-id", empty = no warning. The benches never
+# unload these.
+CORESIDENT = envfile.env_list("ROCKY_CORESIDENT")
 GOTO_MAX_M = 3.0          # a goto target farther than this from the robot is an argument error
 LOOK_MAX_TOKENS = 160
 REPLY_MAX_TOKENS = 512
-CATALOG_TTL_S = 20.0      # llama-swap's model list (loaded/cold changes as models swap)
+CATALOG_TTL_S = 20.0      # the server's model list (llama-swap: loaded/cold changes as models swap)
 VOICE_RECENT_S = 60.0     # a chat text equal to the last transcript within this is voice
 MAX_TEXT = 2000
 RESULT_CHARS = 4000       # a tool result is cut to this in the transcript
@@ -500,26 +526,21 @@ def _is_stop_cmd(line):
 
 
 def local_ai_key():
-    for k in ("ROCKY_LLM_API_KEY", "LOCAL_AI_KEY"):
-        if os.environ.get(k):
-            return os.environ[k]
-    conf = os.path.expanduser("~/.config/environment.d/local-ai.conf")
-    if os.path.exists(conf):
-        for line in open(conf):
-            if line.startswith("LOCAL_AI_KEY="):
-                return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return "none"
+    """The model server's bearer key: ROCKY_LLM_API_KEY, else the key in ROCKY_LLM_KEY_FILE
+    (envfile.llm_key); 'none' when there is no key (a server without auth ignores it)."""
+    return envfile.llm_key() or "none"
 
 
 # ------------------------------------------------------------ embeddings (D057 place recognition)
-EMBED_MODEL = "embedding"   # llama-swap's always-warm Qwen3-Embedding-0.6B (CPU, 1024-dim, ~50 ms): no GPU
+# the reference setup's always-warm CPU Qwen3-Embedding-0.6B (1024-dim, ~50 ms, no GPU); ROCKY_EMBED_MODEL
+EMBED_MODEL = os.environ.get("ROCKY_EMBED_MODEL", "embedding")
 EMBED_TIMEOUT_S = 5.0
 EMBED_MAX_CHARS = 2000
 
 
 def embed(text, base_url=None, api_key=None, model=EMBED_MODEL, timeout_s=EMBED_TIMEOUT_S, client=None):
-    """text -> its embedding (a list of floats) from llama-swap's OpenAI embeddings API
-    (model 'embedding', timeout_s, no retries), or None: no text, a timeout, an HTTP error,
+    """text -> its embedding (a list of floats) from the server's OpenAI embeddings API
+    (model EMBED_MODEL, timeout_s, no retries), or None: no text, a timeout, an HTTP error,
     an empty or non-finite answer. Never raises: a missing embedding is a missing signal
     (place_memory then recognises from the scan alone). Blocking: call it off the event
     loop. client: an OpenAI client to use (Brains.embed keeps one; tests pass a fake)."""
@@ -1146,7 +1167,7 @@ class Brains:
 
     # --------------------------------------------------------------- catalog
     def catalog(self, refresh=False):
-        """(models list or None when llama-swap is unreachable, reachable bool).
+        """(models list or None when the model server is unreachable, reachable bool).
         Cached CATALOG_TTL_S; blocking — call it off the event loop."""
         t, cat, ok = self._cat
         if not refresh and cat is not None and time.monotonic() - t < CATALOG_TTL_S:
@@ -1194,12 +1215,12 @@ class Brains:
             if not c or c in out or c in seen:
                 continue
             if c in QUARANTINED:
-                notes.append(f"{c} is quarantined (GPU faults) — never used")
+                notes.append(f"{c} is quarantined (ROCKY_QUARANTINED) — never used")
                 continue
             if cat is not None:
                 e = cat.get(c)
                 if e is None:
-                    notes.append(f"{c} is not in llama-swap")
+                    notes.append(f"{c} is not on the model server")
                     continue
                 if e["quarantined"]:
                     notes.append(f"{c} is quarantined — skipped")
@@ -1233,7 +1254,7 @@ class Brains:
             "catalog": cat, "reachable": ok, "roles": self.roles(), "fallbacks": chains,
             "modes": list(MODES), "brain": self.state, "claude": self.claude_available(),
             "base_url": self.base, "stt": {"url": WHISPER_URL, "model": self.state["stt_model"]},
-            "quarantined": sorted(QUARANTINED),
+            "quarantined": sorted(QUARANTINED), "coresident": list(CORESIDENT),
             "draft": None if self.composed is None else {        # the gesture studio can load it
                 k: self.composed.get(k) for k in ("name", "spec", "ok", "report", "saved")}}
 
@@ -1272,7 +1293,7 @@ class Brains:
         if not v:
             return f"{key}: empty model id"
         if v in QUARANTINED:
-            return f"{v} is quarantined (GPU faults) — not selectable"
+            return f"{v} is quarantined (ROCKY_QUARANTINED) — not selectable"
         if key == "claude_model":
             return None if v.startswith("claude") else f"{v} is not a Claude model id"
         if key == "stt_model":
@@ -1280,7 +1301,7 @@ class Brains:
         if cmap is not None:
             e = cmap.get(v)
             if e is None:
-                return f"{v} is not in llama-swap's model list"
+                return f"{v} is not in the model server's list"
             if e["quarantined"]:
                 return f"{v} is quarantined — not selectable"
             if key in ("vision_model", "multimodal_model") and not e["vision"]:
@@ -1363,7 +1384,7 @@ class Brains:
         return bool(a.get("recognize")) if isinstance(a, dict) else False
 
     def embed(self, text):
-        """embed(text) against this brain's llama-swap (self.base, self.key, model 'embedding',
+        """embed(text) against this brain's server (self.base, self.key, model EMBED_MODEL,
         EMBED_TIMEOUT_S): a list of floats, or None. Blocking — the cockpit runs it in a thread.
         The cockpit's default place-recognition embedder (CockpitSim.embed_fn overrides it)."""
         if self._embed_client is None:
@@ -2572,9 +2593,9 @@ class Brains:
 
     @staticmethod
     def _claude_missing():
-        return {"reply": "Claude in the cockpit needs `pip install anthropic` and ANTHROPIC_API_KEY. "
-                         "Without a key, run `./rocky.sh chat` in a terminal: with the cockpit up, "
-                         "Claude Code drives THIS sim over MCP and you watch it here.",
+        return {"reply": "Claude in the cockpit needs the anthropic package (pip install -e '.[cockpit]') "
+                         "and ANTHROPIC_API_KEY. Without a key, run `./rocky.sh chat` in a terminal: with "
+                         "the cockpit up, Claude Code drives THIS sim over MCP and you watch it here.",
                 "trace": [], "mode": "claude"}
 
     async def _claude(self, text, allow, stops=None, ask=None):

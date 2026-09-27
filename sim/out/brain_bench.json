@@ -54,7 +54,7 @@
    "vram_mib": 5841,
    "decode": {
     "ok": true,
-    "model": "/mnt/models/qwen3.5-4b/Qwen3.5-4B-Q8_0.gguf",
+    "model": "Qwen3.5-4B-Q8_0.gguf",
     "decode_tps": 72.3,
     "prompt_tps": 701.3,
     "completion_tokens": 127,
@@ -1539,7 +1539,7 @@
    "vram_mib": 9173,
    "decode": {
     "ok": true,
-    "model": "/mnt/models/qwen3.5-9b-q6k/Qwen3.5-9B-UD-Q6_K_XL.gguf",
+    "model": "Qwen3.5-9B-UD-Q6_K_XL.gguf",
     "decode_tps": 43.4,
     "prompt_tps": 384.8,
     "completion_tokens": 150,
@@ -2780,7 +2780,7 @@
    "vram_mib": 11325,
    "decode": {
     "ok": true,
-    "model": "/mnt/models/gemma-4-12b/gemma-4-12b-it-UD-Q6_K_XL.gguf",
+    "model": "gemma-4-12b-it-UD-Q6_K_XL.gguf",
     "decode_tps": 33.1,
     "prompt_tps": 285.3,
     "completion_tokens": 136,

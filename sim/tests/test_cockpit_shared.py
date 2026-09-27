@@ -191,7 +191,7 @@ def test_guide_has_every_section_the_page_links_to():
 
 def test_guide_names_the_tailnet_address_and_every_verdict_code():
     guide = open(cs.GUIDE_PATH, encoding="utf-8").read()
-    assert "https://ai-hub.tail54f481.ts.net:9445" in guide
+    assert "https://<machine>.<tailnet>.ts.net:9445" in guide     # generic; `./rocky.sh tailnet` prints yours
     sys.path.insert(0, os.path.join(ROOT, "gait"))
     pf = pytest.importorskip("pebble_feasibility")
     for code in pf.FAIL_CODES + pf.WARN_CODES:

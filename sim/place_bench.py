@@ -5,7 +5,7 @@
     python sim/place_bench.py --dry-run --trials 1         # plumbing only: no GPU (canned look, hashed embeddings)
     python sim/place_bench.py --url http://127.0.0.1:8796  # a cockpit you started (loopback, NOT :8765)
 
-The owner's three sentences as a bench: "hey, I'm in the basement at home"
+The three sentences D057 was asked for, as a bench: "hey, I'm in the basement at home"
 (KNOWN), "hey, this is completely new" (NEW), "hey, this master bedroom has
 a new chair" (KNOWN WITH A CHANGE). Every verdict is the cockpit's own
 place recognition (D057: sim/cockpit.py runs sim/place_memory.py on a lidar
@@ -26,7 +26,7 @@ forget_place {name: all}, which keeps its places.json.bak), then:
 
   ENROL  rooms a, b, c (world_builder presets "room a" / "room b" / "room c",
          see the comment above them): load the world, READ, then name the
-         place the way a truthful owner would: name_place {name} when the
+         place the way a truthful user would: name_place {name} when the
          robot said new (it stored the place: this renames it), name_place
          {name, new: true} when it said known or ambiguous ("no, this is a
          different place").
@@ -105,7 +105,8 @@ not fenced (its fallback chain applies).
 
 STOPPING. Ctrl-C, SIGTERM and SIGHUP stop the bench's cockpit and the fence,
 remove the scratch directory, unload a vision model the bench loaded (unless
---keep-loaded or it is the resident lfm2.5-vl) and write the partial JSON.
+--keep-loaded or it is one of ROCKY_CORESIDENT, e.g. the reference setup's
+resident lfm2.5-vl) and write the partial JSON.
 
 Honesty: MuJoCo rooms are flat-shaded boxes on a checker floor and the lidar
 is a perfect ray cast with the sim's pose as a perfect odometry, so every
@@ -148,25 +149,25 @@ for _p in (HERE, ROOT, os.path.join(ROOT, "gait")):
 
 import vision_bench as vb                                                 # noqa: E402
 from vision_bench import (Cockpit, parent_death_hook, listed_models, running_models,   # noqa: E402
-                          unload, OWNER_PORT)
+                          unload, LIVE_COCKPIT_PORT)
 from brain_bench import (refuse_url, port_busy, Fence, BenchStopped, _child_cockpits,   # noqa: E402
                          _install_signals, _restore_signals, target_settings, restore_target)
 from world_builder import PRESETS                                         # noqa: E402
 from scene_memory import same_thing, norm_name                            # noqa: E402
-from cockpit_brains import QUARANTINED, DEFAULT_BASE                      # noqa: E402
+from cockpit_brains import (QUARANTINED, CORESIDENT, DEFAULT_BASE, EMBED_MODEL,   # noqa: E402
+                            FALLBACK)
 
 DEFAULT_PORT = 8795
 OUT = os.path.join(HERE, "out", "place_bench.json")
-DEFAULT_VISION = "lfm2.5-vl"
-RESIDENT = frozenset({"lfm2.5-vl"})             # llama-swap's resident vision model: never unloaded here
-EMBED_MODEL = "embedding"                       # llama-swap's CPU Qwen3-Embedding-0.6B (always warm)
+DEFAULT_VISION = (FALLBACK["vision"] or ["lfm2.5-vl"])[0]     # the vision chain's first (reference: the 3B)
+RESIDENT = frozenset(CORESIDENT)                # ROCKY_CORESIDENT, the GPU's resident pair: never unloaded
 EMBED_DIM = 1024
 COCKPIT_PY = os.path.join(HERE, "cockpit.py")
 VIEW_NEAR_M, VIEW_MAX_M = 0.15, 2.0             # the cockpit's eye_visible (sim/cockpit.py VIEW_*)
 
 # ------------------------------------------------------------------ the rooms and the cases
 ROOMS = {"a": "room a", "b": "room b", "c": "room c", "d": "room d"}   # label -> world_builder preset
-PLACE_NAMES = {"a": "den", "b": "workshop", "c": "playroom"}          # what the owner calls them
+PLACE_NAMES = {"a": "den", "b": "workshop", "c": "playroom"}          # what the user calls them
 ENROL_ROOMS = ("a", "b", "c")
 SECOND_LOOK_DEG = 30.0      # the cockpit's own second-look turn (sim/cockpit.py PLACE_TURN_DEG, + = left)
 MOVED = {"x": 0.25, "y": -0.15, "yaw_deg": 90.0}    # 0.29 m from the enrolment spot, a quarter turn
@@ -1336,7 +1337,7 @@ def run_trial(ck, trial, cases, cfg, log):
         st = stage(ck, ROOMS[lab], wname, cfg.settle_s)
         r1 = rd("arrival", since, t_ref=t0)
         p1 = r1.get("parsed") or {}
-        # a truthful owner: "this is the den" after "new" (it stored the place: this names it);
+        # a truthful user: "this is the den" after "new" (it stored the place: this names it);
         # "no, this is a different place: the den" after known / ambiguous
         nm = name_place(ck, lab, new=p1.get("verdict") != "new")
         names[lab] = PLACE_NAMES[lab]
@@ -1411,7 +1412,8 @@ def main(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog="The protocol, the cases, the scoring, the fence and the honesty notes: "
                                         "see the module docstring (sim/place_bench.py).")
-    ap.add_argument("--url", help=f"a running cockpit on this machine's loopback (never :{OWNER_PORT}); "
+    ap.add_argument("--url", help="a running cockpit on this machine's loopback "
+                                  f"(never :{LIVE_COCKPIT_PORT}); "
                                   "its places are wiped (forget_place all) before each trial; "
                                   "default: start one on --port")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT, help="the bench's own cockpit (default %(default)s)")
@@ -1437,8 +1439,8 @@ def main(argv=None):
         bad = refuse_url(args.url)
         if bad:
             raise SystemExit(bad)
-    elif args.port == OWNER_PORT:
-        raise SystemExit(f"refusing --port {OWNER_PORT}: that is the owner's live cockpit")
+    elif args.port == LIVE_COCKPIT_PORT:
+        raise SystemExit(f"refusing --port {LIVE_COCKPIT_PORT}: that is the live cockpit's port")
     if args.trials < 1:
         raise SystemExit("--trials must be at least 1")
     ids = [c["id"] for c in CASES]
@@ -1449,7 +1451,7 @@ def main(argv=None):
     cases = case_table([c for c in CASES if c["id"] in want])
     vm = args.vision_model
     if vm in QUARANTINED:
-        raise SystemExit(f"{vm} is quarantined (GPU faults) — never used")
+        raise SystemExit(f"{vm} is quarantined (ROCKY_QUARANTINED) — never used")
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
 
     lines = []
@@ -1462,7 +1464,8 @@ def main(argv=None):
     if not args.dry_run:
         listed = listed_models()
         if not listed:
-            raise SystemExit("llama-swap does not answer GET /v1/models on :8080 — use --dry-run for plumbing")
+            raise SystemExit(f"llama-swap does not answer GET {DEFAULT_BASE}/models — "
+                             "use --dry-run for plumbing")
         if vm not in listed:
             raise SystemExit(f"{vm} is not listed by llama-swap")
         if args.embed and EMBED_MODEL not in listed:
@@ -1488,7 +1491,7 @@ def main(argv=None):
             ck = BenchCockpit(args.url)
             if not ck.alive():
                 raise SystemExit(f"no cockpit answers at {args.url}")
-            # its roles persist in its conf file (by default the owner's ~/.config/rocky/cockpit.json)
+            # its roles persist in its conf file (by default the user's ~/.config/rocky/cockpit.json)
             saved = target_settings(ck)
             if saved is None:
                 raise SystemExit(f"could not read the roles of the cockpit at {args.url} (GET /api/models) — "

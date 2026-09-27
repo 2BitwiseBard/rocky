@@ -3,10 +3,11 @@
     python sim/brain_bench.py --models qwen3.5-4b                  # multimodal role, own cockpit :8792
     python sim/brain_bench.py --models qwen3.5-9b,gemma-4-12b --vision
     python sim/brain_bench.py --models qwen3.5-4b --mode local     # the text brain role
-    python sim/brain_bench.py --models X --url http://127.0.0.1:8793   # a cockpit you started (loopback, NOT :8765)
+    python sim/brain_bench.py --models X --url http://127.0.0.1:8793   # a cockpit you started (loopback)
 
-For each model, one at a time (the 9B, the 12B and the 35B driver cannot
-co-reside on this 16 GB card):
+Needs llama-swap (its /running and /api/models/unload routes). For each model,
+one at a time (on the reference 16 GB GPU the 9B, the 12B and the 35B driver
+cannot co-reside):
 
   1  skip it when it is quarantined or llama-swap does not list it;
   2  unload every running model (the CPU retrieval models excepted; the
@@ -121,7 +122,7 @@ THE FENCE. The cockpit this bench starts talks to llama-swap through a
 loopback proxy that lists and forwards ONLY the model under test: the
 cockpit's fallback chains (qwen3.5-9b -> gemma-4-26b-a4b -> the 35B brain)
 would otherwise load other models whenever the tested one fails — model
-swaps on every failing line, which this GPU punishes. A fenced-out call
+swaps on every failing line, which a 16 GB GPU punishes. A fenced-out call
 fails fast, the cockpit ends in its regex brain, and the line is
 'not-scored' (its safety still counts, see SCORING). With --url (a cockpit
 you started) there is no fence: its fallback chain applies, and a fallback
@@ -136,9 +137,10 @@ bench refuses to start its cockpit on a port something already answers on (a coc
 run would otherwise be the one it drives — unfenced, since the fence died
 with that run).
 
---url: loopback only (127.0.0.0/8, ::1, localhost) and never :8765 — a
-tailnet name, a LAN or a 100.x address can reach the owner's live cockpit
-on any port (`rocky.sh tailnet` serves it on :9445). The bench reads that
+--url: loopback only (127.0.0.0/8, ::1, localhost) and never the live
+cockpit's port (ROCKY_COCKPIT_PORT, default 8765) — a tailnet name, a LAN or
+a 100.x address can reach the live cockpit on any port (`rocky.sh tailnet`
+serves it on :9445). The bench reads that
 cockpit's roles, mode and speed first and puts them back at the end: a
 role change is saved to its conf file (by default
 ~/.config/rocky/cockpit.json, which the live cockpit reads when it starts).
@@ -148,7 +150,7 @@ lines reach the model under test. A --url cockpit answers stop lines itself
 unless it was started with ROCKY_STOP_FIRST=0: those rows come back answered
 by nobody (model None), so they are not-scored.
 
-Do not chat in the live cockpit (:8765) while this runs: its models are
+Do not chat in the live cockpit while this runs: its models are
 unloaded here and a request there would swap the model under test out.
 Prints a table, writes --out (sim/out/brain_bench.json) and prints a
 Markdown block for docs/BRAIN_MODELS_2026-09-24.md.
@@ -187,18 +189,18 @@ for _p in (HERE, ROOT, os.path.join(ROOT, "gait")):
 
 import vision_bench as vb                                                 # noqa: E402
 from vision_bench import (Cockpit, start_cockpit, listed_models, running_models, unload,   # noqa: E402
-                          QUARANTINED, OWNER_PORT, ball, box)
+                          QUARANTINED, LIVE_COCKPIT_PORT, ball, box)
 from world_builder import PRESETS                                         # noqa: E402
-from cockpit_brains import (GATED, TOOL_NAMES, DEFAULT_BASE, local_ai_key,  # noqa: E402
+from cockpit_brains import (GATED, TOOL_NAMES, DEFAULT_BASE, EMBED_MODEL, local_ai_key,  # noqa: E402
                             classify_models)
+from brain_install import DEFAULT_CONFIG as SWAP_CONFIG, DEFAULT_MODELS_DIR as MODELS_DIR   # noqa: E402
 
 DEFAULT_PORT = 8792
 OUT = os.path.join(HERE, "out", "brain_bench.json")
-SWAP_CONFIG = os.path.expanduser("~/.config/llama-swap/config.yaml")     # READ only (the files column)
-MODELS_DIR = "/mnt/models"
 MOTION_TOOLS = frozenset(GATED)                   # goto move gesture compose_gesture find_object go_back_to turn
 LOCOMOTION_TOOLS = frozenset({"goto", "move", "find_object", "go_back_to"})   # the robot walks somewhere
-KEEP_RUNNING = frozenset({"embedding", "embedding-code", "reranker"})     # CPU, always warm, no VRAM
+# CPU models the bench never unloads (always warm, no VRAM): the embedder + the reference setup's other two
+KEEP_RUNNING = frozenset({EMBED_MODEL, "embedding-code", "reranker"})
 ACTIVE_MODES = ("walking", "gesturing", "posing")
 # the /api/state event kinds a tool call produces (cockpit.py tool_*, Brains._event); the
 # Playground's own notes (thermal, void, latch, gate, hw:..., nan) and the awareness loop's
@@ -345,8 +347,8 @@ def _loopback(host):
 
 def refuse_url(url):
     """Why a cockpit URL is refused, or None. Only an http(s) cockpit on this
-    machine's loopback, on another port than the owner's: a tailnet name, a
-    LAN or a 100.x address can reach the owner's live cockpit on any port
+    machine's loopback, on another port than the live cockpit's: a tailnet
+    name, a LAN or a 100.x address can reach the live cockpit on any port
     (`rocky.sh tailnet` serves :8765 as https://<host>.ts.net:9445)."""
     try:
         u = httpx.URL(str(url))
@@ -354,12 +356,12 @@ def refuse_url(url):
         return f"refusing {url!r}: not a URL"
     if u.scheme not in ("http", "https") or not u.host:
         return f"refusing {url!r}: not an http(s) URL — write http://127.0.0.1:PORT"
-    if u.port == OWNER_PORT:
-        return (f"refusing {url}: :{OWNER_PORT} is the owner's live cockpit and the bench swaps its "
+    if u.port == LIVE_COCKPIT_PORT:
+        return (f"refusing {url}: :{LIVE_COCKPIT_PORT} is the live cockpit and the bench swaps its "
                 "world and its brain roles — start one with --port instead")
     if not _loopback(u.host):
         return (f"refusing {url}: {u.host} is not this machine's loopback — the bench drives only a "
-                "local cockpit you started (a tailnet, LAN or 100.x address can be the owner's live "
+                "local cockpit you started (a tailnet, LAN or 100.x address can be the live "
                 "cockpit); use http://127.0.0.1:PORT")
     return None
 
@@ -1047,7 +1049,8 @@ def decode_result(j, wall_s):
     if not tps:
         tps, src = (n / wall_s if n and wall_s > 0 else None), "wall"
     ptps = _num(tm.get("prompt_per_second"))
-    return {"ok": tps is not None, "model": (j or {}).get("model"),
+    mdl = (j or {}).get("model")          # llama-server answers with the GGUF's path: keep its file name only
+    return {"ok": tps is not None, "model": os.path.basename(mdl) if isinstance(mdl, str) else mdl,
             "decode_tps": None if tps is None else round(tps, 1),
             "prompt_tps": None if ptps is None else round(ptps, 1),
             "completion_tokens": n, "wall_s": round(wall_s, 2), "source": src}
@@ -1248,7 +1251,7 @@ def seed_gesture_library(dst, src=None):
 
 class OwnCockpit:
     """The bench's own cockpit process: fenced (ROCKY_LLM_BASE_URL = the fence),
-    a scratch conf (the owner's ~/.config/rocky/cockpit.json is never written) and
+    a scratch conf (the user's ~/.config/rocky/cockpit.json is never written) and
     a scratch scene-memory dir. Restartable: a new process has no last look /
     find_object result, which every chat turn's situation line carries (the eye
     clause) and which a cockpit older than 2026-09-25 keeps across a world swap
@@ -1763,7 +1766,8 @@ def main(argv=None):
                                  epilog="Scoring, latency, the fence and stopping: see the module docstring "
                                         "(sim/brain_bench.py).")
     ap.add_argument("--models", required=True, help="llama-swap model id(s), comma-separated")
-    ap.add_argument("--url", help=f"a running cockpit on this machine's loopback (never :{OWNER_PORT}); "
+    ap.add_argument("--url", help="a running cockpit on this machine's loopback "
+                                  f"(never :{LIVE_COCKPIT_PORT}); "
                                   "default: start one on --port")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT,
                     help="the bench's own cockpit (default %(default)s)")
@@ -1784,20 +1788,20 @@ def main(argv=None):
         bad = refuse_url(args.url)
         if bad:
             raise SystemExit(bad)
-    elif args.port == OWNER_PORT:
-        raise SystemExit(f"refusing --port {OWNER_PORT}: that is the owner's live cockpit")
+    elif args.port == LIVE_COCKPIT_PORT:
+        raise SystemExit(f"refusing --port {LIVE_COCKPIT_PORT}: that is the live cockpit's port")
     args.commands = max(0, min(args.commands, len(COMMANDS)))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
 
     listed = listed_models()
     if not listed:
-        raise SystemExit("llama-swap does not answer GET /v1/models on :8080 — nothing to bench")
+        raise SystemExit(f"llama-swap does not answer GET {DEFAULT_BASE}/models — nothing to bench")
     cat = catalog()
     models, skipped = [], {}
     for m in [x.strip() for x in args.models.split(",") if x.strip()]:
         e = cat.get(m) or {}
         if m in QUARANTINED or e.get("quarantined"):
-            skipped[m] = "quarantined (GPU faults) — never used"
+            skipped[m] = "quarantined (ROCKY_QUARANTINED) — never used"
         elif m not in listed:
             skipped[m] = "not listed by llama-swap (installed and restarted?)"
         else:

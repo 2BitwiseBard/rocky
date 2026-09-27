@@ -12,25 +12,36 @@ requires-python = ">=3.10"
 dependencies = ["numpy", "pyyaml"]
 
 [project.optional-dependencies]
-# MuJoCo sim, worlds, videos, the analytic gait tests
-sim = ["mujoco>=3.1", "gymnasium", "imageio", "imageio-ffmpeg", "matplotlib", "scipy", "numpy-stl"]
+# MuJoCo sim, worlds, videos, the analytic gait tests. MuJoCo: the range CI and the reference venv
+# have run (3.12.0 locally, 3.14.0 on CI); constraints.txt pins the one CI tests against
+sim = ["mujoco>=3.12,<3.15", "gymnasium", "imageio", "imageio-ffmpeg", "matplotlib", "scipy", "numpy-stl"]
 # PPO training + evaluation (torch is CPU-fine for eval; GPU for training)
 rl = ["torch"]
-# the six-tool MCP server, local-LLM and text brains
-harness = ["mcp<2", "pytest-asyncio", "openai", "httpx"]
-# the browser cockpit (sim/cockpit.py): starlette + uvicorn come with mcp, listed for clarity
-cockpit = ["starlette", "uvicorn", "openai", "httpx", "pillow"]
+# the MCP tool server (tools generated from harness/capabilities.py), local-LLM and text brains
+harness = ["mcp<2", "openai", "httpx"]
+# harness.local_brain without --base-url talks to an Ollama daemon
+ollama = ["ollama"]
+# the browser cockpit (sim/cockpit.py): starlette + uvicorn come with mcp, listed for clarity;
+# anthropic: the 'claude' brain mode (with ANTHROPIC_API_KEY)
+cockpit = ["starlette", "uvicorn", "openai", "httpx", "pillow", "anthropic"]
 # real servo bus
 hw = ["pyserial"]
-# parametric CAD + the check suite + print pack
-cad = ["build123d>=0.9", "trimesh", "networkx", "shapely", "rtree", "numpy-stl", "matplotlib", "reportlab"]
+# parametric CAD + the check suite + print pack. build123d + OCCT pinned: the committed cad/out
+# exports and sim/mass_budget.json (0.1 g of STL volume, CI's git-diff gate) depend on the
+# version; bump them deliberately, in the commit that carries the regenerated files
+cad = ["build123d==0.11.1", "cadquery-ocp-novtk==7.9.3.1.1", "trimesh", "networkx", "shapely", "rtree",
+       "numpy-stl", "matplotlib", "reportlab"]
+# cad/test_viewer.py drives the WebGL viewer in a browser (then: playwright install chromium)
+viewer = ["playwright"]
 dev = ["pytest", "pytest-asyncio", "ruff"]
 
 [tool.setuptools]
-# the importable core (D009 layering: no ROS needed): the gait modules and the
-# bus driver. sim/, harness/, bench/ run from the repo root.
-py-modules = ["pebble_gait", "pebble_manip_adjacent", "pebble_reflex", "pebble_watchdog",
-              "pebble_gestures", "pebble_gestures2", "rocky_model"]   # rocky_model: pebble_gait imports it (V2)
+# the importable core (D009 layering: no ROS needed): the gait modules and the bus driver.
+# sim/, harness/, bench/ run from the repo root. Editable installs only (pip install -e .):
+# rocky_model reads ../cad/params.yaml and pebble_feasibility ../sim/mass_budget.json
+py-modules = ["rocky_model", "pebble_gait", "pebble_feasibility", "pebble_reflex", "pebble_watchdog",
+              "pebble_gestures", "pebble_gestures2", "pebble_keyframes", "pebble_pose_solver",
+              "pebble_manip_adjacent"]
 packages = ["rocky_driver"]
 
 [tool.setuptools.package-dir]
@@ -40,6 +51,8 @@ rocky_driver = "driver/rocky_driver"
 [tool.pytest.ini_options]
 markers = ["slow: physics-backed tests (seconds to minutes)"]
 asyncio_mode = "auto"
+# a bare `pytest` runs the ladder (never cad/test_viewer.py, which needs the viewer extra)
+testpaths = ["driver/tests", "harness", "gait", "sim/tests"]
 
 [tool.ruff]
 line-length = 110

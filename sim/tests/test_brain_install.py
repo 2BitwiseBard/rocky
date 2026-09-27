@@ -6,8 +6,8 @@ each: magic, v3, KV strings, one skipped array, optionally a real tensor table
 Always --no-restart; --no-fetch except where a fetch must FAIL (HF_BIN points
 at a file that does not exist): no test restarts llama-swap, runs `hf
 download`, or loads a model. Two tests read the REAL config/manifest, but only
-as copies in tmp_path, and one reads real GGUF headers under /mnt/models
-(read-only; skipped where those files are absent).
+as copies in tmp_path, and one reads real GGUF headers under the models dir
+(ROCKY_MODELS_DIR; read-only; skipped where those files are absent).
 """
 import hashlib
 import json
@@ -30,8 +30,8 @@ sys.path.insert(0, os.path.join(ROOT, "sim"))
 import brain_install as bi                                               # noqa: E402
 
 TODAY = time.strftime("%Y%m%d")
-REAL_CONFIG = os.path.expanduser("~/.config/llama-swap/config.yaml")
-REAL_MANIFEST = os.path.expanduser("~/.config/llama-swap/models.manifest.json")
+REAL_CONFIG = bi.DEFAULT_CONFIG            # ROCKY_SWAP_CONFIG (rocky.env), else ~/.config/llama-swap/
+REAL_MANIFEST = bi.DEFAULT_MANIFEST
 
 
 # ------------------------------------------------------------------ synthetic GGUF
@@ -117,7 +117,7 @@ CONFIG = """\
 # test config — the same skeleton as the real one
 healthCheckTimeout: 300
 apiKeys:
-  - ${{env.LOCAL_AI_KEY}}
+  - ${{env.LLM_API_KEY}}
 
 macros:
   binary: /opt/llama/llama-server
@@ -278,23 +278,24 @@ def test_names_quants_and_keys():
     assert bi.family_of({"general.architecture": "gemma4-assistant"}, "gemma-4-423m") == "unknown"
 
 
-REAL_HEADERS = {
-    "/mnt/models/qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf": ("qwen35", "model", "qwen3.5-9b"),
-    "/mnt/models/qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf": ("clip", "mmproj", "qwen3.5-9b"),
-    "/mnt/models/gemma-4-26B-A4B-it-UD-Q5_K_XL.gguf": ("gemma4", "model", "gemma-4-26b-a4b"),
-    "/mnt/models/mmproj-gemma-4-26B-A4B-F16.gguf": ("clip", "mmproj", "gemma-4-26b-a4b"),
-    "/mnt/models/LiquidAI_LFM2.5-VL-3B-Q8_0.gguf": ("lfm2", "model", "lfm2.5-vl-3b"),
-    "/mnt/models/gemma-4-12b/mmproj-gemma-4-12b-it-F16.gguf": ("clip", "mmproj", "gemma-4-12b"),
-    "/mnt/models/qwen3.5-4b/mmproj-Qwen3.5-4B-F16.gguf": ("clip", "mmproj", "qwen3.5-4b"),
+REAL_HEADERS = {                            # the reference setup's files, relative to the models dir
+    "qwen3.5-9b/Qwen3.5-9B-UD-Q4_K_XL.gguf": ("qwen35", "model", "qwen3.5-9b"),
+    "qwen3.5-9b/mmproj-Qwen3.5-9B-F16.gguf": ("clip", "mmproj", "qwen3.5-9b"),
+    "gemma-4-26B-A4B-it-UD-Q5_K_XL.gguf": ("gemma4", "model", "gemma-4-26b-a4b"),
+    "mmproj-gemma-4-26B-A4B-F16.gguf": ("clip", "mmproj", "gemma-4-26b-a4b"),
+    "LiquidAI_LFM2.5-VL-3B-Q8_0.gguf": ("lfm2", "model", "lfm2.5-vl-3b"),
+    "gemma-4-12b/mmproj-gemma-4-12b-it-F16.gguf": ("clip", "mmproj", "gemma-4-12b"),
+    "qwen3.5-4b/mmproj-Qwen3.5-4B-F16.gguf": ("clip", "mmproj", "qwen3.5-4b"),
 }
 
 
-@pytest.mark.parametrize("path", sorted(REAL_HEADERS))
-def test_real_headers_on_this_machine(path):
+@pytest.mark.parametrize("rel", sorted(REAL_HEADERS))
+def test_real_headers_on_this_machine(rel):
     """Read-only: the header of the real files (only where they exist)."""
+    path = os.path.join(bi.DEFAULT_MODELS_DIR, rel)
     if not os.path.isfile(path):
-        pytest.skip(f"{path} not on this machine")
-    arch, gtype, key = REAL_HEADERS[path]
+        pytest.skip(f"{rel} not in the models dir on this machine")
+    arch, gtype, key = REAL_HEADERS[rel]
     i = bi.header_info(path)
     assert (i["arch"], i["type"], i["key"]) == (arch, gtype, key)
 
@@ -575,7 +576,7 @@ def _real_copies(env):
 
 
 def _expected_gemma_id():
-    """gemma-4-12b until the owner installs one; then the quant-suffixed id; a
+    """gemma-4-12b until one is installed; then the quant-suffixed id; a
     test id if even that is taken (the real config changes under this test)."""
     cfg = yaml.safe_load(open(REAL_CONFIG))
     taken = bi.config_models(cfg, (cfg.get("macros") or {}).get("models_dir", ""))
@@ -740,7 +741,7 @@ def test_a_failed_fetch_moves_nothing_and_a_rerun_finishes(env, capsys):
     assert code == 1 and "nothing moved" in out
     assert sha1(src) == digest and env.text() == cfg and open(env.manifest, "rb").read() == mani
     assert not os.path.exists(os.path.join(env.models, "gemma-4-12b", "gemma-4-12b-it-UD-Q4_K_XL.gguf"))
-    env.dl("mmproj-F16.gguf", gemma_mm())                                 # the owner fetched it by hand
+    env.dl("mmproj-F16.gguf", gemma_mm())                                 # fetched by hand
     code, out, _ = run(env, capsys, fetch=True)
     assert code == 0, out
     assert '"gemma-4-12b":' in env.text() and os.listdir(env.downloads) == []

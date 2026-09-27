@@ -2,7 +2,7 @@
 
     python sim/vision_bench.py                        # starts its own cockpit on :8791
     python sim/vision_bench.py --models lfm2.5-vl --no-find
-    python sim/vision_bench.py --url http://127.0.0.1:8792   # a cockpit you started (NOT :8765)
+    python sim/vision_bench.py --url http://127.0.0.1:8792   # a cockpit you started (NOT the live :8765)
 
 Against a running cockpit (default: a fresh one it starts itself on port 8791
 with --world "obstacle course", and stops at the end), for each vision model:
@@ -28,13 +28,13 @@ with --world "obstacle course", and stops at the end), for each vision model:
            Success = found AND the true near-edge distance from the camera at
            the end is <= 0.35 m.
 
-Prints a table and writes sim/out/vision_bench.json. Models: default
-lfm2.5-vl, then gemma-4-26b-a4b if llama-swap lists it; quarantined models
-(gpt-oss-20b, glm-flash-reap) are never used. A model that does not answer
+Prints a table and writes sim/out/vision_bench.json. Models: default (the
+reference setup's) lfm2.5-vl, then gemma-4-26b-a4b if the server lists it;
+quarantined models (ROCKY_QUARANTINED) are never used. A model that does not answer
 its first call within --load-timeout is skipped and says so; an answer from a
 DIFFERENT model (the cockpit's vision fallback chain) is never scored as the
 asked model's. A model the bench loaded is unloaded again at the end (unless
---keep-loaded) so the GPU is left as it was found.
+--keep-loaded, or it is one of ROCKY_CORESIDENT) so the GPU is left as it was found.
 
 Honesty: a MuJoCo render (flat shading, a checker floor, one orange ball and
 grey boxes) is far easier than a real camera, so these numbers are an upper
@@ -65,10 +65,11 @@ for _p in (HERE, ROOT, os.path.join(ROOT, "gait")):
         sys.path.insert(0, _p)
 
 from world_builder import footprint_dist, PRESETS                     # noqa: E402
-from cockpit_brains import (QUARANTINED, EYE_FWD_M, EYE_HFOV_DEG,      # noqa: E402
+from cockpit_brains import (QUARANTINED, CORESIDENT, EYE_FWD_M, EYE_HFOV_DEG,      # noqa: E402
                             local_ai_key, DEFAULT_BASE)
 
-OWNER_PORT = 8765
+# the live cockpit (./rocky.sh cockpit, ROCKY_COCKPIT_PORT): a bench swaps worlds and models, never there
+LIVE_COCKPIT_PORT = int(os.environ.get("ROCKY_COCKPIT_PORT") or 8765)
 DEFAULT_PORT = 8791
 DEFAULT_MODELS = ("lfm2.5-vl", "gemma-4-26b-a4b")
 OUT = os.path.join(HERE, "out", "vision_bench.json")
@@ -255,7 +256,7 @@ def start_cockpit(port, world="obstacle course"):
 
 # ------------------------------------------------------------------ llama-swap
 def llama_swap(path, method="GET", timeout=10.0):
-    root = DEFAULT_BASE[:-3]
+    root = DEFAULT_BASE.rstrip("/").removesuffix("/v1")
     h = {"Authorization": f"Bearer {local_ai_key()}"}
     return httpx.request(method, root + path, headers=h, timeout=timeout)
 
@@ -386,8 +387,8 @@ def main(argv=None):
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args(argv)
 
-    if args.url and httpx.URL(args.url).port == OWNER_PORT:
-        raise SystemExit(f"refusing {args.url}: :{OWNER_PORT} is the owner's live cockpit and the bench "
+    if args.url and httpx.URL(args.url).port == LIVE_COCKPIT_PORT:
+        raise SystemExit(f"refusing {args.url}: :{LIVE_COCKPIT_PORT} is the live cockpit and the bench "
                          "swaps its world — start one with --port instead")
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     os.makedirs(os.path.join(HERE, "out"), exist_ok=True)
@@ -396,9 +397,9 @@ def main(argv=None):
     models, skipped = [], {}
     for m in [x.strip() for x in args.models.split(",") if x.strip()]:
         if m in QUARANTINED:
-            skipped[m] = "quarantined (GPU faults) — never used"
+            skipped[m] = "quarantined (ROCKY_QUARANTINED) — never used"
         elif listed and m not in listed:
-            skipped[m] = "not listed by llama-swap"
+            skipped[m] = "not listed by the model server"
         else:
             models.append(m)
     methods = [x.strip() for x in args.methods.split(",") if x.strip()]
@@ -461,7 +462,7 @@ def main(argv=None):
                 proc.kill()
         if not args.keep_loaded:
             for m in loaded_by_us:
-                if m != "lfm2.5-vl":                 # the resident vision model stays warm
+                if m not in CORESIDENT:              # the resident brain + vision pair stays warm
                     result.setdefault("unloaded", {})[m] = unload(m)
 
     # ------------------------------------------------------------ the table

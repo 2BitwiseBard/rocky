@@ -14,6 +14,8 @@ bench/calibration.yaml
 
 # --- local machine config (the .example is the portable one) ---
 .mcp.json
+rocky.env
+.claude/settings.local.json
 
 # --- OS noise ---
 .DS_Store
@@ -34,6 +36,26 @@ MUJOCO_LOG.TXT
 # scene memory (sim/scene_memory.py): per-machine robot memory, not source
 sim/out/memory/
 
-# personal, machine-specific to-do lists (the owner's evening checklists); the repo stays generic
+# cockpit recordings (sim/cockpit.py REC_DIR): per machine, like the scene memory
+sim/out/recordings/
+
+# sim outputs: experiment clips + temp mux files (sim/experiments/exp_paths.py OUT) and
+# run_sim's clip + contact sheet
+sim/experiments/out/
+sim/out/run_sim/
+# temp mux files a clip script left in sim/ (they are deleted when ffmpeg succeeds)
+sim/_*.wav
+sim/_*.mp4
+sim/_g2list.txt
+
+# --- packaging and tool caches ---
+build/
+dist/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# personal to-do lists kept beside the checkout; the repo stays generic
 OWNER_TODO*.md
 TONIGHT*.md
