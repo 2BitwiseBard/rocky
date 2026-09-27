@@ -23,6 +23,8 @@ jobs:
         run: bash -n rocky.sh
       - name: install (MuJoCo pinned by constraints.txt)
         run: pip install -e ".[sim,harness,dev]" -c constraints.txt
+      - name: lint (ruff check . — pyflakes + syntax, pyproject [tool.ruff.lint])
+        run: ruff check .
       - name: unit suites (driver, gait, harness fast)
         run: python -m pytest driver/tests gait harness -m "not slow" -q
       - name: regenerate the model files (MJCF + URDF) from params

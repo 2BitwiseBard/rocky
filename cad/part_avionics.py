@@ -111,6 +111,9 @@ if __name__ == "__main__":
     # deck fit: tray + rails must fit inside the R100 pentagon's inner zone
     # (electronics grid r<56): W/2 + rail + block = 42+3+10/2... report it
     half_span = W / 2 + RAIL + 5
+    bad = []
+    if half_span > 56:
+        bad.append("tray + rails leave the deck grid zone")
     print(f"tray+rails half-span {half_span:.0f} mm vs deck grid zone 56 mm "
           f"({'FITS the grid zone' if half_span <= 56 else 'CHECK deck layout'})")
     # rail engagement: pose one rail so its open channel faces the tray and
@@ -120,10 +123,16 @@ if __name__ == "__main__":
     posed = Pos(RAIL_POSE_X, 0, (T - 1.0) - 5.4) * Rot(0, 0, 90) * rail
     inter = tray & posed
     v = 0.0 if inter is None else inter.volume
+    if v >= 1:
+        bad.append("tray wing binds in the rail")
     print(f"tray wing x rail channel: {v:.2f} mm^3 ({'SLIDES' if v < 1 else 'BINDS'})")
     # and the wing must actually be INSIDE the channel (engagement > 2 mm):
     lifted = Pos(0, 0, 2.5) * posed               # lift rail: should now hit wing
     inter = tray & lifted
     v2 = 0.0 if inter is None else inter.volume
+    if v2 <= 5:
+        bad.append("tray wing not captive in the rail")
     print(f"rail lifted 2.5 mm: intersection {v2:.1f} mm^3 "
           f"({'ENGAGED (wing captive)' if v2 > 5 else 'wing not captive?'})")
+    print(f"part_avionics checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
+    raise SystemExit(1 if bad else 0)

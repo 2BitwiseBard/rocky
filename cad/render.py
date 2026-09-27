@@ -2,7 +2,7 @@
 
     python3 render.py coxa_fork coxa_yaw_base [--out DIR] [--elev E --azim A]
 """
-import sys, os
+import os
 import numpy as np
 from stl import mesh as stlmesh
 import matplotlib

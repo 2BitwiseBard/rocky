@@ -3,6 +3,8 @@
 local_brain and intent all drive the ONE sim the browser is showing.
 
     ROCKY_BACKEND=cockpit  ROCKY_COCKPIT_URL=http://127.0.0.1:8765
+                           (default: 127.0.0.1 on ROCKY_COCKPIT_PORT, the port the cockpit
+                           binds, else 8765)
     ROCKY_BACKEND=auto     -> AutoBackend: the cockpit whenever one answers,
                               else the in-process sim — re-resolved per call
 
@@ -46,7 +48,16 @@ import time
 
 import httpx
 
-DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
+def default_url(env=None):
+    """The cockpit this process drives: ROCKY_COCKPIT_URL, else 127.0.0.1 on ROCKY_COCKPIT_PORT
+    (what sim/cockpit.py binds and `rocky.sh tailnet` proxies), else :8765. An empty value
+    counts as unset."""
+    env = os.environ if env is None else env
+    return (env.get("ROCKY_COCKPIT_URL") or
+            f"http://127.0.0.1:{env.get('ROCKY_COCKPIT_PORT') or 8765}")
+
+
+DEFAULT_URL = default_url()
 AUTO_TTL_S = 3.0
 CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities: an event-loop route, no sim thread
 COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capabilities.CAPABILITY_FLAGS

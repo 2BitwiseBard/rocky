@@ -450,6 +450,18 @@ def build_server(backend=None) -> RockyMCP:
     return mcp
 
 
+def _load_rocky_env():
+    """Apply this machine's rocky.env (sim/envfile.py: a variable already set wins; ROCKY_ENV_FILE
+    names another file) the way the cockpit and the benches read it, so a server an MCP client
+    starts directly, not through rocky.sh, resolves the same cockpit (ROCKY_COCKPIT_PORT /
+    ROCKY_COCKPIT_URL, read when harness.cockpit_backend is imported in _pick_backend)."""
+    sim = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sim")
+    if sim not in sys.path:
+        sys.path.append(sim)                     # appended: never shadows an installed module
+    import envfile
+    return envfile.load()
+
+
 def _pick_backend():
     kind = os.environ.get("ROCKY_BACKEND", "mock")
     if kind == "auto":
@@ -479,4 +491,5 @@ if __name__ == "__main__":
     # D056: the capabilities watcher GETs every POLL_S; httpx's INFO line per request would bury
     # the [rocky-mcp] lines on stderr (backend switches, 'tool list moved', stop not confirmed)
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    _load_rocky_env()
     build_server(_pick_backend()).run()          # stdio transport

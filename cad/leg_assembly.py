@@ -6,7 +6,7 @@ Exports one combined STL for visualization plus the posed sub-solids.
 from build123d import *
 from common import params, export
 from servo_st3215 import servo_body
-from leg_frame import YAW_TF, HIP_TF, KNEE_TF, L1, L2, L3, KNEE_X, Z_HIP
+from leg_frame import YAW_TF, HIP_TF, KNEE_TF, L3, KNEE_X, Z_HIP
 from part_coxa import coxa_yaw_base, coxa_fork
 from part_femur import femur_link, femur_plate_b, hub_face_tf, LINK_TF
 from part_coupler import coupler_on_face

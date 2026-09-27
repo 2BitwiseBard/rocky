@@ -52,6 +52,7 @@ def pose(hip=0.2, knee=-0.45):
 @pytest.fixture
 def make(tmp_path, monkeypatch):
     monkeypatch.setattr(hw_bridge, "CAL_PATH", str(tmp_path / "calibration.yaml"))
+    monkeypatch.setattr(hw_bridge, "MOCK_CAL_PATH", str(tmp_path / "calibration.yaml"))
     made = []
 
     def _make(fast=True, rest_knee_deg=-30.0, **kw):

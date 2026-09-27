@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Torque-step test — measure the real holding margin against D015's numbers.
+"""Torque-step test — measure the real holding margin against the torque audit's numbers.
 
 Setup: servo on the jig with a lever arm + known mass (BENCH_RUNBOOK.md §8),
 so gravity applies a KNOWN torque. The script then steps TORQUE_LIMIT down
@@ -8,9 +8,12 @@ sag equals the actual load as a fraction of stall. Compare with prediction:
 
     predicted %stall = m * g * arm / stall * 100    (stall: params, 2.94 N*m ST3215 @ 12 V)
 
-D015 margins to reproduce: walking hips 22–33 %, 3-leg stance 29–36 %
-(both should HOLD comfortably); untucked-manip 43–65 % (should sag/derate —
-that's the STS3250 sales pitch, and why manip keeps feet tucked until then).
+D015 sized the servos at walking hips 22–33 % and 3-leg stance 29–36 % of
+stall; D044's re-audit on CAD masses (sim/torque_audit.py) puts walking and
+stance under ~16 % and leaves one warm case, the self-righting knee push at
+~50 % of ST3215 stall — the lever load most worth reproducing. Every joint is
+an ST3215 (D058). STS3250 (4.90 N*m, --stall-nm 4.9) is only the D015
+upgrade-path comparison; none was bought.
 
 Safety: temp cut at 65 C, sag limit 8 deg (--sag-limit-deg; the test stops
 and the torque limit is restored), and the mass should be a bag of screws on a
@@ -23,7 +26,7 @@ import csv
 import os
 import sys
 import time
-from _common import base_parser, make_bus, hline, OUT_DIR
+from _common import base_parser, make_bus, hline, out_dir
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
@@ -34,7 +37,7 @@ from rocky_driver import soft_enable                                # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gait"))
 import rocky_model as rm                                            # noqa: E402
 
-STALL_NM = rm.stall_nm()   # the leg servo's params actuators block (ST3215 @ 12 V: 2.94); STS3250: --stall-nm
+STALL_NM = rm.stall_nm()   # the leg servo's params actuators block (ST3215 @ 12 V: 2.94)
 G = 9.81
 
 
@@ -104,7 +107,7 @@ def main():
     bus.write_reg(sid, "TORQUE_LIMIT", 1000)
     bus.set_position(sid, args.hold_deg)
     hline("=")
-    csv_path = os.path.join(OUT_DIR, f"torque_step_{stamp}.csv")
+    csv_path = os.path.join(out_dir(args), f"torque_step_{stamp}.csv")
     with open(csv_path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow([f"# torque step id={sid} mass_g={args.mass_g} "
@@ -120,7 +123,7 @@ def main():
               f"{pred_pct:.1f} % -> measured/predicted = "
               f"{threshold_pct / pred_pct:.2f}")
         print("within ~0.8–1.3 => torque model trustworthy; outside that, "
-              "re-check the lever arm, supply sag, and D015's margins")
+              "re-check the lever arm, supply sag, and the torque audit (sim/torque_audit.py)")
     print(f"wrote {csv_path}\nfile the ratio in NOTES_INBOX.md")
     return 0
 

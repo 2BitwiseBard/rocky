@@ -196,7 +196,8 @@ def parse_args(argv=None):
     p.add_argument("--rate-limit", type=float, default=rc.SERVO_SAFE_RAD_S,
                    help="recover env only: policy-side command clamp, rad/s (default 4.0 = params "
                         "'free' speed; the servo model slews on its own after it). Recorded in the "
-                        "checkpoint; the righter replays it. v1-v3 runs used 5.0 (> the 4.7 no-load)")
+                        "checkpoint; the righter replays it. The legacy v1/v2 runs used 5.0 "
+                        "(> the 4.7 no-load), the D048 v3 runs 3.0")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--torch-threads", type=int, default=0,

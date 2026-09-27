@@ -230,6 +230,10 @@ playground's `rl` command prints the same table live. What to look for:
 Install torch first: `pip install -e ".[sim,rl]"`. CPU works for
 everything below; a GPU only speeds up the long runs.
 
+The `python` commands in this section and in §5 run from `sim/` with the
+repo venv active (the `rocky.sh` recipes `cd` there themselves); §2's
+commands and the `./rocky.sh` lines run from the repo root.
+
 **Smoke test (under a minute each).** This proves the pipeline end to end:
 
 ```bash
@@ -328,8 +332,8 @@ over 20 random falls on the same seeds, deterministic policy. Columns:
 - **current model**: fingerprint `7d376178fe27` (the D052a peak-torque
   model after D059's torso change), re-measured 2026-09-26. Cells marked
   `5a32…` were measured on the first D052 model (`5a32f772ca99`, the
-  1.911 N·m clip, D052a) and not re-run; a "not re-measured" cell is not a
-  zero.
+  1.911 N·m clip, D052a) and not re-run (backlog B68); a "not re-measured"
+  cell is not a zero.
 
 Terms in the current-model column: **legacy** = the old handoff test
 (`--handoff legacy`); **hw** = `handoff_ok` (the default); **servo** =
@@ -394,7 +398,7 @@ In order, each teaching one thing:
    runs/cmd_sample3/latest.pt --video a.mp4 --compare-zero` and the same
    with `eval_recover.py runs/recover1/latest.pt --video b.mp4`. Read mean |residual|: how loud is the correction the
    network learned?
-2. **Read the curves.** `python sim/rl_dashboard.py`, or two lines of
+2. **Read the curves.** `python rl_dashboard.py`, or two lines of
    pandas on `runs/*/train_log.jsonl` (step vs `ep_return`, `kl`, `ent`).
    Learn what a healthy curve looks like before causing an unhealthy one.
 3. **One reward knob.** In `rocky_env.py` double the tilt weight

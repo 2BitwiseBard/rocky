@@ -9,7 +9,7 @@
 meta:
   version: 0.1
   robot: pebble
-  params_rev: D052       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
+  params_rev: D059       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints

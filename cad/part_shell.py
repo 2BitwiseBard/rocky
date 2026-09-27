@@ -359,8 +359,11 @@ if __name__ == "__main__":
           f"({'ENGAGED' if v_engage > 10 else '*** NOT ENGAGING ***'})")
     for n, p in (("sector", sector), ("cap", cap)):
         bb = p.bounding_box()
+        fits = bb.size.X <= PR["bed_mm"][0] and bb.size.Y <= PR["bed_mm"][1] \
+            and bb.size.Z <= PR["bed_mm"][2]
+        ok &= fits
         print(f"  {n}: bbox {bb.size.X:.0f} x {bb.size.Y:.0f} x "
               f"{bb.size.Z:.0f} mm, {p.volume / 1000:.0f} cm^3 "
-              f"({'fits bed' if bb.size.X <= PR['bed_mm'][0] and bb.size.Y <= PR['bed_mm'][1] else 'TOO BIG'})")
+              f"({'fits bed' if fits else '*** TOO BIG for the bed ***'})")
     print("ALL CLEAR" if ok else "FIX BEFORE PRINTING")
     raise SystemExit(0 if ok else 1)

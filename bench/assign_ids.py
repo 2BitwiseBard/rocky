@@ -18,18 +18,16 @@ knows they're protocol 0 and REMINDS YOU they must be on the 5–6 V rail
     python3 assign_ids.py --mock --yes            # full 20-servo rehearsal (~seconds)
     python3 assign_ids.py --port ... --start-from 16   # resume at the hands
 
-Every assignment is appended to bench/out/id_log.txt.
+Every assignment is appended to bench/out/id_log.txt (bench/out/mock/ for --mock).
 """
 import os
 import sys
-from _common import (base_parser, make_bus, confirm, hline, OUT_DIR)
+from _common import base_parser, make_bus, confirm, hline, out_dir
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
 from rocky_driver import Family, load_bus_params                    # noqa: E402
 from rocky_driver.mock import MockServo, MockTransport              # noqa: E402
-
-LOG = os.path.join(OUT_DIR, "id_log.txt")
 
 
 def target_list():
@@ -79,7 +77,7 @@ def main():
     bus, clock, mt = make_bus(args, mock_transport=mock_mt)
 
     targets = [t for t in target_list() if t[0] >= args.start_from]
-    os.makedirs(OUT_DIR, exist_ok=True)
+    log = os.path.join(out_dir(args), "id_log.txt")
     done = []
     for n, (tid, fam, label) in enumerate(targets):
         hline("=")
@@ -111,13 +109,13 @@ def main():
                 print("skipped."); continue
             bus.set_id(cur_id, tid)
             print(f"  id {tid} verified (ping + readback OK)")
-        with open(LOG, "a") as f:
+        with open(log, "a") as f:
             f.write(f"{tid}\t{label}\tfrom_id={cur_id}\n")
         done.append(tid)
         print(f"  >>> LABEL THE CASE NOW: '{tid}' <<<")
     hline("=")
     print(f"assigned/verified {len(done)} servos: {done}")
-    print(f"log: {LOG}\nnext: calibrate_centers.py")
+    print(f"log: {log}\nnext: calibrate_centers.py")
     return 0
 
 

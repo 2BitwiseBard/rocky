@@ -57,7 +57,8 @@ reads 0.87 × stall RMS of force but 0.22 of current, and the 45 mm/s gait's
 mean load reads 0.184 × stall as force but 0.094 as current). Heat goes with
 τ², so `audit_gestures` judges each joint's RMS τ_e / stall (> 0.65 warns
 `THERMAL_LOAD_WARN`, > 0.85 fails `THERMAL_LOAD`): a 50 % duty of stall is
-mean 0.50 but RMS 0.71 and trips the proxy at 691 s. Before D052 the
+mean 0.50 but RMS 0.71 and trips the proxy at 691 s (1 s at stall, 1 s at
+rest, pinned in `sim/tests/test_rl_envs.py`). Before D052 the
 actuators were clamped at stall with joint damping 0.05, which let the gait
 ask for 7.4 rad/s and turn 50 % further than the servo could; D052's first
 cut clipped at 1.911 N·m, which capped every joint at 3.05 rad/s, and D052a
@@ -65,7 +66,8 @@ made the clip the peak and moved the continuous budget into the thermal
 model. `sim/model_fingerprint.py` hashes the robot (not the world):
 `7d376178fe27` since D059's CAD change (torso 1448.9 → 1435.2 g),
 `ceb63a1254c3` for the D052a model before it, `5a32f772ca99` for the
-1.911 N·m clip. Every RL checkpoint records the fingerprint it was trained on.
+1.911 N·m clip (`4debe4e83893`, the peak clip with the old claw damping,
+was never trained on). Every RL checkpoint records the fingerprint it was trained on.
 
 **The control stack is the real one.** The sim has no controller of its own.
 It imports `gait/pebble_gait.py` (closed-form IK, the five-phase `WaveGait`
@@ -211,16 +213,20 @@ same checks, in the Playground itself:
   safe-stops and latches the world bearing; any command with a component
   toward it is refused (`blocked: void at N deg — clear to release`), and a
   goto has that component projected out, until `clear`.
-- **Touchdown gate.** A stance foot that has not felt ground 140 ms (7 bus
-  ticks) after its commanded touchdown runs the gait clock back to that
-  touchdown and holds it until the foot finds ground or the void guard fires.
-  The wave gait lifts the next leg the instant one lands, so at a 10–20°
-  approach a leading foot over the edge used to lose its neighbour before its
-  probe finished. Seven ticks because the first switch contact lands 2–4
-  ticks after the commanded touchdown on flat ground and rubble; any
-  threshold ≤ 5 held the gait on almost every flat step (29–31 holds in
-  15 s). `set gate.wait 1` is the **careful walk**: every touchdown waits for
-  its switch (about 17 % slower on every surface, safer at edges; off by
+- **Touchdown gate.** A stance foot that has not felt ground 140 ms
+  (`GATE_TICKS` = 7 ticks at 50 Hz, `sim/playground.py`) after its commanded
+  touchdown runs the gait clock back to that touchdown and holds it until the
+  foot finds ground or the void guard fires. The wave gait lifts the next leg
+  the instant one lands, so at a 10–20° approach a leading foot over the edge
+  used to lose its neighbour before its probe finished. Seven ticks because
+  the first switch contact lands 2–4 ticks after the commanded touchdown on
+  flat ground and rubble (≤ 8 on rough terrain and stairs); any threshold
+  ≤ 5 held the gait on almost every flat step (29–31 holds in 15 s). The
+  clock runs back at most 3× real time, less when the gait's own peak joint
+  rate would push a joint past its budget (1.12× at 45 mm/s), so the joints
+  that are not probing stay ≤ 3.94 rad/s on stairs and rough ground (D052a).
+  `set gate.wait 1` is the **careful walk**: every touchdown waits for its
+  switch (about 17 % slower on every surface, safer at edges; off by
   default).
 - **Trip escalation.** 3 gyro trips within 5 s latch a safe-stop; velocity is
   ignored until `clear`.
@@ -257,7 +263,10 @@ and braces; `push 40 0` tips it on most seeds (4 of 5 in
 **Falls and the righter.** A fall runs the learned righter (torch plus a
 checkpoint in `sim/runs/`; the start-up line says which) under the
 supervisor, fed tilt, the kinematic height, the measured joint angles and the
-foot switches, so a fall ends in FALLEN → RIGHTED → NORMAL. On the D052 model
+foot switches, so a fall ends in FALLEN → RIGHTED → NORMAL. RIGHTED is a
+joint-space smoothstep ramp to the planted stance (1.0 s, stretched so its
+peak stays under the 3.0 rad/s loaded budget; at D042's 0.6 s a hip left at
++90° asked 5.4 rad/s), a 0.5 s hold, then NORMAL. On the D052 model
 the policy never meets `handoff_ok` by itself and the 3 s stall ramp does the
 standing. Comparing righters live, the `rl` / `righter` commands,
 `set reflex.stall_s` and the training curves: RL_GUIDE §6.
@@ -301,8 +310,8 @@ Stop it with Ctrl-C, the page's ⏻ quit button (the real legs are limped
 first) or `./rocky.sh cockpit-stop`. For a phone, `./rocky.sh tailnet`
 publishes it over HTTPS with `tailscale serve` (port 9445,
 `ROCKY_TAILNET_PORT`) at `https://<machine>.<tailnet>.ts.net:9445`; the
-server itself stays on 127.0.0.1. The phone path was verified over HTTPS in
-session 9g; the request guard's `*.ts.net` rule is also tested with
+server itself stays on 127.0.0.1. The phone path was verified over HTTPS on
+2026-09-24 (BUILD_LOG, session 9g); the request guard's `*.ts.net` rule is also tested with
 fixtures.
 
 **Architecture.** One sim thread steps the `Playground` (§3) and renders the
@@ -561,14 +570,14 @@ The tools that stay in `sim/` because live code, CI or the docs use them:
 | `run_sim.py` | the CI smoke walk (§2) | seconds |
 | `shove_envelope.py [--quick]` | survivable rim shove per direction, standing and walking (D048) → `sim/out/shove_envelope.json` | ~3 min |
 | `torque_audit.py`, `mass_audit.py` | static servo margins on CAD masses → `sim/out/torque_audit.json`; the mass budget itself | seconds |
-| `audit_gestures.py [NAME ...] [--json F]` | every gesture and gait row through the feasibility checker plus a physics pass | ~1 min |
+| `audit_gestures.py [NAME ...] [--json F]` | every gesture and gait row through the feasibility checker plus a physics pass → `sim/out/audit_gestures.json` with `--json` | ~20 s |
 | `audit_righter.py CKPT ...` | a righter's jitter and handoffs (RL_GUIDE) | minutes |
 | `rl_dashboard.py [--table]` | the checkpoint table; the training curves → `sim/out/rl_curves.png` | seconds |
 | `vision_bench.py`, `brain_bench.py`, `place_bench.py` | the eye, the brains, place recognition, each on its own cockpit (:8791, :8792, :8795) → `sim/out/*.json` | minutes |
 | `sim_lidar.py` | writes the `sim/lidar_scans.npz` fixture and the `sim/laserscan_spec.json` contract | seconds |
 
 The tracked records in `sim/out/` (`shove_envelope.json`, `torque_audit.json`,
-`rl_curves.png`, `vision_bench.json`, `brain_bench.json`, `place_bench.json`)
+`audit_gestures.json`, `rl_curves.png`, `vision_bench.json`, `brain_bench.json`, `place_bench.json`)
 are the last real runs; a new run overwrites them, so commit them with the
 docs that quote them. The committed clips are regenerated with
 `sim/run_sim.py --out sim` and:
@@ -652,7 +661,7 @@ Which body answers the tools, `ROCKY_BACKEND`:
 
 | value | backend |
 |---|---|
-| `auto` (the example's choice) | the running cockpit (`ROCKY_COCKPIT_URL`, default `http://127.0.0.1:8765`) whenever it answers, else the in-process sim; re-checked on every call and logged to stderr |
+| `auto` (the example's choice) | the running cockpit (`ROCKY_COCKPIT_URL`, default `http://127.0.0.1` on `ROCKY_COCKPIT_PORT`, else :8765; the server reads rocky.env like the cockpit) whenever it answers, else the in-process sim; re-checked on every call and logged to stderr |
 | `cockpit` | the cockpit, or refuse to start when nothing answers |
 | `sim` | the in-process MuJoCo sim (`harness/sim_backend.py`) |
 | `mock` | the millisecond contract, no physics; the default when unset |
@@ -702,7 +711,8 @@ registry change (or a `params.yaml` change that moves the envelope):
 
 A new tool also needs its handler in the cockpit's executor
 (`sim/cockpit_brains.registry_problems`, run by the tests, catches a missing
-one).
+one); the whole procedure, with the test pins it moves, is
+[DESIGN_CHANGE_GUIDE.md](DESIGN_CHANGE_GUIDE.md) §8.
 
 ## 6. Regenerating after a CAD or params change
 
@@ -732,7 +742,10 @@ sources it; Python started without the launcher (a cockpit under systemd, a
 bench, pytest) reads the same file through `sim/envfile.py`
 (`.venv/bin/python sim/envfile.py` shows what it sets). A variable already in
 the environment wins over the file, and `ROCKY_ENV_FILE` points at another
-file (`/dev/null` = none). The model ids quoted in these docs are the
+file (`/dev/null` = none). Tests run on the reference setup: the repo-root
+`conftest.py` and `./rocky.sh test` set `ROCKY_ENV_FILE=/dev/null` unless it
+is already set (`ROCKY_ENV_FILE=rocky.env ./rocky.sh test` tests this
+machine's settings). The model ids quoted in these docs are the
 reference setup's (D055): one laptop with a 16 GB GPU running llama-swap;
 `rocky.env` overrides every one.
 
@@ -773,7 +786,7 @@ The model (B33, D052a):
 - Tracking lag p95 is 16.5–18.5° on the gait rows of `audit_gestures` (15 of
   20 rows warn TRACK; warn at 10°, fail at 20°): the sim is close to saying the
   gait asks more than the servo follows. `manip_adjacent` warns
-  `MARGIN_WARN` (17 mm).
+  `MARGIN_WARN` (a 17.4 mm CoM margin against the 25 mm warn line).
 - **Heat** (the rest of the honesty box's guesses are in §1): the RL envs
   derate a hot joint; the playground and cockpit only account it
   (`guard_status()['thermal']`, the `servo heat` chip, sim → robot refused
@@ -789,8 +802,9 @@ The model (B33, D052a):
   spawn-pose fix (a 9.8° spawn tilt every `tilt_max` reported) and the peak
   clip; `run_push_reflex_v2`'s TRIP = 1.8 was calibrated on that spawn.
   Decisions D017, D022, D023, D025, D040, D042 / D045 / D048 and D044 (the
-  knee's torque label) rest on numbers the rerun moved
-  (sim/experiments/README.md).
+  knee's torque label) rest on numbers the rerun moved; each row carries a
+  RERUN 2026-09-26 note
+  ([sim/experiments/README.md](../sim/experiments/README.md#the-current-record)).
 
 Behaviour:
 
@@ -803,6 +817,12 @@ Behaviour:
   see this: a foot sphere centred 0–9 mm past the edge sits on the corner,
   closes its switch, then slides off. Pinned as a strict xfail
   (`test_void_guard_lip_band_known_gap`); a look-ahead ToF is B33 (c).
+  Tried and rejected (D052a): re-seeking a planted foot whose switch opens
+  while another leg swings (it closes the band, but the switch flicker at
+  every handoff and on stairs, rough ground and ice ratcheted the probes
+  into false voids: 18–27 holds and a void on flat ground); the same gated
+  on a ≥ 1.5° tilt rise plus a tilt-confirmed void during holds (terrain
+  clean, but 7 → 7 falls late, 9 → 8 careful); `GATE_TICKS` 5 or 6.
   Outside the band the guard stops with room to spare (walk 45 at 0–45°: max
   torso x 166–230 mm on the 0.35 m platform, 0 falls), and the retreat backs
   off 39–59 mm at walk 45 (14–28 mm at walk 25).

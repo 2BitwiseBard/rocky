@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Center calibration — teach the software where mechanical zero is.
 
-For each joint: torque OFF, you hold the joint at its jig pose (use the
-calibration comb / bench jig faces — see BENCH_RUNBOOK.md §5), the script
-reads the position and stores
+For each joint: torque OFF, you hold the joint at its jig pose (the bench
+jig faces — see BENCH_RUNBOOK.md §5), the script reads the position and
+stores
 
     offset = (present - CENTER) - dir * jig        (counts)
 
@@ -14,14 +14,15 @@ re-derived on the spot from the same reading.
 
 Offsets live in ONE place (D052): bench/calibration.yaml, software side, by
 default — a per-robot file (git-ignored: back it up with the robot) that
-survives servo swaps. `--burn` moves a joint's offset into the STS
-POSITION_OFFSET EEPROM instead and stores 0 in the yaml, so exactly one of the
-two is ever non-zero (both non-zero = double correction; apply_limits.py
-refuses such a servo). The register holds +/-2047 counts with its sign in
-bit 11 (VERIFY-ON-BENCH — run pose_check.py after any --burn); a bigger offset
-stays in software. SCS0009 has no such register; hands are always
-software-offset. A joint that already carries a burned EEPROM offset is
-refused without --burn.
+survives servo swaps; a --mock rehearsal reads and writes
+bench/out/mock/calibration.yaml instead, never the robot's file. `--burn`
+moves a joint's offset into the STS POSITION_OFFSET EEPROM instead and
+stores 0 in the yaml, so exactly one of the two is ever non-zero (both
+non-zero = double correction; apply_limits.py refuses such a servo). The
+register holds +/-2047 counts with its sign in bit 11 (VERIFY-ON-BENCH — run
+pose_check.py after any --burn); a bigger offset stays in software. SCS0009
+has no such register; hands are always software-offset. A joint that already
+carries a burned EEPROM offset is refused without --burn.
 
 Do NOT run this while the cockpit's hardware bridge has the same port open:
 two processes on one half-duplex bus interleave packets, and a mirroring
@@ -33,8 +34,8 @@ Afterwards: apply_limits.py (the hardware limits depend on dir + offset).
 CAD-zero poses (frames from pebble_gait.py / the CAD status log):
   yaw   : leg pointing straight out along its station radial (q1 = 0)
   hip   : femur horizontal (q2 = 0)
-  knee  : tibia straight in line with femur (q3 = 0)  <- comb holds -90; the
-          script accepts a --knee-at -90 flag for the comb pose and shifts it
+  knee  : tibia straight in line with femur (q3 = 0)  <- the jig pose holds it
+          at -90; --knee-at (default -90) tells the script, which shifts it
   claw  : fingers fully CLOSED into the cone (0 deg = walking foot)
 
     python3 calibrate_centers.py --port /dev/ttyACM0
@@ -43,7 +44,7 @@ CAD-zero poses (frames from pebble_gait.py / the CAD status log):
 import os
 import sys
 import yaml
-from _common import base_parser, make_bus, confirm, hline, CAL_PATH
+from _common import base_parser, make_bus, hline, cal_path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
@@ -58,7 +59,7 @@ def main():
     p.add_argument("--only", default=None,
                    help="subset, e.g. 'leg0' or 'hands' or 'leg2_knee'")
     p.add_argument("--knee-at", type=float, default=-90.0,
-                   help="knee angle (deg) the comb/jig holds during calibration")
+                   help="knee angle (deg) of the jig pose during calibration")
     p.add_argument("--burn", action="store_true",
                    help="also write STS POSITION_OFFSET EEPROM")
     p.add_argument("--skip-dir-test", action="store_true",
@@ -66,10 +67,11 @@ def main():
     args = p.parse_args()
 
     bus, clock, mt = make_bus(args)
+    cal_file = cal_path(args)
     bp = load_bus_params()
     cal = {"dir": {}, "offset": {}, "meta": {"knee_jig_deg": args.knee_at, "jig_deg": {}}}
-    if os.path.exists(CAL_PATH):
-        with open(CAL_PATH) as f:
+    if os.path.exists(cal_file):
+        with open(cal_file) as f:
             old = yaml.safe_load(f) or {}
         cal["dir"].update(old.get("dir", {}))
         cal["offset"].update(old.get("offset", {}))
@@ -154,13 +156,13 @@ def main():
             print("  EEPROM POSITION_OFFSET burned (software offset stored as 0; "
                   "sign bit 11 is VERIFY-ON-BENCH -> pose_check.py)")
 
-    with open(CAL_PATH, "w") as f:
+    with open(cal_file, "w") as f:
         yaml.safe_dump(cal, f, sort_keys=True)
     hline("=")
-    print(f"wrote {CAL_PATH} ({len(cal['offset'])} offsets)")
+    print(f"wrote {cal_file} ({len(cal['offset'])} offsets)")
     print("next: apply_limits.py (hardware angle limits follow dir + offset)")
     print("verify: python3 pose_check.py --port ... (commands the jig pose "
-          "at low speed; every leg should match the comb)")
+          "at low speed; every leg should match its jig pose)")
     return 0
 
 

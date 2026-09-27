@@ -17,7 +17,6 @@ protractor arc around the yaw axis reads coxa sweep by eye.
 Because the jig consumes the SAME iface.leg_port_deck_features() as the real
 deck, a leg that bolts to the jig bolts to the robot. That's the point.
 """
-import numpy as np
 from build123d import *
 from common import params, export
 from iface import leg_port_deck_features
@@ -99,7 +98,6 @@ def jig_column():
         Box(px1 - px0, COL_W, top_t)
     # protractor: engraved ticks every 10 deg over +/-50 around the yaw axis
     for ang in range(-50, 51, 10):
-        a = np.deg2rad(ang)
         r0, r1 = 26.0, (32.0 if ang % 30 == 0 else 29.0)
         tick = Pos((r0 + r1) / 2, 0, deck_top - 0.5) * Box(r1 - r0, 1.0, 1.2)
         plate -= Rot(0, 0, ang) * tick
@@ -115,15 +113,20 @@ if __name__ == "__main__":
     export(b, "jig_base")
     export(c, "jig_column")
     bed_x, bed_y = PR["bed_mm"][:2]
+    bad = []
     for name, part in (("base", b), ("column", c)):
         bb = part.bounding_box()
         dims = sorted([bb.size.X, bb.size.Y, bb.size.Z], reverse=True)
         fits = dims[0] <= bed_x and dims[1] <= bed_y
+        if not fits:
+            bad.append(f"jig_{name} does not fit the bed")
         print(f"jig_{name}: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} "
               f"-> print footprint {dims[0]:.0f} x {dims[1]:.0f} "
               f"({f'FITS bed {bed_x:.0f}x{bed_y:.0f}' if fits else 'TOO BIG'})")
     inter = b & c
     v = 0.0 if inter is None else inter.volume
+    if v >= 1:
+        bad.append("base and column clash")
     print(f"base x column interference: {v:.1f} mm^3 "
           f"({'OK' if v < 1 else 'CLASH'})")
     # port sanity: dowel posts + catch present at the right stations
@@ -131,3 +134,5 @@ if __name__ == "__main__":
     lp = IF["leg_port"]
     print(f"leg port on jig: dowels at {lp['dowel_xy']}, "
           f"thumbscrews at {lp['thumbscrew_xy']} — same params the deck uses")
+    print(f"part_bench_jig checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
+    raise SystemExit(1 if bad else 0)

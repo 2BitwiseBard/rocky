@@ -25,7 +25,7 @@ Parts:
 """
 from build123d import *
 from common import params, export
-from servo_st3215 import horn_screw_positions, horn_slot_cutter, spec
+from servo_st3215 import horn_slot_cutter, spec
 
 P = params()
 PR = P["print"]

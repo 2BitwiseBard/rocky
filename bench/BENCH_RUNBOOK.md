@@ -26,9 +26,14 @@ assigned, 20 offsets, limits 20/20 verified, pose check 0.00° PASS, a
 register dump, the soak ending at 55 °C (PASS), torque step
 measured/predicted = 0.86.
 
-**Delete `bench/calibration.yaml` after rehearsing.** The rehearsal writes
-made-up offsets for all 20 joints, and a real `calibrate_centers.py` run
-merges into whatever file is there. `bench/out/` gets rehearsal CSVs too.
+A `--mock` run writes only under `bench/out/mock/` (git-ignored): its
+scan, ID log, dumps, CSVs, the soak plot and its own `calibration.yaml`,
+which the mock `apply_limits` and `pose_check` read back. The robot's
+`bench/calibration.yaml` is never touched, so a rehearsal cannot leave
+made-up offsets for a real `calibrate_centers.py` run to merge into, and
+there is nothing to delete afterwards. `--mock-ids 1-3` puts only leg 0 on
+the simulated bus, to rehearse the one-leg bench (for example
+`python3 pose_check.py --mock --yes --mock-ids 1-3`).
 
 ---
 
@@ -150,10 +155,12 @@ so calibrating a bare servo is meaningless. You need the bench jig
 python3 calibrate_centers.py --port /dev/ttyACM0 --only leg0
 python3 pose_check.py --port /dev/ttyACM0     # acceptance: < 2° everywhere
 ```
-**Known gap:** `pose_check.py` reads the whole 20-servo map. With servos
-missing, as on the one-leg bench, it stops with `NoResponse`. Until it reads
-only the servos that answer, check the leg in the cockpit's Hardware panel
-instead (§5b): jog each joint to its jig pose and compare.
+`pose_check.py` checks the servos that answer: it pings every id of the
+params bus map, commands the ones present to the jig pose and prints `--`
+for a joint that is not on the bus, so the one-leg bench (ids 1–3) works
+as is; `--ids 1-3` narrows the check to a list. The cockpit's Hardware
+panel (§5b) is the other way to eyeball it: jog each joint to its jig pose
+and compare.
 - **Jig poses:** yaw straight out, femur horizontal, knee at −90°
   (`--knee-at`, default −90), claw fully closed.
 - **Where offsets go:** the script stores software offsets in
@@ -171,7 +178,7 @@ instead (§5b): jog each joint to its jig pose and compare.
   `python3 apply_limits.py --port /dev/ttyACM0`. It sets MIN/MAX_ANGLE_LIMIT
   to the params joint limits + dir + offset + 2° (`--margin`), then reads
   them back and verifies. Re-run after every recalibration.
-- **Over-current backstop (REVIEW §4):** set `PROTECT_CURRENT` to about
+- **Over-current backstop (D058; REVIEW §4):** set `PROTECT_CURRENT` to about
   2 A per ST3215, which is 308 counts at 6.5 mA/count. VERIFY that unit
   against the §2 dump first. No script writes it yet, so do it by hand
   with the §4 `bus` (`write_reg` handles the EEPROM lock), then archive it
@@ -230,36 +237,42 @@ Any session longer than a smoke test runs with the monitor in the loop
 ## 7. Thermal soak: the #1 hardware risk, measured
 
 Put the femur servo in the bench jig, with a lever and mass per §8's table
-(stance load ≈ 0.9–1.0 N·m). Note the room temperature.
+(3-leg stance load ≈ 0.45 N·m). Note the room temperature.
 
 ```bash
 python3 thermal_soak.py --port /dev/ttyACM0 --ids 2 --minutes 20 \
-        --note "stance load 0.95Nm, 22C room"
+        --note "stance load 0.45Nm, 22C room"
 ```
-- [ ] Walking-load soak (~0.7 N·m): expect a comfortable steady state.
-- [ ] Stance-load soak (~1.0 N·m): the number that matters. Time-to-60 °C
+- [ ] Walking-load soak (~0.35 N·m): expect a comfortable steady state.
+- [ ] Stance-load soak (~0.45 N·m): the number that matters. Time-to-60 °C
   is the robot's standing-still budget before the sleep pose must trigger.
-- [ ] (Optional, supervised) untucked-manipulation load (~1.4 N·m): D015
-  flags this band as a no-go, and watching it climb is the point. Abort
-  early; there is no need to reach 65 °C.
+- [ ] (Optional, supervised) self-righting load (~1.46 N·m): D044's one
+  warm case, which the righter asks for seconds, not minutes; watching it
+  climb is the point. Abort early; there is no need to reach 65 °C.
 
 File all three time-to-temperature numbers in `NOTES_INBOX.md`.
 
 ## 8. Torque step: calibrate trust in the torque model
 
 Use a lever and a bag-of-screws mass (nothing rigid: it needs to fall
-gracefully). Predictions use the params stall torque, 2.94 N·m at 12 V.
+gracefully). Predictions use the params stall torque, 2.94 N·m at 12 V. The
+loads are the worst joint of each case in `sim/out/torque_audit.json`
+(`sim/torque_audit.py`, static holding torques on the CAD masses, D044):
 
-| test | mass @ 100 mm arm | predicted % stall |
-|---|---|---|
-| walking-hip proxy | ~700 g | ~23 % |
-| stance-hip proxy | ~1000 g | ~33 % |
-| no-go demo (optional) | ~1500 g | ~50 % |
+| test | load | mass @ 100 mm arm | predicted % stall |
+|---|---|---|---|
+| walking (`walk_4leg`, knee) | 0.34 N·m | ~350 g | ~12 % |
+| 3-leg stance (`stance_3leg`, knee) | 0.45 N·m | ~460 g | ~15 % |
+| untucked carry of 100 g (`carry_100g`, hip) | 0.51 N·m | ~520 g | ~17 % |
+| self-righting push (`selfright_push`, knee; optional, supervised) | 1.46 N·m | ~1500 g | ~50 %, WARM |
+
+The pre-D039 table (D015: 700 g walking, 1000 g stance) over-tests these
+about twice; a 1000 g step is still a fair margin check, logged as one.
 
 ```bash
-python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 1000 --arm-mm 100
+python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 460 --arm-mm 100
 ```
-- [ ] measured/predicted within 0.8–1.3 means D015's margins are real.
+- [ ] measured/predicted within 0.8–1.3 means the audit's margins are real.
   Outside that, investigate: lever geometry, supply sag under load, the
   wrong variant. The test stops at 8° of sag (`--sag-limit-deg`) or 65 °C.
 

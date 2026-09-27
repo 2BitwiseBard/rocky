@@ -127,6 +127,9 @@ if __name__ == "__main__":
     r1 = Pos(0, (PACK_W / 2 + 2.4 - RAIL / 2 - 1.6), 1.6 + FIT / 2) * parts["sled_rail"]
     inter = sled & r1
     v = 0.0 if inter is None else inter.volume
+    bad = []
+    if v >= 1:
+        bad.append("sled binds on the rail")
     print(f"sled x rail (posed): {v:.2f} mm^3 ({'SLIDES' if v < 1 else 'BINDS'})")
     bb = sled.bounding_box()
     print(f"sled envelope {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} "
@@ -134,5 +137,9 @@ if __name__ == "__main__":
     rotor, housing = parts["latch_rotor"], parts["latch_housing"]
     inter = rotor & housing
     v = 0.0 if inter is None else inter.volume
+    if v >= 2:
+        bad.append("latch rotor jams")
     print(f"latch rotor x housing (open pose): {v:.2f} mm^3 "
           f"({'TURNS' if v < 2 else 'JAMS'})")
+    print(f"part_battery checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
+    raise SystemExit(1 if bad else 0)

@@ -100,7 +100,7 @@ import harness.capabilities as tool_registry                           # noqa: E
 from cockpit_brains import (Brains, TOOLS, SYSTEM, VISION_PROMPT, TOOL_NAMES,   # noqa: E402,F401
                             validate_goto, goto_range_error, local_ai_key as _local_ai_key,
                             cockpit_flags)
-# scene memory + situational awareness (the owner's "memory" and "awareness" asks)
+# scene memory + situational awareness (the "memory" and "awareness" asks)
 from scene_memory import (SceneMemory, DEFAULT_DIR as MEMORY_DIR, fmt_age,     # noqa: E402
                           objects_from_description, same_thing, norm_name, LOOK_NOUNS)
 # D057: which place is this, from what the robot senses (not the world's name)

@@ -19,9 +19,9 @@ so tests are deterministic while long soaks can be fast-forwarded.
 from __future__ import annotations
 import time
 from dataclasses import dataclass, field
-from .protocol import (HEADER, BROADCAST_ID, Instr, Family, checksum,
+from .protocol import (BROADCAST_ID, Instr, Family, checksum,
                        build_status, encode_u16, decode_u16, encode_sm16)
-from .registers import (MAPS, COUNTS, CENTER, BAUD_CODES, Reg, max_speed_cps)
+from .registers import (MAPS, COUNTS, CENTER, Reg, max_speed_cps)
 from .transport import Transport
 
 MEM_SIZE = 96

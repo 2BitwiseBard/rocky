@@ -149,7 +149,7 @@ for _p in (HERE, ROOT, os.path.join(ROOT, "gait")):
 
 import vision_bench as vb                                                 # noqa: E402
 from vision_bench import (Cockpit, parent_death_hook, listed_models, running_models,   # noqa: E402
-                          unload, LIVE_COCKPIT_PORT)
+                          unload, LIVE_COCKPIT_PORT, seed_gesture_library)
 from brain_bench import (refuse_url, port_busy, Fence, BenchStopped, _child_cockpits,   # noqa: E402
                          _install_signals, _restore_signals, target_settings, restore_target)
 from world_builder import PRESETS                                         # noqa: E402
@@ -1024,8 +1024,10 @@ def place_env_names(src_path=COCKPIT_PY):
 
 
 class OwnCockpit:
-    """The bench's own cockpit process: fenced, a scratch conf and a scratch
-    memory directory per start (a fresh, empty place memory each trial)."""
+    """The bench's own cockpit process: fenced, a scratch conf, a scratch gesture
+    copy and a scratch memory directory per start (a fresh, empty place memory
+    each trial). env() is FORCED over the caller's environment (never setdefault),
+    so a rocky.env or an exported ROCKY_* can never point it at the owner's files."""
 
     def __init__(self, port, fence, tmp, log, extra_args=()):
         self.port, self.fence, self.tmp, self.log = port, fence, tmp, log
@@ -1037,7 +1039,8 @@ class OwnCockpit:
         mem = os.path.join(self.tmp, f"memory-{self.starts}")
         out = {"ROCKY_LLM_BASE_URL": self.fence.base_url,
                "ROCKY_COCKPIT_CONF": os.path.join(self.tmp, "cockpit.json"),   # never ~/.config
-               "ROCKY_MEMORY_DIR": mem}
+               "ROCKY_MEMORY_DIR": mem,
+               "ROCKY_GESTURE_DIR": os.path.join(self.tmp, "gestures")}      # never gait/gestures
         for k in place_env_names():                   # a separate place directory, if the cockpit has one
             out[k] = mem
         return out
@@ -1050,6 +1053,7 @@ class OwnCockpit:
         over = self.env()
         self.memory_dir = over["ROCKY_MEMORY_DIR"]
         os.makedirs(self.memory_dir, exist_ok=True)
+        seed_gesture_library(over["ROCKY_GESTURE_DIR"])
         env = dict(os.environ, **over)
         env["MUJOCO_GL"] = os.environ.get("MUJOCO_GL") or "egl"
         log = open(os.path.join(self.tmp, f"cockpit_{self.port}_{self.starts}.log"), "w")

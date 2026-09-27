@@ -544,6 +544,7 @@ def test_own_cockpit_env_is_scratch_only(tmp_path, monkeypatch):
     assert env["ROCKY_LLM_BASE_URL"] == F.base_url
     assert env["ROCKY_MEMORY_DIR"].startswith(str(tmp_path)) and env["ROCKY_PLACE_DIR"] == env["ROCKY_MEMORY_DIR"]
     assert env["ROCKY_COCKPIT_CONF"].startswith(str(tmp_path))
+    assert env["ROCKY_GESTURE_DIR"].startswith(str(tmp_path))
     assert not any(os.path.expanduser("~/.config") in v for v in env.values())
     own.starts = 1
     assert own.env()["ROCKY_MEMORY_DIR"] != env["ROCKY_MEMORY_DIR"]     # a fresh memory per start

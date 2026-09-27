@@ -55,7 +55,7 @@ M_PRONG = 0.004                         # each visual claw prong (MJCF parity)
 
 # mass budget: the CAD-derived sim/mass_budget.json (D039) — the same file
 # sim/build_mjcf.py reads, so URDF and MJCF cannot drift apart again (they did:
-# D046 updated the budget, this file still carried the session-2 hand budget)
+# D046 updated the budget, this file still carried the pre-D039 estimate)
 _MB_PATH = os.path.join(REPO, "sim", "mass_budget.json")
 if os.path.exists(_MB_PATH):
     import json
@@ -63,7 +63,7 @@ if os.path.exists(_MB_PATH):
         _mb = json.load(_f)
     M_TORSO, M_COXA, M_FEMUR, M_TIBIA = (_mb[k] / 1000.0 for k in ("torso", "coxa", "femur", "tibia"))
     MASS_SOURCE = "mass_budget.json"
-else:                                    # session-2 hand budget, kept as the fallback
+else:                                    # the pre-D039 estimate (D015's sizing budget), the fallback
     M_TORSO, M_COXA, M_FEMUR, M_TIBIA = 1.35, 0.14, 0.03, 0.17
     MASS_SOURCE = "fallback constants"
 

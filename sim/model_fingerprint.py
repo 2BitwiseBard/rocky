@@ -14,7 +14,7 @@ robot. NOT the timestep or solver either (those are the sim, not the robot;
 fingerprint_note records the MuJoCo version for that).
 
     fp = robot_fingerprint(model)     # '3f9a0c...' (12 hex)
-    fingerprint_note(model)           # 'robot 3f9a.. | mujoco 3.x | params 0.1/D052'
+    fingerprint_note(model)           # 'robot 3f9a.. | mujoco 3.x | params 0.1/D059'
 """
 from __future__ import annotations
 import hashlib

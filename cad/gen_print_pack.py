@@ -33,9 +33,12 @@ PARTS = [
      "Slot profile is v0.1 placeholder - expect to reprint after bench tuning."),
     ("hand_finger", "PLA first / PETG final", "on wedge side face", "under knuckle tab only",
      "3 walls / 25%", 3, "Three identical. Light part - fast iterations."),
-    ("coxa_yaw_base", "PETG", "plate DOWN", "under the cup roof rails (report only)",
-     "5 walls / 40%", 1, "D047: I1 plate + servo CUP (yaw servo shaft-down). 4 rim self-tappers hold the servo."),
-    ("coxa_fork", "PETG", "lower hub DOWN (as assembled)", "under the upper plate",
+    ("coxa_yaw_base", "PETG", "plate DOWN (hook lip on the bed)",
+     "ON under the whole plate: the I1 hook lip holds it 9.3 mm off the bed",
+     "5 walls / 40%", 1, "D047: I1 plate + servo CUP (yaw servo shaft-down), D059 harness channel on -Y. "
+     "4 rim self-tappers hold the servo."),
+    ("coxa_fork", "PETG", "lower hub DOWN (as assembled)",
+     "under the upper plate (z 72.5) and the 14 mm ledge at z 44",
      "5 walls / 40%", 1, "D047: C-fork rides horn (below) + idler (above). 4x M3 x 6 from below into the horn."),
     ("femur_link", "PETG (CF-PLA later)", "plate A outer face DOWN", "none", "6 walls / 40%", 1,
      "D047: plate A + bridge walls. Recesses up; 2x M3 x 8 clamps per coupler; 4x M3 x 8 for plate B."),
@@ -110,7 +113,7 @@ story.append(Paragraph(
     "PLA: 210/60, full fan. CF-PLA: 225/60, HARDENED NOZZLE.", body))
 story.append(Spacer(1, 8))
 
-story.append(Paragraph("Print order (docs/PRINT_PLAN_2026-09-22.md)", h2))
+story.append(Paragraph("Print order (docs/PRINT_PLAN.md)", h2))
 checklist = [
     "1. Calibrate the printer (PID, first layer, flow) on the filament you will use.",
     "2. Batch 0: the fit ladder -> write the measured fits into params.yaml (print:).",
@@ -124,9 +127,12 @@ for c in checklist:
     story.append(Paragraph(c, small))
 story.append(Spacer(1, 6))
 
-rows = [["Part", "Material", "Orientation", "Supports", "Walls/Infill", "Qty"]]
-for name, mat, ori, sup, wi, qty, _ in PARTS:
-    rows.append([name, mat, ori, sup, wi, str(qty)])
+cell = ParagraphStyle("cell", parent=body, fontSize=7.2, leading=8.6)
+head = ParagraphStyle("head", parent=cell, textColor=colors.white)
+rows = [[Paragraph(h, head) for h in ("Part", "Material", "Orientation", "Supports",
+                                      "Walls/Infill", "Qty")]]
+for name, mat, ori, sup, wi, qty, _ in PARTS:      # Paragraph cells wrap inside the column
+    rows.append([Paragraph(str(c), cell) for c in (name, mat, ori, sup, wi, qty)])
 t = Table(rows, colWidths=[1.35*inch, 1.25*inch, 1.45*inch, 1.25*inch, 0.95*inch, 0.35*inch])
 t.setStyle(TableStyle([
     ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#5b4a8a")),

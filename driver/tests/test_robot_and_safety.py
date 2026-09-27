@@ -3,9 +3,7 @@ import math
 import os
 import sys
 import numpy as np
-import pytest
-from rocky_driver import (FeetechBus, Family, PebbleRobot, make_pebble_mock,
-                          SafetyLimits)
+from rocky_driver import (FeetechBus, Family, PebbleRobot, make_pebble_mock)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "gait"))

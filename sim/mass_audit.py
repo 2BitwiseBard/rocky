@@ -15,7 +15,6 @@ scale replaces every number here (NOTES_INBOX -> params -> regen).
   python3 mass_audit.py          # prints the table, writes mass_budget.json
 """
 import json, os, sys
-import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAD = os.path.join(HERE, "..", "cad")
 sys.path.insert(0, CAD)
@@ -37,7 +36,6 @@ def printed_g(name, material=PLA):
 
 
 def main():
-    rows = {}
     # ---- torso: deck + carapace (PETG keepers) + battery + electronics + sled/tray/door
     torso = {
         "body_deck": printed_g("body_deck"),

@@ -85,6 +85,8 @@ guards the shared state. Order is always bus_lock -> lock, never the reverse.
 Calibration model (same as bench/calibrate_centers.py and PebbleRobot):
 servo_deg = dir * q_deg + offset_deg, offset = (present - CENTER) - dir*jig,
 stored in bench/calibration.yaml so the bench scripts and the cockpit agree.
+A mock bridge reads and writes bench/out/mock/calibration.yaml instead (the
+file the bench scripts' --mock rehearsals use), never the robot's.
 """
 from __future__ import annotations
 import glob
@@ -113,7 +115,8 @@ from rocky_driver.registers import CENTER, COUNTS, SWEEP_DEG                    
 import rocky_model as rm                                                        # noqa: E402
 import apply_limits as limits_mod                                               # noqa: E402
 
-CAL_PATH = os.path.join(ROOT, "bench", "calibration.yaml")
+CAL_PATH = os.path.join(ROOT, "bench", "calibration.yaml")                   # the robot's (a real port)
+MOCK_CAL_PATH = os.path.join(ROOT, "bench", "out", "mock", "calibration.yaml")  # port 'mock' (git-ignored)
 JOINTS = ("yaw", "hip", "knee")
 MIRRORS = ("off", "sim2real", "real2sim")
 TICK_HZ = float(rm.bus_hz())   # D052 V2: the stream runs at the bus rate the sim models (50 Hz)
@@ -163,7 +166,8 @@ class HardwareBridge:
         else:
             bus = FeetechBus(SerialTransport(port, baud), fams)
         self.bus = bus
-        self.cal = load_calibration(CAL_PATH)
+        self.cal_path = MOCK_CAL_PATH if port == "mock" else CAL_PATH
+        self.cal = load_calibration(self.cal_path)
         self.robot = PebbleRobot(bus, bp, self.cal)
         mon = self.robot.monitor
         mon.on_event = self._monitor_event
@@ -879,8 +883,8 @@ class HardwareBridge:
 
     # ------------------------------------------------------------ calibration
     def _save_cal(self):
-        os.makedirs(os.path.dirname(CAL_PATH), exist_ok=True)
-        with open(CAL_PATH, "w") as f:
+        os.makedirs(os.path.dirname(self.cal_path), exist_ok=True)
+        with open(self.cal_path, "w") as f:
             yaml.safe_dump(self.cal, f, sort_keys=True)
         self.robot.dir = {k: int(v) for k, v in self.cal.get("dir", {}).items()}
         self.robot.offset = {k: int(v) for k, v in self.cal.get("offset", {}).items()}

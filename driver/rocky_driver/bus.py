@@ -21,8 +21,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from . import protocol as fp
-from .protocol import Family, Instr, ChecksumError
-from .registers import (MAPS, BAUD_CODES, BAUD_TO_CODE, CURRENT_LSB_A,
+from .protocol import Family, ChecksumError
+from .registers import (MAPS, BAUD_TO_CODE, CURRENT_LSB_A,
                         VOLTAGE_LSB_V, LOAD_LSB_PCT, counts_to_deg,
                         deg_to_counts, Reg, COUNTS as MAPS_COUNTS)
 from .transport import Transport

@@ -8,13 +8,15 @@ Two jobs:
 
     python3 register_dump.py --port /dev/ttyACM0
     python3 register_dump.py --mock
-    python3 register_dump.py --mock --diff bench/out/dump_XXXX.csv
+    python3 register_dump.py --mock --diff bench/out/mock/dump_XXXX.csv
+
+Dumps go to bench/out/ (bench/out/mock/ for --mock).
 """
 import csv
 import os
 import sys
 import time
-from _common import base_parser, make_bus, hline, OUT_DIR
+from _common import base_parser, make_bus, hline, out_dir
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
@@ -51,7 +53,7 @@ def main():
         rows[sid] = list(raw)
 
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    out = os.path.join(OUT_DIR, f"dump_{stamp}.csv")
+    out = os.path.join(out_dir(args), f"dump_{stamp}.csv")
     with open(out, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["addr", "name_sts", "name_scs"] + [f"id{sid}" for sid in ids])

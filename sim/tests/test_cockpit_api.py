@@ -732,6 +732,9 @@ def test_start_cockpit_installs_the_parent_death_hook(monkeypatch, tmp_path):
     monkeypatch.setattr(vb.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(vb.Cockpit, "alive", lambda self: True)
     monkeypatch.setattr(vb.tempfile, "gettempdir", lambda: str(tmp_path))     # the log file lands here
+    # an exported (or rocky.env) conf / memory / gesture dir must NOT reach the bench's cockpit
+    for k in ("ROCKY_COCKPIT_CONF", "ROCKY_MEMORY_DIR", "ROCKY_GESTURE_DIR"):
+        monkeypatch.setenv(k, f"/owner/real/{k}")
     try:
         proc, ck = vb.start_cockpit(8799, world="flat")
     finally:
@@ -739,6 +742,9 @@ def test_start_cockpit_installs_the_parent_death_hook(monkeypatch, tmp_path):
             seen["stdout"].close()
     assert isinstance(proc, FakeProc) and ck.url == "http://127.0.0.1:8799"
     assert seen["argv"][-4:] == ["--port", "8799", "--world", "flat"] and seen["cwd"] == vb.ROOT
+    for k in ("ROCKY_COCKPIT_CONF", "ROCKY_MEMORY_DIR", "ROCKY_GESTURE_DIR"):
+        assert seen["env"][k].startswith(str(tmp_path)), k                   # forced, never setdefault
+    assert os.listdir(seen["env"]["ROCKY_GESTURE_DIR"])                      # a seeded copy of the library
     if sys.platform.startswith("linux"):
         assert callable(seen["preexec_fn"])
     else:

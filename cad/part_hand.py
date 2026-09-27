@@ -74,7 +74,6 @@ def hand_hub():
             Pos(16/2 - 1.5, 0, -14 + IF2["entry_len"]/2 - 0.5) * \
             Box(6, slot_w, IF2["entry_len"] + 1.0)
         # circumferential twist arc (90 deg), stepped cuts
-        import math as _m
         for k in range(13):
             a = base_ang + IF2["twist_deg"] * k / 12
             # detent: slot narrows just before the end seat (last 12 deg)

@@ -64,7 +64,8 @@ def test_servo_model_off_is_transparent_and_on_slews():
 def test_hw_bridge_mock_mirrors_and_calibrates(tmp_path, monkeypatch):
     """The D051 happy path, D052 rules on (fault injection lives in test_hw_bridge.py)."""
     import hw_bridge
-    monkeypatch.setattr(hw_bridge, "CAL_PATH", str(tmp_path / "calibration.yaml"))
+    monkeypatch.setattr(hw_bridge, "CAL_PATH", str(tmp_path / "real_calibration.yaml"))
+    monkeypatch.setattr(hw_bridge, "MOCK_CAL_PATH", str(tmp_path / "calibration.yaml"))
     for k, v in dict(BLEND_S=0.2, ENTRY_S=0.3, ENTRY_TAIL_S=0.1, ENTRY_SPEED_CPS=1500).items():
         monkeypatch.setattr(hw_bridge, k, v)            # a fast soft entry; the real numbers are tested there
     ev = []
@@ -102,7 +103,8 @@ def test_hw_bridge_mock_mirrors_and_calibrates(tmp_path, monkeypatch):
         assert legs.all() and q_in[1, 1] == pytest.approx(0.5, abs=0.01)
         b.set_mirror("off")
         r = b.center("leg0_knee")
-        assert r["key"] == "leg0_knee" and os.path.exists(hw_bridge.CAL_PATH)
+        assert r["key"] == "leg0_knee" and os.path.exists(hw_bridge.MOCK_CAL_PATH)
+        assert b.cal_path == hw_bridge.MOCK_CAL_PATH and not os.path.exists(hw_bridge.CAL_PATH)
         assert len(b.limp()) == 20 and b.status()["torque"] == [] and b.errors == 0
     finally:
         b.close()

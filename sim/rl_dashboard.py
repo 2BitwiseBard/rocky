@@ -26,14 +26,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 RUNS = os.path.join(HERE, "runs")
 
-# recorded evals (deterministic policy, this machine) — see RL_GUIDE §4. D052 = on the
-# 2026-09-24 model (damping 0.62, forcerange 1.9, mu 0.8); the rest predate it. The D052
-# amendment raised forcerange to stall (2.94 N.m): none of these were re-run on it.
+# recorded evals (deterministic policy, this machine) — see RL_GUIDE §4. The three recover
+# runs were re-evaluated 2026-09-26 on robot 7d376178fe27 (the D052-amended model: forcerange
+# at stall, 2.94 N.m); robust_fwd2 is the 2026-09-24 D052 eval and cmd_sample3 predates D052
+# (neither walker was re-run).
 RESULTS = {
     "robust_fwd2": "D052: 245 mm vs bare gait 320 (servo on: 236 vs 298) — loses (D031)",
     "cmd_sample3": "walk under full DR: same conclusion (pre-D052)",
-    "recover1": "D052 peak: stood 5/20 legacy, 0/20 hw handoff; system 20/20 vs 11/20 no-righter — SHIPPED",
-    "recover5_v3_warm": "stood 4/20 — smoothest yet: 58 % pinned, 6.5 rev/s (D048)",
+    "recover1": "stood 4/20 legacy, 0/20 handoff_ok; system 20/20 vs 11/20 no-righter — SHIPPED",
+    "recover5_v3_warm": "stood 3/20 legacy, 0/20 hw; system 20/20 — smoothest yet: 55 % pinned, 3.6 rev/s (D048)",
     "recover6_d052": "D052 obs v2: 0/20 hw handoff; system 11/20 = no-righter 11/20 — NEGATIVE (B34)",
 }
 

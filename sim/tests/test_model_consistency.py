@@ -404,7 +404,7 @@ def test_robot_fingerprint_ignores_the_world_not_the_robot(model):
     changed.actuator_forcerange[changed.actuator("knee0").id] *= 1.5
     assert robot_fingerprint(changed) != fp
     note = fingerprint_note(model)
-    assert fp in note and "mujoco" in note and "D052" in note
+    assert fp in note and "mujoco" in note and f"params {rm.params_rev()}" in note
 
 
 # ------------------------------------------------------------------ contacts

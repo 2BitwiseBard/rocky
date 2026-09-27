@@ -239,6 +239,39 @@ def test_cockpit_alive_uses_ping_and_counts_a_500_as_alive(monkeypatch):
     assert not cb.cockpit_alive("http://x")
 
 
+def test_cockpit_url_follows_the_cockpit_port():
+    """The MCP server drives the cockpit on ROCKY_COCKPIT_PORT (the port sim/cockpit.py binds and
+    rocky.sh tailnet proxies) unless ROCKY_COCKPIT_URL names another; empty counts as unset."""
+    from harness import cockpit_backend as cb
+    assert cb.default_url({}) == "http://127.0.0.1:8765"
+    assert cb.default_url({"ROCKY_COCKPIT_PORT": "8800"}) == "http://127.0.0.1:8800"
+    assert cb.default_url({"ROCKY_COCKPIT_PORT": "", "ROCKY_COCKPIT_URL": ""}) == "http://127.0.0.1:8765"
+    assert cb.default_url({"ROCKY_COCKPIT_PORT": "8800",
+                           "ROCKY_COCKPIT_URL": "http://10.0.0.5:9000"}) == "http://10.0.0.5:9000"
+
+
+def test_server_reads_rocky_env_before_it_picks_the_cockpit(tmp_path):
+    """A server an MCP client starts directly (not through rocky.sh) applies rocky.env, so its
+    cockpit URL follows the machine's ROCKY_COCKPIT_PORT; a variable already set still wins."""
+    import subprocess
+    env_file = tmp_path / "rocky.env"
+    env_file.write_text("ROCKY_COCKPIT_PORT=8811\nROCKY_MCP_LIVE=0\n")
+    root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    env = {k: v for k, v in os.environ.items() if k not in ("ROCKY_COCKPIT_PORT", "ROCKY_COCKPIT_URL",
+                                                            "ROCKY_MCP_LIVE")}
+    env["ROCKY_ENV_FILE"] = str(env_file)
+    code = ("import os, harness.server as s; s._load_rocky_env(); "
+            "import harness.cockpit_backend as c; print(c.DEFAULT_URL, os.environ['ROCKY_MCP_LIVE'])")
+    out = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True,
+                         text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.split() == ["http://127.0.0.1:8811", "0"]
+    env["ROCKY_COCKPIT_PORT"] = "8812"                                 # the caller's value wins
+    out = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True,
+                         text=True, timeout=60)
+    assert out.stdout.split()[0] == "http://127.0.0.1:8812", out.stderr
+
+
 @pytest.mark.asyncio
 async def test_cockpit_proxy_gesture_passes_its_name():
     """Regression: CockpitBackend._tool(name, **args) collided with gesture's

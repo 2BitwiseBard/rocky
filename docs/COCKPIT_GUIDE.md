@@ -294,7 +294,7 @@ The Hardware panel talks to the Feetech servo bus beside the sim. No real servo 
 
 1. **connect** the adapter's port (or `mock` to rehearse), then **scan bus**. Every leg whose three servos answer becomes a real leg.
 2. **set id**: with one servo on the bus at a time, write its ID.
-3. **center here**: torque off on that joint, hold it at the jig pose (`bench/BENCH_RUNBOOK.md` §5), click. It writes `bench/calibration.yaml`.
+3. **center here**: torque off on that joint, hold it at the jig pose (`bench/BENCH_RUNBOOK.md` §5), click. It writes `bench/calibration.yaml` (on the `mock` port, `bench/out/mock/calibration.yaml`, the file the bench scripts' `--mock` rehearsals use, so a rehearsal never touches the robot's).
 4. **dir test**: jog each joint a few degrees; if it moves the wrong way, **dir −** flips its sign.
 5. **robot → sim**: move a real leg by hand and confirm the sim leg follows the same way (the IK frame is right).
 6. **sim → robot** with the stream speed at 200 c/s for the first stance. It needs the sim at a planted standstill, at 1× speed, not paused.

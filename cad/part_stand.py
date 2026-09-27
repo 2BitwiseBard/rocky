@@ -131,10 +131,10 @@ def _layout_checks():
         ok &= dmin >= 35.9                            # web = 36 off stations
         print(f"    ...and {dmin:.0f} deg from the nearest coxa station")
     floor_in, wall_in = 70.0 - 8, 84.0
-    bite = 80.9 - (70.0 - 8.0)
-    print(f"  saddle: floor r {70 - 8:.0f}..{86:.0f}, wall at r 84..88; "
-          f"deck edge 80.9 bears on {80.9 - 62:.0f} mm of floor, "
-          f"{84 - 80.9:.1f} mm radial slack to the wall")
+    bite = 80.9 - floor_in
+    print(f"  saddle: floor r {floor_in:.0f}..{86:.0f}, wall at r {wall_in:.0f}..88; "
+          f"deck edge 80.9 bears on {bite:.0f} mm of floor, "
+          f"{wall_in - 80.9:.1f} mm radial slack to the wall")
     return ok
 
 
@@ -159,6 +159,6 @@ if __name__ == "__main__":
         print(f"  {upper_n} on base: aligned {v_ok:.2f} mm^3 "
               f"({'SLIDES' if v_ok < 1 else 'BINDS'}), misaligned 36 deg "
               f"{v_bad:.0f} mm^3 ({'REGISTERS' if v_bad > 50 else 'no reg!'})")
-    print(f"  deck-bottom heights: base+crown 47 mm | +1 section 127 | "
-          f"+2 sections 207 (full leg reach below deck: 172)")
+    print("  deck-bottom heights: base+crown 47 mm | +1 section 127 | "
+          "+2 sections 207 (full leg reach below deck: 172)")
     assert ok

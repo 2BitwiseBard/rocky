@@ -20,7 +20,7 @@ confidence. If it binds, fix params, not printed parts.
 """
 from build123d import *
 from common import params, export
-from iface import leg_port_deck_features, leg_port_plate_features, IF
+from iface import leg_port_deck_features, leg_port_plate_features
 
 P = params()
 T_DECK = 6.0          # B27 OPEN: the deck thickness (params body.deck_t says 4, unread)

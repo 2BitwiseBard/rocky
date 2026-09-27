@@ -23,7 +23,7 @@ from common import params, export
 from part_coupler import (coupler_recess, coupler_on_face, DISC_T, RECESS_CLAMP_ANGS,
                           TAP_R_POS, POCKET_DEPTH, CLAMP_BORE_DEPTH)
 from servo_st3215 import spec, z_levels, plug_envelope
-from leg_frame import L1, L2, Z_HIP, YB, Y_HORN_TOP, Y_IDLER_FACE, FIT, HIP_TF, KNEE_TF, KNEE_X
+from leg_frame import L1, L2, Z_HIP, YB, Y_HORN_TOP, Y_IDLER_FACE, FIT, HIP_TF, KNEE_TF
 
 P = params()
 S = spec(P)

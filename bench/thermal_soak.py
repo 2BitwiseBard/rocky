@@ -7,12 +7,14 @@ stands. This test holds a commanded pose under load and logs temperature /
 load / current / voltage at 1 Hz until steady-state or the 65 C cut.
 
 Bench setup (see BENCH_RUNBOOK.md §7): servo on the jig, lever + known mass
-giving the D015 stance load (0.85–1.06 N·m => 29–36 % of stall). Run once at
-walking-load, once at 3-leg-stance load, once (carefully) at the untucked
-43–65 % band D015 flags as a no-go — the whole point is to SEE the no-go.
+giving a load from sim/out/torque_audit.json (D044, CAD masses). Run once at
+walking load (~0.35 N·m, ~12 % of stall), once at 3-leg-stance load
+(~0.45 N·m, ~15 %), once (carefully, supervised) at the self-righting knee
+push (~1.46 N·m, ~50 %, D044's one warm case); the whole point is to SEE
+where the cut comes.
 
 Outputs: CSV + PNG plot + a summary (time-to-60 C, time-to-cut, projected
-steady state) into bench/out/.
+steady state) into bench/out/ (bench/out/mock/ for --mock).
 
     python3 thermal_soak.py --port /dev/ttyACM0 --ids 2 --minutes 20
     python3 thermal_soak.py --mock --ids 2 --minutes 20 --mock-load 62
@@ -21,7 +23,7 @@ import csv
 import os
 import sys
 import time
-from _common import base_parser, make_bus, hline, OUT_DIR
+from _common import base_parser, make_bus, hline, out_dir
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "driver"))
@@ -59,7 +61,7 @@ def main():
           f"{args.minutes:.0f} min (cut at {args.cut_c} C) ...")
 
     stamp = time.strftime("%Y%m%d_%H%M%S")
-    csv_path = os.path.join(OUT_DIR, f"soak_{stamp}.csv")
+    csv_path = os.path.join(out_dir(args), f"soak_{stamp}.csv")
     t0 = clock.now()
     hist = {sid: [] for sid in ids}
     time_to = {sid: {} for sid in ids}
@@ -103,8 +105,9 @@ def main():
                           sorted(time_to[sid].items()))
         print(f"id {sid}: start {temps[0]} C, end {temps[-1]} C, "
               f"peak {max(temps)} C   {marks or '(never warmed past 50)'}")
-    verdict = ("NO-GO at this load — servo hit the cut. This pose needs "
-               "STS3250s, a lower duty, or the sleep-pose timer."
+    verdict = ("NO-GO at this load — servo hit the cut. This pose needs a lower "
+               "duty or the sleep-pose timer (the D015 upgrade path, an STS3250, "
+               "was not bought — D058)."
                if mon.tripped else
                "PASS — steady state below the cut at this load.")
     print(verdict)
@@ -124,7 +127,7 @@ def main():
         ax[1].set_ylabel("current (A)"); ax[1].set_xlabel("minutes")
         ax[1].grid(alpha=0.3)
         fig.suptitle(f"thermal soak — {args.note or stamp}")
-        png = os.path.join(OUT_DIR, f"soak_{stamp}.png")
+        png = os.path.join(out_dir(args), f"soak_{stamp}.png")
         fig.savefig(png, dpi=110, bbox_inches="tight")
         print(f"wrote {csv_path}\nwrote {png}")
     except Exception as e:                                   # pragma: no cover

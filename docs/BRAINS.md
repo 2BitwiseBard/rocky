@@ -2,8 +2,8 @@
 
 Which models drive Pebble in the cockpit, how to add one and how to
 measure it. The model ids here are the **reference setup's** (D055): one
-laptop with a 16 GB GPU (RTX 3080 Ti Laptop) running llama-swap on a
-pinned llama.cpp build. Any OpenAI-compatible server works
+laptop with a 16 GB GPU running llama-swap on a pinned llama.cpp build.
+Any OpenAI-compatible server works
 (`ROCKY_LLM_BASE_URL`), and every id below is a default that `rocky.env`
 overrides (`rocky.env.example` lists the knobs). The full 2026-09-24
 research round behind the picks, with 22 candidates and their install

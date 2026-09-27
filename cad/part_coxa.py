@@ -40,8 +40,8 @@ from common import params, export
 from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
 from servo_st3215 import servo_body, plug_envelope, horn_slot_cutter, spec, z_levels
 from servo_mount import servo_cup, cup_extents, cup_screw_columns, FRONT_X, T as CUP_T
-from leg_frame import (YAW_TF, HIP_TF, L1, Z_HIP, YB, HUB_Z0, HUB_Z1, Z_YAW_TOP, ZC_YAW,
-                       Z_YAW_IDLER_FACE, Z_YAW_RIM_TOP, Z_CUP_FLOOR_TOP, FIT, HALF_W, yaw_z)
+from leg_frame import (YAW_TF, HIP_TF, Z_HIP, HUB_Z0, HUB_Z1, ZC_YAW,
+                       Z_YAW_IDLER_FACE, Z_YAW_RIM_TOP, Z_CUP_FLOOR_TOP, FIT, yaw_z)
 
 P = params()
 S = spec(P)

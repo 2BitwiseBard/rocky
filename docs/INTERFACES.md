@@ -11,11 +11,13 @@ never through latches, thumbscrews or magnets.** Fasteners and latches only
 thumbscrew must never be able to become a structural failure, only a
 rattle.
 
-Print fit: every mating clearance inherits `print.clearance_fit` (0.30) or
-`print.clearance_press` (0.15). Each frozen dimension below is nominal, and
-the scripts apply clearances at generation time. VERIFY items are measured
-on real prints ([PRINT_PLAN.md](PRINT_PLAN.md) batch 0) and updated in
-params, never in part code.
+Print fit: mating clearances inherit `print.clearance_fit` (0.30), which the
+CAD scripts apply at generation time; each frozen dimension below is
+nominal. `print.clearance_press` (0.15) is recorded for press fits, but no
+script reads it yet (press seats are reamed by hand). VERIFY items are
+measured on real prints (the fit ladder, [PRINT_PLAN.md](PRINT_PLAN.md)
+batch 0, and the [interface coupons](PRINT_PLAN.md#interface-coupons-pla-02-mm-with-batch-1))
+and updated in params, never in part code.
 
 ---
 
@@ -169,7 +171,8 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   The belly door (I3) closes over the sled's tail lip and does the
   retaining; the connector does not.
 - **Spare power taps:** the dock's bus bar breaks out 2 × XT30 pigtails
-  (the B8 LED ring and later accessories).
+  (the B8 LED ring and later accessories); today they sit ahead of the
+  15 A fuse, so fuse anything plugged in (B66).
 - **Hot swap at Pebble scale:** limp the servos, swap the sled (~5 s), then
   reboot the Pi.
 

@@ -3,3 +3,6 @@
 # with. pyproject.toml allows a range; CI tests exactly this. Bump it on purpose, in a commit
 # that also re-measures what the docs quote.
 mujoco==3.12.0
+# The linter CI gates on (`ruff check .`, the dev extra): a new release can add or change an
+# F rule and fail CI with no code change. Bump it on purpose, with any fixes it asks for.
+ruff==0.16.9

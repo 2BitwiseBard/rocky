@@ -2,8 +2,14 @@
 
 What to print, in what order, and what each print proves. Every STL is in
 `cad/out/`. The orientations and support policy below are the ones
-`cad/check_printability.py` audits, so slice exactly as listed. The print
-pack, [`cad/out/PRINT_PREP_PACK.pdf`](../cad/out/PRINT_PREP_PACK.pdf), has a
+`cad/check_printability.py` audits, so slice exactly as listed. It slices
+each STL at 0.2 mm in that orientation and fails a part that floats (a layer
+region with no material anywhere below it), a wall under 0.8 mm (two
+perimeters) that persists 1 mm in height (a 45° feather where a plane grazes
+a cone does not count), or a part that misses the bed; supported islands,
+overhangs and walls under 1.6 mm are warnings, which the tables' supports
+column answers (D038). The print pack,
+[`cad/out/PRINT_PREP_PACK.pdf`](../cad/out/PRINT_PREP_PACK.pdf), has a
 three-view sheet and slicer settings for the leg, coupon, deck and hand
 parts; `./rocky.sh cad-check --derived` regenerates it along with the
 estimates.
@@ -100,12 +106,29 @@ Fit criteria (write them in `NOTES_INBOX.md`):
 - **idler:** the tower drops over the glued idler without rocking, and the
   plug notch is clear.
 
+## Interface coupons (PLA, 0.2 mm, with batch 1)
+
+The standards the body, panels and tools attach by (D020,
+[INTERFACES.md](INTERFACES.md)) each have a coupon. None changed at D047, so
+a set printed earlier still counts. They are small and not in the estimate.
+All print as exported (`check_printability.py` audits that pose).
+
+| part | qty | supports | proves |
+|---|---|---|---|
+| `latch_housing` + `latch_rotor` | 1 each | none | I3 latch: the rotor quarter-turns with a coin and is cam-tight at 90°. A tiny mechanism: 0.15 mm layers if you are patient |
+| `thumb_knob_m3` | 2 | none | an M3 × 10 head seats in the hex pocket, 5.6 A/F and snug on purpose (note if the head needs persuasion). The same knob is the I1 port's thumbscrew |
+| `dovetail_male_coupon` + `dovetail_shoe` | 1 each | none | I6: the shoe slides down the 24 mm spec segment and the knob locks it. I6's load rating is benched later on a shell sector's as-built 16 mm segment |
+| `shell_sector_demo` + `frame_coupon` | 1 each | the demo: yes, under the plate (its two I6 segments stand on the bed and the plate starts at z 4, a 35.9 mm cantilever in the audit); the frame: none | the I3 panel standard, both halves (the panel's lip, latch pocket, magnet pockets and two I6 segments; the frame's groove, latch strike and magnets): exercise them with a latch cartridge before any real shell |
+| `tool_hook`, `tool_scoop` | 1 each | yes (3 walls; the audit finds two supported islands on each) | I2 tool socket: on a printed `tibia_sea_slider`, the tool inserts free and quarter-turns, and a tug must not pull it off |
+
+Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
+
 ## Batch 2: one leg (129 g, 6.9 h), after batch 1 passes
 
 | part | qty | material | pose | supports |
 |---|---|---|---|---|
-| `coxa_yaw_base` | 1 | PETG | plate DOWN | yes. The I1 hook lip stands on the bed and holds the plate about 9.3 mm up, so support the whole plate from the bed. The harness channel's roof bridges 11 mm, and the roof rails over the cup are 3 mm cantilevers |
-| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, under the upper plate (28 mm over the yaw-servo zone) |
+| `coxa_yaw_base` | 1 | PETG | plate DOWN | yes. The I1 hook lip stands on the bed and holds the plate about 9.3 mm up (a 32.9 mm cantilever at z 9.5 in `cad/out/printability.json`), so support the whole plate from the bed. The harness channel's roof bridges 11 mm |
+| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, under the upper plate (a 21 mm step at z 72.5) and the 13.7 mm ledge at z 44 |
 | `horn_coupler` | 2 | PETG | disc DOWN | none |
 | `femur_link` | 1 | PETG (CF-PLA later) | plate A outer face DOWN | none: recesses up, bridge walls vertical |
 | `femur_plate_b` | 1 | PETG | outer face DOWN | none: pockets up |
@@ -160,14 +183,35 @@ design counts, not a shopping list:
 ## Deferred
 
 - **Wait until servos are in hand:** the other four legs (4 × batch 2
-  without the blanks), the bench jig (`jig_base` + `jig_column`,
-  327 cm³, 0.3 mm layers) and the calibration gauges
-  (`calib_gauge_hip`, `calib_gauge_knee`), which the bench runbook's
+  without the blanks and the `coxa_yaw_base`, which batch 3 prints), the
+  bench jig (`jig_base` flat, `jig_column` on its back with the spine down
+  and supports on; 327 cm³, 0.3 mm layers) and the calibration gauges
+  (`calib_gauge_hip` standing as exported with no support, since both
+  lying poses leave an island; `calib_gauge_knee` as exported, with
+  support under its 15.8 mm step at z 1.1), which the bench runbook's
   calibration uses.
-- **Print last:** the stand (`stand_base`, `stand_section`, `stand_crown`)
-  and the carapace (5 × `shell_sector` + `shell_cap`, 0.25 mm). The
-  fixtures weigh more than the legs.
-- **The hand is a later tool (B25):** `hand_hub`, `hand_cam`,
-  3 × `hand_finger` and the tools. `foot_pad_tpu` (TPU) is a sock over the
-  closed hand's cone tip, so it waits for the hand. B25's plain stub foot
-  is not modelled yet. None of these are in the estimate.
+- **Print last:** the stand and the carapace. The fixtures weigh more
+  than the legs.
+  - Stand: 0.3 mm, 2 walls, 15 %. `stand_base` + `stand_crown` alone are
+    the 47 mm deck cradle. Each `stand_section` stacks on the printed I6
+    spigots and raises it 80 mm (127 / 207 mm); two free the leg's full
+    172 mm reach below the deck (`part_stand.py`). The crown's top plate
+    spans its hollow skirt, so support it from the bed inside the skirt;
+    the supports pull out of the open bottom.
+  - Carapace: 5 × `shell_sector` + `shell_cap`, 0.25 mm, 3 walls, 12 %
+    gyroid, brim. The sector's cavity ceilings are 45° terraces and need
+    nothing inside; support the outside overhangs (the audit's widest is a
+    27.7 mm step at z 58.5).
+- **Printable, not planned yet:** `belly_door` (the I3 door demo over the
+  sled: two latches + two magnets), `trim_cup` + `trim_cup_lid` (washer
+  ballast for CoM trimming), `belly_skid` × 2 (the sacrificial skid),
+  `imu_grommet` × 4 (TPU eventually; a PLA one is a placeholder),
+  `tube_clip` and `link_clip` (harness clips, 3–4 each), `whisker_shoe`
+  (an I6 shoe), `coupler_recess_demo` (the coupler pocket alone; batch 1's
+  hip-hub coupon covers it) and the dock (`dock_base`, `dock_tower`,
+  `dock_block`), which waits for the charge-port decision (B14).
+- **The hand is a later tool (B25):** `hand_hub`, `hand_cam` and
+  3 × `hand_finger` (the tools are already coupons, above).
+  `foot_pad_tpu` (TPU) is a sock over the closed hand's cone tip, so it
+  waits for the hand. B25's plain stub foot is not modelled yet. None of
+  these are in the estimate.

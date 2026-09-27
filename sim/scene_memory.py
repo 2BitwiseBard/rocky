@@ -1,6 +1,6 @@
 """scene_memory — what the robot has seen, been told and run into, per world.
 
-The owner asked for "memory" and "environmental / situational awareness".
+Two asks: "memory" and "environmental / situational awareness".
 This is the memory half (the awareness loop lives in sim/cockpit.py):
 
   observation  {t, pose {x, y, yaw}, kind, text, objects [...], world}

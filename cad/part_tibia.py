@@ -20,8 +20,8 @@ are modeled in their own local +Z-down frame and get posed by the assembly.
 from build123d import *
 from common import params, export
 from servo_st3215 import servo_body, plug_envelope, spec
-from servo_mount import servo_cup, cup_extents, FRONT_X
-from leg_frame import KNEE_TF, KNEE_X, Z_HIP, YB, FIT, HALF_W, Z_CUP_FLOOR_TOP, L1, L2
+from servo_mount import servo_cup, FRONT_X
+from leg_frame import KNEE_TF, KNEE_X, Z_HIP, FIT, Z_CUP_FLOOR_TOP
 
 P = params()
 S = spec(P)
@@ -48,7 +48,6 @@ def knee_servo_placed(clearance=0.0):
 def tibia_knee_carrier():
     """Cup around the rear of the knee servo + tube clamp under the knee."""
     car = KNEE_TF * servo_cup()
-    e = cup_extents()
     # floor extension from the cup's front edge to past the tube boss
     ext = _box(KNEE_X + FRONT_X - 0.01, KNEE_X + BOSS_D / 2, -EXT_HALF_W, EXT_HALF_W,
                CUP_FLOOR_Z0, Z_CUP_FLOOR_TOP)

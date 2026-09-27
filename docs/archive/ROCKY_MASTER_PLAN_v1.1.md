@@ -76,14 +76,14 @@ Each phase has a **gate** — a demonstrable result — before money is spent on
 
 | Phase | Name | Duration | New spend | Gate to pass |
 |---|---|---|---|---|
-| 0 | Foundations | Wks 1–2 | ~$25 (TPU only — hot ends/nozzles & PLA/PETG stock owned) | Prusa reassembled, prints a calibration part cleanly; URDF pentapod walks in simulation |
+| 0 | Foundations | Wks 1–2 | ~$25 (TPU only — [personal note removed]) | Prusa reassembled, prints a calibration part cleanly; URDF pentapod walks in simulation |
 | 1 | One True Leg | Wks 2–5 | ~$208 | Physical leg on a bench jig tracks foot trajectories from ROS 2; spring (SEA) shin survives impact testing; hand prototype opens/closes |
-| 2 | Pebble walks | Wks 5–10 | ~$627 (+$12 optional wattmeter) | Full pentapod stands, wave-gait walks omnidirectionally, teleop via your Xbox Elite controller |
+| 2 | Pebble walks | Wks 5–10 | ~$627 (+$12 optional wattmeter) | Full pentapod stands, wave-gait walks omnidirectionally, teleop via [personal note removed] |
 | 3 | Pebble senses | Wks 10–16 | ~$86 (+$227 optional depth cam/lidar) | IMU-stabilized body, foot-contact terrain adaptation, camera streaming; optional: RL gait trained in sim runs on hardware |
 | 4 | Pebble thinks | Wks 16–24 | ~$29 | Laptop VLM agent commands robot skills by voice/vision ("go look at that", "pick that up"); chord-speak voice |
 | 5 | Full-scale gate | — | decision | Design review: everything learned → Rocky full-scale spec + budget; go/no-go/fundraise |
 
-Cumulative spend through Phase 4: **≈ $975 core / ≈ $1,276 with every optional** (v1.1: credits your owned hot ends/nozzles, filament stock, and Xbox Elite controller) — $224+ of headroom under the $1,500 envelope, with trim levers (spreadsheet Summary tab) that pull core near ~$900. Timeline assumes hobby pace (evenings/weekends); compress or stretch freely.
+Cumulative spend through Phase 4: **≈ $975 core / ≈ $1,276 with every optional** (v1.1: [personal note removed]) — $224+ of headroom under the $1,500 envelope, with trim levers (spreadsheet Summary tab) that pull core near ~$900. Timeline assumes hobby pace (evenings/weekends); compress or stretch freely.
 
 **Leg-cost amortization (a common worry, defused):** Batch 1's ~$208 is *not* the per-leg price. It buys leg #1's actuators **plus** all the one-time shared kit — bench PSU, bus adapter, USB-UART dongle, fastener/bearing/insert stock, spring assortment. The marginal cost of every additional leg is just its actuators: 3× ST3215 + 1× SCS0009 ≈ **$70–75/leg**, and all four remaining legs are already inside Batch 2's total.
 
@@ -116,17 +116,17 @@ Each tibia ends in a **stowable 3-finger claw**, exactly like the movie still:
 - A pentapod bonus from the literature: radially symmetric multi-legged robots can *statically stand on 3 legs while 2 limbs manipulate* — Rocky's canonical "walk on some legs, work with others" behavior. Our 3-leg-stance torque math above is exactly this case, and it closes.
 
 ### 3.4 Materials & manufacturing
-Filament strategy given current stock (plenty of PLA, carbon-fiber-filled PLA, some purple PETG, no TPU):
-- **PLA (owned):** jigs, the Phase-1 bench fixture, gait-test mule parts, cosmetic shells, and any bracket you expect to revise twice anyway. Free iteration. Its weakness is **creep** — it slowly deforms under sustained load, especially warm — so keep it away from servo pockets on the final walking build (ST3215 cases reach 50–65 °C working hard).
-- **CF-PLA (owned):** excellent for the *link* parts — femur plates, tibia clamps — much stiffer and more creep-resistant than plain PLA, prints dead flat. Use the hardened nozzle you already have (CF eats brass). Avoid it for thin snap-fits and living hinges; the fibers make it brittle in thin walls.
-- **PETG (purple, owned):** reserve it for the heat-adjacent, permanently-loaded parts — servo pockets, coxa clevis, carapace decks. A purple Pebble has excellent energy. Restock only when it runs out.
-- **TPU (buy, ~$25):** foot pads, bumpers, cable grommets. The only filament actually missing.
+Filament strategy [personal note removed]:
+- **PLA ([personal note removed]):** jigs, the Phase-1 bench fixture, gait-test mule parts, cosmetic shells, and any bracket you expect to revise twice anyway. Free iteration. Its weakness is **creep** — it slowly deforms under sustained load, especially warm — so keep it away from servo pockets on the final walking build (ST3215 cases reach 50–65 °C working hard).
+- **CF-PLA ([personal note removed]):** excellent for the *link* parts — femur plates, tibia clamps — much stiffer and more creep-resistant than plain PLA, prints dead flat. Use the hardened nozzle [personal note removed] (CF eats brass). Avoid it for thin snap-fits and living hinges; the fibers make it brittle in thin walls.
+- **PETG (purple, [personal note removed]):** reserve it for the heat-adjacent, permanently-loaded parts — servo pockets, coxa clevis, carapace decks. A purple Pebble has excellent energy. [personal note removed]
+- **TPU (buy, ~$25):** foot pads, bumpers, cable grommets. [personal note removed]
 - General: 0.2 mm layers, 4+ perimeters, 30–50% gyroid for structural parts; **carbon tube** shins (8–10 mm OD), music-wire or die springs.
 - Everything in Phases 0–4 prints on the Prusa i3. **Xometry is not needed at subscale** — save it for full-scale Rocky (CNC 7075 brackets, SLS nylon gear housings) or for a one-off part your printer can't do (they quote instantly from STEP files).
 - Design rule: servo-horn interfaces get printed *replaceable sacrificial couplers* — crashes strip a $0.30 part, not a $17 servo.
 
 ### 3.5 Prusa i3 refurb checklist (Phase 0, do first)
-1. Reassemble the hot end from your spares stock (you have hot ends + nozzles already — including hardened for CF-PLA). Run brass 0.4 mm default; a 0.6 mm speeds up big structural parts ~40%.
+1. Reassemble the hot end [personal note removed]. Run brass 0.4 mm default; a 0.6 mm speeds up big structural parts ~40%.
 2. While it's apart: inspect thermistor + heater cartridge leads and connectors (replace only if crusty, ~$10).
 3. Fresh PTFE tube cut square; check extruder idler tension and clean drive gear.
 4. Re-tension X/Y belts (twang test or Prusa belt-status screen), check Z-couplers.
@@ -205,13 +205,13 @@ Radial symmetry makes locomotion *nicer*, not harder:
 
 | Batch | When | Contents | ~Cost |
 |---|---|---|---|
-| 0 | now | TPU filament (rest of stock owned); optional: PETG restock, calipers | $25 core (+$62 opt.) |
+| 0 | now | TPU filament ([personal note removed]); optional: PETG restock, calipers | $25 core (+$62 opt.) |
 | 1 | Phase 1 | 4× ST3215 12 V, bus adapter, USB-UART dongle, bench PSU, springs, carbon tube, fasteners/bearings/inserts, 1× SCS0009 | ~$208 |
 | 2 | Phase 2 | 11× more ST3215 (+2 spares), Pi 5 8 GB + SD + cooler, 2× 3S 5200 LiPo + charger + bag, buck converter, wiring, XT60/fuses/switch, 4× more SCS0009; optional wattmeter | ~$627 (+$12 opt.) |
 | 3 | Phase 3 | BNO085 IMU, Pi Camera 3 Wide + pan servo, foot microswitches; (optional) OAK-D Lite + LD19-class lidar | $86 core, +$227 optional |
 | 4 | Phase 4 | I²S speaker/amp, USB mic | ~$29 |
 
-Running total, core path: **≈ $975**. With every optional: **≈ $1,276**. Trim levers on the spreadsheet's Summary tab (Waveshare-direct or AliExpress servos, skip spares, one battery to start, used-lidar hack below) pull the core near ~$900. Teleop uses your Xbox Elite controller (works with the ROS 2 `joy` node over USB or Bluetooth, zero config beyond pairing).
+Running total, core path: **≈ $975**. With every optional: **≈ $1,276**. Trim levers on the spreadsheet's Summary tab (Waveshare-direct or AliExpress servos, skip spares, one battery to start, used-lidar hack below) pull the core near ~$900. Teleop uses [personal note removed] (works with the ROS 2 `joy` node over USB or Bluetooth, zero config beyond pairing).
 
 ### 6.1 Vendors, deals, and used-gear strategy
 
@@ -223,7 +223,7 @@ Running total, core path: **≈ $975**. With every optional: **≈ $1,276**. Tri
 
 **Raspberry Pi (pricing is volatile in 2026 — the memory squeeze):**
 - Check [rpilocator.com](https://rpilocator.com) for live stock at *authorized* resellers (PiShop.us, CanaKit, Adafruit, Vilros, Micro Center) at official pricing — marketplace listings often run $20–40 over.
-- **Micro Center** in-store (Brooklyn/Westbury/Yonkers if you're near NYC) regularly has Pis at list plus open-box deals on SBCs, PSUs, and filament.
+- **Micro Center** in-store ([personal note removed]) regularly has Pis at list plus open-box deals on SBCs, PSUs, and filament.
 
 **Used/refurb — where it's smart:**
 - **eBay / Amazon Warehouse (open-box):** bench PSUs, LiPo chargers, OAK-D cameras, calipers, Prusa spares. Robotics gear gets abandoned constantly; 30–50% off is routine.
@@ -303,4 +303,4 @@ leg segment lengths (45/95/135 mm), body circumradius (110 mm), servo pocket dim
 
 ---
 
-*Doc history: v1.0 — initial master plan, replaces/supersedes the earlier "Biomimetic Hybrid Leg" Gemini brainstorm (its SEA shin, daisy-chained hand servo, and full-scale hybrid-actuation instinct survive; its servo sizing, per-leg microcontrollers-at-subscale, and static-hold claims were corrected against computed torque/thermal budgets). v1.1 — credited owned gear (hot ends/nozzles, PLA + CF-PLA + purple PETG, Xbox Elite controller), added filament strategy by material, leg-cost amortization note, and §6.1 vendors/deals/used-gear; core path $1,051 → $975.*
+*Doc history: v1.0 — initial master plan, replaces/supersedes the earlier "Biomimetic Hybrid Leg" Gemini brainstorm (its SEA shin, daisy-chained hand servo, and full-scale hybrid-actuation instinct survive; its servo sizing, per-leg microcontrollers-at-subscale, and static-hold claims were corrected against computed torque/thermal budgets). v1.1 — [personal note removed], added filament strategy by material, leg-cost amortization note, and §6.1 vendors/deals/used-gear; core path $1,051 → $975.*

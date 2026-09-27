@@ -11,10 +11,14 @@ kitchen" before lidar exists.
 Modes:
   --scan       run on the Pi later: `iw dev <if> scan` (fallback nmcli),
                pose from --pose x,y,yaw (the /pebble/odom hookup is future
-               work), appends JSONL to rssi_log.jsonl
+               work), appends JSONL to perception/out/rssi_log.jsonl
   --sim        synthesizes a 3-AP apartment (log-distance path
                loss, sigma 3 dB), walks a coverage path, logs fingerprints,
                then k-NN-localizes hold-out samples and reports error.
+               It REPLACES its own file, perception/out/rssi_log_sim.jsonl,
+               never the scan log.
+
+perception/out/ is git-ignored (per-machine data); --out picks another file.
 
 The record format is the contract; the Pi script and the sim write the same
 JSONL. Analysis lives here too (fingerprint_localize) so the pipeline is
@@ -26,12 +30,12 @@ import math
 import os
 import re
 import subprocess
-import sys
 import time
 
 import numpy as np
 
 REC_VERSION = 1
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")   # git-ignored
 
 
 # ------------------------------------------------------------------ Pi side
@@ -135,11 +139,15 @@ def main():
     ap.add_argument("--sim", action="store_true")
     ap.add_argument("--scan", action="store_true")
     ap.add_argument("--iface", default="wlan0")
-    ap.add_argument("--out", default=os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "rssi_log.jsonl"))
+    ap.add_argument("--out", default=None,
+                    help="JSONL file (default: perception/out/rssi_log.jsonl for --scan, "
+                         "perception/out/rssi_log_sim.jsonl for --sim)")
     ap.add_argument("--pose", default="0,0,0",
                     help="x,y,yaw (until the odom topic wires in)")
     args = ap.parse_args()
+    if args.out is None:
+        args.out = os.path.join(OUT_DIR, "rssi_log_sim.jsonl" if args.sim else "rssi_log.jsonl")
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     if args.sim:
         run_sim(args.out)
         return

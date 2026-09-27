@@ -19,7 +19,7 @@ All read frozen dims from params (D020); gauges assume the bench jig
 """
 from build123d import *
 from common import params, export
-from iface import IF, dovetail_female_shoe
+from iface import dovetail_female_shoe
 
 P = params()
 PR = P["print"]
@@ -115,15 +115,24 @@ if __name__ == "__main__":
                  calib_gauge_hip=calib_gauge_hip(),
                  calib_gauge_knee=calib_gauge_knee(),
                  whisker_shoe=whisker_shoe())
+    bed = sorted(PR["bed_mm"], reverse=True)
+    bad = []
     for n, p in parts.items():
         export(p, n)
         bb = p.bounding_box()
         big = max(bb.size.X, bb.size.Y, bb.size.Z)
+        if not all(d <= b for d, b in zip(sorted((bb.size.X, bb.size.Y, bb.size.Z),
+                                                  reverse=True), bed)):
+            bad.append(f"{n} fits the bed in no orientation")
         print(f"  {n}: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f}"
               f"{'  (print lying down)' if big > 200 else ''}")
     # gauge height sanity
     hip = parts["calib_gauge_hip"].bounding_box()
     from leg_frame import Z_CUP_FLOOR_TOP
     cradle_z = LEG_Z0_IN_JIG + (Z_CUP_FLOOR_TOP - 3.0) - 0.3
+    if abs(hip.max.Z - (cradle_z + 6)) > 0.5:
+        bad.append("hip gauge cradle is off its jig height")
     print(f"hip gauge cradle top at jig z {hip.max.Z:.1f} "
           f"(target {cradle_z + 6:.1f} incl. cheeks)")
+    print(f"part_smallwins checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
+    raise SystemExit(1 if bad else 0)

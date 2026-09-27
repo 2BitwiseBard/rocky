@@ -158,7 +158,7 @@ print(f"fell over: {'YES' if fell else 'no'}")
 # fall or on a walk that went nowhere / too far. The band is +-30% around the walk
 # measured on the D052 model (servo damping 0.6255 N.m.s/rad, forcerange 1.911 N.m on
 # the 15 leg joints; 2.94 since the D052 amendment, see below): 235 mm of ~261
-# commanded, measured 2026-09-24 (the owner's scratch run on the same derating said 240). Re-measure and move it when the model
+# commanded, measured 2026-09-24 (a scratch run on the same derating said 240). Re-measure and move it when the model
 # changes on purpose; a drift outside the band is exactly what this should catch.
 # V2: 246 mm re-measured 2026-09-24 after the spawn moved to rocky_model.spawn_z_m (the
 # 235 was measured before that change; A's run said 231, V1's 246 — same model otherwise).

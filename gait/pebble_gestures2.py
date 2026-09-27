@@ -217,8 +217,8 @@ def _gaited(g, t, total, cmd):
 
 def turn_in_place(g: WaveGait, t: float):
     """Turn on the spot at min(0.35 rad/s, the budget) — 0.246 at the D052
-    gait (the servo cannot swing the coxa any faster; the owner's derated
-    physics reached ~0.3 of a commanded 0.5 anyway)."""
+    gait (the servo cannot swing the coxa any faster; an earlier derated
+    physics run reached ~0.3 of a commanded 0.5 anyway)."""
     return _gaited(g, t, TURN_TOTAL, (0.0, 0.0, TURN_WZ))
 
 

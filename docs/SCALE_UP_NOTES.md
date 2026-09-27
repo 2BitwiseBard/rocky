@@ -1,6 +1,6 @@
 # Scale-up notes — what survives the jump from Pebble to full Rocky
 
-*Written in session 6 (2026-08-07), updated 2026-09-26. The owner's stated
+*Written in session 6 (2026-08-07), updated 2026-09-26. The stated
 ambition: if Pebble lands, full-scale Rocky gets real fabrication (CNC, SLS,
 sent-out drawings). These notes capture, while the subscale design is still
 fluid, which of our decisions are scale-portable and what "professional

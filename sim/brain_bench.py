@@ -189,7 +189,8 @@ for _p in (HERE, ROOT, os.path.join(ROOT, "gait")):
 
 import vision_bench as vb                                                 # noqa: E402
 from vision_bench import (Cockpit, start_cockpit, listed_models, running_models, unload,   # noqa: E402
-                          QUARANTINED, LIVE_COCKPIT_PORT, ball, box)
+                          QUARANTINED, LIVE_COCKPIT_PORT, ball, box,
+                          seed_gesture_library)
 from world_builder import PRESETS                                         # noqa: E402
 from cockpit_brains import (GATED, TOOL_NAMES, DEFAULT_BASE, EMBED_MODEL, local_ai_key,  # noqa: E402
                             classify_models)
@@ -926,7 +927,7 @@ def _first_cell(res):
 
 
 def md_row(model, res, date):
-    """One Markdown row (the BRAIN_MODELS table's 12 columns) for one model."""
+    """One Markdown row (the 12-column results table in docs/BRAINS.md) for one model."""
     if res.get("skipped"):
         return (f"| `{model}` | {res.get('files', '—')} | {date}: skipped — {res['skipped']} "
                 "| — | — | — | — | — | — | — | — | — |")
@@ -1232,23 +1233,6 @@ def _child_cockpits(port):
     return out
 
 
-def seed_gesture_library(dst, src=None):
-    """Copy the repo's keyframe gestures (gait/gestures/*.json) into dst once, so the bench
-    cockpit knows the same gestures but a model's compose_gesture ('do a happy dance')
-    saves into the scratch copy — the shakedown of 2026-09-25 left happy_dance.json in the
-    repo. Returns the names copied (empty when dst already existed)."""
-    src = src or os.path.join(ROOT, "gait", "gestures")
-    if os.path.isdir(dst):
-        return []
-    os.makedirs(dst, exist_ok=True)
-    names = []
-    for fn in sorted(os.listdir(src)) if os.path.isdir(src) else []:
-        if fn.endswith(".json"):
-            shutil.copyfile(os.path.join(src, fn), os.path.join(dst, fn))
-            names.append(fn)
-    return names
-
-
 class OwnCockpit:
     """The bench's own cockpit process: fenced (ROCKY_LLM_BASE_URL = the fence),
     a scratch conf (the user's ~/.config/rocky/cockpit.json is never written) and
@@ -1279,10 +1263,8 @@ class OwnCockpit:
                              "pick another --port")
         over = self.env
         seed_gesture_library(over["ROCKY_GESTURE_DIR"])
-        saved = {k: os.environ.get(k) for k in over}
-        os.environ.update(over)
         try:
-            proc, ck = start_cockpit(self.port)
+            proc, ck = start_cockpit(self.port, scratch=over)     # forced over os.environ + rocky.env
         except BaseException:
             for pid in _child_cockpits(self.port):       # interrupted mid-start: no orphan
                 try:
@@ -1290,12 +1272,6 @@ class OwnCockpit:
                 except OSError:
                     pass
             raise
-        finally:
-            for k, v in saved.items():
-                if v is None:
-                    os.environ.pop(k, None)
-                else:
-                    os.environ[k] = v
         self.proc = proc
         ck.c.timeout = httpx.Timeout(CHAT_TIMEOUT_S)
         if self.ck is None:

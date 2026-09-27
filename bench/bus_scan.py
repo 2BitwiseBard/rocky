@@ -5,14 +5,14 @@
     python3 bus_scan.py --mock                       # rehearsal
 
 Prints a table (id, baud, model bytes both-endian, volts, temp, position) and
-writes bench/out/last_scan.json. Run this FIRST on bench day, before anything
+writes bench/out/last_scan.json (bench/out/mock/ for --mock). Run this FIRST on bench day, before anything
 is commanded to move: it also catches the classic factory state (every servo
 ID 1 — which is why assignment happens one servo at a time).
 """
 import json
 import os
 import sys
-from _common import base_parser, make_bus, hline, OUT_DIR
+from _common import base_parser, make_bus, hline, out_dir, parse_ids
 
 
 def main():
@@ -21,11 +21,7 @@ def main():
     p.add_argument("--bauds", default="1000000,500000,250000,128000,115200")
     args = p.parse_args()
 
-    if "-" in args.ids:
-        a, b = args.ids.split("-")
-        id_range = range(int(a), int(b) + 1)
-    else:
-        id_range = [int(x) for x in args.ids.split(",")]
+    id_range = parse_ids(args.ids)
     bauds = [int(b) for b in args.bauds.split(",")]
 
     bus, clock, _ = make_bus(args)
@@ -49,11 +45,10 @@ def main():
     elif len(found) == 0:
         print("NOTHING FOUND. Checklist: 12 V rail on? TX/RX not swapped? "
               "servo plugged to the adapter's bus side? try --bauds with more rates")
-    dup_warning = [sid for sid in found if sid == 1 and len(found) > 1]
-    if 1 in found and len(found) < expect:
-        print("NOTE: id 1 present with an incomplete set — if these are fresh "
-              "servos they are ALL id 1; unplug all but one and run assign_ids.py")
-    out = os.path.join(OUT_DIR, "last_scan.json")
+    if set(found) == {1}:
+        print("NOTE: only id 1 answers — if several fresh servos are plugged in they "
+              "are ALL id 1; unplug all but one and run assign_ids.py")
+    out = os.path.join(out_dir(args), "last_scan.json")
     with open(out, "w") as f:
         json.dump({str(k): v for k, v in found.items()}, f, indent=1)
     print(f"wrote {out}")

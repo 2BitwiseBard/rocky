@@ -8,7 +8,6 @@ Three circumferential grip ribs; 3 mm crown under the tip for impact.
 Print: TPU 95A, 0.2 layers, 2 walls, 25% gyroid, slow (25 mm/s), tip down
 with a brim. Five needed + spares — they will be consumables, by design.
 """
-import math
 from build123d import *
 from common import params, export
 from part_hand import CONE_BASE_R, CONE_TIP_R, CONE_LEN, KNUCKLE_Z
@@ -29,7 +28,6 @@ def cone_r(up_from_tip):
 
 def foot_pad():
     """Modeled tip-down: z=0 at the pad sole, +z up the cone axis."""
-    h = GRIP_LEN + CROWN + CONE_TIP_R      # total height incl. tip sphere seat
     r_top_in = cone_r(GRIP_LEN) - STRETCH
     r_tip_in = CONE_TIP_R - STRETCH * 0.5
     # outer: cone shell following the inner taper + wall
@@ -61,6 +59,9 @@ if __name__ == "__main__":
           f"inner grip {GRIP_LEN} mm of cone, stretch {STRETCH} mm")
     # sanity: the pad must NOT reach the finger hinge zone (cone base)
     reach_z = KNUCKLE_Z + CONE_LEN - GRIP_LEN
+    ok = CONE_LEN - GRIP_LEN > 25
     print(f"sock top sits {CONE_LEN - GRIP_LEN:.0f} mm below the knuckles "
           f"(hand-frame z {reach_z:.1f}) — clear of finger gaps: "
-          f"{'OK' if CONE_LEN - GRIP_LEN > 25 else 'TOO LONG'}")
+          f"{'OK' if ok else 'TOO LONG'}")
+    print(f"part_footpad checks: {'CLEAN' if ok else 'FAIL — the sock reaches the finger gaps'}")
+    raise SystemExit(0 if ok else 1)

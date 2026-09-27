@@ -2,8 +2,10 @@
 
 How power and data move through Pebble: the power tree, the five leg drops,
 the star board, the Pi's pins and the power budget. The electrical calls
-come from the 2026-09-22 review ([REVIEW_2026-09-22.md](REVIEW_2026-09-22.md)
-§4). The rule that saves a servo: **hand servos never see 12 V** (D016).
+are D058's ([decisions](decisions.md)), which settled the 2026-09-22
+review's findings ([REVIEW_2026-09-22.md](REVIEW_2026-09-22.md) §4) and
+kept the Pi + adapter as the bus master (the ESP32 board is a bench tool).
+The rule that saves a servo: **hand servos never see 12 V** (D016).
 Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
 
 ## Power tree
@@ -33,7 +35,7 @@ Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
   ([pin map](#pi-5-pin-map-draft-verify)).
 - **The 6 V UBEC** (B-11) is a Hobbywing UBEC-3A with its jumper at 6 V.
   Measure 6.0 V at the plug before any claw is connected.
-- **Open:** the dock's two XT30 spare taps (I5) break out of the dock
+- **Open (B66):** the dock's two XT30 spare taps (I5) break out of the dock
   block, ahead of the fuse. Fuse anything that is plugged into them.
 
 ## Per-leg drop (×5, ends at the I1 leg-port connectors)
@@ -153,9 +155,9 @@ write the real numbers next to these.
 | 3 | 306° | **287 mm** | **144 mm** |
 | 4 | 18° | **198 mm** | **115 mm** |
 
-The trunk (bulkhead XH-5 → J0) is not computed. The bulkhead faces south
-at y ≈ −72 and the board sits at y 32, so the trunk runs round the tray:
-measure it. The longest leg loom is 287 mm (legs 2 and 3), under the
+The trunk (bulkhead XH-5 → J0) is not computed (B67). The bulkhead faces
+south at y ≈ −72 and the board sits at y 32, so the trunk runs round the
+tray: measure it. The longest leg loom is 287 mm (legs 2 and 3), under the
 400 mm budget.
 
 ### Star-board build order
@@ -203,7 +205,7 @@ device.
 | load | nominal | peak |
 |---|---|---|
 | 15 × ST3215 walking | ~4–6 A @ 12 V | 8–10 A (stance transitions) |
-| stall, worst case | — | the 15 A fuse is the ceiling, by design; per servo, `PROTECT_CURRENT` ≈ 2 A is set on bench day (REVIEW §4, [bench runbook](../bench/BENCH_RUNBOOK.md) §5) |
+| stall, worst case | — | the 15 A fuse is the ceiling, by design; per servo, `PROTECT_CURRENT` ≈ 2 A is set on bench day (D058; REVIEW §4; [bench runbook](../bench/BENCH_RUNBOOK.md) §5) |
 | Pi 5 + camera | 1.2 A @ 5 V | 2.5 A (the 5 A buck has headroom) |
 | D500 lidar | 0.29 A @ 5 V | — |
 | 5 × SCS0009 | 0.2 A @ 6 V | ~1.5 A all stalled (UBEC 3 A) |

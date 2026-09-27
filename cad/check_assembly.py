@@ -21,8 +21,8 @@ from servo_mount import cup_screw_columns
 from leg_frame import YAW_TF, HIP_TF, KNEE_TF, L1, KNEE_X, Z_HIP
 from part_coxa import HUB_Z0, CB_DEPTH, harness_path, harness_solid, HARNESS_W
 from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
-from part_coupler import RECESS_CLAMP_ANGS, TAP_R_POS, DISC_T, HEAD_CB_DEPTH
-from part_femur import (LINK_TF, YA0, YA1, T as FEM_T, BOSS_X, BOSS_ZC, RAIL_Y0, YB1, BOSS_H)
+from part_coupler import RECESS_CLAMP_ANGS, TAP_R_POS
+from part_femur import (LINK_TF, YA0, BOSS_X, BOSS_ZC, RAIL_Y0, YB1, BOSS_H)
 from leg_assembly import build_dryfit
 
 P = params(); S = spec(P); PR = P["print"]

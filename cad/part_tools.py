@@ -14,9 +14,7 @@ its hand for:
 Checks mirror part_tibia's: inserted & locked poses must be free, locked
 + pulled must interfere (retention proof).
 """
-import math
 
-import numpy as np
 from build123d import *
 from common import params, export
 

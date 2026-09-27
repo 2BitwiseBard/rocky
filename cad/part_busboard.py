@@ -1,7 +1,8 @@
 """Bus star-board bracket — see docs/WIRING_HARNESS.md (star board).
 
-Holds the 40x30 perfboard star hub flat at 12 mm standoff: 4 posts (M3
-thread-forming, 34x24 pattern), two zip-tie wings for the r=62 loom ring.
+Holds the 40x30 perfboard star hub flat 11 mm off the deck (3 mm plate +
+8 mm posts): 4 posts (M3 thread-forming, 34x24 pattern), two zip-tie wings
+for the r=62 loom ring.
 Print flat, no supports, PLA fine (no load).
 
 Deck mounting (v0.2): two M3 screws through the plate's centreline into the
@@ -103,7 +104,8 @@ if __name__ == "__main__":
     part = busboard_bracket()
     export(part, "busboard_bracket")
     bb = part.bounding_box()
-    print(f"bracket: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} mm")
+    print(f"bracket: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} mm "
+          f"(board standoff {PLATE_T + POST_H:.0f} mm = plate {PLATE_T:.0f} + posts {POST_H:.0f})")
     # sanity: posts land on the 34x24 corner-drill pattern
     assert abs(POST_DX - 34) < 1e-9 and abs(POST_DY - 24) < 1e-9
     print("post pattern matches the WIRING_HARNESS.md star-board drill spec (34 x 24)")

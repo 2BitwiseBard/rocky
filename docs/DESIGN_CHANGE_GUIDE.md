@@ -2,7 +2,8 @@
 
 This guide covers changing Pebble's hardware design: a different servo, a
 longer link, a new foot, another material, or more joints or legs. It says
-what to edit, what to run, and which checks catch what you forgot.
+what to edit, what to run, and which checks catch what you forgot. The
+tools a brain can call are data too; adding one is §8.
 
 It describes what works **today** (after D053, step 1 of
 [`ROBOT_AS_DATA.md`](ROBOT_AS_DATA.md)). The end state is "edit `params.yaml`,
@@ -19,6 +20,7 @@ Contents:
 - §5 A fourth joint or a sixth leg
 - §6 The first real leg
 - §7 Checklist
+- §8 A new tool for the brains
 
 ---
 
@@ -94,8 +96,9 @@ tolerance.
 
 **Every design change is a decision.** Give it a D-number in
 `docs/decisions.md`. If a physics number changed, bump `meta.params_rev` in
-`params.yaml`. `sim/model_fingerprint` prints `params_rev`, and RL
-checkpoints record it.
+`params.yaml` to that D-number; a mass change counts (D059's torso change
+took it from D052 to D059). `sim/model_fingerprint` prints `params_rev`,
+and RL checkpoints record it.
 
 **RL checkpoints go stale on almost every change.** The robot fingerprint
 (`sim/model_fingerprint.py`) covers masses, damping, forcerange, joint
@@ -227,8 +230,8 @@ from `leg.foot.mu_slide` and `mu_torsion_m`.
 1. Edit `leg.foot.*` in `params.yaml`. MJCF, URDF, spawn height and parity
    follow.
 2. **Two CAD literals must be changed by hand.** They mirror params but do
-   not read them: `part_hand.CONE_TIP_R` (`part_hand.py:31`, 3.5) and
-   `part_footpad.CROWN` (`part_footpad.py:20`, 3.0). B36 step 8 adds the
+   not read them: `part_hand.CONE_TIP_R` (3.5) and `part_footpad.CROWN`
+   (3.0). B36 step 8 adds the
    check for them.
 3. If the new foot changes the stack length from the knee axis to the
    contact point, that is an **L3 change** (§2).
@@ -268,7 +271,7 @@ B36 step 7. Until then:
    `test_compiled_mass_equals_budget` passes by construction. Review the
    `sim/mass_budget.json` diff: it is the change.
 4. Mass moves the CoM, and therefore the feasibility support margins (the
-   tightest is `manip_adjacent`'s 17.5 mm), the shove thresholds and the RL
+   tightest is `manip_adjacent`'s 17.4 mm), the shove thresholds and the RL
    dynamics. Re-run the audits (§1 step 8). Weigh the real part on the
    kitchen scale when you have it. That number beats any fill factor.
 
@@ -389,3 +392,51 @@ The leg is built to `params.yaml` as it stands. Before assembling:
 - [ ] The regenerated `sim/pebble.xml`, `sim/mass_budget.json` and
       `ros2/.../urdf/*` are committed **with** the params change (CI fails
       otherwise).
+
+---
+
+## 8. A new tool for the brains
+
+Every tool a brain can call is one `ToolSpec` in `harness/capabilities.py`
+(`REGISTRY`, D056). The local brains' OpenAI schema, the cockpit's list
+(Claude mode converts it), the MCP server's live list and `docs/TOOLS.md`
+are generated from it; the cockpit's executor is checked against it, not
+generated. To add a tool:
+
+1. **The spec.** Append a `ToolSpec` to `REGISTRY`: `name`; `kind` (`voice`,
+   `motion`, `query`, `memory`, `gesture_authoring` or `meta`);
+   `description`, the text the local brains read; `parameters`, an OpenAI
+   JSON schema, where a gesture or chord-word enum is written
+   `{"$live": "gestures"}` / `{"$live": "lexicon"}` and filled from the live
+   lists. `surfaces` says who is offered it: `("openai", "mcp")` by default,
+   `("openai",)` for the local brains only, `("internal",)` for the executor
+   only (like `turn`). An MCP tool needs `mcp_args` (plus `annotations`, and
+   `mcp_description` when MCP should read a different text), only an MCP
+   tool may have them, and the constructor refuses a mismatch.
+   `gated=True` if the tool moves the robot (a spoken line then needs the
+   wake word). `requires` names what a backend must have to offer it (`eye`,
+   `memory`, `cockpit`, `places`).
+2. **The handler.** In the cockpit, `Brains.tool` runs it: add the name to
+   its dispatch in `sim/cockpit_brains.py` (`TOOL_NAMES`, or a tuple beside
+   it as D057 did with `PLACE_TOOLS`; `dispatch_names()` reads both) and a
+   route (`OWN_ROUTES`, a `mem_<name>` method for a memory tool, or the
+   sim's `tool_<name>`, which also serves `/api/tool/<name>`). `registry_problems()`, run by the tests,
+   fails while the registry and the executor disagree. For MCP, each backend
+   that offers the tool needs the method `backend_method` names (default:
+   the tool's name); a backend without it does not list the tool. Talk mode
+   (the regex parser in `harness/intent.py`) reaches only the tools it parses.
+3. **The page.** `.venv/bin/python -m harness.capabilities --md --out docs/TOOLS.md`;
+   CI runs `--check docs/TOOLS.md` and fails on a stale page.
+4. **The pins.** The generated lists and the name sets are pinned, so a new
+   tool (or a changed text) fails `./rocky.sh test` until the pins move with
+   it, in the same commit, as the record that the change was meant:
+   `GOLDEN`, `GOLDEN_D057` and the name sets (`DISPATCH_TODAY`,
+   `ADDED_D057`) in `harness/test_capabilities.py`, `_BUILD_TOOLS_BEFORE` in
+   `harness/test_harness.py`, and `EXTRA_BEFORE`, `EXTRA_BEFORE_SHA` and
+   `GATED_BEFORE` in `sim/tests/test_cockpit_brains.py`. A tool behind a new
+   capability flag leaves every list built without that flag unchanged: that
+   is how D057 added its four place tools (`places`) without touching a D056
+   hash.
+
+The registry's walkthrough (the surfaces, the live MCP list, the CLI) is
+[SIM_GUIDE.md](SIM_GUIDE.md) §5; the generated page is [TOOLS.md](TOOLS.md).

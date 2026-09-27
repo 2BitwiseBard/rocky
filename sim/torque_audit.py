@@ -33,7 +33,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import (WaveGait, leg_ik, leg_fk, body_to_leg,      # noqa: E402
-                         N_LEGS, L1, L2, L3)
+                         N_LEGS, L2, L3)
 
 G = 9.81
 STALL = {"ST3215": 2.94, "STS3250": 4.90}          # N*m at 12 V

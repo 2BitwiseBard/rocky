@@ -101,12 +101,19 @@ if __name__ == "__main__":
     posed = Pos(0, 0, 0.0) * male                 # both z=0-based, same axis
     inter = posed & shoe
     v = 0.0 if inter is None else inter.volume
+    bad = []
+    if v >= 1:
+        bad.append("I6 dovetail binds")
     print(f"I6 dovetail male x shoe: {v:.2f} mm^3 ({'SLIDES' if v < 1 else 'BINDS'})")
     # I3 rotor through housing bore
     r, h = latch_insert_rotor(), latch_insert_housing()
     inter = r & h
     v = 0.0 if inter is None else inter.volume
+    if v >= 2:
+        bad.append("I3 rotor jams")
     print(f"I3 rotor x housing: {v:.2f} mm^3 ({'ASSEMBLES' if v < 2 else 'JAMS'})")
     for n, p in parts.items():
         bb = p.bounding_box()
         print(f"  {n}: {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f}")
+    print(f"part_panel checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
+    raise SystemExit(1 if bad else 0)

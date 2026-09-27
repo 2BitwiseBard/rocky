@@ -4,7 +4,9 @@ Superseded plans, early logs and full-length records, kept word for word so ever
 measurement and decision stays readable in the working tree. Nothing here is maintained:
 where an archived file and a live doc disagree, the live doc (and `docs/decisions.md`)
 wins. Archived text is verbatim except that personal identifiers are genericized (the
-owner's first name reads "the owner"; machine paths read as `ROCKY_*` settings).
+owner's first name reads "the owner"; machine paths read as `ROCKY_*` settings; the
+reference laptop's GPU is named by its size) and personal details (owned gear, store
+locations) read `[personal note removed]`.
 
 | File | What it is | Dates | Why archived | Superseded by |
 |---|---|---|---|---|
@@ -21,7 +23,7 @@ gone, this is where its content lives now:
 | Old name | Now |
 |---|---|
 | `plan/ROCKY_MASTER_PLAN.md` ("the master plan") | [ROCKY_MASTER_PLAN_v1.1.md](ROCKY_MASTER_PLAN_v1.1.md) |
-| `docs/PRINT_PLAN_2026-09-22.md`, `docs/PRINTER_NIGHT.md`, `docs/PRINT_NIGHT_s8.html`, `docs/PRINT_WEEKEND_s6.html` | [docs/PRINT_PLAN.md](../PRINT_PLAN.md) (with the fit-ladder GO/NO-GO table) |
+| `docs/PRINT_PLAN_2026-09-22.md`, `docs/PRINTER_NIGHT.md`, `docs/PRINT_NIGHT_s8.html`, `docs/PRINT_WEEKEND_s6.html` | [docs/PRINT_PLAN.md](../PRINT_PLAN.md): the fit-ladder GO/NO-GO table, the interface-coupon fit criteria, and the fixture and carapace print settings. The night-by-night print queues themselves are only in the git history |
 | `PRINT_PREP_PACK.pdf` (repo root) | `cad/out/PRINT_PREP_PACK.pdf` (`cad/gen_print_pack.py`) |
 | `bom/ROCKY_BOM.xlsx`, `bom/SHOPPING_LIST_2026-09-22.md`, the order sheets and addenda (`bom/ORDER_SHEET_batch01.html`, `bom/ORDER_ADDENDUM_batch3.html`, `bom/ADDENDUM_session5.html`, `docs/pebble_order_sheet_v2.html`) | [bom/BOM.csv](../../bom/BOM.csv) + [bom/README.md](../../bom/README.md) (D058) |
 | `docs/BUS_STARBOARD.md` | the star-board section of [docs/WIRING_HARNESS.md](../WIRING_HARNESS.md) |

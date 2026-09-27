@@ -69,9 +69,19 @@ GOLDEN_D057 = {       # has_places=True (recognition on); regenerated 2026-09-25
     # {name, description, inputSchema, annotations} rows sorted by name (the D056 rows + the four)
     "mcp_rep": "bb4b0fd415d5f4ed676d89f17dab1af8020725137eaa32e36815183b50e9166d",
 }
-# the no-cockpit snapshot's version at D056 (docs/TOOLS.md at HEAD): with has_places off the
-# snapshot is still exactly that one (the D057 tools add nothing unless recognition is on)
+# the no-cockpit snapshot's version at D056 (docs/TOOLS.md then): with has_places off the
+# snapshot is still exactly that one (the D057 tools add nothing unless recognition is on) —
+# except the robot block's params revision, which D059 moved on (_version_at_d056)
 D056_FALLBACK_VERSION = "99615678f55b"
+D056_PARAMS_REV = "0.1/D052"
+
+
+def _version_at_d056(caps):
+    """The snapshot version with the robot block's params_rev put back to D056's: every tool,
+    list and envelope field still has to match the D056 snapshot byte for byte."""
+    c = json.loads(json.dumps(caps))
+    c["robot"]["params_rev"] = D056_PARAMS_REV
+    return C.snapshot_version(c)
 # today's sets, as recorded in snapshot_sets.json
 GATED_TODAY = frozenset({"compose_gesture", "find_object", "gesture", "go_back_to", "goto", "move", "turn"})
 DISPATCH_TODAY = frozenset({"say", "gesture", "move", "goto", "stop", "scan_summary", "status", "look",
@@ -385,7 +395,7 @@ def test_snapshot_shape_envelope_and_robot():
     off = C.fallback_caps(has_places=False)
     assert off["capabilities"] == ["cockpit", "eye", "memory"]
     assert [t["name"] for t in off["tools"]] == [n for n in C.TOOL_NAMES if n not in ADDED_D057]
-    assert off["version"] == D056_FALLBACK_VERSION
+    assert _version_at_d056(off) == D056_FALLBACK_VERSION
     env = caps["envelope"]
     assert env["goto_reach_m"] == 1.5 and env["goto_timeout_s"] == 40.0
     assert env["source"].startswith("gait/"), env                   # the gait is importable here
@@ -585,4 +595,4 @@ def test_mcp_specs_with_places_are_the_d056_list_plus_the_four():
         == GOLDEN["mcp_mock"]
     # F3 changed no OpenAI list (the local brains' texts and schemas, recognition on or off)
     assert _sha(C.to_openai_tools(rep_caps(has_places=True))) == GOLDEN_D057["openai_rep"]
-    assert C.fallback_caps(has_places=False)["version"] == D056_FALLBACK_VERSION
+    assert _version_at_d056(C.fallback_caps(has_places=False)) == D056_FALLBACK_VERSION

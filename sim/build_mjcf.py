@@ -75,9 +75,10 @@ MU = float(FOOT["mu_slide"])
 MU_T = float(FOOT["mu_torsion_m"])
 FRICTION = f"{MU:g} {MU_T:g} 0.0001"   # sliding, torsional (m), rolling (m)
 
-# mass budget (kg). Session 8: derived from the CAD tree by mass_audit.py
-# (sim/mass_budget.json — STL volumes x PLA x fill factor + params.mass_hw);
-# the session-2 hand budget stays as the fallback so the file always builds.
+# mass budget (kg): derived from the CAD tree by mass_audit.py (D039:
+# sim/mass_budget.json — STL volumes x material x fill factor + params mass_hw);
+# the pre-D039 estimate (the budget D015 sized the servos on) stays as the
+# fallback so the file always builds.
 _MB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mass_budget.json")
 if os.path.exists(_MB):
     import json as _json
@@ -86,13 +87,13 @@ if os.path.exists(_MB):
     M_COXA = _mb["coxa"] / 1000.0
     M_FEMUR = _mb["femur"] / 1000.0
     M_TIBIA = _mb["tibia"] / 1000.0
-    MASS_SOURCE = "mass_budget.json (CAD-derived, session 8)"
+    MASS_SOURCE = "mass_budget.json (CAD-derived, D039)"
 else:
     M_TORSO = 1.35                     # deck + battery + electronics + carapace
     M_COXA = 0.14                      # fork + femur servo
     M_FEMUR = 0.03                     # link plate
     M_TIBIA = 0.17                     # knee servo + carrier + tube + SEA + hand
-    MASS_SOURCE = "hand budget (session 2)"
+    MASS_SOURCE = "pre-D039 estimate (fallback)"
 
 # the tibia budget INCLUDES the hand (mass_audit); split it without adding mass:
 M_PRONG = 0.004                        # each visual claw prong (fixed one + the claw joint's)

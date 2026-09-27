@@ -37,8 +37,10 @@
 #   rocky.sh voice [--backend mock]  push-to-talk: mic -> whisper (ROCKY_WHISPER_URL, default
 #                                  :8082) -> intent (no wake word: pressing Enter is the
 #                                  operator's confirmation, D052 V2)
-#   rocky.sh test [pytest args]    the fast ladder: driver, harness, gait, sim/tests (-m "not slow").
-#                                  CI's fast job also runs the slow tests
+#   rocky.sh test [pytest args]    the fast ladder: driver, harness, gait, sim/tests (-m "not slow"),
+#                                  on the reference setup like CI (rocky.env is NOT read; opt in
+#                                  with ROCKY_ENV_FILE=rocky.env ./rocky.sh test). CI's fast job also
+#                                  runs ruff and the slow tests
 #                                  (.venv/bin/python -m pytest harness sim/tests -m slow -q), run_sim,
 #                                  URDF parity and the MJCF/URDF/TOOLS.md freshness checks
 #   rocky.sh jobs                  training runs in flight + last log line of each
@@ -46,7 +48,9 @@
 #   rocky.sh eval-recover NAME [args]    20-episode righting eval of runs/NAME
 #   rocky.sh train-walk NAME [args]  residual-gait PPO run (see docs/RL_GUIDE.md)
 #   rocky.sh eval-walk NAME [args]   deterministic eval of runs/NAME vs the bare gait
-#   rocky.sh cad-check             whole-tree CAD CI (build123d) — 23/23 or it didn't happen
+#   rocky.sh cad-check [--derived] whole-tree CAD CI (build123d): 28/28 modules or it didn't happen;
+#                                  --derived also rebuilds the preview, print estimate, print pack
+#                                  and viewer (32/32)
 #   rocky.sh help                  this text (the whole header, so new commands show up)
 #
 # Env the launcher itself reads (all of them, with defaults: rocky.env.example): ROCKY_REPO,
@@ -60,6 +64,8 @@ ROCKY_REPO="${ROCKY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 PY="$ROCKY_REPO/.venv/bin/python"
 # this machine's settings; `set -a` exports them, then the caller's exported environment is put
 # back on top, so `ROCKY_WORLD=room ./rocky.sh play` still wins (sim/envfile.py: the same rule)
+# `test` runs on the reference setup, as CI does (the repo's conftest.py sets the same default)
+if [[ "${1:-}" == test && -z "${ROCKY_ENV_FILE:-}" ]]; then export ROCKY_ENV_FILE=/dev/null; fi
 ROCKY_ENV_FILE="${ROCKY_ENV_FILE:-$ROCKY_REPO/rocky.env}"
 if [[ -f "$ROCKY_ENV_FILE" ]]; then
   _caller_env="$(export -p)"

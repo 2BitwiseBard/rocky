@@ -126,7 +126,7 @@ def clear(bus, ids, log=print) -> dict[int, tuple[int, int]]:
 
 
 def main():
-    from _common import base_parser, make_bus, confirm, hline, CAL_PATH
+    from _common import base_parser, make_bus, confirm, hline, cal_path
     from rocky_driver import load_calibration
 
     p = base_parser("Write MIN/MAX_ANGLE_LIMIT from the params joint limits + calibration")
@@ -138,7 +138,8 @@ def main():
     args = p.parse_args()
 
     bus, clock, mt = make_bus(args)
-    cal = load_calibration(CAL_PATH)
+    cal_file = cal_path(args)
+    cal = load_calibration(cal_file)
     if args.ids:
         ids = [int(x) for x in args.ids.split(",")]
     else:
@@ -154,7 +155,7 @@ def main():
         clear(bus, ids)
         return 0
     pl = plan(cal, ids, args.margin)
-    print(f"calibration: {CAL_PATH if cal else '(none — dir +1, offset 0)'}")
+    print(f"calibration: {cal_file if cal else '(none — dir +1, offset 0)'}")
     for sid, e in pl.items():
         flag = f"  !! {e['problem']}" if e["problem"] else ""
         print(f"  id {sid:2d} {e['key']:<11} dir {e['dir']:+d} off {e['offset']:+5d}  "

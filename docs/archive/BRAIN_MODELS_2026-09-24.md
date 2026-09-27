@@ -122,7 +122,7 @@ All 22 candidates in the verified table exist on Hugging Face and are supported 
 - **lfm2.5-vl is already in `resident`.** I did not check whether llama-swap v249 lets one model belong to two groups. The safe route is a second model ID (for example `lfm2.5-vl-eye`) that points at the same GGUF and flags, and putting that ID in the new group.
 - **Rename every generic `mmproj-F16.gguf` when you download it** (the commands below do this), and add each new file to `models.manifest.json`.
 - **Bench etiquette:** load models through llama-swap only (`test-llm.sh load …`), and leave at least 15–30 s idle between spawns.
-- **Speed estimates are probably too high.** They come from memory bandwidth (about 512 GB/s on the laptop 3080 Ti, divided by the weight size). But lfm2.5-vl, a 3B model at Q8, measures only 31 t/s on this machine, far below its bandwidth ceiling. Small models here appear to be held back by per-token overhead, so treat every t/s figure below as an upper bound.
+- **Speed estimates are probably too high.** They come from memory bandwidth (about 512 GB/s on the reference laptop's 16 GB GPU, divided by the weight size). But lfm2.5-vl, a 3B model at Q8, measures only 31 t/s on this machine, far below its bandwidth ceiling. Small models here appear to be held back by per-token overhead, so treat every t/s figure below as an upper bound.
 - **KV cache** figures assume q8_0 (about 1.06 bytes per element), as `common_flags` sets.
 
 ---

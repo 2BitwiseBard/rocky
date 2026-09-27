@@ -16,9 +16,10 @@ that are gait-phase effects (which leg was mid-swing when the push landed).
 FROZEN (D048): superseded by sim/shove_envelope.py (the rim half-sine is the
 shove model now). Kept runnable for the D017 record only: this ladder stops
 at 27 N, below what the robot survives, so every direction reports the
-ceiling; the D017 envelope (35-53 N walking / 46-53 N stance) came from a
-wider ladder, results/pre_d052/push_results_ext.json, which no script here
-writes (results/pre_d052/plot_results.py plots it).
+ceiling. A wider ladder (27-60 N, session-8 masses) is in
+results/pre_d052/push_results_ext.json, which no script here writes: stand
+40-46 N, walk 31-46 N (results/pre_d052/plot_results.py plots it). D017's
+35-53 N walking / 46-53 N stance was an earlier run on the pre-D039 masses.
 
 Usage: MUJOCO_GL=egl .venv/bin/python sim/experiments/run_push.py
 """

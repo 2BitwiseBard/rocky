@@ -17,6 +17,10 @@ same watchdog state machine that runs the recovery.
 
 Usage: MUJOCO_GL=egl .venv/bin/python sim/experiments/run_stuck_voiced.py [seed]
 Output: sim/experiments/out/pebble_stuck_retry_40mm_voiced.mp4
+
+The default rubble seed is 1: on the budgeted retry ladder (D060) seed 0 no
+longer crosses 40 mm (run_stuck.py: the watchdog crosses 2/4 seeds there),
+while seed 1 crosses at ~21 s — the video needs a crossing to narrate.
 """
 import os
 import subprocess
@@ -39,7 +43,7 @@ GOAL_X = 0.40
 FPS = 30
 
 
-def main(seed=0):
+def main(seed=1):
     model = build_model(AMP, seed)
     gait = WaveGait()
     data, q0 = init_robot(model, gait, extra_z=AMP / 1000.0)
@@ -130,4 +134,4 @@ def main(seed=0):
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 0)
+    main(int(sys.argv[1]) if len(sys.argv) > 1 else 1)

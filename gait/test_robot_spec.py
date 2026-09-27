@@ -8,7 +8,6 @@ code cannot honour yet. Pure Python + numpy, no MuJoCo:
 
     python -m pytest gait/test_robot_spec.py -q
 """
-import copy
 import os
 import subprocess
 import sys

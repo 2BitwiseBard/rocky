@@ -29,7 +29,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from chordspeak2 import SR, render_word, vocabulary, write_wav   # noqa: E402
+from chordspeak2 import SR, render_word, vocabulary   # noqa: E402
 
 # event -> (word, priority, cooldown_s)   priority 2 = urgent (preempts)
 EVENT_MAP = {

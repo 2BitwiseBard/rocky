@@ -23,8 +23,8 @@ Choreography: stand -> crouch -> step flank A -> step flank B -> lean ->
 raise adjacent arms + gripper work -> reverse everything.
 """
 import numpy as np
-from pebble_gait import (WaveGait, leg_ik, leg_to_body, body_to_leg,
-                        arm_pose, claw_cycle, N_LEGS, STATION_DEG)
+from pebble_gait import (WaveGait, leg_ik, body_to_leg,
+                        claw_cycle, N_LEGS, STATION_DEG)
 
 ARM_LEGS = (0, 1)                 # adjacent pair; any pair works by symmetry
 CROUCH_MM = 30.0
@@ -86,12 +86,7 @@ class AdjacentManip:
         self.arm_dir = np.arctan2(np.sin(a).mean(), np.cos(a).mean())
         self.lean_dir = self.arm_dir + np.pi
         # flanking stance legs = the two adjacent to the arm pair;
-        # middle stance leg stays put.
-        mid = self.stance_legs[np.argmax([
-            min((STATION_DEG[i] - np.rad2deg(self.lean_dir)) % 360,
-                (np.rad2deg(self.lean_dir) - STATION_DEG[i]) % 360)
-            for i in self.stance_legs]) if False else 0]
-        # simpler: middle leg is the one whose station is closest to lean_dir
+        # middle stance leg stays put: the one whose station is closest to lean_dir
         ang_to_lean = [abs(((STATION_DEG[i] - np.rad2deg(self.lean_dir)) + 180) % 360 - 180)
                        for i in self.stance_legs]
         self.mid_leg = self.stance_legs[int(np.argmin(ang_to_lean))]
@@ -139,7 +134,6 @@ class AdjacentManip:
             name, 1.0 if name in ("lean", "arms_up", "work", "arms_down",
                                   "unlean") else 0.0)
 
-        crouched = crouch_b > 1e-9
         offset = self.lean_vec * lean_b
         offset = offset + np.array([0.0, 0.0, 0.0])       # crouch handled via foot z
         if name == "work":

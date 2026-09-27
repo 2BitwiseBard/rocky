@@ -49,6 +49,7 @@ import json
 import math
 import os
 import re
+import shutil
 import signal
 import statistics
 import subprocess
@@ -234,10 +235,37 @@ def parent_death_hook(sig=signal.SIGTERM):
     return hook
 
 
-def start_cockpit(port, world="obstacle course"):
+def seed_gesture_library(dst, src=None):
+    """Copy the repo's keyframe gestures (gait/gestures/*.json) into dst once, so the bench
+    cockpit knows the same gestures but a model's compose_gesture ('do a happy dance')
+    saves into the scratch copy — the shakedown of 2026-09-25 left happy_dance.json in the
+    repo. Returns the names copied (empty when dst already existed)."""
+    src = src or os.path.join(ROOT, "gait", "gestures")
+    if os.path.isdir(dst):
+        return []
+    os.makedirs(dst, exist_ok=True)
+    names = []
+    for fn in sorted(os.listdir(src)) if os.path.isdir(src) else []:
+        if fn.endswith(".json"):
+            shutil.copyfile(os.path.join(src, fn), os.path.join(dst, fn))
+            names.append(fn)
+    return names
+
+
+def start_cockpit(port, world="obstacle course", scratch=None):
+    """Start a bench's own cockpit on port and wait for it. scratch: {ROCKY_*: value} FORCED
+    over the caller's environment — never setdefault, so an exported variable or a rocky.env
+    can never point a bench cockpit at the owner's conf, scene/place memory or gesture
+    library. None = this bench's own fresh conf, memory and gesture copy under the temp dir."""
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"))
     tmp = tempfile.gettempdir()
-    env.setdefault("ROCKY_COCKPIT_CONF", os.path.join(tmp, "vision_bench_cockpit.json"))   # never ~/.config
+    if scratch is None:
+        base = tempfile.mkdtemp(prefix="vision_bench_", dir=tmp)
+        scratch = {"ROCKY_COCKPIT_CONF": os.path.join(base, "cockpit.json"),   # never ~/.config
+                   "ROCKY_MEMORY_DIR": os.path.join(base, "memory"),
+                   "ROCKY_GESTURE_DIR": os.path.join(base, "gestures")}
+        seed_gesture_library(scratch["ROCKY_GESTURE_DIR"])
+    env.update(scratch)
     log = open(os.path.join(tmp, f"vision_bench_cockpit_{port}.log"), "w")
     proc = subprocess.Popen([sys.executable, os.path.join("sim", "cockpit.py"), "--port", str(port),
                              "--world", world], cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,

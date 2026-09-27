@@ -8,7 +8,8 @@ __pycache__/
 *.egg-info/
 .ipynb_checkpoints/
 
-# --- bench outputs (calibration is per-robot, written on bench day) ---
+# --- bench outputs (calibration is per-robot, written on bench day; --mock rehearsals
+#     write bench/out/mock/, never beside the real files) ---
 bench/out/
 bench/calibration.yaml
 
@@ -24,9 +25,7 @@ rocky.env
 # --- RL smoke / scratch runs (real runs are committed on purpose, git-lfs) ---
 sim/runs/_*/
 sim/runs/smoke_*/
-# --- regenerated experiment clips (run_gestures2.py) ---
-sim/pebble_gesture_*.mp4
-sim/pebble_gestures2.mp4
+# --- the playground's `record` clip ---
 sim/playground_clip.mp4
 
 # playwright MCP scratch (screenshots, snapshots)
@@ -40,13 +39,14 @@ sim/out/memory/
 sim/out/recordings/
 
 # sim outputs: experiment clips + temp mux files (sim/experiments/exp_paths.py OUT) and
-# run_sim's clip + contact sheet
+# run_sim's clip + contact sheet (`run_sim.py --out sim`, which refreshes the committed
+# sim/pebble_sim.mp4, also writes the sheet beside it)
 sim/experiments/out/
 sim/out/run_sim/
-# temp mux files a clip script left in sim/ (they are deleted when ffmpeg succeeds)
-sim/_*.wav
-sim/_*.mp4
-sim/_g2list.txt
+sim/sim_contact_sheet.png
+
+# perception logs (wifi_rssi_logger.py: the --scan log and the --sim demo log)
+perception/out/
 
 # --- packaging and tool caches ---
 build/

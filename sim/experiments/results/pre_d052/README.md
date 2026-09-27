@@ -11,11 +11,13 @@ dated numbers.
 Known caveats of this record:
 
 - `push_results.json`: `run_push.py`'s force ladder stops at 27 N, below
-  what the robot survives, so every direction reports the ceiling. The D017
-  envelope (35–53 N walking / 46–53 N stance) is `push_results_ext.json`,
-  from a wider ladder that no script in the repo writes;
-  `terrain_results_ext.json` (25–40 mm rubble) is the same kind of
-  extension of `run_terrain.py`. `plot_results.py` here draws
+  what the robot survives, so every direction reports the ceiling.
+  `push_results_ext.json` is a wider ladder (27–60 N, 0.15 s shoves, on the
+  session-8 mass budget) that no script in the repo writes: it holds stand
+  40–46 N and walk 31–46 N. D017's 35–53 N walking / 46–53 N stance is an
+  earlier run on the pre-D039 masses, kept only in the decision and the
+  archived build log. `terrain_results_ext.json` (25–40 mm rubble) is the
+  same kind of extension of `run_terrain.py`. `plot_results.py` here draws
   `fig_push_envelope.png` and `fig_terrain.png` from them.
 - `run_push_reflex_v2.py`'s trip threshold (1.8 rad/s) was calibrated on
   the pre-D052 spawn.

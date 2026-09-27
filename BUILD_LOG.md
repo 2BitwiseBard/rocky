@@ -42,7 +42,8 @@ of the sim experiments on today's model.
 - **Generic setup** (`72e3f1d`, D060): machine knobs in a git-ignored `rocky.env`
   (template `rocky.env.example`, every `ROCKY_*` variable), read by `rocky.sh` and by
   `sim/envfile.py` for Python started without it; the environment wins. The code no
-  longer reads `LOCAL_AI_KEY`; the D055 model ids are the reference setup's
+  longer reads one machine's own key variable (the key is `ROCKY_LLM_API_KEY` or
+  `ROCKY_LLM_KEY_FILE`); the D055 model ids are the reference setup's
   overridable defaults; brain-install's models dir defaults to `~/models`
   (`ROCKY_MODELS_DIR`); CI pins MuJoCo 3.12.0 (`constraints.txt`) and build123d 0.11.1.
 - **Core** (`730658d`, D060): driver sign bits per register (STS `PRESENT_LOAD` bit
@@ -84,7 +85,7 @@ and one Closed table, with the stage-1 follow-ups as B42–B65.
 378 g / 20.2 h, whole plan 1111 g / 53.8 h; fast tests **1,039 passed + 2 strict
 xfail** (driver 79, harness 111, gait 75, sim 777 collected; last recorded 454 at
 D053) in ~7.8 min; `run_stuck` on today's model with the budgeted ladder 4/4, 4/4,
-2/4, 2/4 at 30/35/40/45 mm rubble (no watchdog 2/4, 2/4, 0/4, 1/4).
+2/4, 2/4 at 30/35/40/45 mm rubble (no watchdog 2/4, 0/4, 0/4, 1/4).
 
 **Decisions:** D058 (one BOM: the 2026-09-22 electronics calls), D059 (the D047
 follow-up CAD fixes), D060 (the repo goes generic and condensed).
@@ -109,6 +110,29 @@ envelope order flips to v2 55.4 ≥ base 54.4 ≥ v1 53.2 N (one ladder step); *
 fallen demo falls 4/5, not 5/5 (seed 4 braces and stays up; the other 4 right and walk
 away). The decision rows keep their dated numbers.
 
+**Final pass (2026-09-27).** Code: ruff in CI (B64); a repo-root `conftest.py` sets
+`ROCKY_ENV_FILE=/dev/null`, so the suite runs on the reference setup (B63); the benches
+force their scratch cockpit conf (B62); `--mock` rehearsals, the cockpit's mock bridge
+included, write only under `bench/out/mock/`, never `bench/calibration.yaml` (B71), and
+`pose_check` works on a partial bus (B70); six part modules' checks and `part_shell`'s
+bed fit now fail the exit code (B52); `params_rev` D052 → D059 (B53); `run_stuck_voiced`
+defaults to seed 1, which crosses; the print pack and `bom/BOM.csv` cite the current
+docs. Docs: a RERUN 2026-09-26 note on each decision row the rerun moved; B1 closed
+NEGATIVE, B66–B68 opened; the facts that lived only in the D036–D057 archive moved into
+SIM_GUIDE, PRINT_PLAN and DESIGN_CHANGE_GUIDE §8 (adding a tool); personal details cut
+from the archive; every relative link and anchor in the Markdown resolves. Two
+independent reviews (docs truth, code + CI + generic) then found 19 items, 18 fixed: the
+MCP server now follows `ROCKY_COCKPIT_PORT` and reads `rocky.env` (B73); the gesture
+audit's record is tracked, `sim/out/audit_gestures.json` (B69: 20 rows, 0 FAIL,
+`manip_adjacent` 17.4 mm); the runbook's soak and torque-step loads come from
+`sim/out/torque_audit.json` (walking 0.34, stance 0.45, self-righting 1.46 N·m), not
+D015; the interface-coupon fit criteria and the fixture print poses, lost with the
+print-night pages, are back in PRINT_PLAN; the photo's EXIF and phone trailer are
+stripped (pixels unchanged); ruff is pinned in `constraints.txt`; the sled-vs-bay
+width (50.8 vs 50 mm) is B72. Fast tests at the end: 1,035 passed, 7 skipped (the
+brain-install checks, off on the reference setup), 2 strict xfail, in 5 min 43 s.
+Left to the owner: the git history still carries the old machine paths and tailnet
+name, so a public copy needs a fresh or filtered history.
 
 **Next:** order the bench kit (`bom/BOM.csv` phase A); the fit ladder → `params.print`
 (B28); print batches 0–1 (`docs/PRINT_PLAN.md`); the first servo settles the horn
