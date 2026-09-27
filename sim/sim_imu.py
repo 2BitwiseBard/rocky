@@ -16,7 +16,7 @@ adapter and the playground all import it.
 
     grav_body(model, data, torso)  # the ideal quantities, stateless
     gyro_body(model, data, torso)
-    tilt_rad(model, data, torso)
+    tilt_from_grav(grav_body(...)) # the ideal tilt
 
 grav is the unit gravity direction in the body frame ([0, 0, -1] upright),
 gyro the body-frame angular rate (rad/s), tilt the angle between the body
@@ -54,10 +54,6 @@ def tilt_from_grav(g_body) -> float:
     if n < 1e-9:
         return 0.0
     return float(np.arccos(np.clip(-g[2] / n, -1.0, 1.0)))
-
-
-def tilt_rad(model, data, body) -> float:
-    return tilt_from_grav(grav_body(model, data, body))
 
 
 class SimIMU:

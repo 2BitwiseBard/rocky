@@ -1,13 +1,15 @@
 """Run Pebble in MuJoCo under the wave gait; record video + stability metrics.
 
 Sequence: settle -> stand -> walk +X -> strafe +Y -> turn in place.
-Usage: MUJOCO_GL=osmesa python3 run_sim.py [--out DIR]   (video + contact sheet, default sim/)
+Usage: MUJOCO_GL=egl .venv/bin/python sim/run_sim.py [--out DIR]
+       (video + contact sheet into DIR, default sim/out/run_sim/, git-ignored;
+       `--out sim` regenerates the committed sim/pebble_sim.mp4 on purpose)
+Exit code 1 on a fall, a short walk or a turn outside its band (CI runs it).
 
 D052 V2 (review): every segment's command goes through WaveGait.budget()
 (the turn asked 0.6 rad/s, 2.4x the 0.246 rad/s envelope, and nothing
-checked what it did), the turn's yaw is checked against a band like the
-walk, and the outputs can go elsewhere (--out) so a local run does not
-rewrite the tracked pebble_sim.mp4 / sim_contact_sheet.png.
+checked what it did), and the turn's yaw is checked against a band like
+the walk.
 """
 import argparse
 import os, sys
@@ -17,7 +19,8 @@ import imageio
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _ap = argparse.ArgumentParser()
-_ap.add_argument("--out", default=HERE, help="directory for pebble_sim.mp4 + sim_contact_sheet.png")
+_ap.add_argument("--out", default=os.path.join(HERE, "out", "run_sim"),
+                 help="directory for pebble_sim.mp4 + sim_contact_sheet.png (default sim/out/run_sim/)")
 OUT = _ap.parse_args().out
 os.makedirs(OUT, exist_ok=True)
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
@@ -136,7 +139,6 @@ if frames:
 # ---- metrics report ----
 h = np.array(metrics["height"]); tilt = np.array(metrics["tilt"])
 seg = np.array(metrics["seg"])
-walk_mask = seg == "walk +X"
 walk_disp = (pos_end_walk - pos_start_walk) * 1000
 commanded = 45 * (6.0 - 0.2)     # ramp-adjusted approx, mm
 print("=== SIM METRICS ===")

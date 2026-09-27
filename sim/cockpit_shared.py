@@ -40,7 +40,6 @@ GUIDE_PATH = os.path.join(HERE, "..", "docs", "COCKPIT_GUIDE.md")
 
 TABS = ("drive", "talk", "make", "world", "robot")
 VIEWS = ("follow", "wide", "top", "low")
-DEFAULT_WAKE = "Pebble"
 SSE_HZ = 4.0
 KEEPALIVE_S = 10.0
 

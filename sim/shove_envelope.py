@@ -1,14 +1,14 @@
 """Shove envelope under the D048 shove model (half-sine at the shell rim).
 
-The counterpart of run_push_reflex_v2.py's envelope for the new model:
+The counterpart of experiments/run_push_reflex_v2.py's envelope for the new model:
 for standing and walking (bare gait + ReflexSupervisor, as the playground
 runs it), climb the peak force per direction until the robot ends up
 fallen (tilt > 60°) or displaced more than 0.5 m, and report the last
 survivable peak in newtons and bodyweights plus how far/fast it went.
 
-  python shove_envelope.py            # 6 directions x {stand, walk}, ~2 min
-  python shove_envelope.py --quick    # 2 directions
-writes out/shove_envelope.json
+  MUJOCO_GL=egl .venv/bin/python sim/shove_envelope.py            # 6 directions x {stand, walk}, ~2 min
+  MUJOCO_GL=egl .venv/bin/python sim/shove_envelope.py --quick    # 2 directions
+writes sim/out/shove_envelope.json
 """
 import argparse
 import json
@@ -22,7 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import WaveGait, N_LEGS                                # noqa: E402
 from pebble_reflex import ReflexSupervisor, FALLEN                     # noqa: E402
-from run_push_reflex import make_data, gyro_xy_of, T_SETTLE, V_X        # noqa: E402
+from scenes import make_data, gyro_xy_of, T_SETTLE, V_X                 # noqa: E402
 from righter import foot_contacts                                       # noqa: E402
 from shove import Shove, bodyweights, impulse_ns                        # noqa: E402
 

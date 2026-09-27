@@ -76,13 +76,6 @@ def load(ckpt):
     return policy, ck.get("global_step", 0)
 
 
-def ckpt_args(ckpt):
-    """The trainer's argument dict as saved in the checkpoint ({} if absent)."""
-    import torch
-    ck = torch.load(ckpt, map_location="cpu", weights_only=False)
-    return dict(ck.get("args") or {})
-
-
 def env_for(contract, condition="nominal", servo=None, reward=None, seed=0):
     """A RecoverEnv that replays `contract` under an eval condition."""
     trained = contract.get("servo", "off")

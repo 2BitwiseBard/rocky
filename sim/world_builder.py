@@ -283,7 +283,7 @@ def world_xml(spec):
         from sim_lidar import ROOM
         body.append(re.sub(r"<geom [^>]*/>", lambda m: _world_geom(m.group(0), spec), ROOM))
     elif base == "cliff":
-        from run_cliff import EDGE_X, PLAT_H
+        from scenes import EDGE_X, PLAT_H
         body.append(f'<geom name="platform" type="box" size="{(EDGE_X + 0.45) / 2:.3f} 0.5 {PLAT_H / 2:.3f}" '
                     f'pos="{(EDGE_X - 0.45) / 2:.3f} 0 {PLAT_H / 2:.3f}" {_wattr(spec)} '
                     f'rgba="0.45 0.4 0.55 1"/>')

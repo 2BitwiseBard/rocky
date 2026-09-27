@@ -1,6 +1,6 @@
 """PolicyRighter — the learned self-righting policy as a ReflexSupervisor
-`righter` callable (D042), factored out of run_reflex_fallen.py so the
-playground can use it too (D048).
+`righter` callable (D042), factored out of the fallen demo
+(experiments/run_reflex_fallen.py) so the playground can use it too (D048).
 
 D052: RecoverEnv-faithful BY CONSTRUCTION. The observation comes from the
 same builder object type the env uses (rl_common.RecoverObs for obs v2,
@@ -38,7 +38,7 @@ CONTACT_FORCE_N = 0.3     # foot switch stand-in threshold for the demos' superv
 
 def foot_contacts(model, data, fids):
     """bool[5] feet on the WORLD (> 0.3 N), no hysteresis — the supervisor feed
-    run_reflex_fallen / audit_righter / shove_envelope use. D052: delegates to
+    the fallen demo / audit_righter / shove_envelope / eval_recover use. D052: delegates to
     perception.contacts, so a foot pressed into the robot's own body no longer
     counts (the threshold stays 0.3 N so those demos keep their calibration)."""
     from contacts import foot_contacts as _fc
@@ -46,11 +46,9 @@ def foot_contacts(model, data, fids):
 
 
 def default_ckpt():
-    """The shipped righter: the first of these that exists.
-    recover1 FIRST (D045): the v2/3.67M recover2 checkpoint regressed the
-    deterministic handoff (2/20 vs recover1's 12/20). Re-order only when
-    an eval says a newer checkpoint earned it."""
-    for name in ("recover1", "recover2"):
+    """The shipped righter: sim/runs/recover1 (D045), None when it is absent.
+    Add a newer run here only when an eval says it earned the handoff."""
+    for name in ("recover1",):
         p = os.path.join(HERE, "runs", name, "latest.pt")
         if os.path.exists(p):
             return p

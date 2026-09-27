@@ -368,7 +368,7 @@ class Playground:
         if model is not None:                       # D049: the cockpit's world builder
             self.model = model
         elif cliff:
-            from run_cliff import build_world, PLAT_H
+            from scenes import build_world, PLAT_H
             self.model = build_world()
             z0 = PLAT_H
         else:

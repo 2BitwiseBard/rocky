@@ -1560,6 +1560,16 @@ def test_a_two_look_answer_carries_each_looks_parts(place_client):
         assert lk["parts"]["scan"] is not None and lk["parts"]["desc"] is not None
         assert lk["second"]["place_id"] and lk["second"]["parts"]["scan"] is not None
         assert {e["name"] for e in lk["ranking"]} == {"den", "study"}
-    assert u["confidence"] == pytest.approx(sum(x["confidence"] for x in u["per_look"]) / 2, abs=0.002)
+    # the combiner's invariant (combine_recognitions): per place, the mean of its confidence in
+    # each look (a look that did not list it counts its lowest listed one); the answer's
+    # confidence is the best place's. Not the mean of each look's own top — the two looks may
+    # top different places here — and not keyed by the answer's place_id, which is the place
+    # the memory is bound to (_place_brief), not necessarily the best candidate of an
+    # ambiguous verdict.
+    def combined(pid):
+        return sum(next((e["confidence"] for e in lk["ranking"] if e["place_id"] == pid),
+                        min(e["confidence"] for e in lk["ranking"])) for lk in u["per_look"]) / 2
+    pids = {e["place_id"] for lk in u["per_look"] for e in lk["ranking"]}
+    assert u["confidence"] == pytest.approx(max(combined(p) for p in pids), abs=0.002)
     w = c.post("/api/tool/where_am_i", json={}).json()
     assert w["per_look"] == u["per_look"] and w["signal_list"] == ["scan", "desc"]

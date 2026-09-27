@@ -90,7 +90,6 @@ CTRL_DT = rc.CTRL_DT
 EP_SECONDS = 6.0
 RATE_LIMIT_RAD_S = rc.LEGACY_RATE_LIMIT_RAD_S   # 5.0: the v1-v3 checkpoints' clamp — replay fallback ONLY
 SERVO_SAFE_RAD_S = rc.SERVO_SAFE_RAD_S          # 4.0: the default for new runs
-RATE_LIMIT = RATE_LIMIT_RAD_S * CTRL_DT         # rad per control step (legacy default)
 REWARDS = ("v1", "v2", "v3")
 Q_LO, Q_HI = rc.joint_limits()                  # params joints.pos_deg (D052), was hand-typed
 STAND_H = 0.10
@@ -100,7 +99,6 @@ HOLD_S = 1.0
 # hybrid). D052: tilt + >= HANDOFF_FEET switches + the kinematic torso height
 # from the joint angles — everything the robot can compute. HANDOFF_H is kept
 # for the privileged (sim) variant the supervisor still uses today.
-HANDOFF_TILT = np.deg2rad(25.0)
 HANDOFF_TILT_DEG = 25.0
 HANDOFF_H = 0.09
 HANDOFF_HOLD_S = 0.5
@@ -232,10 +230,6 @@ class RecoverEnv(gym.Env if gym else object):
                     **self._note)
 
     # ------------------------------------------------------------------ state
-    def _feet_down(self):
-        """Obs-v1's count (contact pairs, self-contacts included). Kept for old callers."""
-        return rc.legacy_feet_count(self.data, self._foot_gid)
-
     def true_feet(self):
         """Floor-only foot switches with hysteresis, no dropout (reward / eval truth)."""
         from contacts import foot_contacts

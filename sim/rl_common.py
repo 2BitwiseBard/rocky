@@ -539,9 +539,6 @@ class DomainRandomizer:
         m.actuator_forcerange[:n] = self._base_frange[:n] * float(voltage)
         m.opt.gravity[:] = draws["gravity"]
 
-    def restore(self):
-        self.apply(self.nominal(), 1.0)
-
 
 def refresh_constants(model, data):
     """Recompute mass-derived constants (subtree masses, invweights) after DR

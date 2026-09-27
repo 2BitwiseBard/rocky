@@ -1,128 +1,48 @@
 """Pebble COCKPIT (D049) — the browser playground: live cameras, teleop,
 console, a chat with a switchable brain (regex / local LLM / Claude), the
 robot's eye + a vision model, a world editor (obstacles, terrain, friction,
-slopes) and the RL panel (checkpoint table, righter hot-swap, tuning),
-all on ONE continuously running MuJoCo sim.
+slopes), the gesture studio, the hardware bridge and the RL panel, all on
+ONE continuously running MuJoCo sim.
 
     ./rocky.sh cockpit                # http://127.0.0.1:8765
-    MUJOCO_GL=egl python sim/cockpit.py --port 8765 --world "obstacle course"
+    MUJOCO_GL=egl .venv/bin/python sim/cockpit.py --port 8765 --world "obstacle course"
 
-Architecture: one sim thread owns physics (the Playground step loop with a
-goto controller + cliff detector folded in, real-time paced, offscreen
+Architecture: one sim thread owns physics (CockpitSim = the Playground step
+loop with its guards, plus a goto controller, real-time paced, offscreen
 rendering of a chase camera and the eye camera to JPEG). Everything else
 talks to it through a job queue (`call`), so the HTTP layer, the brains
-and the MCP proxy (harness/cockpit_backend.py — `./rocky.sh chat` drives
-THIS sim while the cockpit is up) never touch MjData from another thread.
-Guard supremacy is unchanged: goto runs the reflex supervisor and the
-cliff detector exactly as harness/sim_backend.py does; a veto comes back
-as stopped='cliff'.
+(cockpit_brains.Brains) and the MCP proxy (harness/cockpit_backend.py —
+`./rocky.sh chat` drives THIS sim while the cockpit is up) never touch
+MjData from another thread. Scene memory (scene_memory.SceneMemory, per
+world or per recognised place) and place recognition (place_memory,
+optional) hang off the sim; the tool surface is the one registry
+(harness/capabilities.py), served live at GET /api/capabilities.
 
 Honesty: same MJCF, same guessed servo gains and friction as every other
 sim entry point (see playground.py's box). The vision tool sends the eye
 camera's JPEG to a local vision model; its words are the model's, not a
 sensor's.
 
-D052 (this file): the sim thread can no longer die silently (a step that
-raises limps the bridge, fails every waiting request and exits non-zero;
-/api/state carries a heartbeat); the server refuses a non-loopback --host
-unless --unsafe-lan (nothing here is authenticated) and every POST must be
-same-origin JSON (voice: multipart); goto shares the Playground's always-on
-void guard, reads the lidar at 8 Hz for what is in its way (a +-45 deg
-detour, then a sidestep, then stopped='blocked' with bearing + range) and
-calls a 3 s no-progress run 'stuck'; the gesture studio checks every spec
-with pebble_feasibility before it moves or saves anything, solves reaches
-with the whole-body pose solver and turns a recorded pose stream into
-keyframes; the residual walker is fed the observation its checkpoint was
-trained on (rl_common contract), not a hand-built one.
+Invariants:
+  * loopback only unless --unsafe-lan (nothing here is authenticated); every
+    POST is same-origin JSON (voice: multipart);
+  * guard supremacy: goto and every motion tool run through the Playground's
+    reflex supervisor, always-on void guard, servo budget and feasibility
+    checks; a veto comes back as a result (stopped='cliff' / 'blocked' /
+    'stuck'), never as a crash;
+  * the sim thread cannot die silently: a step that raises limps the bridge,
+    fails every waiting request and exits non-zero; /api/state carries a
+    heartbeat;
+  * a world load / edit / reset forgets the eye's last look, the situation
+    line and the eye frame, so nothing describes a world that is gone;
+  * place recognition is OFF by default (--recognize); while it is on no
+    result names the world, and one glance never declares a change (two
+    looks must agree);
+  * a look that failed is None, never [] — it is never read as "nothing is
+    there".
 
-Memory + awareness (2026-09-24): sim.memory is a SceneMemory per world
-(sim/scene_memory.py; persisted by main() to sim/out/memory/<key>.json —
-memory_key: a preset by name, anything else by name + a hash of its spec);
-guards, looks and finds record into it; a reset / world load starts a new
-memory epoch (earlier sightings turn stale, 'start' is pinned at the spawn). _aware_tick (sim thread, 1 Hz wall
-clock, never fatal) composes sim.situation while idle (--awareness-s),
-reacts to a guard latch / a new obstacle with a chord (reactions, once per
-30 s) and, only with --curious, schedules one look a minute. Routes:
-/api/memory, /api/awareness; the state feed carries situation +
-memory_objects.
-
-Hygiene (2026-09-25): a world load / edit / reset forgets the eye's last
-description and find_object's last report, the composed situation, the
-awareness tick's previous scan and the eye FRAME itself (_forget_scene; live
-cameras re-render on the next loop turn, paused or not), so neither the next
-situation line nor the next look describes a world that is gone; the state feed's `event_seq` counts
-every event ever appended (EventLog), so a client sees a new event even
-when the 12-event window looks the same.
-
-Capabilities (D056): GET /api/capabilities is what this cockpit can do right
-now, from the one tool registry (harness/capabilities.py): the live gesture
-and chord-word lists, every tool it runs with its schema and whether a spoken
-line needs the wake word for it, the live gait envelope and the robot, plus a
-`version` (12 hex of a sha256 over all of it). Built on demand and cached by
-its inputs; saving or deleting a gesture or a chord word, or a gait change,
-makes a new version. The state feed (/api/state, /api/events) carries it as
-`caps_version`, with `caps_seq` counting the changes since start, and the
-console logs each change. It is NOT an entry on the events feed: the `status`
-tool hands every model that feed's last five entries, and a tool the models
-already call must not answer differently because a list or the gait moved.
-
-Places (D057, 2026-09-25; OFF by default: awareness `recognize`, POST
-/api/awareness {recognize: true}, or --recognize). A world's name is ground
-truth a real robot never has, so with recognition on the scene memory is
-keyed by the place the robot RECOGNISES (sim/place_memory.py), not by the
-world. After a spawn (a world load, a reset; an edit keeps the robot where it
-is) the memory is a provisional RAM-only one (PLACE_PENDING_KEY); once the
-robot stands still (RECOG_SETTLE_S) it takes a lidar sweep (scan_signature,
-the sim's pose standing in for odometry — a perfect one) and a look (the
-vision role, Brains.look), embeds the description (sim.embed_fn, default
-Brains.embed: llama-swap's CPU 'embedding' model) and asks
-PlaceMemory.recognize. 'ambiguous' -> a second look after a 30 deg
-turn_in_place (the `turn` tool: one gesture, every guard) and the two are
-combined; 'new' -> the same second look first (the situation line says it is
-looking again), then a place is stored ("new place #k") from BOTH looks as
-samples (PlaceMemory.enroll_samples) and the memory bound to it; 'known' -> a
-visit, the memory bound to 'place-<id>' (what was sensed since the spawn is
-carried over), and the place is checked for changes BY THE EYE, not by the
-prose: every remembered object name and every thing the description mentions
-(LOOK_NOUNS, not a fixture) is one question to the vision model — the box
-question find_object and /api/look {find, method: "bbox"} ask
-(Brains.detect) — answered True (boxed; the box's floor geometry places it,
-sighting_to_map) / False (not there) / None (no answer, or its remembered
-spot out of the eye's 86 deg x 2 m view: unobservable), fed to
-place_memory.checked_objects. Any change takes the second look, which asks the
-same questions again, and only what BOTH looks agree on (confirm_diff) is
-declared or stored — one glance never declares a change, and a failed look
-or an unanswered question is never 'not there'. The situation line then
-starts with verdict_text (<= 90 chars), the state feed carries `place` (with
-`signals`: 'scan + description' | 'scan only' | ...), /api/memory `places`;
-a new place or a confirmed new object says curious_question (reactions,
-rate-limited as ever). Tools:
-where_am_i, name_place, places, forget_place; routes GET/POST /api/place.
-Recognition off = everything as before (memory keyed by world, no `place`,
-and the models' tool list is the D056 one: the place tools need the
-registry's `places` capability).
-Review fixes (2026-09-25): a look that FAILED has no objects (None, not []):
-it is never read as "nothing is there", so no change check runs on it and
-the answer says the verdict rests on the lidar. An edit (the robot was not
-moved) and place_check (talk mode's "this X has a new Y") are change checks
-of the bound place only — never a new place, never a rebind. name_place is
-a correction when the name is another place's or the recognised place's
-own name differs (rename=true renames instead), and "this is completely
-new" stores ONE place per visit; a correction takes back what the visit
-wrote into the wrongly recognised place (_place_take_back: its record from
-before the visit, its scene memory from the bind) and moves the records to
-the right one. While recognition is on, no memory record, status or
-scan_summary result names the world.
-Review fixes, round 2 (2026-09-25): both looks of a change check stand on
-one spot (the second turns in place), so a remembered spot hidden behind a
-box the eye drew in that look, or behind a nearer lidar return, is
-unobservable, never missing (look_hidden / look_view) — two 'not there'
-answers from one line of sight prove nothing. A thing the eye boxes but can
-never place (above the horizon: on a table; beyond 2 m) is kept by name as a
-place note (PLACE_UNPLACED_NOTE), so a later visit counts it present instead
-of 'new here' every time; placed later, it is stored, not declared. The
-answer carries per_look (each look's own parts, evidence, signals, runner-up
-and ranking) and signal_list, so a two-look verdict can be replayed.
+Behaviour and history: docs/SIM_GUIDE.md §3b-3c, docs/COCKPIT_GUIDE.md,
+decisions D049-D057.
 """
 from __future__ import annotations
 import argparse
@@ -139,6 +59,7 @@ import queue
 import re
 import socket
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -983,14 +904,6 @@ class CockpitSim(Playground):
     def brain(self):
         """The brain state dict (mode + role models) — live: writes stick."""
         return self.brains.state
-
-    @property
-    def chat_hist(self):
-        return self.brains.hist
-
-    @property
-    def llm_base(self):
-        return self.brains.base
 
     def reload_library(self):
         """Any thread: re-read keyframe gestures + chord words from disk (D056: a
@@ -2391,9 +2304,6 @@ class CockpitSim(Playground):
             obs["turned_deg"] = r.get("turned_deg")
         return obs, why
 
-    def _eye_visible(self, pose):
-        return eye_visible(pose)
-
     @staticmethod
     def _place_eye_check(stored, look, seen_before=()):
         """One GOOD look's change check BY THE EYE -> place_memory.checked_objects(snapshot,
@@ -3425,10 +3335,6 @@ class CockpitSim(Playground):
         return self.brains.surface()
 
     # ------------------------------------------------------------ brains
-    def llm_models(self):
-        """[{id, name, vision, loaded, selector, targets, quarantined}] (blocking)."""
-        return self.brains.catalog(refresh=True)[0] or []
-
     def claude_available(self):
         return self.brains.claude_available()
 
@@ -3726,11 +3632,17 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     _curves = {"t": 0.0, "png": b""}
 
+    def _render_curves():
+        """The training curves as PNG bytes, drawn in a temp dir: the committed
+        sim/out/rl_curves.png is written only by `python sim/rl_dashboard.py`."""
+        from rl_dashboard import curves
+        with tempfile.TemporaryDirectory() as d:
+            with open(curves(os.path.join(d, "rl_curves.png")), "rb") as f:
+                return f.read()
+
     async def rl_curves(_):
         if time.time() - _curves["t"] > 60:
-            from rl_dashboard import curves
-            path = await asyncio.to_thread(curves, os.path.join(HERE, "out", "rl_curves.png"))
-            _curves["png"] = open(path, "rb").read()
+            _curves["png"] = await asyncio.to_thread(_render_curves)
             _curves["t"] = time.time()
         return Response(_curves["png"], media_type="image/png")
 

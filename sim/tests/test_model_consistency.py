@@ -455,15 +455,15 @@ def test_contacts_ignore_self_contact_count_world():
     assert not foot_contacts(m, d, fids, close_n=mid + 1)[1]
 
 
-def test_run_odom_contacts_keep_their_1p5_newton_threshold(model):
+def test_scenes_contacts_keep_their_1p5_newton_threshold(model):
     """V2 (review): the old version tested a robot in the air (every force 0), so a
     foot_contacts that ignored CONTACT_FORCE_N passed. Now the planted robot is
     unloaded by a lift on the torso until the feet carry 1.84 N (between 1.5 and
     the params switch's 2.0) and 1.04 N (between righter's 0.3 and 1.5)."""
-    import run_odom
+    import scenes
     from contacts import foot_forces
     from pebble_gait import WaveGait, leg_ik, body_to_leg
-    assert run_odom.CONTACT_FORCE_N == 1.5
+    assert scenes.CONTACT_FORCE_N == 1.5
     g = WaveGait()
     q0 = np.array([leg_ik(body_to_leg(i, g.p_nom[i])) for i in range(N)]).ravel()
     jadr = [model.joint(f"{n}{i}").qposadr[0] for i in range(N) for n in rm.LEG_JOINTS]
@@ -482,4 +482,4 @@ def test_run_odom_contacts_keep_their_1p5_newton_threshold(model):
             mujoco.mj_step(model, d)
         F = foot_forces(model, d, fids)
         assert np.all((F > lo) & (F < hi)), (lift, F)
-        assert np.array_equal(run_odom.foot_contacts(model, d), F > 1.5), (lift, F)
+        assert np.array_equal(scenes.foot_contacts(model, d), F > 1.5), (lift, F)

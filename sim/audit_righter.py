@@ -1,6 +1,6 @@
 """Righter jitter audit (D048): how staircase-y is a recovery checkpoint?
 
-Runs the fallen demo's shove (run_reflex_fallen.episode) for N seeds with
+Runs the fallen demo's shove (experiments/run_reflex_fallen.episode) for N seeds with
 the given checkpoint and reports, over the FALLEN phase, the servo-target
 statistics that make a recovery LOOK jittery:
   pinned   fraction of per-tick joint moves at the checkpoint's rate limit
@@ -26,8 +26,8 @@ The old columns stay for comparison with the D048 numbers. --servo picks
 the servo model (auto = the checkpoint's contract: off for pre-D052
 checkpoints, nominal for D052 ones).
 
-  python audit_righter.py runs/recover1/latest.pt runs/recover5_v3/latest.pt --episodes 5
-  python audit_righter.py runs/recover1/latest.pt --servo nominal
+  .venv/bin/python sim/audit_righter.py sim/runs/recover1/latest.pt sim/runs/recover6_d052/latest.pt --episodes 5
+  .venv/bin/python sim/audit_righter.py sim/runs/recover1/latest.pt --servo nominal
 """
 import argparse
 import os
@@ -40,9 +40,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import WaveGait, N_LEGS                                # noqa: E402
 from pebble_reflex import ReflexSupervisor, FALLEN, RIGHTED, NORMAL    # noqa: E402
-from run_push_reflex import make_data, gyro_xy_of, T_SETTLE, V_X        # noqa: E402
-from run_push_reflex_v2 import TRIP                                     # noqa: E402
-from run_reflex_fallen import SHOVE_N, SHOVE_S, T_SHOVE, T_TOTAL        # noqa: E402
+from scenes import (make_data, gyro_xy_of, T_SETTLE, V_X,               # noqa: E402
+                    SHOVE_N, SHOVE_S, T_SHOVE, T_FALLEN as T_TOTAL)
 from righter import PolicyRighter, foot_contacts                        # noqa: E402
 from rocky_recover_env import CTRL_DT                                   # noqa: E402
 from shove import Shove                                                 # noqa: E402
@@ -81,7 +80,7 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="au
     fids = [model.geom(f"foot{i}").id for i in range(N_LEGS)]
     DT = model.opt.timestep
     righter = PolicyRighter(ckpt, model, data, torso, fids)
-    sup = ReflexSupervisor(gait, gyro_trip=TRIP, gyro_calm=TRIP / 2, righter=righter)
+    sup = ReflexSupervisor(gait, righter=righter)          # trip / calm from params reflex:
     sm = rc.make_servo()
     rc.apply_servo_params(sm, rc.servo_params(servo_mode_for(righter.contract, servo)))
     sm.reset(q0)

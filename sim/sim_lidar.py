@@ -9,16 +9,17 @@ ray fan (N_RAYS over 360°, RATE Hz) fires from the puck pose (torso top,
 +60 mm). Rays see only group-3 geoms (world), never the robot's own legs.
 
 v2 (2026-07-31): the legged-odom EKF now runs IN THE LOOP (noisy IMU +
-encoders + contacts, zero-yaw-rate settle calibration — run_odom_v2
-config), so the archive carries the REAL odometry the SLAM front-end will
-be seeded with, not just ground truth. run_slam_lite.py consumes it.
+encoders + contacts, zero-yaw-rate settle calibration — the
+experiments/run_odom_v2 config), so the archive carries the REAL odometry
+the SLAM front-end will be seeded with, not just ground truth.
+experiments/run_slam_lite.py consumes it.
 
-Outputs:
-  lidar_scans.npz        scans + ground-truth poses + EKF odometry poses
-  laserscan_spec.json    the exact sensor_msgs/LaserScan field contract
-  fig_lidar_map.png      occupancy demo built from the scans (quality proof)
+Outputs (main(), the lap):
+  sim/lidar_scans.npz        scans + ground-truth poses + EKF odometry poses (a fixture)
+  sim/laserscan_spec.json    the exact sensor_msgs/LaserScan field contract
+  sim/experiments/results/fig_lidar_map.png   occupancy demo built from the scans
 
-Usage: MUJOCO_GL=osmesa python3 sim_lidar.py
+Usage: MUJOCO_GL=egl .venv/bin/python sim/sim_lidar.py
 """
 import json
 import os
@@ -33,9 +34,9 @@ sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
 import rocky_model as rm   # noqa: E402  (D052 spawn height)
 from legged_odom import LeggedOdomEKF, quat_to_R, StillnessGate      # noqa: E402
-from run_odom import (fk_body, IMU_HZ, GYRO_NOISE, ACC_NOISE,        # noqa: E402
-                      QVEL_NOISE, GYRO_BIAS, ACC_BIAS, ENC_NOISE,
-                      CONTACT_FORCE_N)
+from scenes import (fk_body, IMU_HZ, GYRO_NOISE, ACC_NOISE,          # noqa: E402
+                    QVEL_NOISE, GYRO_BIAS, ACC_BIAS, ENC_NOISE,
+                    CONTACT_FORCE_N)
 
 N_RAYS = 360
 RATE_HZ = 8.0
@@ -237,7 +238,9 @@ def main():
                  f"ground-truth poses)")
     ax.legend()
     fig.tight_layout()
-    fig.savefig(os.path.join(HERE, "fig_lidar_map.png"), dpi=120)
+    figs = os.path.join(HERE, "experiments", "results")
+    os.makedirs(figs, exist_ok=True)
+    fig.savefig(os.path.join(figs, "fig_lidar_map.png"), dpi=120)
     print("wrote lidar_scans.npz + laserscan_spec.json + fig_lidar_map.png")
 
 

@@ -132,7 +132,6 @@ LOST_ERRORS = 25               # consecutive failed ticks before the port is "lo
 REOPEN_S = 2.0                 # port reopen cadence after a loss
 STALE_S = 2.0                  # sim2real heartbeat: no push_targets this long -> off
 EVENT_EVERY_S = 1.0            # repeated nan/rate events are throttled to this
-RATE_MODES = ("cap", "refuse")
 
 _KEY_RE = re.compile(r"^(?:leg(\d)_(yaw|hip|knee)|hand(\d)_claw)$")
 
@@ -188,7 +187,7 @@ class HardwareBridge:
         self.speed_cps = 0                      # 0 = servo max; the sim2real stream can be slowed
         self.torque_limit = 1000                # released-to TORQUE_LIMIT (0.1 %)
         self.acc = 0                            # released-to ACC (0 = no ramp)
-        self.rate_mode = "cap"
+        self.rate_mode = "cap"                  # "cap" | "refuse": a target past the rate limit
         self.locomotion_ok = False              # flip when real foot contacts are wired
         self.errors = 0
         self.last_error = ""
@@ -301,9 +300,6 @@ class HardwareBridge:
         """May the sim walk (cmd_v != 0)? Not while streaming to real legs until
         real contacts are wired (locomotion_ok), and never during a soft entry."""
         return self.mirror != "sim2real" or (self.locomotion_ok and not self._blend)
-
-    def present_leg_ids(self):
-        return [sid for leg, ids in enumerate(self.leg_ids) if self.legs_present[leg] for sid in ids]
 
     def _need_port(self):
         if not self.port_ok:

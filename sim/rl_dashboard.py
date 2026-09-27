@@ -1,8 +1,8 @@
 """RL runs at a glance (D048): a table of every checkpoint in sim/runs/ and a
 training-curve figure.
 
-  python rl_dashboard.py            # table + out/rl_curves.png
-  python rl_dashboard.py --table    # table only (what the playground's `rl` prints)
+  .venv/bin/python sim/rl_dashboard.py            # table + sim/out/rl_curves.png (the committed figure)
+  .venv/bin/python sim/rl_dashboard.py --table    # table only (what the playground's `rl` prints)
 
 Columns: env, reward version, rate limit, obs version, servo model it
 trained with, steps, last logged return and episode length, final entropy
@@ -32,13 +32,9 @@ RUNS = os.path.join(HERE, "runs")
 RESULTS = {
     "robust_fwd2": "D052: 245 mm vs bare gait 320 (servo on: 236 vs 298) — loses (D031)",
     "cmd_sample3": "walk under full DR: same conclusion (pre-D052)",
-    "recover1": "D052: stood 2/20 hybrid (0/20 hw handoff); system (handoff_ok) 20/20 vs 11/20 "
-                "no-righter, all exits on the stall ramp — SHIPPED",
-    "recover2": "stood 2/20 — sigma inflated (D045)",
-    "recover3_capped": "stood 7/20 — carried by noise (D045)",
-    "recover3_scratch": "stood 3/20",
-    "recover5_v3": "stood 2/20 — v3 negative (D048)",
+    "recover1": "D052 peak: stood 5/20 legacy, 0/20 hw handoff; system 20/20 vs 11/20 no-righter — SHIPPED",
     "recover5_v3_warm": "stood 4/20 — smoothest yet: 58 % pinned, 6.5 rev/s (D048)",
+    "recover6_d052": "D052 obs v2: 0/20 hw handoff; system 11/20 = no-righter 11/20 — NEGATIVE (B34)",
 }
 
 

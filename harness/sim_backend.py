@@ -1,32 +1,25 @@
 """SimBackend — the Rocky-MCP contract bound to the MuJoCo cliff world.
 
 This is the honest half of the harness: goto() steps real physics with the
-real CliffDetector + ReflexSupervisor safe-stop (session 6 integration,
-sim/run_cliff_safestop.py). A goto toward the void therefore exercises the
+real CliffDetector + ReflexSupervisor safe-stop (the session-6 integration,
+sim/experiments/run_cliff_safestop.py; the cliff world and the contact switch
+come from sim/scenes.py). A goto toward the void therefore exercises the
 ACTUAL reflex stack, and stopped='cliff' means a simulated robot really
 halted on a simulated table edge.
 
-Scope (v0, deliberate):
+Scope:
   * goto blocks the tool call on real physics (runs in a worker thread so
     the event loop stays live; the mock covers async interleaving tests);
-    planar targets, simple straight-line steering, 25 mm arrival window,
-    20 s time cap.
-  * scan_summary is NOT implemented here — the cliff world has no lidar
-    model (absent tool > lying tool); use the mock or the sim_lidar
-    binding when it lands (v0.1).
-  * say/gesture validate against the real lexicons and log; rendering
-    audio/gesture motion in-world is the B18/session-7 demo.
-
-Laptop additions (2026-09-08, Tyler's machine — declared in NOTES_INBOX):
-  * ROCKY_VIEWER=1 opens the passive MuJoCo window on this backend, so
-    chat-driving (Claude over MCP, local_brain, intent) is WATCHABLE;
-    motion then paces to real time instead of running CPU-fast. Fail-soft:
-    no display -> a stderr note and the backend runs headless as before.
-  * gesture() now renders the gesture in physics (same fn(gait, t) tables
-    the playground uses) instead of only logging it; FELL is reported the
-    way goto reports it.
-  * ROCKY_AUDIO=1 plays the chord-speak sample for say() through
-    aplay/ffplay when audio/samples_v2/<word>.wav exists.
+    planar targets, straight-line steering, 25 mm arrival window, 20 s cap.
+  * scan_summary: one sim_lidar scan from the puck pose, summarised into
+    8 sectors (walls yes, voids no), in any world.
+  * say validates against the chord lexicon and plays audio/samples_v2/<word>.wav
+    with ROCKY_AUDIO=1 (aplay/ffplay); gesture renders the gesture in physics
+    (the playground's fn(gait, t) tables) and reports FELL the way goto does.
+  * ROCKY_VIEWER=1 opens the passive MuJoCo window, so chat-driving (Claude
+    over MCP, local_brain, intent) is watchable; motion then paces to real
+    time. No display -> a stderr note and it runs headless.
+  * ROCKY_WORLD = cliff (default: the guard tests' platform) | flat | room.
 
 D052 V2 (review) — HONESTY NOTE: this backend is NOT the D052 control loop
 (no ServoModel, no WaveGait.budget, no void-probe, its own CliffDetector
@@ -35,7 +28,7 @@ it now shares: every joint target is NaN-guarded and rate-clamped (4.7 rad/s,
 params 'hard'), and a stop / the end of a gesture ramps back to the stance at
 the LOADED 3.0 rad/s instead of snapping in one physics step (119 deg for
 fist_bump). AutoBackend tags every result with the backend it ran on.
-Rebuilding this on Playground is the real fix (left for the owner).
+Rebuilding this on the Playground loop is the real fix (design backlog).
 """
 from __future__ import annotations
 
@@ -82,7 +75,7 @@ class SimBackend:
             self.model = build_room()
             self.plat_h = 0.0
         else:
-            from run_cliff import build_world, PLAT_H
+            from scenes import build_world, PLAT_H
             self.model = build_world()
             self.plat_h = PLAT_H
         self.events = []
@@ -188,7 +181,10 @@ class SimBackend:
     def _goto_blocking(self, tx, ty):
         from pebble_reflex import ReflexSupervisor, body_gyro_xy
         from cliff import CliffDetector, CliffReaction
-        from run_odom import foot_contacts
+        # the experiments' 1.5 N switch, no hysteresis (scenes.foot_contacts): the params
+        # switch (2.0 / 1.0 N) moved the diagonal cliff stop by 10 mm in an A/B, so this
+        # loop keeps the calibration its guard test was measured with
+        from scenes import foot_contacts
         mujoco = self._mujoco
         model, data, gait = self.model, self.data, self.gait
         det = CliffDetector()

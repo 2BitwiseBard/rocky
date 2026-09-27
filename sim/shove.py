@@ -1,7 +1,7 @@
 """Shove model for the sim (D048, 2026-09-23).
 
 Until this file every push in the project was a RECTANGULAR force pulse
-applied at the torso's centre of mass: `run_push*.py` use 0.15 s, the
+applied at the torso's centre of mass: `experiments/run_push*.py` use 0.15 s, the
 fallen demo used 120 N x 0.25 s (30 N·s = 4.6 bodyweight-seconds, which
 launches a 2.67 kg robot at ~10 m/s and 11-15 m across the floor), and the
 playground's `push` was the same model. That is a strike, not a shove,
