@@ -10,10 +10,9 @@ Two implementations of one contract:
     without physics. The mock is for testing the SERVER; it proves
     nothing about the robot.
 
-  SimBackend (sim_backend.py) — the truth: MuJoCo cliff world + the real
-    CliffDetector + ReflexSupervisor safe-stop (session 6 integration,
-    sim/run_cliff_safestop.py). Slow (~minutes); the guard-supremacy test
-    runs it once, marked slow.
+  SimBackend (sim_backend.py) — physics: MuJoCo cliff world + the real
+    CliffDetector + ReflexSupervisor safe-stop (D025). Slow (~minutes);
+    the guard-supremacy test runs it once, marked slow.
 
 Contract invariants implemented here (tests in test_harness.py):
   1. guard supremacy — a goto into the void returns stopped("cliff"),
@@ -40,9 +39,9 @@ CHORD_WORDS = [
     "determined", "discovery", "error", "found_it", "greeting",
     "low_battery", "no", "sleepy", "startup", "thinking", "yes",
 ]
-GESTURES = ["jazz_hands", "fist_bump", "beckon",   # B18 shipped session 6
+GESTURES = ["jazz_hands", "fist_bump", "beckon",   # pebble_gestures.CANON
             "wave", "bow", "look_around", "shake", "sit",
-            "turn_in_place", "sidestep"]                 # v2 library, session 8
+            "turn_in_place", "sidestep"]                 # pebble_gestures2.GESTURES2
 # D052: these two take direction left|right ("turn right" used to be a
 # 20 cm sidestep-by-goto in the regex brain; the gait turns either way)
 SIGNED = ["turn_in_place", "sidestep"]

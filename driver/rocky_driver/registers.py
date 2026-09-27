@@ -10,7 +10,8 @@ Conventions
 A register is (addr, nbytes, kind):
   kind "u8"  — one byte
   kind "u16" — plain 16-bit (endianness per family)
-  kind "sm16"— signed-magnitude 16-bit (bit 15 = sign; STS speed/load/current)
+  kind "sm16"— signed-magnitude 16-bit; the sign sits in `sign_bit` (15 for
+              STS speed/current; 10 for PRESENT_LOAD, 11 for POSITION_OFFSET)
 EEPROM registers (addr < 40) persist and need LOCK released before writing
 on STS (LOCK addr 55) and SCS (LOCK addr 48).
 """
@@ -26,6 +27,7 @@ class Reg:
     nbytes: int
     kind: str = "u8"        # "u8" | "u16" | "sm16"
     eeprom: bool = False
+    sign_bit: int = 15      # sm16 only: where the sign lives (magnitude below it)
 
 
 # ------------------------------------------------------------------ STS map
@@ -53,7 +55,9 @@ STS = {
     "CCW_DEAD":           Reg(27, 1, eeprom=True),
     "PROTECT_CURRENT":    Reg(28, 2, "u16", eeprom=True),  # 6.5 mA units
     "ANGULAR_RESOLUTION": Reg(30, 1, eeprom=True),
-    "POSITION_OFFSET":    Reg(31, 2, "sm16", eeprom=True), # counts, bit15 sign
+    # counts, sign in bit 11 (|offset| <= 2047). VERIFY-ON-BENCH: the Feetech
+    # SDK tables were read as bit 15; LeRobot's STS_SMS encodings table says 11.
+    "POSITION_OFFSET":    Reg(31, 2, "sm16", eeprom=True, sign_bit=11),
     "MODE":               Reg(33, 1, eeprom=True),  # 0 servo, 1 wheel, 2 pwm, 3 step
     "PROTECT_TORQUE":     Reg(34, 1, eeprom=True),  # % after overload
     "PROTECT_TIME":       Reg(35, 1, eeprom=True),  # 10 ms units
@@ -71,7 +75,10 @@ STS = {
     "LOCK":               Reg(55, 1),               # 1 = EEPROM locked
     "PRESENT_POSITION":   Reg(56, 2, "u16"),
     "PRESENT_SPEED":      Reg(58, 2, "sm16"),
-    "PRESENT_LOAD":       Reg(60, 2, "sm16"),       # 0.1% of stall
+    # 0.1 % of stall, sign (direction) in bit 10. VERIFY-ON-BENCH: bit 15 per
+    # our first reading of the SDK, bit 10 per LeRobot — push one servo by hand
+    # both ways under register_dump.py; a bit-15 servo would never set bit 10.
+    "PRESENT_LOAD":       Reg(60, 2, "sm16", sign_bit=10),
     "PRESENT_VOLTAGE":    Reg(62, 1),               # 0.1 V
     "PRESENT_TEMP":       Reg(63, 1),               # degC
     "ASYNC_ACTION":       Reg(64, 1),
@@ -114,7 +121,9 @@ SCS = {
 
 MAPS = {Family.STS: STS, Family.SCS: SCS}
 
-# Baud codes (register BAUD) — shared table, Feetech convention
+# Baud codes (register BAUD) — shared table, Feetech convention.
+# VERIFY-ON-BENCH for codes 5-7: LeRobot's table reads 5 = 57 600, 6 = 38 400,
+# 7 = 19 200. Nothing here writes a code above 4 (the bus runs at 1 Mbps).
 BAUD_CODES = {0: 1_000_000, 1: 500_000, 2: 250_000, 3: 128_000,
               4: 115_200, 5: 76_800, 6: 57_600, 7: 38_400}
 BAUD_TO_CODE = {v: k for k, v in BAUD_CODES.items()}
@@ -154,7 +163,3 @@ def deg_to_counts(deg: float, family: Family) -> int:
 
 def counts_to_deg(counts: int, family: Family) -> float:
     return (counts - CENTER[family]) * SWEEP_DEG[family] / COUNTS[family]
-
-
-def degps_to_counts(dps: float, family: Family) -> int:
-    return round(dps * COUNTS[family] / SWEEP_DEG[family])

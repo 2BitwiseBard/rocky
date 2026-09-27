@@ -10,8 +10,9 @@ kitchen" before lidar exists.
 
 Modes:
   --scan       run on the Pi later: `iw dev <if> scan` (fallback nmcli),
-               pose from /pebble/odom, appends JSONL to rssi_log.jsonl
-  --sim        RIGHT NOW: synthesizes a 3-AP apartment (log-distance path
+               pose from --pose x,y,yaw (the /pebble/odom hookup is future
+               work), appends JSONL to rssi_log.jsonl
+  --sim        synthesizes a 3-AP apartment (log-distance path
                loss, sigma 3 dB), walks a coverage path, logs fingerprints,
                then k-NN-localizes hold-out samples and reports error.
 

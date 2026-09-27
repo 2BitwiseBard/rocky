@@ -1,0 +1,426 @@
+{
+ "call": {
+  "gestures": [
+   "wave",
+   "sit",
+   "turn_in_place",
+   "sidestep",
+   "look_around",
+   "bow",
+   "shake",
+   "point_there"
+  ],
+  "lexicon": [
+   "greeting",
+   "yes",
+   "no",
+   "acknowledge",
+   "found_it",
+   "thinking",
+   "error"
+  ],
+  "signed": [
+   "turn_in_place",
+   "sidestep"
+  ],
+  "look": true,
+  "extra": "sim.cockpit_brains.EXTRA_TOOLS"
+ },
+ "tools": [
+  {
+   "type": "function",
+   "function": {
+    "name": "say",
+    "description": "Speak one chord-speak word through the speakers (the robot's only voice — it never speaks human words).",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "word": {
+       "type": "string",
+       "description": "a chord-speak word",
+       "enum": [
+        "greeting",
+        "yes",
+        "no",
+        "acknowledge",
+        "found_it",
+        "thinking",
+        "error"
+       ]
+      }
+     },
+     "required": [
+      "word"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "gesture",
+    "description": "Perform one gesture and wait for it to finish. Refused with error='busy' while walking: stop first. direction left|right applies to turn_in_place and sidestep only (turn_in_place turns on the spot for ~5 s; left = counter-clockwise).",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "gesture name",
+       "enum": [
+        "wave",
+        "sit",
+        "turn_in_place",
+        "sidestep",
+        "look_around",
+        "bow",
+        "shake",
+        "point_there"
+       ]
+      },
+      "direction": {
+       "type": "string",
+       "enum": [
+        "left",
+        "right"
+       ]
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "move",
+    "description": "Relative move in the robot's OWN frame, in METERS: forward_m + ahead / - back, left_m + left / - right (default 0). 'forward 30 cm' = move(forward_m=0.3); 'back up 20 cm' = move(forward_m=-0.2); 'half a meter to your left' = move(forward_m=0, left_m=0.5). It reads the robot's pose and heading itself (no status call, no trigonometry) and walks there as a goto: every guard applies and it ends the same way, stopped= arrived | cliff | stuck | blocked | timeout | user | preempted | FELL (a veto is a NORMAL result: report it, do not retry). At most 1.5 m. goto is for MAP coordinates.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "forward_m": {
+       "type": "number",
+       "description": "meters, + ahead / - back (0.3 = 30 cm)"
+      },
+      "left_m": {
+       "type": "number",
+       "description": "meters, + left / - right (default 0)"
+      }
+     },
+     "required": [
+      "forward_m"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "goto",
+    "description": "Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "x": {
+       "type": "number"
+      },
+      "y": {
+       "type": "number"
+      }
+     },
+     "required": [
+      "x",
+      "y"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "stop",
+    "description": "Safe-stop immediately (PLANT->BRACE). Always accepted.",
+    "parameters": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "scan_summary",
+    "description": "What the lidar sees: nearest obstacles by direction (walls and objects yes; holes in the floor no).",
+    "parameters": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "status",
+    "description": "Robot status: pose (x, y m; yaw deg), mode, reflex state.",
+    "parameters": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "list_gestures",
+    "description": "The gestures this robot knows right now (saved ones included).",
+    "parameters": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "look",
+    "description": "Look through the robot's eye camera: a vision model describes what is in front of the robot (obstacles, open floor, objects).",
+    "parameters": {
+     "type": "object",
+     "properties": {}
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "compose_gesture",
+    "description": "Create a NEW gesture from keyframes (the owner describes it; you write the frames). It is checked against the robot's real limits (joint range, servo speed, balance, self-contact); when feasible it is previewed once on the robot and kept as a draft until save_gesture. Frame fields (all optional except t; missing = standing): t seconds from start (first frame {\"t\": 0} = standing); body [dx, dy, dz] mm body shift, feet planted (z < 0 crouches; +-30 mm is a lot); yaw deg body twist (+-15); dz [5] mm extra crouch per leg; arm {\"leg\": [yaw, hip, knee] deg} lifts that leg as an arm (yaw -40..40, hip -70..90 (up), knee -150..-20); claw [5] 0..1 open; say a chord word cue; ease smooth|linear|hold. Legs: 0 = left (+y), then counter-clockwise: 1 rear-left, 2 rear-right, 3 front-right, 4 front-left. Keep >= 4 feet down (raise ONE leg; shift the body away from it first, body [0, -15, 0] for leg 0), give each move >= 0.6 s. Example wave with leg 0: [{\"t\":0},{\"t\":1.0,\"body\":[0,-15,0]},{\"t\":1.8,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},{\"t\":2.6,\"body\":[0,-15,0],\"arm\":{\"0\":[25,70,-60]}},{\"t\":3.4,\"body\":[0,-15,0],\"arm\":{\"0\":[-25,70,-60]}},{\"t\":4.2,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},{\"t\":5.0,\"body\":[0,-15,0]},{\"t\":5.8}]",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "short snake_case name"
+      },
+      "description": {
+       "type": "string",
+       "description": "what the gesture should look like"
+      },
+      "keyframes": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "t": {
+          "type": "number"
+         },
+         "body": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          }
+         },
+         "yaw": {
+          "type": "number"
+         },
+         "dz": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          }
+         },
+         "arm": {
+          "type": "object"
+         },
+         "claw": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          }
+         },
+         "say": {
+          "type": "string"
+         },
+         "ease": {
+          "type": "string",
+          "enum": [
+           "smooth",
+           "linear",
+           "hold"
+          ]
+         }
+        },
+        "required": [
+         "t"
+        ]
+       }
+      },
+      "loop": {
+       "type": "boolean"
+      }
+     },
+     "required": [
+      "name",
+      "keyframes"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "check_gesture",
+    "description": "Check a keyframe gesture spec {name, keyframes, loop?, end?} against the robot's limits WITHOUT moving; returns the report lines.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "spec": {
+       "type": "object"
+      }
+     },
+     "required": [
+      "spec"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "save_gesture",
+    "description": "Save the last composed (previewed) gesture so it can be played by name. Only when the operator asked to keep it.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "optional new name"
+      },
+      "overwrite": {
+       "type": "boolean"
+      }
+     }
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "find_object",
+    "description": "Find an object by name with the eye and walk up to it (e.g. 'find the ball', 'go to the box'). It loops by itself: look (a vision model boxes the object; its bearing and distance come from the camera geometry), then walk 0.1-0.4 m toward it (an ordinary goto: every guard applies), or turn 30 deg to scan when it is not seen or the sighting is unsure; it ends found (within ~0.25 m) | not found | stopped (a goto came back cliff / blocked / stuck: report it, do not retry blindly). Takes up to ~1-2 minutes.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "what to find, in plain words: 'ball', 'box'"
+      },
+      "max_steps": {
+       "type": "integer",
+       "description": "looks before giving up (default 6, max 16)"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "remember",
+    "description": "Remember a fact the operator states, in their words ('the charger is by the door'). 'the X is here' / 'this spot is X' / 'call this spot X' pins X at the robot's current position; 'the X is at (1.0, 0.2)' pins map meters (the floor is +-6 m); anything else is kept as a note that recall finds by its words. Only for what the operator tells you — sightings are remembered automatically.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "note": {
+       "type": "string",
+       "description": "the fact, in the operator's words"
+      }
+     },
+     "required": [
+      "note"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "where_is",
+    "description": "Where is a named object, from memory (no looking, no walking): its map position (meters), how long ago it was seen, confidence and source (find = the eye's box geometry; user = the operator pinned it; look = a vague description). stale=true: seen over 10 min ago or before the last reset, so it may have moved — find_object re-checks. known=false when it was never located — then call find_object.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "the object, in plain words: 'ball'"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "recall",
+    "description": "Search the robot's memory of this world — what it saw, found, was told, and which guards fired — for a query ('ball', 'charger', 'cliff'); returns the most relevant entries with their age. An empty query returns recent entries, the operator's notes and things near the robot first.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "query": {
+       "type": "string"
+      },
+      "k": {
+       "type": "integer",
+       "description": "how many entries (default 5, max 20)"
+      }
+     }
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "go_back_to",
+    "description": "Walk back to a remembered object or place ('go back to the ball', 'go back to the start' = where the robot spawned): ordinary gotos toward its remembered position (every guard applies), stopping ~0.4 m short of it (a place the operator pinned with 'X is here': onto it). Refused when it is not remembered, only vaguely, or only from before the last reset — then call find_object. A stale sighting (> 10 min) is walked to but flagged. It does NOT re-check with the eye: call look or find_object afterwards if the object may have moved.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "the remembered object: 'ball'"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  },
+  {
+   "type": "function",
+   "function": {
+    "name": "forget",
+    "description": "Forget one named object (and every memory that mentions it), or everything with name 'all'. A pronoun ('that', 'it') forgets nothing: name the thing. Only when the operator asks.",
+    "parameters": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string",
+       "description": "the object, or 'all'"
+      }
+     },
+     "required": [
+      "name"
+     ]
+    }
+   }
+  }
+ ]
+}

@@ -8,20 +8,20 @@ reads the position and stores
     offset = (present - CENTER) - dir * jig        (counts)
 
 — the inverse of the driver model servo_counts = CENTER + dir*q + offset, so
-at the jig pose (q = jig) the model reproduces what was read. (Before D052 this
-line said "center - present": the sign was backwards; the code was right.)
-The direction sign comes from a small nudge test; if it flips a dir the
-offset is re-derived on the spot from the same reading (D052 — it used to ask
-for a second run).
+at the jig pose (q = jig) the model reproduces what was read. The direction
+sign comes from a small nudge test; if it flips a dir, the offset is
+re-derived on the spot from the same reading.
 
 Offsets live in ONE place (D052): bench/calibration.yaml, software side, by
-default — they ride along in git and survive servo swaps. `--burn` moves a
-joint's offset into the STS POSITION_OFFSET EEPROM instead and stores 0 in
-the yaml, so exactly one of the two is ever non-zero (both non-zero = double
-correction; apply_limits.py refuses such a servo). The sign convention of the
-EEPROM register is VERIFY-ON-BENCH — run pose_check.py after any --burn.
-SCS0009 has no such register; hands are always software-offset. A joint that
-already carries a burned EEPROM offset is refused without --burn.
+default — a per-robot file (git-ignored: back it up with the robot) that
+survives servo swaps. `--burn` moves a joint's offset into the STS
+POSITION_OFFSET EEPROM instead and stores 0 in the yaml, so exactly one of the
+two is ever non-zero (both non-zero = double correction; apply_limits.py
+refuses such a servo). The register holds +/-2047 counts with its sign in
+bit 11 (VERIFY-ON-BENCH — run pose_check.py after any --burn); a bigger offset
+stays in software. SCS0009 has no such register; hands are always
+software-offset. A joint that already carries a burned EEPROM offset is
+refused without --burn.
 
 Do NOT run this while the cockpit's hardware bridge has the same port open:
 two processes on one half-duplex bus interleave packets, and a mirroring
@@ -144,19 +144,23 @@ def main():
             else:
                 cal["dir"].setdefault(key, +1)
         if args.burn and fam is Family.STS:
-            bus.set_position_offset(sid, offset)
+            try:
+                bus.set_position_offset(sid, offset)
+            except ValueError as e:                 # |offset| > 2047: the register cannot hold it
+                print(f"  NOT burned: {e} — the offset stays in the yaml")
+                continue
             cal["offset"][key] = 0                  # D052: one place only
             cal["meta"].setdefault("eeprom_offset", {})[key] = int(offset)
             print("  EEPROM POSITION_OFFSET burned (software offset stored as 0; "
-                  "sign convention VERIFY-ON-BENCH -> pose_check.py)")
+                  "sign bit 11 is VERIFY-ON-BENCH -> pose_check.py)")
 
     with open(CAL_PATH, "w") as f:
         yaml.safe_dump(cal, f, sort_keys=True)
     hline("=")
     print(f"wrote {CAL_PATH} ({len(cal['offset'])} offsets)")
     print("next: apply_limits.py (hardware angle limits follow dir + offset)")
-    print("verify: python3 pose_check.py --port ... (commands the neutral "
-          "stance at low speed; every leg should match the comb)")
+    print("verify: python3 pose_check.py --port ... (commands the jig pose "
+          "at low speed; every leg should match the comb)")
     return 0
 
 

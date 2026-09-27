@@ -1,10 +1,10 @@
 """D056: harness/capabilities.py regenerates today's tool definitions exactly.
 
 Three layers of proof that the registry changes nothing a model sees:
-  1. the snapshots taken BEFORE the registry existed (JSON files; the test skips
-     when they are not on this machine — ROCKY_D056_SNAPSHOTS points at them);
-  2. GOLDEN: the sha256 of those same snapshots (canonical JSON), pinned here, so
-     the proof survives without the files (CI, another machine, a cleared /tmp);
+  1. the snapshots taken BEFORE the registry existed (JSON files vendored in
+     harness/fixtures/d056/; ROCKY_D056_SNAPSHOTS overrides the directory);
+  2. GOLDEN: the sha256 of those same snapshots (canonical JSON), pinned here —
+     a second, independent pin of the same content;
   3. the live builders (local_brain.build_tools, cockpit_brains, server.build_server)
      — while they still carry their own copies, any drift between the two fails.
 If a tool text or schema changes ON PURPOSE, update GOLDEN in the same commit and say
@@ -39,10 +39,8 @@ sys.path.insert(0, ROOT)
 import harness.capabilities as C                                   # noqa: E402
 from harness.backend import CHORD_WORDS, GESTURES, SIGNED, MockBackend   # noqa: E402
 
-SNAP_DIR = os.environ.get(
-    "ROCKY_D056_SNAPSHOTS",
-    "/tmp/claude-1000/-home-bitwisebard-Development-rocky/"
-    "617aee55-a110-4e95-989e-f8423ee0b4fa/scratchpad/d056")
+# the pre-registry (D056) tool lists, vendored: harness/fixtures/d056/*.json (~80 KB)
+SNAP_DIR = os.environ.get("ROCKY_D056_SNAPSHOTS") or os.path.join(ROOT, "harness", "fixtures", "d056")
 
 # the representative call the snapshots were taken with
 REP_GESTURES = ['wave', 'sit', 'turn_in_place', 'sidestep', 'look_around', 'bow', 'shake', 'point_there']
@@ -98,7 +96,7 @@ def _added_d057(tools):
 def _snap(name):
     path = os.path.join(SNAP_DIR, name)
     if not os.path.exists(path):
-        pytest.skip(f"no D056 snapshot at {path} (the GOLDEN hashes still pin it)")
+        pytest.fail(f"no D056 snapshot at {path} (vendored in harness/fixtures/d056/)")
     with open(path, encoding="utf-8") as f:
         return json.load(f)
 

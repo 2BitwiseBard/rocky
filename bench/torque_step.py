@@ -6,14 +6,15 @@ so gravity applies a KNOWN torque. The script then steps TORQUE_LIMIT down
 from 100 % and watches position error: the limit where the servo starts to
 sag equals the actual load as a fraction of stall. Compare with prediction:
 
-    predicted %stall = m * g * arm / 2.94 N*m * 100
+    predicted %stall = m * g * arm / stall * 100    (stall: params, 2.94 N*m ST3215 @ 12 V)
 
 D015 margins to reproduce: walking hips 22–33 %, 3-leg stance 29–36 %
 (both should HOLD comfortably); untucked-manip 43–65 % (should sag/derate —
 that's the STS3250 sales pitch, and why manip keeps feet tucked until then).
 
-Safety: temp cut at 65 C, sag limit 15 deg (test aborts + torque limit
-restored), and the mass should be a bag of screws on a string — nothing rigid.
+Safety: temp cut at 65 C, sag limit 8 deg (--sag-limit-deg; the test stops
+and the torque limit is restored), and the mass should be a bag of screws on a
+string — nothing rigid.
 
     python3 torque_step.py --port ... --id 2 --mass-g 350 --arm-mm 100
     python3 torque_step.py --mock --id 2 --mass-g 350 --arm-mm 100 --mock-load 33
@@ -30,7 +31,10 @@ from rocky_driver.registers import COUNTS, SWEEP_DEG                # noqa: E402
 from rocky_driver.protocol import Family                            # noqa: E402
 from rocky_driver import soft_enable                                # noqa: E402
 
-STALL_NM = 2.94          # ST3215 @ 12 V (D002); STS3250: 4.90 — use --stall-nm
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gait"))
+import rocky_model as rm                                            # noqa: E402
+
+STALL_NM = rm.stall_nm()   # the leg servo's params actuators block (ST3215 @ 12 V: 2.94); STS3250: --stall-nm
 G = 9.81
 
 

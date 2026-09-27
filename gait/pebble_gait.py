@@ -9,10 +9,12 @@ Conventions
 BODY frame: origin at pentagon center on the DECK-TOP plane, +Z up.
 Leg i station: angle a_i = 90 + 72*i deg (leg 0 points "north"), at radius R_BODY.
 LEG frame (matches CAD leg-local): origin at the yaw axis on the deck plane,
-+X radial outward, +Z up. Femur pivot: (L1, 0, +58). Foot = tip of tibia.
++X radial outward, +Z up. Femur pivot: (L1, 0, Z_HIP) — params
+leg.hip_axis_z. Foot = tip of tibia.
 
 Joints per leg: q1 yaw (coxa), q2 femur pitch (0 = horizontal, + = up),
-q3 knee pitch (0 = straight with femur, - = knee down). Neutral: (0, 0, -90deg).
+q3 knee pitch (0 = straight with femur, - = knee down). Calibration/jig pose:
+(0, 0, -90 deg); the standing stance is leg_ik(p_nom), about (0, -34, -77) deg.
 
 Servo mapping (Phase 1, for reference):
 ticks = 2048 + q * 4096 / (2*pi) * DIR[j] + OFFSET[j]   (calibrated per joint)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""intent — talk to Pebble in plain text, no LLM required (session 8d).
+"""intent — talk to Pebble in plain text, no LLM required.
 
 The deterministic layer of the VISION_PLAN brain stack: a regex/keyword
 intent parser that maps operator text onto the SAME tools the MCP
@@ -45,7 +45,7 @@ Understood (case-insensitive; number WORDS 1-100 work too: "thirty cm"):
 
 VOICE (D052): speech is not typing. Whisper hallucinates whole phrases
 out of fan noise (" Thank you." at no_speech_prob 1e-8 on 1.5 s of pink
-noise, measured on this box 2026-09-24), so a voice line that would MOVE
+noise, measured 2026-09-24), so a voice line that would MOVE
 the robot needs the wake word ("pebble, forward 30 cm") unless the
 operator confirms it; clean_transcript() drops the known junk first.
 whisper.cpp's stream binary emits one line per utterance — pipe it in:

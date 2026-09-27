@@ -7,7 +7,9 @@ Every script accepts:
   --mock-load PCT       simulated mechanical load in mock mode
   --yes                 auto-confirm prompts (mock rehearsals / scripted runs)
 
-Mock mode fast-forwards time, so a 20-minute soak rehearses in seconds.
+Mock mode fast-forwards time, so a 20-minute soak rehearses in seconds, and
+waits only 2 ms for a reply (the mock answers inside the write), so a scan's
+silent ids cost little. Output is line-buffered so a piped run shows progress.
 """
 from __future__ import annotations
 import argparse
@@ -22,7 +24,13 @@ from rocky_driver import (FeetechBus, Family, SerialTransport,     # noqa: E402
                           make_pebble_mock, load_bus_params)
 from rocky_driver.mock import MockServo, MockTransport             # noqa: E402
 
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except (AttributeError, ValueError):
+    pass
+
 CAL_PATH = os.path.join(HERE, "calibration.yaml")
+MOCK_TIMEOUT_S = 0.002       # the mock queues its reply inside write(); 20 ms is for real wire
 OUT_DIR = os.path.join(HERE, "out")
 
 
@@ -74,7 +82,7 @@ def make_bus(args, mock_transport: MockTransport | None = None):
         if args.mock_load:
             for s in mt.servos.values():
                 s.external_load_pct = args.mock_load
-        bus = FeetechBus(mt, default_families(), timeout_s=0.02)
+        bus = FeetechBus(mt, default_families(), timeout_s=MOCK_TIMEOUT_S)
         return bus, Clock(mt), mt
     if not args.port:
         sys.exit("need --port (hardware) or --mock (rehearsal). "

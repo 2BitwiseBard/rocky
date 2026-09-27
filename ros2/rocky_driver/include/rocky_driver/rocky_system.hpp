@@ -8,6 +8,7 @@
 #ifndef ROCKY_DRIVER__ROCKY_SYSTEM_HPP_
 #define ROCKY_DRIVER__ROCKY_SYSTEM_HPP_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,8 @@ public:
 
 private:
   // one entry per joint, ordered as in the URDF ros2_control block
+  // (yaw0, hip0, knee0, claw0, yaw1, ...); servo_ids_ comes from the joint
+  // NAME, never the index
   std::vector<double> pos_cmd_, pos_state_, vel_state_, eff_state_;
   std::vector<uint8_t> servo_ids_;
   std::vector<int8_t> dir_;          // calibration.yaml
@@ -52,6 +55,7 @@ private:
 
   // TODO(bench day + one quiet evening):
   //  - open/configure the port (termios, 1 Mbps, raw)
+  //  - on_activate: the soft-enable order (read -> limit -> park -> enable)
   //  - buildSyncWrite(addr=42, entries...) per family — byte layout is
   //    checksum'd + golden-tested in driver/tests/test_protocol.py
   //  - parse status packets (header hunt + checksum, retry once)

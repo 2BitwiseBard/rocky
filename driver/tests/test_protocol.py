@@ -65,6 +65,23 @@ def test_sm16_bit15_encoding():
     assert fp.encode_sm16(-100, Family.STS) == bytes((0x64, 0x80))
 
 
+def test_sm16_sign_bit_10_and_11_golden():
+    # PRESENT_LOAD carries its sign in bit 10, POSITION_OFFSET in bit 11
+    # (registers.Reg.sign_bit; VERIFY-ON-BENCH). raw 0x0464 = -100 = -10.0 %.
+    assert fp.decode_sm16(bytes((0x64, 0x04)), Family.STS, 10) == -100
+    assert fp.encode_sm16(-100, Family.STS, 10) == bytes((0x64, 0x04))
+    assert fp.decode_sm16(bytes((0x64, 0x04)), Family.STS) == 1124   # the old bit-15 reading
+    assert fp.encode_sm16(-100, Family.STS, 11) == bytes((0x64, 0x08))
+    assert fp.decode_sm16(bytes((0x64, 0x08)), Family.STS, 11) == -100
+    assert fp.decode_sm16(bytes((0x64, 0xF8)), Family.STS, 11) == -100  # bits above the sign ignored
+
+
+@pytest.mark.parametrize("bit,value", [(10, 1024), (10, -1024), (11, 2048), (15, 32768)])
+def test_sm16_refuses_a_magnitude_that_reaches_the_sign_bit(bit, value):
+    with pytest.raises(ValueError):
+        fp.encode_sm16(value, Family.STS, bit)
+
+
 # ---------------------------------------------------------------- sync
 def test_sync_write_layout():
     pkt = fp.sync_write(0x2A, 2, [(1, b"\x00\x08"), (2, b"\x10\x08")])

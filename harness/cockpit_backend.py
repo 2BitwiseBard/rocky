@@ -11,42 +11,32 @@ model) and the scene-memory tools (`remember`, `where_is`, `recall`,
 `go_back_to`, `forget` — sim/scene_memory.py), which only exist where a
 cockpit is running — absent tool > lying tool.
 
-D052: AutoBackend used to be resolved ONCE when the MCP server started, so
-a cockpit started after `./rocky.sh chat` was never used (the chat drove an
-invisible in-process sim) and nothing said so. Now each call checks (cached
-AUTO_TTL_S) and every switch is logged loudly to stderr.
+The harness and the cockpit ship from the same checkout: a cockpit that
+lacks /api/ping or /api/capabilities is treated as not a cockpit (logged
+once), never followed through older routes.
 
-D052 V2 — `stop` never falls back silently. The per-call re-probe made a busy
-cockpit (a 1 s console `check` holds the sim thread, and /api/state waits on
-it) look dead, and a stop then went to the in-process sim and answered ok
-while the cockpit robot kept walking. Now: the probe is /api/ping (answered
-by the event loop, not the sim thread; /api/state for an older cockpit), a
-5xx other than 503 counts as alive-but-degraded, and once a cockpit has been
-seen, stop goes to IT (with a retry) — the fallback gets it only in
-addition, never instead. Every motion result names the backend it ran on.
+D052: AutoBackend re-resolves per call (cached AUTO_TTL_S) and logs every
+switch to stderr. The probe is /api/ping (the event loop answers it, not the
+sim thread); 503 = the sim thread is dead, any other 5xx = alive but degraded.
+`stop` never falls back silently: once a cockpit has been seen, stop goes to
+IT (with a retry) — the fallback gets it only in addition. Every motion
+result names the backend it ran on.
 
-D056 — the tool list follows the robot. `capabilities()` says which registry
-tools (harness/capabilities.py `requires`) a backend can run: a cockpit has
-the eye, the scene memory and its own executor ({"cockpit", "eye", "memory"});
-AutoBackend has them too, because any call may land on a cockpit and its
-methods answer honestly when none does. `fetch_capabilities()` reads the
-cockpit's current snapshot (GET /api/capabilities: gestures, chord words,
-signed gestures, version) — or, from a cockpit older than D056, the same lists
-from /api/gesture/list + /api/chord/list — and returns None when nothing
-usable answers, so the MCP server (harness/server.py LiveTools) keeps the list
-it had.
+D056: `capabilities()` says which registry tools (harness/capabilities.py
+`requires`) a backend can run: a cockpit has the eye, the scene memory and
+its own executor ({"cockpit", "eye", "memory"}); AutoBackend has them too,
+because any call may land on a cockpit and its methods answer honestly when
+none does. `fetch_capabilities()` reads the cockpit's snapshot (GET
+/api/capabilities: gestures, chord words, signed gestures, version), or None
+when nothing usable answers, so the MCP server (LiveTools) keeps its list.
 
-F3 — the D057 place tools (`where_am_i`, `name_place`, `places`,
-`forget_place`) are forwarded like the memory tools (POST /api/tool/<name>),
-and `capabilities()` adds the registry's `places` flag ONLY while the cockpit's
-last snapshot lists it (its place recognition is on: POST /api/awareness
-{recognize: true} or cockpit.py --recognize). A cockpit from before D057 never
-lists it, one from before D056 has no snapshot at all (404: last_capabilities
-is cleared), so neither gets the place tools. The MCP server re-reads the
-snapshot on a stale tools/list and on every watcher tick, so the four tools
-come and go with the cockpit's switch. On AutoBackend with no cockpit
-answering, a place call says it needs the cockpit (the in-process sim has no
-places), as the memory tools do.
+D057 place tools (`where_am_i`, `name_place`, `places`, `forget_place`) are
+forwarded like the memory tools (POST /api/tool/<name>); `capabilities()` adds
+the registry's `places` flag ONLY while the cockpit's last snapshot lists it
+(its place recognition is on: POST /api/awareness {recognize: true} or
+cockpit.py --recognize), so the four tools come and go with that switch. On
+AutoBackend with no cockpit answering, a place call says it needs the cockpit
+(the in-process sim has no places), as the memory tools do.
 """
 from __future__ import annotations
 import asyncio
@@ -58,7 +48,7 @@ import httpx
 
 DEFAULT_URL = os.environ.get("ROCKY_COCKPIT_URL", "http://127.0.0.1:8765")
 AUTO_TTL_S = 3.0
-CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities (and the two list routes): event-loop routes, no sim thread
+CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities: an event-loop route, no sim thread
 COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capabilities.CAPABILITY_FLAGS
 PLACES = "places"          # F3: + this flag only while the cockpit reports its place recognition on
 FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
@@ -66,18 +56,15 @@ GO_BACK_TIMEOUT_S = 200.0  # go_back_to: up to 4 goto legs of <= 40 s each
 
 
 def cockpit_alive(url=DEFAULT_URL, timeout=2.0):
-    """True when a cockpit answers at url. /api/ping first (event loop only);
-    404 = an older cockpit -> /api/state. 503 = its sim thread is dead (not
-    alive); any other 5xx = alive but degraded (it still takes a stop)."""
-    for route in ("/api/ping", "/api/state"):
-        try:
-            code = httpx.get(f"{url}{route}", timeout=timeout).status_code
-        except Exception:
-            return False
-        if code == 404 and route == "/api/ping":
-            continue
-        return code == 200 or (code >= 500 and code != 503)
-    return False
+    """True when a cockpit answers GET /api/ping at url (the event loop answers
+    it, not the sim thread). 503 = its sim thread is dead (not alive); any other
+    5xx = alive but degraded (it still takes a stop); 404 = not a cockpit from
+    this checkout (not alive)."""
+    try:
+        code = httpx.get(f"{url}/api/ping", timeout=timeout).status_code
+    except Exception:
+        return False
+    return code == 200 or (code >= 500 and code != 503)
 
 
 def _log(msg):
@@ -97,6 +84,7 @@ class CockpitBackend:
         self.url = url.rstrip("/")
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0))
         self.last_capabilities = None     # the last snapshot GET /api/capabilities answered (D056)
+        self._said_mismatch = False       # the "no /api/capabilities" warning, logged once
 
     async def _tool(self, tool, /, **args):
         # positional-only: gesture's own argument is called `name` (D052 — with
@@ -117,20 +105,23 @@ class CockpitBackend:
 
     def fetch_capabilities(self, timeout: float = CAPS_TIMEOUT_S) -> dict | None:
         """The cockpit's capabilities snapshot, GET /api/capabilities (D056):
-        {version, gestures, lexicon, signed, capabilities, ...}. A cockpit from
-        before D056 (404), or one whose /api/capabilities answers something
-        unusable (5xx, not a snapshot) -> {"gestures", "lexicon", "source"} from
-        the two list routes, as before D056. None when nothing usable answers
-        (unreachable, the list routes failing too): the caller keeps what it had.
-        A usable snapshot is kept as last_capabilities (capabilities() reads its
-        `places` flag, F3); a 404 clears it (an older cockpit: no place tools); a
-        5xx or an unusable answer keeps it. Sync (the MCP server runs it in a thread)."""
+        {version, gestures, lexicon, signed, capabilities, ...}, kept as
+        last_capabilities (capabilities() reads its `places` flag). None when
+        nothing usable answers — unreachable, a 5xx, not a snapshot (the last
+        snapshot is kept) or a 404 (not a cockpit from this checkout: the last
+        snapshot is cleared, so no place tools, and it is logged once). The
+        caller keeps the list it had. Sync (the MCP server runs it in a thread)."""
         try:
             r = httpx.get(f"{self.url}/api/capabilities", timeout=timeout)
         except Exception:
             return None                                   # nothing answers: keep the last list
         if r.status_code == 404:
-            self.last_capabilities = None                 # a cockpit from before D056: no snapshot, no places
+            self.last_capabilities = None
+            if not self._said_mismatch:
+                self._said_mismatch = True
+                _log(f"{self.url} has no /api/capabilities — a cockpit older than this checkout? "
+                     "restart it from this checkout; the tool list stays as it was")
+            return None
         if r.status_code == 200:
             try:
                 snap = r.json()
@@ -139,21 +130,9 @@ class CockpitBackend:
             if isinstance(snap, dict) and (isinstance(snap.get("gestures"), list)
                                            or isinstance(snap.get("lexicon"), list)):
                 self.last_capabilities = snap
+                self._said_mismatch = False
                 return snap
-        g, w = self._list_routes(timeout)
-        if g is None and w is None:
-            return None
-        return {"gestures": g, "lexicon": w, "source": "/api/gesture/list + /api/chord/list"}
-
-    def _list_routes(self, timeout: float = CAPS_TIMEOUT_S):
-        """(gesture names, chord words) from the pre-D056 routes; None where they do not answer."""
-        g = w = None
-        try:
-            g = httpx.get(f"{self.url}/api/gesture/list", timeout=timeout).json().get("all")
-            w = httpx.get(f"{self.url}/api/chord/list", timeout=timeout).json().get("lexicon")
-        except Exception:
-            pass
-        return g, w
+        return None
 
     def live_lists(self):
         """(gesture names, chord words) from the running cockpit; None where the

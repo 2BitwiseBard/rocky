@@ -15,7 +15,7 @@ knows they're protocol 0 and REMINDS YOU they must be on the 5–6 V rail
 (D016) — on the bench, power them from the BEC/5 V supply, never 12 V.
 
     python3 assign_ids.py --port /dev/ttyACM0
-    python3 assign_ids.py --mock --yes            # full 20-servo rehearsal
+    python3 assign_ids.py --mock --yes            # full 20-servo rehearsal (~seconds)
     python3 assign_ids.py --port ... --start-from 16   # resume at the hands
 
 Every assignment is appended to bench/out/id_log.txt.
@@ -46,10 +46,14 @@ def target_list():
 
 
 def find_single_servo(bus, clock, args):
-    """Scan for exactly one servo; complain loudly otherwise."""
+    """Scan for exactly one servo; complain loudly otherwise. On hardware a
+    fresh servo can sit at any id/baud: ids 0-30 at three bauds. The mock
+    rehearsal's servo is always at 1 Mbps, so it scans ids 0-20 at that baud
+    only (the full scan is ~2 min of real ping timeouts for 20 rounds)."""
+    ids, bauds = ((range(0, 21), (1_000_000,)) if clock.is_mock
+                  else (range(0, 31), (1_000_000, 500_000, 115_200)))
     while True:
-        found = bus.scan(id_range=range(0, 31),
-                         bauds=(1_000_000, 500_000, 115_200))
+        found = bus.scan(id_range=ids, bauds=bauds)
         if len(found) == 1:
             sid = next(iter(found))
             return sid, found[sid]

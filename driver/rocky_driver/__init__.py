@@ -8,7 +8,12 @@ Quick start (no hardware):
     from rocky_driver import FeetechBus, make_pebble_mock, PebbleRobot
     bus = FeetechBus(make_pebble_mock())
     robot = PebbleRobot(bus)
-    robot.enable(); robot.send_leg_targets([[0.0, 0.2, -1.6]] * 5)
+    robot.soft_enable()            # D052 V2: goal parked where each servo IS, 40 % torque
+    robot.send_leg_targets([[0.0, 0.2, -1.6]] * 5, speed_cps=200)
+    robot.release_limits()         # full torque once the first move has landed
+    # a loop that streams targets every tick: SoftStream(robot) does all of this
+
+Never robot.enable() first: a Feetech servo enables toward its LAST goal.
 
 With hardware:
     from rocky_driver import FeetechBus, SerialTransport, PebbleRobot

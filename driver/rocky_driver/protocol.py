@@ -82,18 +82,23 @@ def decode_u16(b: bytes, family: Family) -> int:
     return b[1] | (b[0] << 8)
 
 
-def encode_sm16(value: int, family: Family) -> bytes:
-    """Signed-magnitude 16-bit (bit 15 = sign) — STS speed/offset style."""
-    v = abs(int(value)) & 0x7FFF
-    if value < 0:
-        v |= 0x8000
+def encode_sm16(value: int, family: Family, bit: int = 15) -> bytes:
+    """Signed-magnitude 16-bit: the magnitude below `bit`, the sign IN `bit`.
+    STS speed is bit 15; PRESENT_LOAD bit 10 and POSITION_OFFSET bit 11
+    (registers.Reg.sign_bit). A magnitude that does not fit raises instead of
+    wrapping into the sign bit."""
+    mag = abs(int(value))
+    if mag >= (1 << bit):
+        raise ValueError(f"sign-magnitude value {value} does not fit below bit {bit}")
+    v = mag | ((1 << bit) if value < 0 else 0)
     return encode_u16(v, family)
 
 
-def decode_sm16(b: bytes, family: Family) -> int:
+def decode_sm16(b: bytes, family: Family, bit: int = 15) -> int:
+    """Inverse of encode_sm16; bits above `bit` are ignored."""
     v = decode_u16(b, family)
-    mag = v & 0x7FFF
-    return -mag if v & 0x8000 else mag
+    mag = v & ((1 << bit) - 1)
+    return -mag if v & (1 << bit) else mag
 
 
 # ---------------------------------------------------------------- packets
@@ -125,10 +130,6 @@ class Packet:
 
 
 class ChecksumError(ValueError):
-    pass
-
-
-class FramingError(ValueError):
     pass
 
 

@@ -174,7 +174,8 @@ class FeetechBus:
         fam = self.family_of(servo_id)
         if r.nbytes == 1:
             return raw[0]
-        return fp.decode_sm16(raw, fam) if r.kind == "sm16" else fp.decode_u16(raw, fam)
+        return (fp.decode_sm16(raw, fam, r.sign_bit) if r.kind == "sm16"
+                else fp.decode_u16(raw, fam))
 
     def write_reg(self, servo_id: int, name: str, value: int,
                   await_status: bool = True) -> None:
@@ -183,7 +184,7 @@ class FeetechBus:
         if r.nbytes == 1:
             data = bytes((value & 0xFF,))
         else:
-            data = (fp.encode_sm16(value, fam) if r.kind == "sm16"
+            data = (fp.encode_sm16(value, fam, r.sign_bit) if r.kind == "sm16"
                     else fp.encode_u16(value, fam))
         if r.eeprom:
             self._eeprom_write(servo_id, r, data)
@@ -249,8 +250,8 @@ class FeetechBus:
             if r.nbytes == 1:
                 entries = [(i, bytes((v & 0xFF,))) for i, v in group]
             else:
-                enc = fp.encode_sm16 if r.kind == "sm16" else fp.encode_u16
-                entries = [(i, enc(v, fam)) for i, v in group]
+                entries = [(i, fp.encode_sm16(v, fam, r.sign_bit) if r.kind == "sm16"
+                            else fp.encode_u16(v, fam)) for i, v in group]
             self._transact(fp.sync_write(r.addr, r.nbytes, entries), None)
 
     def sync_positions(self, targets: dict[int, float], speed_cps: int = 0) -> None:
@@ -282,18 +283,24 @@ class FeetechBus:
 
     @staticmethod
     def _decode_tel(servo_id: int, fam: Family, raw: bytes) -> Telemetry:
+        """raw = the block read from addr 56 (the register map's sign bits apply:
+        PRESENT_LOAD carries its direction in bit 10 on STS, not bit 15)."""
+        R = MAPS[fam]
+
+        def word(name, off):
+            r = R[name]
+            b = raw[off:off + 2]
+            return fp.decode_sm16(b, fam, r.sign_bit) if r.kind == "sm16" else fp.decode_u16(b, fam)
         pos = fp.decode_u16(raw[0:2], fam)
-        spd = fp.decode_sm16(raw[2:4], fam) if fam is Family.STS \
-            else fp.decode_u16(raw[2:4], fam)
-        load = fp.decode_sm16(raw[4:6], fam) if fam is Family.STS \
-            else fp.decode_u16(raw[4:6], fam)
+        spd = word("PRESENT_SPEED", 2)
+        load = word("PRESENT_LOAD", 4)
         volt, temp = raw[6], raw[7]
         moving = bool(raw[10])
         current = None
         faults = []
         if fam is Family.STS:
             faults = fp.decode_error(raw[9])           # STATUS @65
-            current = fp.decode_sm16(raw[13:15], fam) * CURRENT_LSB_A  # @69-70
+            current = word("PRESENT_CURRENT", 13) * CURRENT_LSB_A  # @69-70
         return Telemetry(servo_id, fam, pos, counts_to_deg(pos, fam), spd,
                          abs(load) * LOAD_LSB_PCT, volt * VOLTAGE_LSB_V,
                          temp, current, moving, faults)
@@ -407,11 +414,16 @@ class FeetechBus:
         return rb
 
     def set_position_offset(self, servo_id: int, offset_counts: int) -> None:
-        """STS only: burn center-calibration offset into EEPROM (sm16)."""
+        """STS only: burn center-calibration offset into EEPROM (sign-magnitude,
+        sign in bit 11 — so |offset| <= 2047 counts, half a turn)."""
         if self.family_of(servo_id) is not Family.STS:
             raise BusError("SCS0009 has no POSITION_OFFSET register; "
                            "store a software offset in calibration.yaml instead")
-        self.write_reg(servo_id, "POSITION_OFFSET", offset_counts)
+        top = (1 << MAPS[Family.STS]["POSITION_OFFSET"].sign_bit) - 1
+        if abs(int(offset_counts)) > top:
+            raise ValueError(f"id {servo_id}: POSITION_OFFSET {offset_counts:+d} counts is "
+                             f"outside +/-{top} (re-seat the horn, or keep it in software)")
+        self.write_reg(servo_id, "POSITION_OFFSET", int(offset_counts))
 
 
 # ---------------------------------------------------------------- monitor

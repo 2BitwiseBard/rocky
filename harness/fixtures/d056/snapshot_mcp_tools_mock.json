@@ -1,0 +1,150 @@
+{
+ "backend": "MockBackend() (canon GESTURES / CHORD_WORDS, no eye, no memory)",
+ "tools": [
+  {
+   "name": "say",
+   "description": "Speak one chord-speak word through Rocky's voice. word: one of acknowledge, alarm_help, amaze, confused, curious_question, determined, discovery, error, found_it, greeting, low_battery, no, sleepy, startup, thinking, yes. Unknown words are refused with the lexicon in the error (Rocky never speaks human words — canon).",
+   "inputSchema": {
+    "properties": {
+     "word": {
+      "title": "Word",
+      "type": "string"
+     }
+    },
+    "required": [
+     "word"
+    ],
+    "title": "sayArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "gesture",
+   "description": "Perform a gesture. Available: jazz_hands, fist_bump, beckon, wave, bow, look_around, shake, sit, turn_in_place, sidestep. direction 'left'|'right' applies to turn_in_place and sidestep only (turn_in_place turns on the spot for ~5 s; left = counter-clockwise). Refused with error='busy' while walking — stop() first. list_gestures has the current list.",
+   "inputSchema": {
+    "properties": {
+     "name": {
+      "title": "Name",
+      "type": "string"
+     },
+     "direction": {
+      "default": "",
+      "title": "Direction",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "title": "gestureArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": false
+   }
+  },
+  {
+   "name": "move",
+   "description": "Relative move in the robot's OWN frame, in METERS: forward_m + ahead / - back, left_m + left / - right (default 0). 'forward 30 cm' = move(forward_m=0.3); 'back up 20 cm' = move(forward_m=-0.2); 'half a meter to your left' = move(forward_m=0, left_m=0.5). It reads the robot's pose and heading itself (no status call, no trigonometry) and walks there as a goto: every guard applies and it ends the same way, stopped= arrived | cliff | stuck | blocked | timeout | user | preempted | FELL (a veto is a NORMAL result: report it, do not retry). At most 1.5 m. goto is for MAP coordinates. One motion intent at a time; a newer move or goto preempts it.",
+   "inputSchema": {
+    "properties": {
+     "forward_m": {
+      "title": "Forward M",
+      "type": "number"
+     },
+     "left_m": {
+      "default": 0.0,
+      "title": "Left M",
+      "type": "number"
+     }
+    },
+    "required": [
+     "forward_m"
+    ],
+    "title": "moveArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": false
+   }
+  },
+  {
+   "name": "goto",
+   "description": "Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it. One motion intent at a time; calling goto again preempts.",
+   "inputSchema": {
+    "properties": {
+     "x": {
+      "title": "X",
+      "type": "number"
+     },
+     "y": {
+      "title": "Y",
+      "type": "number"
+     }
+    },
+    "required": [
+     "x",
+     "y"
+    ],
+    "title": "gotoArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": false
+   }
+  },
+  {
+   "name": "stop",
+   "description": "Safe-stop NOW (always accepted): finish the current step, brace\n        into a full-contact crouch, hold. Resolves any in-flight goto with\n        stopped='user'.",
+   "inputSchema": {
+    "properties": {},
+    "title": "stopArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": false,
+    "idempotentHint": true
+   }
+  },
+  {
+   "name": "scan_summary",
+   "description": "Summarize the latest lidar scan: point count, open frontiers\n        (bearing/range), nearest obstacle.",
+   "inputSchema": {
+    "properties": {},
+    "title": "scan_summaryArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  },
+  {
+   "name": "status",
+   "description": "Robot status: pose, mode (idle|walking|safe_stop), battery\n        voltage (mocked until hardware), recent events.",
+   "inputSchema": {
+    "properties": {},
+    "title": "statusArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  },
+  {
+   "name": "list_gestures",
+   "description": "The gestures the robot knows RIGHT NOW (saved keyframe gestures\n        included) and which ones take a direction.",
+   "inputSchema": {
+    "properties": {},
+    "title": "list_gesturesArguments",
+    "type": "object"
+   },
+   "annotations": {
+    "readOnlyHint": true
+   }
+  }
+ ]
+}

@@ -6,19 +6,18 @@ triangle (the stance legs span only 144 deg of the circle). This module adds
 the missing move: a choreographed FOOT-REPOSITIONING step that rebuilds the
 support triangle around the CoM before the arms come up.
 
-Geometry (worked out 2026-07-29, respects the CAD-validated coxa +/-40 deg):
-- Crouch FIRST (h 118 -> 98 mm). Crouching extends radial reach
-  (leg-frame max 148 -> ~214 mm), which is what makes the wide stance
-  reachable at all.
+Geometry (respects the coxa soft limit +/-40 deg; numbers from the
+self-test, `python gait/pebble_manip_adjacent.py`):
+- Crouch FIRST (h 118 -> 88 mm, CROUCH_MM). Crouching extends radial reach,
+  which is what makes the wide stance reachable at all.
 - Step the two flanking stance legs out and around: body-angle +/-21 deg
-  from station at R = 300 mm (D052 retune, see the constants; was 22 deg /
-  280 mm with the coxa 1.1 deg from its stop; a straight swing at nominal
-  radius would need ~44+ deg and is impossible).
-- Support triangle after repositioning: flanking feet 170 deg apart around
-  the "back" -- chord clears the CoM by ~23 mm on the critical edge, plus a
-  small 5 mm lean => ~28 mm static margin (vs -57 mm without repositioning).
-- Keep arm-phase body sway small (2.5 mm): the flanking coxas sit ~1.5 deg
-  from their limit.
+  from station at R = 300 mm (SWING_DEG / R_WIDE; a straight swing at
+  nominal radius would need ~44+ deg and is impossible).
+- Support triangle after repositioning, plus an 18 mm lean (LEAN_MM):
+  ~34 mm static margin from the body origin, 17.5 mm from the true CoM — a
+  WARN under the 25 mm comfort line (vs -57 mm without repositioning).
+- Keep arm-phase body sway small (2.2 mm, SWAY_MM): the flanking coxas peak
+  at 37.4 deg (limit 40).
 
 Choreography: stand -> crouch -> step flank A -> step flank B -> lean ->
 raise adjacent arms + gripper work -> reverse everything.
@@ -33,15 +32,10 @@ LEAN_MM = 18.0                    # D052: 12 -> 18
 SWAY_MM = 2.2
 SWING_DEG = 21.0                  # flank feet move this far in body angle (D052: 22 -> 21)
 R_WIDE = 300.0                    # ...at this body radius (D052: 280 -> 300)
-# D052, measured by pebble_feasibility.check (CoM through the FK chain, not
-# the body-origin proxy the numbers above were designed with): 22/280/12 put
-# the flank coxas at 38.9 deg (inside the 2 deg guard of the 40 stop) with a
-# 15.6 mm CoM margin at arms_down. A 48-point sweep of swing/radius/lean:
-# 21/300/18 -> coxa <= 37.4 deg, CoM margin 17.5 mm (under the 25 mm comfort
-# line — a WARNING, honestly: adjacent-arm work is the tightest thing Pebble
-# does). The flank feet also used to hang 30 mm in the air at t=0 (the
-# crouched home was used in every phase) and the work sway switched off
-# with a step; both fixed in targets().
+# D052, measured by pebble_feasibility.check (CoM through the FK chain): a
+# 48-point sweep of swing/radius/lean picked 21/300/18 -> coxa <= 37.4 deg,
+# CoM margin 17.5 mm (under the 25 mm comfort line — a WARNING, honestly:
+# adjacent-arm work is the tightest thing Pebble does).
 STEP_LIFT = 35.0                  # mm foot lift during repositioning steps
 
 

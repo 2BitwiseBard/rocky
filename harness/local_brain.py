@@ -26,12 +26,12 @@ Requires: `pip install ollama` and a running Ollama daemon (except
 --mock-llm). Tool-calling quality varies by model; qwen2.5 7B+ and
 llama3.1 8B+ behave well.
 
-OpenAI-compatible servers (2026-09-08, laptop addition): llama-swap,
-llama.cpp's llama-server, vLLM, LM Studio… anything speaking
-/v1/chat/completions with tools. `pip install openai`, then
+OpenAI-compatible servers (llama-swap, llama.cpp's llama-server, vLLM,
+LM Studio…): anything speaking /v1/chat/completions with tools.
+`pip install openai`, then
 
     python3 -m harness.local_brain --base-url http://127.0.0.1:8080/v1 \
-        --model qwen3.6-35b-a3b            # ROCKY_LLM_API_KEY if it needs one
+        --model <your-model-id>            # ROCKY_LLM_API_KEY if it needs one
 
 (or ROCKY_LLM_BASE_URL / ROCKY_LLM_MODEL in the environment). Same tool
 loop, same guards; thinking is switched off for snappy tool calls unless

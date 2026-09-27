@@ -1,4 +1,4 @@
-"""FALLEN/RIGHTED state-machine tests (session 8d, D042) — pure Python,
+"""FALLEN/RIGHTED state-machine tests (D042) — pure Python,
 no MuJoCo, no torch: the supervisor is fed synthetic IMU signals and a
 scripted righter, and must walk the NORMAL -> FALLEN -> RIGHTED -> NORMAL
 path exactly, never emit NaN, and never fire on a transient tilt spike.

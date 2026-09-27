@@ -1,65 +1,43 @@
-"""Rocky-MCP tool server v0 (docs/MCP_CONTRACT_v0.md) — FastMCP over stdio.
+"""Rocky-MCP tool server (docs/MCP_CONTRACT_v0.md) — FastMCP over stdio.
 
 The model proposes, the reflex layer disposes: every tool result is an
 ordinary value (vetoes included — a goto stopped by the cliff reflex
 returns {"stopped": "cliff"}, it does not raise). The backend owns all
 robot state; kill the brain any time and the robot is safe.
 
-Run against the mock (default) or the MuJoCo sim:
-
-    python3 -m harness.server                 # mock backend
+    python3 -m harness.server                     # mock backend
     ROCKY_BACKEND=sim python3 -m harness.server   # MuJoCo cliff world
     ROCKY_BACKEND=auto python3 -m harness.server  # the cockpit whenever one answers, else the sim
                                                   # (re-resolved per call, logged to stderr — D052)
 
-Wire into a client (e.g. Claude Code .mcp.json):
-    {"rocky": {"command": "python3", "args": ["-m", "harness.server"],
-               "cwd": "<repo>/rocky"}}
+Wire into a client: copy .mcp.json.example to .mcp.json (the repo venv's
+python, cwd = the repo root; see its _comment for other hosts).
 
-Tools: say, gesture, move, goto, stop, scan_summary, status, list_gestures, and
-look / find_object where an eye exists and remember / where_is / recall /
-go_back_to / forget where the scene memory exists (a cockpit backend), and (F3) where_am_i /
-name_place / places / forget_place while the cockpit's place recognition is on (D057: the cockpit
-lists `places` in GET /api/capabilities; CockpitBackend / AutoBackend pass the flag on, the mock and
-the in-process sim never have it). map_query / patrol / dock are not stubbed —
-absent tool > lying tool. D052: the gesture and say docs are built from the backend's LIVE lists (saved keyframe gestures and custom chord
-words included); gesture takes direction left|right for turn_in_place /
-sidestep. move (2026-09-25) is a relative move in the robot's frame
-(forward_m, left_m): the server reads the pose from the backend's status and
-calls the backend's own goto (harness.local_brain.move_via), so every backend
-gets it with goto's guards and results, unchanged; a cockpit backend runs it
-itself (/api/tool/move: its stop check between the pose read and the goto).
-move and goto refuse a boolean for a distance, as the cockpit does (pydantic's
-lax mode made move(forward_m=true) a 1 m walk).
+Tools (D056): every tool comes from the one registry, harness/capabilities.py.
+build_server registers to_mcp_specs(build(<the backend's lists>, <its
+capabilities()>)) and each tool forwards to backend.<backend_method>(...),
+positionally in the schema's order (a cockpit backend without that method:
+POST /api/tool/<name>). say, gesture, move, goto, stop, scan_summary, status
+and list_gestures always; look / find_object where an eye exists; remember /
+where_is / recall / go_back_to / forget where the scene memory exists (a
+cockpit); where_am_i / name_place / places / forget_place while the cockpit's
+place recognition is on (D057: its GET /api/capabilities lists `places`).
+map_query / patrol / dock are not stubbed — absent tool > lying tool. What the
+registry cannot say stays here as per-tool adapters keyed by name: ADAPTERS
+(gesture's direction fallback; move — a relative move in the robot's frame —
+through harness.local_brain.move_via on top of goto's guards; list_gestures'
+canon answer) and ARG_TYPES (a distance refuses a boolean, name_place's
+new / rename refuse anything BUT a boolean, as the cockpit does).
 
-D056 — the tool list is generated, and it is live. Every tool comes from the
-one registry, harness/capabilities.py: build_server registers
-to_mcp_specs(build(<the backend's lists>, <its capabilities()>)) — names,
-texts, input schemas and annotations exactly as before D056 — and each one
-forwards to backend.<backend_method>(...), positionally in the schema's order
-as before (a cockpit backend without that method: POST /api/tool/<name>).
-What the registry cannot say stays here as per-tool adapters keyed by name:
-ADAPTERS (gesture's direction fallback for a backend without one, move
-through move_via, list_gestures' canon answer) and ARG_TYPES (the Meters that
-refuse a boolean; F3: name_place's Flags that refuse anything else). LiveTools keeps the backend's last capabilities snapshot
-(a cockpit: GET /api/capabilities; before D056 the gesture + chord list
-routes): a tools/list whose snapshot is older than LIST_TTL_S (2 s) re-reads
-it and re-registers the tools whose text or schema changed (remove_tool +
-add_tool), so a gesture saved in the cockpit's studio is in gesture's text on
-the next list, no restart. Once a client has made a request, a watcher polls
-it every POLL_S (3 s) and sends notifications/tools/list_changed when the list
-moved (the server then declares tools.listChanged); both are best effort — a
-failure is logged to stderr, never fatal, and a fetch that fails keeps the
-last list. Backends with nothing to follow (the mock, the in-process sim) stay
-static, exactly as before. ROCKY_MCP_LIVE=0 turns the refresh and the watcher
-off: the lists are then read once, at start, as before D056.
-
-F3 (D057 place tools): the `places` capability comes from the backend's capabilities() like the
-others, and a cockpit backend reads it from the snapshot it just fetched, so switching recognition
-on in the cockpit (POST /api/awareness {recognize: true}) adds the four place tools on the next
-tools/list (or watcher tick, with a list_changed notification) and switching it off removes them.
-name_place's new / rename refuse anything but a boolean (null = false), as the cockpit does; pydantic's
-lax mode would have read "yes" or 1 as true.
+The list is live. The gesture and say texts are built from the backend's lists
+(saved keyframe gestures, custom chord words). LiveTools keeps the backend's
+last capabilities snapshot (a cockpit: GET /api/capabilities); a tools/list
+whose snapshot is older than LIST_TTL_S (2 s) re-reads it and re-registers the
+tools whose text or schema changed, and once a client has made a request a
+watcher polls every POLL_S (3 s) and sends notifications/tools/list_changed when
+the list moved. Both are best effort: a failure is logged to stderr and a failed
+fetch keeps the last list. The mock and the in-process sim have nothing to
+follow and stay static; ROCKY_MCP_LIVE=0 reads the lists once, at start.
 """
 from __future__ import annotations
 
@@ -193,7 +171,7 @@ def tool_function(be, spec):
         async def run(**kw):
             fn = getattr(be, method, None)
             if callable(fn):
-                return await fn(*[kw[a] for a in argnames])      # positional, as before D056
+                return await fn(*[kw[a] for a in argnames])      # positional, in the schema's order
             remote = getattr(be, "_tool", None)
             if callable(remote):
                 return await remote(name, **kw)                   # a cockpit runs any registry tool
@@ -310,7 +288,7 @@ class LiveTools:
 
     def apply(self, snap) -> bool:
         """Take the snapshot's lists (a field it lacks keeps the last value; an empty list is
-        the canon, as before D056), rebuild, re-register what changed. True when the
+        the canon), rebuild, re-register what changed. True when the
         published tool list changed. Synchronous: no request sees half a list."""
         if isinstance(snap, dict):
             g, w, s = _strs(snap.get("gestures")), _strs(snap.get("lexicon")), _strs(snap.get("signed"))
@@ -364,7 +342,9 @@ class LiveTools:
     # -------------------------------------------------------------- refresh + watch
     async def refresh(self, force=False) -> bool:
         """Re-read the capabilities when the copy is older than ttl_s (force: now). True when
-        the tool list changed. Never raises: a failed fetch keeps the last list."""
+        the tool list changed. Never raises: a failed fetch keeps the last lists (the backend's
+        capability flags are still re-read — a cockpit that answers 404 on /api/capabilities
+        loses its `places` tools)."""
         if not self.live:
             return False
         now = time.monotonic()
@@ -377,10 +357,8 @@ class LiveTools:
             _log("capabilities answer again" if ok else
                  f"no capabilities from {type(self.be).__name__}: keeping the last tool list")
         self.source_ok = ok
-        if not ok:
-            return False
         try:
-            return self.apply(snap)
+            return self.apply(snap if ok else None)
         except Exception as e:                    # noqa: BLE001 — keep serving the last list
             _log(f"tool list not rebuilt ({type(e).__name__}: {e}); keeping the last list")
             return False

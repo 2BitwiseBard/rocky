@@ -20,7 +20,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from .protocol import (HEADER, BROADCAST_ID, Instr, Family, checksum,
-                       build_status, encode_u16, decode_u16)
+                       build_status, encode_u16, decode_u16, encode_sm16)
 from .registers import (MAPS, COUNTS, CENTER, BAUD_CODES, Reg, max_speed_cps)
 from .transport import Transport
 
@@ -70,7 +70,7 @@ class MockServo:
     # self-cut in ~3 min) — rough shape of D015's "43-65% is a thermal no-go"
     heat_k: float = 0.75       # degC/s at 100% load
     cool_k: float = 0.010      # 1/s
-    external_load_pct: float = 0.0    # test hook: simulated mechanical load, %
+    external_load_pct: float = 0.0    # test hook: simulated mechanical load, % (sign = direction)
     stalled: bool = False             # test hook: motion blocked
     silent: bool = False              # test hook: applies writes, never replies
     mem: bytearray = field(default_factory=bytearray)
@@ -95,9 +95,13 @@ class MockServo:
         return decode_u16(bytes(self.mem[r.addr:r.addr + 2]), self.family)
 
     def put(self, name: str, value: int) -> None:
+        """Store a value the way the servo would: sm16 registers get their
+        sign in the register's own sign bit (PRESENT_LOAD: bit 10 on STS)."""
         r = self._reg(name)
         if r.nbytes == 1:
             self.mem[r.addr] = value & 0xFF
+        elif r.kind == "sm16":
+            self.mem[r.addr:r.addr + 2] = encode_sm16(value, self.family, r.sign_bit)
         else:
             self.mem[r.addr:r.addr + 2] = encode_u16(value, self.family)
 
@@ -115,11 +119,14 @@ class MockServo:
         # torque-limit vs load: if the allowed torque can't hold the external
         # load, the servo can't chase its goal — position sags away instead
         # (this is exactly what torque_step.py measures)
+        ext = abs(self.external_load_pct)
+        push = -1.0 if self.external_load_pct < 0 else 1.0   # which way the load drags
         under_torqued = False
         if "TORQUE_LIMIT" in MAPS[self.family]:
             tl_pct = self.get("TORQUE_LIMIT") / 10.0
-            under_torqued = tl_pct < self.external_load_pct
+            under_torqued = tl_pct < ext
         moving = 0
+        direction = 0.0
         if torque_on and not self.stalled and not under_torqued:
             delta = goal - self._pos_f
             step = max_step_s * dt
@@ -128,16 +135,21 @@ class MockServo:
             else:
                 self._pos_f += step if delta > 0 else -step
                 moving = 1
+                direction = 1.0 if delta > 0 else -1.0
         elif torque_on and under_torqued:
-            self._pos_f -= (self.external_load_pct - tl_pct) * 20.0 * dt
-            self._pos_f = max(0.0, self._pos_f)
+            self._pos_f -= push * (ext - tl_pct) * 20.0 * dt
+            self._pos_f = min(max(0.0, self._pos_f), float(COUNTS[self.family] - 1))
         self.put("PRESENT_POSITION", int(round(self._pos_f)))
         if "MOVING" in MAPS[self.family]:
             self.put("MOVING", moving)
-        # load: external plus a bump while moving
-        load_pct = min(100.0, self.external_load_pct + (18.0 if moving else 0.0)) \
-            if torque_on else 0.0
-        self.put("PRESENT_LOAD", int(load_pct * 10))          # 0.1% units
+        # load: external plus a bump while moving, 0.1 % units. Its sign is the
+        # external load's (or, with none, the direction of travel) and rides in
+        # the register's sign bit — bit 10 on STS; SCS load is unsigned here
+        load_pct = min(100.0, ext + (18.0 if moving else 0.0)) if torque_on else 0.0
+        sign = push if self.external_load_pct else (direction or 1.0)
+        mag = int(load_pct * 10)
+        signed = self._reg("PRESENT_LOAD").kind == "sm16" and sign < 0
+        self.put("PRESENT_LOAD", -mag if signed else mag)
         if "PRESENT_CURRENT" in MAPS[self.family]:
             amps = 0.06 + 2.6 * (load_pct / 100.0)            # rough ST3215 curve
             self.put("PRESENT_CURRENT", int(amps / 0.0065))

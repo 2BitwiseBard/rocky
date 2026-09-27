@@ -1,4 +1,4 @@
-"""Canon gestures — JAZZ HANDS and FIST-MY-BUMP (session 5b, by request).
+"""Canon gestures — JAZZ HANDS and FIST-MY-BUMP.
 
 Two scripted social behaviors from the source material, built on the same
 stance choreography the manipulation work proved out (lean -> raise ->
@@ -17,20 +17,14 @@ fist_bump    — one arm (leg 0), hand CLOSED into the cone (canon: the
 Both return (q[5,3] rad, claw[5] rad) target streams; pure Python, no sim
 imports — the same functions later feed the driver on the Pi.
 
-D052 (the sim stops flattering the servo): every gesture here passes
-pebble_feasibility.check — joint limits minus a 2 deg guard, 3.0 rad/s on a
-loaded leg / 4.0 free / 4.7 never, claw <= 8 rad/s, no step at any phase
-boundary, CoM margin >= 10 mm. What that took, measured by the checker:
-  fist_bump  was authored in BODY space and held hip 96-112 / knee -163 (past
-             both limits) for the whole hold, and stepped 14.8 rad/s at the
-             raise because it blended from p_nom, not the leaned foot. Now
-             joint space (Q_CARRY / Q_EXTEND) blended from the leaned pose.
-  beckon     0.9 Hz x 80 deg knee curl = 5.92 rad/s -> 0.6 Hz x 70 deg, two
-             whole curls so the arm ends exactly at Q_OUT.
-  jazz_hands claw flutter 4.5 Hz x +-25 deg = 12.2 rad/s (SCS0009 ~9.5) and a
-             23 deg claw step at raise->jazz -> 3 Hz x +-15 deg from the raise
-             value; knee centre -30 -> -34 (its shimmy touched the -20 stop);
-             the body bounce and claw now END where the next phase starts.
+D052: every gesture here passes pebble_feasibility.check — joint limits
+minus a 2 deg guard, 3.0 rad/s on a loaded leg / 4.0 free / 4.7 never, claw
+<= 8 rad/s, no step at any phase boundary, CoM margin >= 10 mm:
+  fist_bump  joint space (Q_CARRY / Q_EXTEND), blended from the leaned pose.
+  beckon     0.6 Hz x 70 deg knee curl, two whole curls ending at Q_OUT.
+  jazz_hands claw flutter 3 Hz x +-15 deg around the raise value, knee
+             centre -34; the body bounce and claw END where the next phase
+             starts.
 """
 from __future__ import annotations
 import numpy as np
@@ -201,7 +195,7 @@ def fist_bump(g: WaveGait, t: float, bump_mm: float = 0.0):
 
 
 # ---------------------------------------------------------------- beckon
-# B18 (session 6): the "come here" — raise the north arm to carry, then
+# B18: the "come here" — raise the north arm to carry, then
 # three slow curls between the known-reachable carry and extend waypoints
 # (the same pair fist_bump proved — both clear the |L2-L3| inner annulus),
 # claw opening on the pull-in of each curl like a beckoning finger. Meant

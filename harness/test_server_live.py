@@ -51,9 +51,9 @@ class _R:
 class FakeCockpit:
     """A cockpit's GET routes, in-process. /api/capabilities answers what a D056 cockpit
     answers (harness.capabilities.build of its lists, every capability on); `modern=False`
-    is a cockpit from before D056 (404 there, the two list routes instead). `recognize`:
-    the cockpit's place recognition (D057) — on, its snapshot lists `places` and the four
-    place tools, exactly as sim/cockpit.py's _caps_current builds it."""
+    is a cockpit that is not from this checkout (404 there — never followed through older
+    routes). `recognize`: the cockpit's place recognition (D057) — on, its snapshot lists
+    `places` and the four place tools, exactly as sim/cockpit.py's _caps_current builds it."""
 
     def __init__(self, gestures=REP_GESTURES, lexicon=REP_LEXICON, modern=True):
         self.gestures, self.lexicon = list(gestures), list(lexicon)
@@ -63,7 +63,6 @@ class FakeCockpit:
         self.down = False                    # connection refused
         self.status = 200                    # /api/capabilities status while up
         self.garbage = False                 # /api/capabilities answers something that is not a snapshot
-        self.lists_status = 200              # the two pre-D056 list routes
         self.gets = []
         self.foreign = []                    # any other URL (must stay empty)
 
@@ -85,11 +84,6 @@ class FakeCockpit:
             if self.garbage:
                 return _R(200, ["not", "a", "snapshot"])
             return _R(self.status, self.snapshot() if self.status == 200 else {"error": "boom"})
-        if path == "/api/gesture/list":
-            return _R(self.lists_status, {"all": list(self.gestures)} if self.lists_status == 200 else None)
-        if path == "/api/chord/list":
-            ok = self.lists_status == 200
-            return _R(self.lists_status, {"lexicon": list(self.lexicon)} if ok else None)
         return _R(404, None)
 
     def n(self, path="/api/capabilities"):
@@ -229,17 +223,18 @@ async def test_a_new_gesture_reaches_the_next_list_tools(fake):
     assert list(after) == list(before)                           # registry order kept after re-registration
 
 
-async def test_an_older_cockpit_is_followed_through_the_list_routes(fake):
+async def test_a_cockpit_without_capabilities_is_not_followed(fake, capsys):
+    """Cockpit and harness ship together: a 404 on /api/capabilities (a cockpit from an
+    older checkout) is logged once and the list stays as it was — no older routes."""
     fake.modern = False
     fake.gestures = ["wave", "point_there"]
     srv = build_server(CockpitBackend(URL))
-    assert "/api/gesture/list" in fake.gets and "/api/chord/list" in fake.gets
     tools = {t.name: t for t in await srv.list_tools()}
-    assert "point_there" in tools["gesture"].description
-    fake.gestures.append("bow_low")
+    assert "point_there" not in tools["gesture"].description         # the canon, not the cockpit's list
     _stale(srv)
-    tools = {t.name: t for t in await srv.list_tools()}
-    assert "bow_low" in tools["gesture"].description
+    await srv.list_tools()
+    assert set(fake.gets) == {"/api/capabilities"}                    # nothing else was tried
+    assert capsys.readouterr().err.count("has no /api/capabilities") == 1
 
 
 # ---------------------------------------------------------------- list_changed
@@ -308,7 +303,6 @@ async def test_a_failed_fetch_keeps_the_last_list(fake):
     v = live.version
     desc = lambda: {t.name: t for t in srv._tool_manager.list_tools()}["gesture"].description   # noqa: E731
     assert "point_there" in desc()
-    fake.lists_status = 500                                        # the list routes fail too
     for broken in ("down", "500", "garbage"):
         fake.down, fake.garbage = broken == "down", broken == "garbage"
         fake.status = 500 if broken == "500" else 200
@@ -317,15 +311,14 @@ async def test_a_failed_fetch_keeps_the_last_list(fake):
         assert "point_there" in tools["gesture"].description, broken      # the last list, not the canon
         assert await live.poll_once() is False and s.sent == 0, broken
         assert live.version == v and live.source_ok is False, broken
-    # /api/capabilities failing while the list routes answer: the lists are followed, as before D056
-    fake.lists_status = 200
+    # the cockpit answers again, and moved: followed
+    fake.down = fake.garbage = False
+    fake.status = 200
     fake.gestures.append("bow_low")
     assert await live.poll_once() is True and s.sent == 1 and "bow_low" in desc()
     assert live.source_ok is True
     v = live.version
     # a source that raises (not just fails) changes nothing
-    fake.down = fake.garbage = False
-    fake.status = 200
 
     def boom(*a, **k):
         raise RuntimeError("test: broken source")
@@ -584,12 +577,12 @@ async def test_place_calls_forward_to_the_cockpit_with_the_executors_arguments(f
                     ("forget_place", {"name": "all"})]
 
 
-async def test_an_older_cockpit_has_no_place_tools(fake):
-    fake.recognize = True                         # whatever it would say: a pre-D056 cockpit cannot report it
+async def test_a_cockpit_without_capabilities_has_no_place_tools(fake):
+    fake.recognize = True                         # whatever it would say: without a snapshot it cannot report it
     fake.modern = False
     srv = build_server(CockpitBackend(URL))
-    assert _names(srv) == D056_MCP and "/api/gesture/list" in fake.gets
-    # a modern cockpit with recognition on, then an older one in its place (404): the tools go
+    assert _names(srv) == D056_MCP
+    # a current cockpit with recognition on, then one without /api/capabilities in its place (404): the tools go
     fake.modern = True
     be = CockpitBackend(URL)
     srv = build_server(be)
@@ -608,7 +601,7 @@ async def test_an_older_cockpit_has_no_place_tools(fake):
 
 async def test_a_failed_fetch_keeps_the_place_tools_it_had(fake):
     """As every list (D056): a cockpit that stops answering does not take the tools away, and a
-    5xx on /api/capabilities (the list routes still answering) keeps the last reported flag."""
+    5xx on /api/capabilities keeps the last reported flag."""
     fake.recognize = True
     srv = build_server(CockpitBackend(URL))
     want = D056_MCP + list(ADDED_D057)
@@ -620,7 +613,7 @@ async def test_a_failed_fetch_keeps_the_place_tools_it_had(fake):
     fake.down, fake.status = False, 500
     _stale(srv)
     await srv.list_tools()
-    assert _names(srv) == want and srv.live.source_ok is True
+    assert _names(srv) == want and srv.live.source_ok is False
 
 
 async def test_auto_backend_follows_recognition_and_answers_without_a_cockpit(fake):

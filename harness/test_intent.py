@@ -1,4 +1,4 @@
-"""Tests for the deterministic intent layer (session 8d).
+"""Tests for the deterministic intent layer.
 
 Parser tests are pure (plan() is a pure function); executor tests run
 against MockBackend — millisecond-fast. They are PLUMBING tests: the

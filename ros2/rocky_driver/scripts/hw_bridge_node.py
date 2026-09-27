@@ -2,9 +2,9 @@
 """Hardware bridge — the hw:=topic backend for ros2_control.
 
 topic_based_ros2_control turns the controller side into two topics; this node
-owns the actual Feetech bus through the TESTED pure-Python driver stack
-(driver/rocky_driver — 58 tests, mock rehearsals, safety monitor). Zero C++
-between the gait and the servos for Phase 1–2.
+owns the actual Feetech bus through the tested pure-Python driver stack
+(driver/rocky_driver — tested on the byte-level mock, safety monitor). Zero
+C++ between the gait and the servos for Phase 1–2.
 
   subscribe /pebble/joint_commands   sensor_msgs/JointState (positions)
   publish   /pebble/joint_states_hw  sensor_msgs/JointState @ 50 Hz
@@ -14,18 +14,14 @@ between the gait and the servos for Phase 1–2.
 
 Run with --ros-args -p mock:=true for the full-loop rehearsal (no hardware).
 
-D052 V2 (review): this node had none of the D052 bus rules — torque on at
-startup toward whatever goal the servos held, the first command at servo max
-and full torque, no rate limit, a JointState missing a joint defaulted it to
-0.0 rad, and the contact stub said all five feet were down. Now: the stream
-goes through rocky_driver.SoftStream (goal parked where each servo IS at
-40 % torque BEFORE enable, a smoothstep entry at 200 cps, NaN hold, a
-4.7 rad/s rate clamp), a command missing any leg joint is ignored (the last
-good one holds), and NO contact message is published until the SEA switches
-are wired (absent > lying: a consumer that trusted all-True would walk off
-a table). Still missing vs the cockpit path: the reflex supervisor, the
-heartbeat, the monitor's leg-level cut — see ros2/README.md. NOT verified
-under ROS here (no rclpy on the dev box); SoftStream is tested on the mock.
+D052 V2 bus rules: the stream goes through rocky_driver.SoftStream (goal
+parked where each servo IS at 40 % torque BEFORE enable, a smoothstep entry
+at 200 cps, NaN hold, a 4.7 rad/s rate clamp); a command missing any leg
+joint is ignored (the last good one holds); NO contact message is published
+until the SEA switches are wired (absent beats a stub that says every foot is
+down). Still missing vs the cockpit path: the reflex supervisor, the
+heartbeat, the monitor's leg-level cut — see ros2/README.md. Not run under
+ROS in CI (no rclpy); SoftStream is tested on the mock.
 """
 import math
 
@@ -37,9 +33,11 @@ from rocky_msgs.msg import ServoHealth, ContactState
 
 from rocky_driver import (FeetechBus, PebbleRobot, SerialTransport, SoftStream,
                           make_pebble_mock, load_calibration)
+from rocky_driver.protocol import ERROR_BITS
 
 JOINTS = [f"{j}{i}" for i in range(5) for j in ("yaw", "hip", "knee")]
 CLAWS = [f"claw{i}" for i in range(5)]
+FAULT_BIT = {name: 1 << bit for bit, name in ERROR_BITS.items()}   # fault name -> status bit
 
 
 class HwBridge(Node):
@@ -122,7 +120,7 @@ class HwBridge(Node):
             msg.load_pct.append(t.load_pct)
             msg.current_a.append(t.current_a if t.current_a is not None
                                  else float("nan"))
-            msg.fault_bits.append(0 if not t.faults else 1)
+            msg.fault_bits.append(sum(FAULT_BIT.get(f, 0) for f in t.faults) & 0xFF)
             msg.torque_cut.append(sid in self.robot.monitor.tripped)
         self.pub_health.publish(msg)
         for sid in self.robot.monitor.tripped:

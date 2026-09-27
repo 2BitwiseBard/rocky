@@ -235,8 +235,8 @@ def test_cockpit_alive_uses_ping_and_counts_a_500_as_alive(monkeypatch):
     codes.update({"/ping": 500})
     assert cb.cockpit_alive("http://x")                            # degraded, still takes a stop
     codes.clear()
-    codes.update({"/state": 200})                                  # an older cockpit without /api/ping
-    assert cb.cockpit_alive("http://x")
+    codes.update({"/state": 200})                                  # no /api/ping: not a cockpit from this checkout
+    assert not cb.cockpit_alive("http://x")
 
 
 @pytest.mark.asyncio
@@ -526,7 +526,7 @@ _BUILD_TOOLS_BEFORE = {
     "rep look": "b9dc26d6eb986597da7cd6087d34ab5dd44968222480d2ff23367fcbca9032c2",
     "rep signed sidestep": "2e3bd9f251125fd2e01433ccb7470867564a4ccc1ea18129d64e762a560566ad",
 }
-# the snapshot file's key for each (the file is a one-off record; the test skips without it)
+# the snapshot file's key for each (harness/fixtures/d056/, vendored)
 _SNAPSHOT_KEYS = {
     "local_brain.TOOLS": "local_brain.TOOLS (build_tools(GESTURES, CHORD_WORDS))",
     "cockpit_brains.TOOLS": "cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))",
@@ -534,10 +534,8 @@ _SNAPSHOT_KEYS = {
     "rep look": "build_tools(GESTURES_rep, LEXICON_rep, look=True)",
     "rep signed sidestep": "build_tools(signed=('sidestep',)) rep",
 }
-_SNAP_DIR = os.environ.get(
-    "ROCKY_D056_SNAPSHOTS",
-    "/tmp/claude-1000/-home-bitwisebard-Development-rocky/"
-    "617aee55-a110-4e95-989e-f8423ee0b4fa/scratchpad/d056")
+_SNAP_DIR = os.environ.get("ROCKY_D056_SNAPSHOTS") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fixtures", "d056")    # vendored pre-registry lists
 
 
 def _canon_sha(obj):
@@ -571,7 +569,7 @@ def test_build_tools_is_unchanged_by_the_registry():
 def test_build_tools_equals_the_pre_registry_snapshot_byte_for_byte():
     path = os.path.join(_SNAP_DIR, "snapshot_openai_tools_variants.json")
     if not os.path.exists(path):
-        pytest.skip(f"no D056 snapshot at {path} (the hashes above still pin it)")
+        pytest.fail(f"no D056 snapshot at {path} (vendored in harness/fixtures/d056/)")
     with open(path, encoding="utf-8") as f:
         before = json.load(f)
     got = _build_tools_variants()
@@ -615,3 +613,19 @@ async def test_sim_goto_into_void_stops_on_real_physics():
         st = await _call(cs, "status")
         assert st["pose"]["x"] < 0.35          # body short of the edge
         assert st["mode"] == "safe_stop"
+
+
+def test_canon_lists_match_their_sources():
+    """backend.py mirrors the chord words and gesture names by hand (it stays import-light);
+    this pins the copy to the sources it mirrors."""
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    for sub in ("gait", "audio"):
+        p = os.path.normpath(os.path.join(root, sub))
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import chordspeak2
+    import pebble_gestures as pg
+    import pebble_gestures2 as pg2
+    from harness.backend import CHORD_WORDS, GESTURES
+    assert sorted(CHORD_WORDS) == sorted(chordspeak2.vocabulary())
+    assert GESTURES == list(pg.CANON) + list(pg2.GESTURES2)

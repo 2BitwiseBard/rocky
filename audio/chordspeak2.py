@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Chord-speak v0.2 — the Eridian voice. Speech made of chords, not music.
 
-v0 review (Tyler, session 5): "still sounds musical... too nice." Right —
+v0 review (D028): "still sounds musical... too nice." Right —
 v0 was built from 12-TET scale runs, major/minor cadences, organ-bell
 chorus and cathedral reverb: a pleasant instrument. Rocky (Project Hail
 Mary) doesn't play an instrument; he TALKS, and each word happens to be a
@@ -26,8 +26,7 @@ chord. v0.2 rebuilds the voice around that:
     lengthened final = question. Dry, close space (small reverb 8%).
 
 Renders samples_v2/*.wav + demo_reel_v2.wav:  python3 chordspeak2.py
-Event-driven narration: chordspeak_events.py. v0 kept in chordspeak.py
-for A/B (audition_v2.html plays both).
+Event-driven narration: chordspeak_events.py.
 """
 import os
 import wave
@@ -270,7 +269,7 @@ def vocabulary():
         S(0.42, [1, 11 / 8, 2], gap=0.05, root_mul=9 / 8, amp=0.6,
           bend_cents=+34, tail=0.55)])
 
-    # two warm syllables, up-inflected, clean ratios. Hello Tyler.
+    # two warm syllables, up-inflected, clean ratios. Hello.
     V["greeting"] = (124, [
         S(0.15, [1, 3 / 2], amp=0.55, bend_cents=+4),
         S(0.15, [1, 5 / 4, 3 / 2], gap=0.05, root_mul=5 / 4, amp=0.6),

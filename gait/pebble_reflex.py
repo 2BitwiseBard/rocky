@@ -6,18 +6,11 @@ grace — and the extra envelope. Pure Python on top of the gait engine (no
 sim/ROS deps): the same supervisor later runs on the Pi with the BNO085
 gyro + the SEA foot microswitches (D010) as inputs.
 
-v1 (D022) froze every foot target and crouched the moment |gyro| tripped.
-That RAISED the walking floor 33->40 N overall but opened a pocket: pushed
-at +0.25T the reflex survived only 33 N where the bare gait took 48. The
-2026-07-31 diagnosis (sim/diag_brace_phase.py): a shove arriving mid-swing
-catches the polygon already broken — the swing leg is airborne and the
-impulse BOUNCES lightly-loaded feet. Freezing then leaves a 2-leg support
-line; worse, the global crouch keeps EXTENDING the loaded pivot-side legs,
-actively driving the body over that line (tilt 51° vs 14.7° baseline). The
-bare gait survives the same shove precisely because it keeps stepping —
-feet re-plant themselves cycle after cycle.
-
-v2 therefore knows the gait phase and the contact state:
+Why phase-aware (D022 -> v2): a shove arriving mid-swing catches the support
+polygon already broken, so freezing every foot and crouching at once leaves
+a 2-leg support line and the crouch drives the body over it; the bare gait
+survives the same shove because it keeps stepping. So the supervisor knows
+the gait phase and the contact state:
 
 NORMAL   — near-zero command -> all five feet PLANTED at p_nom (no marching
            in place); moving -> WaveGait targets. Watch |gyro_xy|.
@@ -48,7 +41,7 @@ BRACE    — freeze xy targets, ramp the crouch (crouch_ramp_s — a step-input
            z commands clamp to per-leg reachability (IK NaN = sim death).
 RECOVER  — after calm_time of quiet gyro, blend back into the (resumed)
            gait over blend_time. A new spike re-trips.
-FALLEN   — session 8d (D042): braces don't save everything. When tilt
+FALLEN   — (D042) braces don't save everything. When tilt
            exceeds fall_tilt for fall_confirm_s (a shove can spike tilt
            transiently — 60° held 1 s means it is ON THE GROUND, not
            wobbling), the supervisor abandons foot-space control entirely
@@ -68,16 +61,13 @@ RIGHTED  — joint-space smoothstep ramp from wherever the righter left the
            exactly eval_recover.py's hybrid handoff, made a state.
 Arming   — reflex ignores the first arm_after seconds (startup transients).
 
-D052 additions (all optional; a caller that passes none of them gets the
-old supervisor exactly):
+D052 options (a caller that passes none of them gets the plain supervisor):
   monitor=True   — a GESTURE owns the joints. The supervisor still watches:
                    fall detection runs and FALLEN/RIGHTED take over as usual
                    (the caller must drop the gesture and use the returned q),
                    but in the other states the gait clock is frozen, gyro
                    trips are only counted (monitor_trips) and the q it returns
-                   (the planted stance) is not meant to drive anything. Before
-                   this, a playground gesture skipped sup.step entirely: no
-                   fall detection for its whole length.
+                   (the planted stance) is not meant to drive anything.
   probe_dz (mm)  — the caller's contact-probe offsets (playground stance
                    probe). Added below every foot target in NORMAL/PLANT/
                    RECOVER and captured into the brace, so a BRACE/PLANT
@@ -92,13 +82,13 @@ old supervisor exactly):
                    (3 in 5 s) means the robot is teetering, not being
                    shoved: request_stop() and LATCH. While `latched` the
                    velocity command is ignored (treated as zero) until
-                   clear_latch(). Measured motivation: at a cliff edge the
-                   playground cycled NORMAL/PLANT/BRACE/RECOVER for 25 s.
-                   ON by default (the Pi runs this class); an A/B harness that
-                   must reproduce pre-D052 numbers passes trip_escalate_n=None.
+                   clear_latch() (at a cliff edge the supervisor otherwise
+                   cycles NORMAL/PLANT/BRACE/RECOVER). ON by default; an A/B
+                   harness that must reproduce pre-D052 numbers passes
+                   trip_escalate_n=None.
 
 Tuning: clean walking peaks |gyro_xy| ~1 rad/s in sim; trip defaults 1.8.
-contact_aware=False reproduces v1 exactly (for A/B harnesses). Without a
+contact_aware=False reproduces the D022 v1 reflex (for A/B harnesses). Without a
 contacts feed, PLANT falls back to the commanded swing state alone.
 """
 from __future__ import annotations
@@ -196,9 +186,9 @@ class ReflexSupervisor:
         self._last_q = None
         self.trip_count = 0
         self.swing_at_brace = None               # diagnostics
-        self._stop_req = False                   # session 6: safe-stop request
+        self._stop_req = False                   # D025: safe-stop request
         self._stopping = False
-        # session 8d (D042): fall detection + learned self-righting handoff
+        # D042: fall detection + learned self-righting handoff
         self.righter = righter                   # callable(t, dt)->q or None
         self.fall_tilt = fall_tilt_deg
         self.fall_confirm_s = fall_confirm_s
@@ -323,7 +313,7 @@ class ReflexSupervisor:
 
     # ------------------------------------------------------------------
     def request_stop(self):
-        """Session 6 (D025 pairing): route an EXTERNAL halt request — cliff
+        """D025: route an EXTERNAL halt request — cliff
         detector, operator stop, watchdog — through the same PLANT→BRACE
         machinery a gyro trip uses. The gait finishes its current step,
         freezes into a full-contact crouch, then RECOVERs into the idle

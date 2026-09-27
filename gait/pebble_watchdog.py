@@ -2,7 +2,7 @@
 
 D017: on rubble above ~30 mm the blind gait SNAGS but never falls — it
 stalls with tilt barely moving. So the trigger is PROGRESS, not tilt, and
-the cheap fix is step height (the 32 mm default is the binding constraint).
+the cheap fix is a higher step.
 
 ProgressWatchdog
 ----------------
@@ -14,11 +14,22 @@ RetryPolicy
 -----------
 On STUCK: escalate through recovery stages, each tried for `stage_cycles`
 gait cycles, then drop back to nominal if progress resumes:
-  stage 1: step height 32 -> 46 mm, speed x0.7      (step over it)
-  stage 2: step height 52 mm, speed x0.55, body +10 (high-step + clearance)
-  stage 3: retreat: reverse 0.6 cycles, then stage 2 again (unhook the foot)
+  nominal       params gait.step_height, cycle time and speed
+  high-step     step x1.45, speed x0.70            (step over it)
+  higher+clear  step x1.75, body +10 mm, speed x0.55 (high-step + clearance)
+  retreat       reverse 0.6 cycles, then higher+clear again (unhook the foot)
+Under the D052 servo budget a higher step at the same cycle time asks the
+knee for more speed than it has (WaveGait.vf_limit()'s lift ceiling drops to
+0), so each stage gets the shortest cycle time (a multiple of the nominal)
+whose speed envelope min(vf_limit()) is at least MIN_VF_MM_S — worked out
+once from the gait's own budget, never hard-coded. Every command the policy
+returns goes through the gait's budget(). A stage switch keeps the gait
+phase continuous (a new cycle time would otherwise jump every leg's phase).
 Odometry source: sim uses torso ground truth; hardware will use the legged
 odometry EKF (perception/legged_odom.py) — same interface.
+
+Not on a live path: the cockpit's goto has its own no-progress rule; the
+sim/experiments run_stuck*.py scripts drive this.
 """
 from __future__ import annotations
 import numpy as np
@@ -83,12 +94,15 @@ class ProgressWatchdog:
 class RetryPolicy:
     """Escalating recovery stages applied to a WaveGait in place."""
 
-    STAGES = [
-        dict(name="nominal", hstep=32.0, speed_mult=1.00, dh=0.0, reverse=0.0),
-        dict(name="high-step", hstep=46.0, speed_mult=0.70, dh=0.0, reverse=0.0),
-        dict(name="higher+clear", hstep=52.0, speed_mult=0.55, dh=10.0, reverse=0.0),
-        dict(name="retreat", hstep=52.0, speed_mult=0.55, dh=10.0, reverse=0.6),
+    # (name, step height x nominal, body lift mm, speed multiplier, reverse cycles)
+    LADDER = [
+        ("nominal", 1.00, 0.0, 1.00, 0.0),
+        ("high-step", 1.45, 0.0, 0.70, 0.0),
+        ("higher+clear", 1.75, 10.0, 0.55, 0.0),
+        ("retreat", 1.75, 10.0, 0.55, 0.6),
     ]
+    T_MULTS = (1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0)   # cycle-time search, x nominal
+    MIN_VF_MM_S = 20.0        # a stage must still walk: its envelope's foot-speed ceiling
 
     def __init__(self, gait, stage_cycles=3.0, settle_cycles=2.0):
         self.g = gait
@@ -98,25 +112,55 @@ class RetryPolicy:
         self.stage = 0
         self._stage_t0 = None
         self._reverse_until = None
+        self._phase_off0 = np.array(gait.phase_off, dtype=float)
+        self._shift = 0.0                 # phase added so a cycle-time change is continuous
         self.events: list[tuple[float, str]] = []
+        self.STAGES = self.derive_stages(gait)
+
+    @classmethod
+    def derive_stages(cls, gait) -> list[dict]:
+        """The ladder on this gait: per stage the step height, body lift and the
+        shortest cycle time whose speed envelope is >= MIN_VF_MM_S (vf = that
+        envelope, mm/s). ValueError if a stage cannot walk at any T_MULTS."""
+        out = []
+        for name, k_step, dh, mult, rev in cls.LADDER:
+            hstep = gait.hstep * k_step
+            for k in cls.T_MULTS:
+                T = gait.T * k
+                trial = type(gait)(body_height=gait.h + dh, stance_radius=gait.R0,
+                                   cycle_time=T, duty=gait.duty, step_height=hstep)
+                vf = min(trial.vf_limit())
+                if vf >= cls.MIN_VF_MM_S:
+                    break
+            else:
+                raise ValueError(f"retry stage {name!r} (step {hstep:.0f} mm, body +{dh:.0f} mm) "
+                                 f"has no speed envelope >= {cls.MIN_VF_MM_S} mm/s at any cycle time "
+                                 f"up to {cls.T_MULTS[-1]}x nominal")
+            out.append(dict(name=name, hstep=hstep, T=T, dh=dh, speed_mult=mult,
+                            reverse=rev, vf=vf))
+        return out
 
     @property
     def stage_name(self):
         return self.STAGES[self.stage]["name"]
 
-    def _apply(self, s):
+    def _apply(self, s, t):
+        ph = t / self.g.T + self._shift                  # keep the gait phase continuous at t
+        self.g.T = s["T"]
+        self._shift = ph - t / self.g.T
+        self.g.phase_off = self._phase_off0 + self._shift
         self.g.hstep = s["hstep"]
         self.g.h = self.h0 + s["dh"]
-        a = np.deg2rad(90 + 72 * np.arange(5))
-        self.g.p_nom = np.stack([self.g.R0 * np.cos(a), self.g.R0 * np.sin(a),
-                                 -self.g.h * np.ones(5)], axis=1)
+        p = np.array(self.g.p_nom, dtype=float)          # stations come from the gait (robot spec)
+        p[:, 2] = -self.g.h
+        self.g.p_nom = p
 
     def on_stuck(self, t):
         if self.stage < len(self.STAGES) - 1:
             self.stage += 1
         self._stage_t0 = t
         s = self.STAGES[self.stage]
-        self._apply(s)
+        self._apply(s, t)
         if s["reverse"] > 0:
             self._reverse_until = t + s["reverse"] * self.g.T
         self.events.append((round(t, 2), f"STUCK -> {s['name']}"))
@@ -128,16 +172,17 @@ class RetryPolicy:
         if making_progress and (t - self._stage_t0) > \
                 self.stage_cycles * self.g.T:
             self.stage = 0
-            self._apply(self.STAGES[0])
+            self._apply(self.STAGES[0], t)
             self._stage_t0 = None
             self.events.append((round(t, 2), "recovered -> nominal"))
 
     def command(self, t, vx, vy, wz):
-        """Transform the operator command per current stage."""
+        """Transform the operator command per current stage, fitted into the
+        current gait's budget() (D052)."""
         s = self.STAGES[self.stage]
         m = s["speed_mult"]
         if self._reverse_until is not None:
             if t < self._reverse_until:
-                return -vx * m * 0.8, -vy * m * 0.8, wz * 0.3
+                return self.g.budget(-vx * m * 0.8, -vy * m * 0.8, wz * 0.3)
             self._reverse_until = None
-        return vx * m, vy * m, wz
+        return self.g.budget(vx * m, vy * m, wz)

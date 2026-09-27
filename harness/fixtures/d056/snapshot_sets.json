@@ -1,0 +1,149 @@
+{
+ "GATED_raw": [
+  "goto",
+  "gesture",
+  "compose_gesture",
+  "find_object",
+  "go_back_to",
+  "find_object",
+  "turn",
+  "go_back_to",
+  "move"
+ ],
+ "GATED": [
+  "compose_gesture",
+  "find_object",
+  "gesture",
+  "go_back_to",
+  "goto",
+  "move",
+  "turn"
+ ],
+ "intent.MOTION_TOOLS": [
+  "goto",
+  "gesture",
+  "compose_gesture",
+  "find_object",
+  "go_back_to"
+ ],
+ "cockpit_dispatch (CockpitSim.tool -> Brains.tool accepts TOOL_NAMES)": [
+  "say",
+  "gesture",
+  "move",
+  "goto",
+  "stop",
+  "scan_summary",
+  "status",
+  "look",
+  "list_gestures",
+  "compose_gesture",
+  "check_gesture",
+  "save_gesture",
+  "find_object",
+  "turn",
+  "remember",
+  "where_is",
+  "recall",
+  "go_back_to",
+  "forget"
+ ],
+ "cockpit_dispatch": [
+  "check_gesture",
+  "compose_gesture",
+  "find_object",
+  "forget",
+  "gesture",
+  "go_back_to",
+  "goto",
+  "list_gestures",
+  "look",
+  "move",
+  "recall",
+  "remember",
+  "save_gesture",
+  "say",
+  "scan_summary",
+  "status",
+  "stop",
+  "turn",
+  "where_is"
+ ],
+ "cockpit_not_offered_to_models": [
+  "turn"
+ ],
+ "MEMORY_TOOLS": [
+  "remember",
+  "where_is",
+  "recall",
+  "go_back_to",
+  "forget"
+ ],
+ "NOTED": [
+  "goto",
+  "gesture",
+  "say",
+  "stop",
+  "compose_gesture",
+  "turn"
+ ],
+ "CockpitSim.tool_* methods (reached via getattr(self.sim, 'tool_' + name))": [
+  "gesture",
+  "goto",
+  "look",
+  "say",
+  "scan_summary",
+  "status",
+  "stop"
+ ],
+ "SIGNED": [
+  "turn_in_place",
+  "sidestep"
+ ],
+ "openai_names (representative call)": [
+  "say",
+  "gesture",
+  "move",
+  "goto",
+  "stop",
+  "scan_summary",
+  "status",
+  "list_gestures",
+  "look",
+  "compose_gesture",
+  "check_gesture",
+  "save_gesture",
+  "find_object",
+  "remember",
+  "where_is",
+  "recall",
+  "go_back_to",
+  "forget"
+ ],
+ "mcp_names (full backend)": [
+  "say",
+  "gesture",
+  "move",
+  "goto",
+  "stop",
+  "scan_summary",
+  "status",
+  "list_gestures",
+  "look",
+  "find_object",
+  "remember",
+  "where_is",
+  "recall",
+  "go_back_to",
+  "forget"
+ ],
+ "mcp_names (MockBackend)": [
+  "say",
+  "gesture",
+  "move",
+  "goto",
+  "stop",
+  "scan_summary",
+  "status",
+  "list_gestures"
+ ]
+}

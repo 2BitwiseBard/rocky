@@ -1,4 +1,4 @@
-"""Gesture library v2 (session 8) — wave, bow, look-around, shake, sit,
+"""Gesture library v2 — wave, bow, look-around, shake, sit,
 turn-in-place, sidestep.
 
 Same contract as pebble_gestures.py: every gesture is fn(g, t) -> (q[5,3]
@@ -17,14 +17,14 @@ slip. stability_margin() is CoM-aware now (it projected the body ORIGIN,
 which ignores the raised arm's own mass — two adjacent arms in a JSON
 gesture scored positive while the CoM sat 57 mm outside).
 
-D052 changes, measured by the checker: wave wag 1.5 -> 1.25 Hz (3.95 ->
-3.29 rad/s on the yaw, free limit 4.0); shake 5.5 Hz x 6 mm -> 4 Hz x 4 mm
-(0.51 g of CoM acceleration over mu 0.8 pads -> 0.18); turn_in_place and
-sidestep go through WaveGait.budget() (the old wz 0.35 swung the coxa at
-5.17 rad/s, past the servo's no-load 4.7) and end on a planted stance.
+D052 (measured by the checker): wave wags at 1.25 Hz (3.29 rad/s on the yaw,
+free limit 4.0); shake is 4 Hz x 4 mm (0.18 g of CoM acceleration over mu
+0.8 pads); turn_in_place and sidestep go through WaveGait.budget() and end
+on a planted stance.
 
 Registry: GESTURES2 = {name: (fn, total_s, narration)} — playground.py,
-harness/backend.py and run_gestures2.py all read it.
+harness/sim_backend.py and run_gestures2.py read it (harness/backend.py
+mirrors the names; a test in harness/test_harness.py pins them).
 """
 from __future__ import annotations
 import numpy as np

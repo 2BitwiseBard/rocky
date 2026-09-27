@@ -15,15 +15,14 @@ Joint order matches rocky_control/config/controllers.yaml:
 Requires `pip install -e .` at the repo root (installs pebble_gait +
 rocky_driver as plain Python packages) — see ros2/README.md.
 
-D052 V2 (review): the node hard-coded the legacy gait (T 1.6 s, step 32 mm —
-a gait WaveGait.budget() allows NO motion on under the D052 servo budget)
-and clipped /cmd_vel to 60 mm/s and 0.6 rad/s: pf.check_gait at (0, 0, 0.6)
-peaks at 8.85 rad/s. Now the defaults come from cad/params.yaml (via
-rocky_model), every command goes through the gait's budget() (logged when it
-scales), the published targets are rate-clamped at the hard 4.7 rad/s and a
-non-finite target holds the last good one. Still NOT here: the reflex
-supervisor (it needs the IMU and contacts this node does not subscribe to)
-— see ros2/README.md. Not run under ROS on the dev box (no rclpy).
+D052 V2: the gait defaults come from cad/params.yaml (via rocky_model), every
+command goes through the gait's budget() (logged when it scales), the
+published targets are rate-clamped at the hard 4.7 rad/s and a non-finite
+target holds the last good one. BodyPoseCommand.height_m is an offset from
+params gait.body_height (the gait is rebuilt when it changes); its lean /
+roll / pitch / yaw fields are reserved and not applied yet. Not here: the
+reflex supervisor (it needs the IMU and contacts this node does not
+subscribe to) — see ros2/README.md. Not run under ROS in CI (no rclpy).
 """
 import math
 
@@ -98,10 +97,18 @@ class GaitNode(Node):
             if msg.arm_legs:
                 self.arm_legs = tuple(int(a) for a in msg.arm_legs)
             self._gait = self._make_gait()
-        self.cmd = [msg.vx, msg.vy, msg.wz]
+        cmd = [float(msg.vx), float(msg.vy), float(msg.wz)]
+        self.cmd = cmd if all(math.isfinite(c) for c in cmd) else [0.0, 0.0, 0.0]
 
     def on_pose(self, msg: BodyPoseCommand):
+        """height_m is applied (an offset from params gait.body_height; the gait
+        is rebuilt); lean/roll/pitch/yaw are reserved and ignored for now."""
+        if not math.isfinite(msg.height_m):
+            return
+        changed = abs(float(msg.height_m) - float(self.pose.height_m)) > 1e-6
         self.pose = msg
+        if changed:
+            self._gait = self._make_gait()
 
     # ------------------------------------------------------------ main loop
     def tick(self):
