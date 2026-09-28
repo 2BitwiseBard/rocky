@@ -48,16 +48,25 @@
 #   rocky.sh eval-recover NAME [args]    20-episode righting eval of runs/NAME
 #   rocky.sh train-walk NAME [args]  residual-gait PPO run (see docs/RL_GUIDE.md)
 #   rocky.sh eval-walk NAME [args]   deterministic eval of runs/NAME vs the bare gait
-#   rocky.sh cad-check [--derived] whole-tree CAD CI (build123d): 28/28 modules or it didn't happen;
-#                                  --derived also rebuilds the preview, print estimate, print pack
-#                                  and viewer (32/32)
+#   rocky.sh cad-check [--derived] [--fem]  whole-tree CAD CI (build123d): 28/28 modules or it didn't happen;
+#                                  --derived also rebuilds the preview, print estimate, print pack,
+#                                  viewer and part drawings (33/33); --fem also runs the leg stress check
+#                                  (cad/fem_check.py: gmsh + CalculiX, D061) — SKIPPED without them
+#   rocky.sh cad-drawings [PART...] [--force]  A4 TechDraw sheets of the leg parts (or PART) in
+#                                  cad/out/drawings/ (FreeCAD, no window; a part is redrawn only when
+#                                  its STEP changed; also part of cad-check --derived)
+#   rocky.sh cad-open [PART|FILE...]  open STEP files in FreeCAD (default: the posed leg assembly);
+#                                  PART = a cad/out/PART.step name; --fem PART opens that part's
+#                                  stress result (after cad-check --fem). With FreeCAD's MCP
+#                                  add-on running, Claude can then inspect / measure / screenshot it
 #   rocky.sh help                  this text (the whole header, so new commands show up)
 #
 # Env the launcher itself reads (all of them, with defaults: rocky.env.example): ROCKY_REPO,
 # ROCKY_ENV_FILE (another rocky.env), ROCKY_WORLD (flat|room|cliff), ROCKY_VIEWER (1|0), ROCKY_AUDIO
 # (1|0), ROCKY_LLM_BASE_URL, ROCKY_LLM_MODEL, ROCKY_LLM_API_KEY / ROCKY_LLM_KEY_FILE, ROCKY_WHISPER_URL,
 # ROCKY_WHISPER_FAST_URL, ROCKY_VOICE_SECS, ROCKY_VOICE_WAV (test file instead of the mic),
-# ROCKY_COCKPIT_PORT (tailnet's proxy target), ROCKY_TAILNET_PORT.
+# ROCKY_COCKPIT_PORT (tailnet's proxy target), ROCKY_TAILNET_PORT, ROCKY_FREECAD / ROCKY_FREECADCMD /
+# ROCKY_GMSH / ROCKY_CCX (CAD tools; default: on PATH, else the FreeCAD Flatpak).
 set -euo pipefail
 
 ROCKY_REPO="${ROCKY_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
@@ -216,6 +225,43 @@ case "$cmd" in
 
   cad-check)
     cd "$ROCKY_REPO/cad" && exec "$PY" run_all_checks.py "$@" ;;
+
+  cad-drawings)
+    cd "$ROCKY_REPO/cad" && exec "$PY" gen_drawings.py "$@" ;;
+
+  cad-open)
+    if [[ -n "${ROCKY_FREECAD:-}" ]]; then read -r -a fc <<< "$ROCKY_FREECAD"
+    elif command -v freecad >/dev/null; then fc=(freecad)
+    elif command -v FreeCAD >/dev/null; then fc=(FreeCAD)
+    elif flatpak info org.freecad.FreeCAD >/dev/null 2>&1; then fc=(flatpak run org.freecad.FreeCAD)
+    else echo "cad-open: no FreeCAD (install it, or set ROCKY_FREECAD in rocky.env)" >&2; exit 1; fi
+    files=()
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --fem) shift; w="$ROCKY_REPO/cad/out/fem/work/${1:?--fem needs a part name}"
+               [[ -f "$w.frd" ]] || { echo "cad-open: no $w.frd (run: rocky.sh cad-check --fem)" >&2; exit 1; }
+               # FreeCAD 1.1 opens a CalculiX result only inside an Analysis: wrap it (cad/fem_to_freecad.py)
+               if [[ ! "$w.FCStd" -nt "$w.frd" ]]; then
+                 if [[ -n "${ROCKY_FREECADCMD:-}" ]]; then read -r -a fcc <<< "$ROCKY_FREECADCMD"
+                 elif command -v FreeCADCmd >/dev/null; then fcc=(FreeCADCmd)
+                 elif command -v freecadcmd >/dev/null; then fcc=(freecadcmd)
+                 else fcc=(flatpak run --command=FreeCADCmd org.freecad.FreeCAD); fi
+                 echo "cad-open: wrapping $(basename "$w").frd in a FreeCAD analysis ..."
+                 command rm -f "$w.FCStd.status"
+                 FEM_FRD="$w.frd" FEM_FCSTD="$w.FCStd" "${fcc[@]}" "$ROCKY_REPO/cad/fem_to_freecad.py" >/dev/null 2>&1 || true
+                 grep -q '^ok' "$w.FCStd.status" 2>/dev/null \
+                   || { echo "cad-open: the wrap failed:" >&2; cat "$w.FCStd.status" >&2 2>/dev/null; exit 1; }
+               fi
+               files+=("$w.FCStd") ;;
+        *)     if [[ -f "$1" ]]; then files+=("$(realpath "$1")")
+               elif [[ -f "$ROCKY_REPO/cad/out/$1.step" ]]; then files+=("$ROCKY_REPO/cad/out/$1.step")
+               else echo "cad-open: no file $1 and no cad/out/$1.step" >&2; exit 1; fi ;;
+      esac
+      shift
+    done
+    [[ ${#files[@]} -gt 0 ]] || files=("$ROCKY_REPO/cad/out/leg_skeleton_assembly.step")
+    setsid "${fc[@]}" "${files[@]}" >/dev/null 2>&1 < /dev/null &
+    echo "opened in FreeCAD: ${files[*]#"$ROCKY_REPO"/}" ;;
 
   help|-h|--help)
     # the whole leading comment block after the shebang, however long it grows

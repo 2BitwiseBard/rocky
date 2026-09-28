@@ -42,7 +42,8 @@ ids (`bus.leg_ids`, `bus.hand_ids`).
 
 # 3. regenerate, in this order (a future `rocky.sh regen` will do this, B36 step 9)
 ./rocky.sh cad-check                                   # the 28 CAD checks; rewrites cad/out/*.stl
-./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer (32/32)
+./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer, drawings (33/33)
+./rocky.sh cad-check --fem                             # + the leg stress check (D061; needs gmsh + CalculiX)
 .venv/bin/python sim/mass_audit.py                     # STL volumes + mass_hw -> sim/mass_budget.json
 MUJOCO_GL=egl .venv/bin/python sim/build_mjcf.py       # -> sim/pebble.xml
 .venv/bin/python ros2/rocky_description/generate_urdf.py   # -> urdf/pebble.urdf(.xacro)
@@ -377,7 +378,7 @@ The leg is built to `params.yaml` as it stands. Before assembling:
       is read.
 - [ ] CAD part literals that mirror params are changed by hand (§2, §3).
 - [ ] `./rocky.sh cad-check` (`--derived` for the preview, print pack and
-      viewer) → `sim/mass_audit.py` → `sim/build_mjcf.py` →
+      viewer; `--fem` when a leg part's shape, a servo or the stance changed) → `sim/mass_audit.py` → `sim/build_mjcf.py` →
       `generate_urdf.py` → `sim/check_urdf_parity.py`
 - [ ] `./rocky.sh test`. Pinned-number failures are updated deliberately,
       not loosened.

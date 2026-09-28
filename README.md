@@ -42,9 +42,11 @@ rocky/
 ├── rocky.env.example    every machine setting (ROCKY_*) with its default; copy to rocky.env (git-ignored)
 ├── pyproject.toml       pip-installable core (gait modules + bus driver) and the extras
 ├── cad/                 build123d parametric parts; params.yaml is the single source of truth
-│   ├── run_all_checks.py   the CAD CI: 28 modules incl. the joint suite + printability (--derived: +4 generators)
+│   ├── run_all_checks.py   the CAD CI: 28 modules incl. the joint suite + printability (--derived: +5 generators, --fem: the stress check)
+│   ├── fem_check.py     will a leg part break? CalculiX stress check under servo-limited loads (D061)
 │   ├── ref/             the measured ST3215 STEP every leg part is derived from (+ its Apache-2.0 license)
-│   ├── out/             exported STL/STEP/PNG (git-lfs) and PRINT_PREP_PACK.pdf, the print pack
+│   ├── out/             exported STL/STEP/PNG (git-lfs) and PRINT_PREP_PACK.pdf, the print pack;
+│   │                    fem/FEM_REPORT.md + a stress picture per leg part; drawings/ (A4 sheet per leg part)
 │   ├── pebble_viewer.html  self-contained WebGL viewer (git-lfs)
 │   └── leg_frame.py, servo_st3215.py, servo_mount.py, part_*.py, check_*.py
 ├── gait/                pure-numpy control: params loader (rocky_model.py), wave gait + IK, feasibility
@@ -113,6 +115,9 @@ MUJOCO_GL=egl python sim/run_sim.py                  # the wave gait walks, head
 MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + arrow-key teleop (or ./rocky.sh play)
 ./rocky.sh cockpit                                   # browser playground: http://127.0.0.1:8765
 ./rocky.sh cad-check                                 # the CAD CI (needs the cad extra)
+./rocky.sh cad-check --fem                           # + the leg stress check (needs gmsh + CalculiX: FreeCAD has both)
+./rocky.sh cad-open coxa_fork                        # a part (or --fem PART, its stress result) in FreeCAD
+./rocky.sh cad-drawings                              # A4 TechDraw sheets of the leg parts (FreeCAD, no window)
 ```
 
 ## Driving it

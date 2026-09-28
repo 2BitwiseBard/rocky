@@ -47,6 +47,11 @@ sim/sim_contact_sheet.png
 
 # perception logs (wifi_rssi_logger.py: the --scan log and the --sim demo log)
 perception/out/
+# FEM scratch: meshes, CalculiX decks and .frd results (cad/fem_check.py; the report + pictures
+#   in cad/out/fem/ are tracked)
+cad/out/fem/work/
+# FreeCAD scratch for the part drawings (cad/gen_drawings.py; the PDFs + INDEX.md are tracked)
+cad/out/drawings/work/
 
 # --- packaging and tool caches ---
 build/

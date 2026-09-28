@@ -1,0 +1,375 @@
+{
+ "blank_idler": {
+  "scale": 2,
+  "bbox_mm": [
+   19.88,
+   19.89,
+   5.8
+  ],
+  "extents_mm": [
+   19.9,
+   5.8,
+   19.9
+  ],
+  "holes": [],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "c87d5aa9e8bdb0f8"
+ },
+ "coxa_fork": {
+  "scale": 0.75,
+  "bbox_mm": [
+   44.0,
+   39.8,
+   75.4
+  ],
+  "extents_mm": [
+   44.0,
+   75.4,
+   39.8
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.4,
+    "count": 4,
+    "axis": "Y"
+   },
+   {
+    "dia_mm": 6.4,
+    "count": 1,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 7.0,
+    "count": 1,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 20.3,
+    "count": 1,
+    "axis": "Z"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "495e1d5df132d8dc"
+ },
+ "coxa_yaw_base": {
+  "scale": 0.75,
+  "bbox_mm": [
+   72.45,
+   44.0,
+   58.5
+  ],
+  "extents_mm": [
+   72.45,
+   58.5,
+   44.0
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.4,
+    "count": 2,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 3.4,
+    "count": 2,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 3.7,
+    "count": 2,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 4.3,
+    "count": 2,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 5.0,
+    "count": 2,
+    "axis": "Z"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "fae5980b24660b05"
+ },
+ "femur_link": {
+  "scale": 0.75,
+  "bbox_mm": [
+   125.0,
+   47.7,
+   31.0
+  ],
+  "extents_mm": [
+   125.0,
+   31.0,
+   47.7
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.8,
+    "count": 4,
+    "axis": "Y"
+   },
+   {
+    "dia_mm": 3.4,
+    "count": 4,
+    "axis": "Y"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "3cba4218d0bf39a5"
+ },
+ "femur_plate_b": {
+  "scale": 1,
+  "bbox_mm": [
+   121.0,
+   9.8,
+   38.0
+  ],
+  "extents_mm": [
+   121.0,
+   38.0,
+   9.8
+  ],
+  "holes": [
+   {
+    "dia_mm": 7.0,
+    "count": 2,
+    "axis": "Y"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "1b36ad2537fcd80f"
+ },
+ "horn_coupler": {
+  "scale": 2,
+  "bbox_mm": [
+   26.0,
+   25.96,
+   5.6
+  ],
+  "extents_mm": [
+   26.0,
+   5.6,
+   26.0
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.8,
+    "count": 2,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 6.4,
+    "count": 1,
+    "axis": "Z"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "59c377c221c8cd5f"
+ },
+ "servo_blank": {
+  "scale": 1,
+  "bbox_mm": [
+   45.4,
+   24.8,
+   35.6
+  ],
+  "extents_mm": [
+   45.4,
+   35.6,
+   24.8
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.5,
+    "count": 4,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 3.0,
+    "count": 3,
+    "axis": "Y"
+   },
+   {
+    "dia_mm": 6.2,
+    "count": 1,
+    "axis": "Z"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "5e41a5925bcf8349"
+ },
+ "tibia_knee_carrier": {
+  "scale": 0.75,
+  "bbox_mm": [
+   48.0,
+   38.4,
+   50.4
+  ],
+  "extents_mm": [
+   48.0,
+   50.4,
+   38.4
+  ],
+  "holes": [
+   {
+    "dia_mm": 2.4,
+    "count": 4,
+    "axis": "Y"
+   },
+   {
+    "dia_mm": 2.8,
+    "count": 1,
+    "axis": "X"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "00f3cbe04b2ae631"
+ },
+ "tibia_sea_outer": {
+  "scale": 1.5,
+  "bbox_mm": [
+   19.0,
+   21.8,
+   28.0
+  ],
+  "extents_mm": [
+   19.0,
+   28.0,
+   21.8
+  ],
+  "holes": [
+   {
+    "dia_mm": 10.3,
+    "count": 1,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 13.2,
+    "count": 1,
+    "axis": "Z"
+   }
+  ],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "c3cd86f02a4be1de"
+ },
+ "tibia_sea_slider": {
+  "scale": 2,
+  "bbox_mm": [
+   16.3,
+   16.6,
+   24.0
+  ],
+  "extents_mm": [
+   16.3,
+   24.0,
+   16.6
+  ],
+  "holes": [],
+  "template_fields": [
+   "Designed_by_Name",
+   "Drawing_number",
+   "FC-Date",
+   "FC-SC",
+   "FC-SH",
+   "FC-Title",
+   "Subtitle",
+   "Weight",
+   "copyright"
+  ],
+  "step_sha": "29f0e1fdf0c1d2cc"
+ }
+}

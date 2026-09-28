@@ -1,12 +1,12 @@
 # Design backlog
 
-*Ideas and follow-ups with verdicts (B1–B71, started 2026-07-30). Each got a bounded look: a sim
+*Ideas and follow-ups with verdicts (B1–B75, started 2026-07-30). Each got a bounded look: a sim
 test where physics could answer, CAD where the part was cheap, spec-and-defer where it depends on
 hardware not yet in hand. Statuses: work to do — OPEN, PROPOSED, BLOCKING, RECOMMENDED, OPTION,
 COUPON (a print answers it), QUEUED, RERUN PENDING; waiting on hardware — SPEC'D, DEFERRED; partly
 done — HALF / MOSTLY / MECHANICAL / STEP 1 SHIPPED; done — SHIPPED, NEGATIVE (tested, don't build),
 MERGED.
-B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 those of its final pass (2026-09-27).*
+B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 those of its final pass (2026-09-27), B74–B75 from the first FEM run (D061).*
 
 ## Open
 
@@ -56,6 +56,8 @@ B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 
 | B67 | The tray's bus trunk: route and length | **OPEN** | The tray's XH-5 trunk leaves the bulkhead at y ≈ −72 (facing south), while the D059 star board sits at y 32, so the trunk runs round the tray; neither the route nor the length is computed ([WIRING_HARNESS](WIRING_HARNESS.md#cut-lengths-computed-from-the-deck-geometry)). Measure it on the printed deck, or compute it once the tray position is fixed (B51). |
 | B68 | Evaluations not rerun on `7d376178fe27` | **RERUN PENDING** | The 2026-09-26 rerun did not repeat `recover5_v3_warm`'s servo-nominal, randomised and pure-RL cells (still labelled `5a32f772ca99` in RL_GUIDE §4) or the `robust_fwd2` / `cmd_sample3` walker evaluations (pre-D052 walkers with no envelope, zeroed in the cockpit). Rerun them with `eval_recover` / `eval_ppo`, or retire the checkpoints. |
 | B72 | The battery sled is wider than its bay | **OPEN** | `part_battery.battery_sled` is the pack width plus two 2.4 mm walls: 50.8 mm (46 + 4.8, the STL measures 50.80), but `interfaces.battery_sled.bay_w` is 50, and `part_dock` sizes its funnel from `bay_w / 2` as the sled's half-width. Decide which moves (a 45.2 mm pack limit, 2.0 mm walls, or a 51 mm bay) and add the sled-in-bay check that `part_battery` only prints today; the pack itself is VERIFY on purchase (I5). |
+| B74 | The femur twists under a sideways foot load | **PROPOSED** (D061) | `cad/fem_check.py`: `femur` (plate A + plate B joined at the four bosses) **FAILS at SF 1.22** in the lateral cases (39 N at the foot, the yaw servo at stall; 4.9 N·m of twist about the femur's own axis) and deflects 4.5 mm at the knee; 1.16 on a 6× finer mesh, so it is the part, not the mesh. Hot spots: plate B's rails at the knee tower and the boss joints. The open twin-plate section is soft in torsion. What-ifs on the same loads: rails 6 → 9 mm SF 1.64 (+10.7 g); bridge walls 3 → 5 mm 1.29; a plate-B deck closing the box between the rails over the bridge (x 21–52, \|z\| < 11) 1.71 (+5.2 g, deflection 1.37 mm); **deck + 8 mm rails 2.16, PASS (+14.1 g, deflection 1.05 mm)**, deck + 9 mm 2.32. Found on the way (the drawings' hole table has no M3 hole for plate B): **plate B's four Ø3.4 screw holes break out of the rails' inner edge** (centre \|z\| 11.5, radius 1.7, rails from \|z\| 11: a 1.2 mm notch, 57 % of a 1 mm ring round each hole is material, the M3 head half on air); the deck puts them in solid plastic. The deck + 8 mm rails clears both servos, both plug keep-outs, the knee carrier's sweep and the fork over hip −90…90 (checked 2026-09-27); the femur-to-knee cable route is not modelled, so check it on a print. Changing the femur moves the mass and the fingerprint (B53). |
+| B75 | Allowables from your own printer | **COUPON** | `params.fem.petg` holds datasheet-derived allowables with a knock-down (35 MPa von Mises, 20 MPa across layers, VERIFY). Pull one dog-bone printed flat and one printed standing, same settings as the leg parts, and file the two breaking stresses; every SF in `cad/out/fem/FEM_REPORT.md` scales with them. |
 
 ## Closed
 

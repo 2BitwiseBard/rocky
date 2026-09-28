@@ -1,0 +1,650 @@
+{
+ "material": "petg",
+ "results": [
+  {
+   "part": "coxa_yaw_base",
+   "verdict": "PASS",
+   "sf": 2.93,
+   "governing": "V",
+   "nodes": 36535,
+   "elements": 19050,
+   "held_nodes": 5335,
+   "loaded_nodes": 3985,
+   "build_dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "held": "deck (plate underside)",
+   "loaded": "yaw servo case in the cup",
+   "cases": [
+    {
+     "case": "V",
+     "F_N": [
+      0.0,
+      0.0,
+      60.29
+     ],
+     "M_Nmm": [
+      0.0,
+      -4521.8,
+      0.0
+     ],
+     "vm_p999": 6.88,
+     "sn_p999": 6.82,
+     "util_p999": 0.341,
+     "util_peak": 0.385,
+     "peak_at": [
+      -14.0,
+      5.5,
+      0.0
+     ],
+     "defl_mm": 0.15,
+     "sf": 2.93,
+     "governs": "layers"
+    },
+    {
+     "case": "R+",
+     "F_N": [
+      16.42,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      -2365.1,
+      0.0
+     ],
+     "vm_p999": 2.1,
+     "sn_p999": 2.08,
+     "util_p999": 0.104,
+     "util_peak": 0.115,
+     "peak_at": [
+      -14.0,
+      5.5,
+      0.0
+     ],
+     "defl_mm": 0.046,
+     "sf": 9.62,
+     "governs": "layers"
+    },
+    {
+     "case": "R-",
+     "F_N": [
+      -16.42,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      2365.1,
+      0.0
+     ],
+     "vm_p999": 2.1,
+     "sn_p999": 1.74,
+     "util_p999": 0.087,
+     "util_peak": 0.092,
+     "peak_at": [
+      -38.5,
+      8.1,
+      1.4
+     ],
+     "defl_mm": 0.046,
+     "sf": 11.49,
+     "governs": "layers"
+    },
+    {
+     "case": "L+",
+     "F_N": [
+      0.0,
+      39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      5644.8,
+      -0.0,
+      2940.0
+     ],
+     "vm_p999": 5.43,
+     "sn_p999": 2.9,
+     "util_p999": 0.155,
+     "util_peak": 0.165,
+     "peak_at": [
+      -24.0,
+      -10.1,
+      -2.5
+     ],
+     "defl_mm": 0.099,
+     "sf": 6.45,
+     "governs": "von Mises"
+    },
+    {
+     "case": "L-",
+     "F_N": [
+      0.0,
+      -39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      -5644.8,
+      -0.0,
+      -2940.0
+     ],
+     "vm_p999": 5.43,
+     "sn_p999": 5.07,
+     "util_p999": 0.253,
+     "util_peak": 0.274,
+     "peak_at": [
+      -24.0,
+      -10.1,
+      -2.5
+     ],
+     "defl_mm": 0.099,
+     "sf": 3.95,
+     "governs": "layers"
+    }
+   ]
+  },
+  {
+   "part": "coxa_fork",
+   "verdict": "PASS",
+   "sf": 3.03,
+   "governing": "L-",
+   "nodes": 33528,
+   "elements": 17739,
+   "held_nodes": 1723,
+   "loaded_nodes": 3876,
+   "build_dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "held": "yaw horn pocket + yaw idler pocket",
+   "loaded": "hip servo case in the cup",
+   "cases": [
+    {
+     "case": "V",
+     "F_N": [
+      0.0,
+      0.0,
+      60.29
+     ],
+     "M_Nmm": [
+      0.0,
+      -1808.7,
+      0.0
+     ],
+     "vm_p999": 10.07,
+     "sn_p999": 4.89,
+     "util_p999": 0.288,
+     "util_peak": 0.309,
+     "peak_at": [
+      11.7,
+      -0.2,
+      42.2
+     ],
+     "defl_mm": 0.369,
+     "sf": 3.47,
+     "governs": "von Mises"
+    },
+    {
+     "case": "R+",
+     "F_N": [
+      16.42,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      -2940.0,
+      0.0
+     ],
+     "vm_p999": 6.88,
+     "sn_p999": 3.24,
+     "util_p999": 0.197,
+     "util_peak": 0.214,
+     "peak_at": [
+      11.7,
+      -0.2,
+      42.2
+     ],
+     "defl_mm": 0.246,
+     "sf": 5.08,
+     "governs": "von Mises"
+    },
+    {
+     "case": "R-",
+     "F_N": [
+      -16.42,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      2940.0,
+      0.0
+     ],
+     "vm_p999": 6.88,
+     "sn_p999": 5.61,
+     "util_p999": 0.28,
+     "util_peak": 0.298,
+     "peak_at": [
+      6.5,
+      -0.2,
+      48.2
+     ],
+     "defl_mm": 0.246,
+     "sf": 3.57,
+     "governs": "layers"
+    },
+    {
+     "case": "L+",
+     "F_N": [
+      0.0,
+      39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      7016.8,
+      -0.0,
+      1176.0
+     ],
+     "vm_p999": 7.79,
+     "sn_p999": 6.16,
+     "util_p999": 0.308,
+     "util_peak": 0.329,
+     "peak_at": [
+      20.8,
+      13.0,
+      44.1
+     ],
+     "defl_mm": 0.202,
+     "sf": 3.25,
+     "governs": "layers"
+    },
+    {
+     "case": "L-",
+     "F_N": [
+      0.0,
+      -39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      -7016.8,
+      -0.0,
+      -1176.0
+     ],
+     "vm_p999": 7.79,
+     "sn_p999": 6.61,
+     "util_p999": 0.33,
+     "util_peak": 0.362,
+     "peak_at": [
+      6.5,
+      -8.8,
+      49.8
+     ],
+     "defl_mm": 0.202,
+     "sf": 3.03,
+     "governs": "layers"
+    }
+   ]
+  },
+  {
+   "part": "femur",
+   "verdict": "FAIL",
+   "sf": 1.22,
+   "governing": "L-",
+   "nodes": 66157,
+   "elements": 35893,
+   "held_nodes": 3246,
+   "loaded_nodes": 3303,
+   "build_dir": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "held": "hip coupler recess (plate A) + hip idler pocket (plate B); plates joined at the 4 bosses only",
+   "loaded": "knee coupler recess + knee idler pocket",
+   "cases": [
+    {
+     "case": "V",
+     "F_N": [
+      -33.71,
+      0.0,
+      49.99
+     ],
+     "M_Nmm": [
+      -287.4,
+      2940.0,
+      -193.8
+     ],
+     "vm_p999": 6.08,
+     "sn_p999": 1.59,
+     "util_p999": 0.174,
+     "util_peak": 0.293,
+     "peak_at": [
+      21.0,
+      27.6,
+      -11.0
+     ],
+     "defl_mm": 0.982,
+     "sf": 5.75,
+     "governs": "von Mises"
+    },
+    {
+     "case": "R+",
+     "F_N": [
+      13.62,
+      0.0,
+      9.18
+     ],
+     "M_Nmm": [
+      -52.8,
+      -2067.6,
+      78.3
+     ],
+     "vm_p999": 3.55,
+     "sn_p999": 0.85,
+     "util_p999": 0.101,
+     "util_peak": 0.163,
+     "peak_at": [
+      21.0,
+      -14.1,
+      -12.0
+     ],
+     "defl_mm": 0.533,
+     "sf": 9.9,
+     "governs": "von Mises"
+    },
+    {
+     "case": "R-",
+     "F_N": [
+      -13.62,
+      0.0,
+      -9.18
+     ],
+     "M_Nmm": [
+      52.8,
+      2067.6,
+      -78.3
+     ],
+     "vm_p999": 3.55,
+     "sn_p999": 0.86,
+     "util_p999": 0.101,
+     "util_peak": 0.163,
+     "peak_at": [
+      21.0,
+      -14.1,
+      -12.0
+     ],
+     "defl_mm": 0.533,
+     "sf": 9.9,
+     "governs": "von Mises"
+    },
+    {
+     "case": "L+",
+     "F_N": [
+      0.0,
+      39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      5160.1,
+      -0.0,
+      1174.1
+     ],
+     "vm_p999": 28.03,
+     "sn_p999": 11.13,
+     "util_p999": 0.817,
+     "util_peak": 1.375,
+     "peak_at": [
+      21.0,
+      27.6,
+      -11.0
+     ],
+     "defl_mm": 4.516,
+     "sf": 1.22,
+     "governs": "von Mises"
+    },
+    {
+     "case": "L-",
+     "F_N": [
+      0.0,
+      -39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      -5160.1,
+      -0.0,
+      -1174.1
+     ],
+     "vm_p999": 28.03,
+     "sn_p999": 12.21,
+     "util_p999": 0.818,
+     "util_peak": 1.375,
+     "peak_at": [
+      21.0,
+      27.6,
+      -11.0
+     ],
+     "defl_mm": 4.516,
+     "sf": 1.22,
+     "governs": "von Mises"
+    }
+   ]
+  },
+  {
+   "part": "tibia_knee_carrier",
+   "verdict": "PASS",
+   "sf": 3.92,
+   "governing": "L-",
+   "nodes": 24294,
+   "elements": 12468,
+   "held_nodes": 4494,
+   "loaded_nodes": 893,
+   "build_dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "held": "knee servo case in the cup",
+   "loaded": "tibia tube in the clamp socket",
+   "cases": [
+    {
+     "case": "V",
+     "F_N": [
+      -21.78,
+      0.0,
+      56.22
+     ],
+     "M_Nmm": [
+      0.0,
+      2380.3,
+      0.0
+     ],
+     "vm_p999": 2.66,
+     "sn_p999": 2.41,
+     "util_p999": 0.12,
+     "util_peak": 0.122,
+     "peak_at": [
+      149.1,
+      -2.8,
+      43.7
+     ],
+     "defl_mm": 0.032,
+     "sf": 8.33,
+     "governs": "layers"
+    },
+    {
+     "case": "R+",
+     "F_N": [
+      15.32,
+      0.0,
+      5.93
+     ],
+     "M_Nmm": [
+      0.0,
+      -1674.0,
+      0.0
+     ],
+     "vm_p999": 1.8,
+     "sn_p999": 1.88,
+     "util_p999": 0.094,
+     "util_peak": 0.105,
+     "peak_at": [
+      130.6,
+      1.5,
+      43.6
+     ],
+     "defl_mm": 0.023,
+     "sf": 10.64,
+     "governs": "layers"
+    },
+    {
+     "case": "R-",
+     "F_N": [
+      -15.32,
+      0.0,
+      -5.93
+     ],
+     "M_Nmm": [
+      0.0,
+      1674.0,
+      0.0
+     ],
+     "vm_p999": 1.8,
+     "sn_p999": 1.76,
+     "util_p999": 0.088,
+     "util_peak": 0.089,
+     "peak_at": [
+      149.1,
+      -2.8,
+      43.7
+     ],
+     "defl_mm": 0.023,
+     "sf": 11.36,
+     "governs": "layers"
+    },
+    {
+     "case": "L+",
+     "F_N": [
+      0.0,
+      39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      4284.6,
+      -0.0,
+      0.0
+     ],
+     "vm_p999": 5.53,
+     "sn_p999": 4.2,
+     "util_p999": 0.21,
+     "util_peak": 0.225,
+     "peak_at": [
+      135.4,
+      -8.3,
+      43.6
+     ],
+     "defl_mm": 0.068,
+     "sf": 4.76,
+     "governs": "layers"
+    },
+    {
+     "case": "L-",
+     "F_N": [
+      0.0,
+      -39.2,
+      0.0
+     ],
+     "M_Nmm": [
+      -4284.6,
+      -0.0,
+      -0.0
+     ],
+     "vm_p999": 5.53,
+     "sn_p999": 5.1,
+     "util_p999": 0.255,
+     "util_peak": 0.365,
+     "peak_at": [
+      139.2,
+      9.4,
+      35.6
+     ],
+     "defl_mm": 0.068,
+     "sf": 3.92,
+     "governs": "layers"
+    }
+   ]
+  },
+  {
+   "part": "horn_coupler",
+   "verdict": "PASS",
+   "sf": 7.81,
+   "governing": "T+",
+   "nodes": 65179,
+   "elements": 39190,
+   "held_nodes": 13283,
+   "loaded_nodes": 8414,
+   "build_dir": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "held": "horn screw slots + disc face",
+   "loaded": "upper half of the shear lobes",
+   "cases": [
+    {
+     "case": "T+",
+     "F_N": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      0.0,
+      2940.0
+     ],
+     "vm_p999": 4.48,
+     "sn_p999": 1.22,
+     "util_p999": 0.128,
+     "util_peak": 0.129,
+     "peak_at": [
+      -11.0,
+      0.5,
+      2.9
+     ],
+     "defl_mm": 0.015,
+     "sf": 7.81,
+     "governs": "von Mises"
+    },
+    {
+     "case": "T-",
+     "F_N": [
+      0.0,
+      0.0,
+      0.0
+     ],
+     "M_Nmm": [
+      0.0,
+      0.0,
+      -2940.0
+     ],
+     "vm_p999": 4.48,
+     "sn_p999": 1.31,
+     "util_p999": 0.128,
+     "util_peak": 0.129,
+     "peak_at": [
+      -11.0,
+      0.5,
+      2.9
+     ],
+     "defl_mm": 0.015,
+     "sf": 7.81,
+     "governs": "von Mises"
+    }
+   ]
+  }
+ ]
+}

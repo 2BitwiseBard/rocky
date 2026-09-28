@@ -297,6 +297,24 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through
     depth: 4.0
     segment_len: 24.0
 
+fem:                     # D061: cad/fem_check.py (rocky.sh cad-check --fem) — will a printed part break?
+  material: petg         # the structural leg parts (docs/PRINT_PLAN.md)
+  petg:                  # printed-part ALLOWABLES, not the filament's lab numbers: a PETG datasheet
+                         # (Prusament-class) says ~1500 MPa and ~47 MPa yield along the layers, ~30
+                         # across them; walls + infill + real layer bonding take a quarter to a third
+                         # off. VERIFY with a pull coupon of each orientation from YOUR printer.
+    name: PETG
+    E_mpa: 1500.0
+    nu: 0.38
+    strength_xy_mpa: 35.0     # von Mises allowable (in-plane of the layers)
+    strength_z_mpa: 20.0      # tension ACROSS the layers: the way printed parts actually break
+  sf_target: 2.0         # pass: covers impacts past stall (a servo back-drives), creep, a weak print
+  sf_warn: 1.5           # 1.5..2: print it, but watch that spot
+  grip_margin_mm: 1.5    # stresses closer than this to a held / loaded zone are the grip's, not the part's
+  mesh:                  # gmsh element size (mm); --fine halves both
+    clmax: 2.0
+    clmin: 0.5
+
 print:                   # FDM design rules (0.4 mm nozzle); fits get re-filed from the fit ladder
   bed_mm: [250.0, 210.0, 210.0]   # build volume the checks assert (X, Y, Z): a Prusa i3-class
                                   # reference printer — change it for yours

@@ -9,6 +9,51 @@ indexes them.*
 
 ---
 
+## 2026-09-27 · Session 9j — FreeCAD in the loop: a stress check, a viewer, part drawings (D061)
+
+**Ask:** set up the FreeCAD MCP server, then find where FreeCAD improves the workflow:
+a stress check of the printed leg, opening parts for inspection, dimensioned drawings
+(the print pack may be redone).
+
+**Setup (outside the repo):** the neka-nat `freecad-mcp` clone in `~/Development/`, its
+add-on in the Flatpak's `Mod/`, the server registered through the MCP manifest. The
+Flatpak carries gmsh 4.15 and CalculiX 2.23, which is all the FEA needs.
+
+**`cad/fem_check.py` (`rocky.sh cad-check --fem`):** build123d solid → gmsh second-order
+tets (straight-sided: curved midside nodes inverted small elements on tight radii) →
+a CalculiX deck (held nodes pinned, loaded nodes on a rigid body) → `.frd` → von Mises
+and tension across the print layers, judged at the 99.9th percentile outside the grips.
+Loads are servo-limited (the foot force that stalls the first servo). The pipeline
+matches a cantilever by hand (4.26 vs 4.20 MPa, 2.655 vs 2.667 mm; pinned by
+`cad/test_fem.py`). Results: `coxa_yaw_base` 2.93, `coxa_fork` 3.03,
+`tibia_knee_carrier` 3.92, `horn_coupler` 7.81 PASS; **`femur` 1.22 FAIL** in the
+lateral cases, 1.16 on a 6× finer mesh. The first femur model welded the bridge walls
+to plate B along their whole top edge (SF 1.20 with its peak on that weld); the model
+now joins the plates only at the four bosses, as the bolts do.
+
+**What-ifs (FEM only, the CAD unchanged):** rails 6 → 9 mm 1.64; walls 3 → 5 mm 1.29;
+a plate-B deck closing the box over the bridge 1.71; deck + 8 mm rails **2.16** (+14 g,
+knee deflection 4.5 → 1.05 mm), clear of both servos, plugs, the knee sweep and the
+fork. Proposed as B74; not applied (it moves the mass and the fingerprint).
+
+**`rocky.sh cad-open`:** opens STEP files in FreeCAD; `--fem PART` wraps the CalculiX
+result in a FreeCAD Analysis first (`cad/fem_to_freecad.py`: FreeCAD 1.1's importer
+raises on a bare multi-step `.frd`).
+
+**`cad/gen_drawings.py` (`rocky.sh cad-drawings`, in `--derived`):** FreeCAD's console
+binary with its GUI on Qt's `minimal:enable_fonts` platform (`offscreen` segfaults;
+plain `minimal` draws boxes for text), in a private user directory so the owner's
+FreeCAD and its MCP add-on are untouched. One A4 sheet per leg part (10), ~6 s each.
+The hole table is read from the solid (concave cylinders that close a circle), which
+is how plate B's missing M3 holes turned up: they break out of the rails (B74). The
+PDF bytes differ on every run (threaded hidden-line removal), so a sheet is redrawn
+only when its STEP's geometry changed.
+
+**Next:** decide B74 (femur deck + rails) before printing the femur in PETG; pull
+coupons for real allowables (B75); redo the print pack around the drawings.
+
+---
+
 ## 2026-09-26 · Session 9i — repo review + clean-up: one BOM, the D047 CAD follow-ups, a generic setup, docs condensed and archived (D058, D059, D060)
 
 **Ask:** go through the whole codebase; condense or remove old things, documentation

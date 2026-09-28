@@ -10,6 +10,7 @@ sense" after any params.yaml or interface change.
     python3 run_all_checks.py --serial   # one at a time (easier log reading)
     python3 run_all_checks.py part_shell part_deck   # subset
     python3 run_all_checks.py --derived  # + regenerate the derived outputs
+    python3 run_all_checks.py --fem      # + the leg stress check (fem_check, D061)
 
 Parallel notes: modules are already independent subprocesses, so they run
 N-at-a-time (N = cpu count, min 2). Each module only writes its OWN exports
@@ -25,8 +26,15 @@ check_interference sweeps the yaw stage with the real servo solids.
 --derived (after a clean tree) rebuilds the outputs nothing checks but
 people look at: pentapod_preview (full-robot meshes + render), print_estimate
 (cad/out/print_estimate.json), gen_print_pack (cad/out/PRINT_PREP_PACK.pdf +
-views_*.png) and make_viewer (cad/pebble_viewer.html). All four write
-deterministic bytes, so an unchanged tree leaves git clean.
+views_*.png), make_viewer (cad/pebble_viewer.html) and gen_drawings (the
+leg parts' TechDraw sheets in cad/out/drawings/; needs FreeCAD, SKIPPED
+without it). The first four write deterministic bytes and gen_drawings
+redraws only a part whose STEP changed, so an unchanged tree leaves git clean.
+
+--fem (after a clean tree) runs fem_check: linear-static FEA of the load-
+bearing leg parts under servo-limited loads (cad/out/fem/FEM_REPORT.md). It
+needs gmsh + CalculiX (the FreeCAD Flatpak carries both) and reports SKIPPED
+without them, so CI stays as it is.
 
 Exit code = number of failing modules.
 """
@@ -65,7 +73,7 @@ def run_one(m):
 
 
 POST = ["check_printability"]     # runs AFTER every module has exported (D038)
-DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer"]
+DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer", "gen_drawings"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -100,6 +108,11 @@ def main():
         else:
             for m in DERIVED:                  # in order: each reads the one before
                 record(run_one(m))
+    if "--fem" in args:
+        if any(not ok for _, ok, *_ in results):
+            print("fem_check NOT run: the checks failed")
+        else:
+            record(run_one("fem_check"))
     bad = [m for m, ok, *_ in results if not ok]
     print(f"\n{len(results) - len(bad)}/{len(results)} modules pass "
           f"({time.time()-t00:.0f} s total)"

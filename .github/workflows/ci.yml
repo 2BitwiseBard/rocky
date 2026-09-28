@@ -108,6 +108,8 @@ jobs:
       - name: run_all_checks (every part module, the joint suite, then printability)
         working-directory: cad
         run: python run_all_checks.py
+      - name: FEM plumbing (cad/test_fem.py; the solver test skips here, no gmsh / CalculiX on the runner)
+        run: python -m pytest cad/test_fem.py -q
       - name: "design-pipeline: CAD -> masses -> MJCF -> URDF -> parity, committed files current (D052)"
         # mass_audit reads the STLs run_all_checks just rebuilt; everything downstream
         # of it must match what is committed, or a CAD edit shipped without its regen.

@@ -12,7 +12,10 @@ column answers (D038). The print pack,
 [`cad/out/PRINT_PREP_PACK.pdf`](../cad/out/PRINT_PREP_PACK.pdf), has a
 three-view sheet and slicer settings for the leg, coupon, deck and hand
 parts; `./rocky.sh cad-check --derived` regenerates it along with the
-estimates.
+estimates. Dimensioned A4 sheets of the leg parts (extents and a hole
+table, for checking a print with calipers) are in
+[`cad/out/drawings/`](../cad/out/drawings/INDEX.md) (`./rocky.sh
+cad-drawings`, FreeCAD).
 
 - **Printer:** the reference is a Prusa i3-class bed-slinger with a
   250 × 210 bed (`print.bed_mm` in `cad/params.yaml`). The checks assert that
@@ -20,6 +23,12 @@ estimates.
   sized for this bed (D012).
 - **Material:** PLA for the coupons, the blanks and anything expected to
   change (D011). PETG for the structural leg parts, once a coupon has passed.
+- **Strength:** `./rocky.sh cad-check --fem` loads each structural leg part
+  with the largest force the servos can put through it and reports a safety
+  factor ([`cad/out/fem/FEM_REPORT.md`](../cad/out/fem/FEM_REPORT.md), D061).
+  Today the femur FAILS in the sideways cases (SF 1.22, B74): print it for
+  fit, but expect it to twist, and do not run a leg hard on it. The
+  allowables are VERIFY until your own pull coupons say otherwise (B75).
 - **Grams and hours** come from
   [`cad/out/print_estimate.json`](../cad/out/print_estimate.json) (0.2 mm
   layers). The fill factors are guesses, so expect ±30 %. If the slicer
