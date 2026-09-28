@@ -41,10 +41,14 @@ thumbscrews, plug two connectors.*
   there) and clear of the cradle walls. The dowels take ALL the shear:
   walking loads, yaw torque reaction, shoves. They need no hand access, so
   they can live under the servo.
-- **Captive thumbscrews:** 2 × M3 × 10 with printed knurled heads at the
-  inboard corners (−41, ±17). They are reachable from above WITH the servo
-  installed, retained in the plate by printed lips, and thread into deck
-  heat-set inserts. They only clamp down and carry no shear.
+- **Thumbscrews:** 2 × M3 × 16 hex head (ISO 4017, `bom/BOM.csv` A-19),
+  each keyed into a printed knurled knob (`thumb_knob_m3`), at the inboard
+  corners (−41, ±17). They are reachable from above WITH the servo
+  installed and thread into deck heat-set inserts, 5.5 mm into the 5.7 mm
+  insert. The knob holds the head 6.5 mm above the plate, so an M3 × 10
+  never reaches the insert. They are not captive yet (B82): nothing retains
+  them in the plate, so they lift out with the leg. They only clamp down
+  and carry no shear.
 - **Load path:** vertical forces go plate face onto deck face; shear and
   torque go into the dowels and the hook lip; tension (leg hanging
   upside-down) goes into the thumbscrews and the hook.
@@ -112,10 +116,17 @@ being removed hundreds of times, and never carry structure.
   printed two-part cartridge: rotor plus a Ø14 housing, glued or
   press-fitted into a Ø14.3 pocket. The wear part is the ~1 g insert, not
   the panel. The rotor has a coin/fingernail slot and turns 90° from OPEN
-  to CAM-TIGHT (0.8 mm cam rise).
+  to CAM-TIGHT (0.8 mm cam rise). As modelled (2026-09-28) the cartridge
+  does not work (B87): the rotor's pegs have no way into the housing's
+  track, the rotor ends flush with the housing bottom so it never reaches
+  the deck strike, and the strike has no undercut to turn under. The tray
+  tongue and the belly door have no strike at all.
 - **Magnets:** Ø6 × 3 glue-in pockets (N35+) wherever a soft-close seat is
-  wanted. Polarity convention: the panel-side magnet has NORTH facing
-  outward, always, so any panel snaps onto any frame station.
+  wanted. Polarity convention: every magnet, panel side and frame side, has
+  its NORTH face pointing away from the robot (the way the panel lifts
+  off). At each joint the frame magnet shows N and the panel magnet shows
+  S, so any panel snaps onto any frame station. Steel strikes take either
+  face.
 - **As built:**
   - the belly door (`part_battery.belly_door`): a perimeter seating lip,
     2 latch inserts and 2 magnets;
@@ -123,7 +134,10 @@ being removed hundreds of times, and never carry structure.
     (az +27.5°, r 74.5) and one magnet (az −25.5°, r 76), mating the deck's
     latch strikes and washer recesses (D030);
   - the top hatch (`shell_cap`): five plug magnets on five seat magnets,
-    one per sector. It has no latch.
+    one per sector. It has no latch. As modelled the magnets cannot go in
+    (B88): each seat pocket hangs in a 0.2 mm ledge with no floor, and a
+    magnet in a plug pocket cuts into the seat wall, so the cap would not
+    seat. Both magnets of a pair go in N up.
 
 **Rocky-scale:** the same cartridge in glass-filled nylon, Ø22, with a
 captive lanyard so field panels don't drop.
@@ -149,11 +163,18 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   4-pin I²C (the sensor mux, [PERCEPTION_PLAN.md](PERCEPTION_PLAN.md)) and
   a USB-C pass-through slot. Removing the tray means one latch plus
   unplugging the bulkhead face, with no reaching inside.
-- **IMU:** sits on four TPU grommets (B4) on the tray's IMU pad and talks
-  over SPI ([WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify)).
+- **IMU:** sits on four TPU grommets (B4) on the tray's IMU pad, under the
+  Pi, so it goes on before the Pi. Each M2.5 needs a nut: the grommet bore
+  does not thread. It talks over SPI
+  ([WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify)). As
+  drawn the pad does not fit (B90): its 16 × 12 holes miss the BNO085's
+  20.32 × 17.78, and the 4.6 mm board stands 0.6 mm into the Pi's
+  underside.
 - **Deck position:** the tray's place on the deck, (0, −38) in the body
-  frame, is still an assumption (`part_avionics.TRAY_XY`). The star-board
-  bracket's layout audit keeps clear of it.
+  frame, is still an assumption (`part_avionics.TRAY_XY`), and there the
+  tray and its rails run into the coxa bases at stations 2 and 3. As drawn,
+  no position clears all five legs, and the rail tabs' holes miss the deck
+  grid (B51).
 
 **Rocky-scale:** a 19" subrack-style card cage with locking DIN connectors.
 
@@ -164,10 +185,15 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
 - **Battery:** one 3S 5200 mAh LiPo in a SOFT case, at most 138 × 44 × 25
   (VERIFY on purchase; `bom/BOM.csv` B-05). Hard-case packs are ~37 mm tall
   and do not fit the 30 mm bay. The pack straps to a printed **sled**, which
-  slides on belly rails into the 175 × 50 × 30 bay.
+  slides on belly rails into the 175 × 50 × 30 bay. The bay itself (floor,
+  walls, the door's frame) is not modelled yet (B84). Until it is, nothing
+  on the robot carries or retains the sled, and the robot runs tethered.
 - **XT60 blind-mate dock:** the sled nose carries a panel-mount XT60E-M
   (body 16.2 × 8.6 × 16.0, `xt60_panel_mm`). The bay's fixed XT60 sits in a
   floating pocket (±0.8 mm) with lead-in chamfers, so you push to seat.
+  That pocket is `part_battery.dock_block`, the robot's half of I5 (not
+  part of the B14 charging dock). As drawn it cannot be bolted down: its
+  two floor holes sit under its own roof, where no driver reaches (B86).
   The belly door (I3) closes over the sled's tail lip and does the
   retaining; the connector does not.
 - **Spare power taps:** the dock's bus bar breaks out 2 × XT30 pigtails
@@ -188,11 +214,15 @@ One profile for everything that clips onto the carapace perimeter:
 - **Male profile (on the shell):** a trapezoid dovetail, 12 wide at the
   base, 8 wide at the crest, 4 deep. As built, each sector web has one
   VERTICAL 16 mm segment at ±27°, giving 10 stations and no top station.
-  A shoe slides down from above, gravity seats it and the set-knob locks
-  it (D029). The params `segment_len` (24) is the spec length, used by the
-  demo coupons (`part_panel`).
+  A shoe slides down from above, gravity seats it and the set-knob is
+  meant to lock it (D029; not yet, B83). The params `segment_len` (24) is
+  the spec length, used by the demo coupons (`part_panel`).
 - **Female shoe (on the accessory):** a matching slot plus an M3 printed
-  set-knob from below, which clamps into the dovetail groove.
+  set-knob from below, meant to clamp into the dovetail groove. As modelled
+  the knob's bore runs 2.0 mm above the male's crest and a screw in it
+  touches nothing, so the shoe does not lock yet (B83). The knob is
+  `thumb_knob_m3`, so it takes a hex head (B82); the screw length waits
+  for the bore.
 - **Users:** sensor pods ([PERCEPTION_PLAN.md](PERCEPTION_PLAN.md)),
   whisker mounts (B11), LED ring segments and shell tool docks. The camera
   is fixed behind a gill (B16) and the lidar goes on a hatch-cap variant
@@ -213,7 +243,7 @@ All are in `cad/params.yaml → interfaces:` (the I1 cable cutout is in
 
 | iface | key dims (mm) |
 |---|---|
-| I1 leg port | dowel Ø4 × 8 @ (−28, ±19); thumbscrew M3 @ (−41, ±17); inboard hook lip 24 wide through a 4.2 deck slot @ x = −48; cable cutout 11 × 11 @ x = −29; XT30 + JST-XH 5-pin |
+| I1 leg port | dowel Ø4 × 8 @ (−28, ±19); thumbscrew M3 × 16 hex head @ (−41, ±17); inboard hook lip 24 wide through a 4.2 deck slot @ x = −48; cable cutout 11 × 11 @ x = −29; XT30 + JST-XH 5-pin |
 | I2 tool socket | lug Ø2.5 × 2.2 @ 9 from the face; entry 6; twist 90°; detent 0.6; JST-SH 3-pin |
 | I3 panel latch | insert housing Ø14 (pocket 14.3), rotor cam rise 0.8, 90° throw; magnet Ø6 × 3 |
 | I4 avionics tray | plate 84 × 70 × 3; rail 3 × 3; bulkhead 70 × 26 face |

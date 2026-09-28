@@ -284,10 +284,10 @@
    },
    {
     "part": "stand_section",
-    "qty": 1,
+    "qty": 2,
     "solid_cm3": 113.1,
-    "est_g": 56.1,
-    "est_min": 123
+    "est_g": 112.2,
+    "est_min": 247
    },
    {
     "part": "stand_crown",
@@ -297,8 +297,8 @@
     "est_min": 117
    }
   ],
-  "total_g": 165,
-  "total_h": 6.1
+  "total_g": 221,
+  "total_h": 8.1
  },
  "Deferred: carapace": {
   "parts": [

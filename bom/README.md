@@ -24,10 +24,10 @@ every line total is qty × unit.
 
 | | to buy | wait | total |
 |---|---:|---:|---:|
-| A bench kit | $276 | | **$276** |
-| B full robot | $644 | $153 (Pi 5 4 GB + cooler + card) | $797 |
+| A bench kit | $282 | | **$282** |
+| B full robot | $662 | $153 (Pi 5 4 GB + cooler + card) | $815 |
 | C senses | $134 | | $134 |
-| **Core robot (A-C)** | | | **$1,207** |
+| **Core robot (A-C)** | | | **$1,231** |
 | D voice/brain (optional) | | | $21 |
 | X optional, near term (power monitor, downward ToF, kill relay, Wi-Fi adapter, logic analyzer, second pack, pins, whisker wire, filament dryer) | | | $216 |
 | X optional, later (sensor pods, depth camera) | | | $214 |
@@ -78,5 +78,7 @@ switches. Everything in B waits until that leg passes
 - **PETG-CF for the legs.** Stiffer, but weaker across layers and more
   brittle, it needs a hardened nozzle, and the FEM check assumes PETG.
 - **KW11 / KW12 microswitches.** ~20 mm long; the foot pocket takes a KW10.
+- **M3 × 10 socket heads for the leg-port thumbscrews.** The knob keys a hex
+  head and an M3 × 10 stops short of the insert (B82); they are A-19.
 - **683ZZ bearings, a USB-UART dongle, STS3250 knees, a pan turret.** Older
   plans had them; the current design (D047 and later) does not use them.

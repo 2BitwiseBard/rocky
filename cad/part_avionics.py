@@ -40,6 +40,7 @@ def avionics_tray():
     for sx in (1, -1):
         tray += Pos(sx * (W / 2 + RAIL / 2), 0, T - 1.0) * Box(RAIL, L - 16, 2.0)
     # Pi 5 standoffs (M2.5 thread-forming, 6 tall) — Pi occupies the center
+    # B89: the Pi 5 is 58 x 49; this 0.9 is a bug, fix with the tray redesign
     for hx, hy in PI_HOLES:
         s = Pos(hx * 1.0, hy * 0.9, T + 3) * Cylinder(3.4, 6)
         s -= Pos(hx * 1.0, hy * 0.9, T + 3.5) * Cylinder(2.05 / 2, 7)
@@ -48,6 +49,8 @@ def avionics_tray():
     for hx in (-6, 14):
         tray -= Pos(hx, -L / 2 + 8, T / 2) * Cylinder(PR["screw_m3_tap"] / 2, T + 2)
     # IMU pad: 4x Ø4.8 grommet holes (BNO085 board on TPU grommets, B4) at center
+    # B90: this 16 x 12 misses the Adafruit 4754's 20.32 x 17.78 holes by 3.6 mm, the 4.6 mm board
+    # stands 0.6 mm into the Pi above, and the nuts underneath have no room
     for gx, gy in ((-8, -6), (8, -6), (-8, 6), (8, 6)):
         tray -= Pos(gx, gy + L / 4 - 4, T / 2) * Cylinder(4.8 / 2, T + 2)
     # weight-relief + zip-tie field

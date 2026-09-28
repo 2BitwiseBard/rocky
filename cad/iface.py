@@ -55,8 +55,8 @@ def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
 
 def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
     """Apply the LEG side of the port to a coxa base plate solid (part_coxa
-    frame: the plate is z -4..0, top at 0): dowel bores, captive-thumbscrew
-    bores + head counterbores with retainer lips, and the inboard hook lip.
+    frame: the plate is z -4..0, top at 0): dowel bores, thumbscrew
+    clearance bores (not captive: no lip is modelled, B82), and the inboard hook lip.
     Pass the actual plate z-extents."""
     lp = IF["leg_port"]
     t = plate_top_z - plate_bot_z
@@ -67,8 +67,8 @@ def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
         # lead-in chamfer from below
         plate -= Pos(dx, dy, plate_bot_z + 0.6) * \
             Cone((lp["dowel_d"] + FIT) / 2 + 0.8, (lp["dowel_d"] + FIT) / 2, 1.3)
-    # captive thumbscrews: shaft clearance + head pocket with retainer lip
-    # (screw drops in from above; a printed lip at the pocket bottom keeps it)
+    # thumbscrews: a loose Ø3.7 shaft pass. The 'head well' below sits ABOVE
+    # the plate (z top..top+8), so on the plate alone it removes nothing; no lip (B82).
     for dx, dy in lp["thumbscrew_xy"]:
         plate -= Pos(dx, dy, (plate_top_z + plate_bot_z) / 2) * \
             Cylinder(3.7 / 2, t + 2)                     # loose shaft pass
@@ -90,6 +90,7 @@ def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
 
 
 # ====================================================================== I3
+# B87: as modelled the rotor has no way into the housing's track and does not reach the deck strike
 def latch_insert_housing():
     """The replaceable quarter-turn latch cartridge OUTER (glued into panels)."""
     pl = IF["panel_latch"]
@@ -155,6 +156,7 @@ def dovetail_female_shoe(length=None, body_h=10.0):
             make_face()
         extrude(amount=L / 2 + 2, both=True)
     blk -= cut.part
+    # B83: this bore passes 2.0 mm above the male's crest, so a screw in it never touches the dovetail
     blk -= Pos(0, 0, body_h - 2.6) * Rot(90, 0, 0) * \
         Cylinder(PR["screw_m3_tap"] / 2, b + 12)     # set-knob cross bore
     return blk

@@ -8,8 +8,9 @@
                       magnet pockets — print both, exercise the standard
                       before committing the real (curved, textured) shells.
   dovetail_shoe     : female accessory shoe (I6) with M3 set-knob bore.
-  thumb_knob_m3     : printed knurled knob that captures an M3x10 — used by
-                      the leg port (I1) and the dovetail shoe set screw.
+  thumb_knob_m3     : printed knurled knob keyed onto an M3 hex head (ISO
+                      4017, 5.5 A/F) — used by the leg port (I1: M3 x 16,
+                      B82) and the dovetail shoe set screw.
 
 The real shells stay D006 (cosmetic, bolt-on, sculpted later); this file
 freezes how EVERY one of them will attach.
@@ -57,10 +58,11 @@ def frame_coupon():
     # lip groove
     f -= Pos(0, H / 2 - 5, T - 1.4) * Box(W + 2, 2.4 + 2 * FIT, 3)
     # latch strike: ramped slot the rotor pegs cam behind
+    # B87: the I3 latch cannot assemble or bite as modelled; the s=180 slot turns about 0,0, not the bore
     f -= Pos(0, -H / 2 + 9, T / 2 + 1) * Cylinder(9.7 / 2 + FIT, T + 2)
     for s in (0, 180):
         f -= Rot(0, 0, s) * Pos(5.5, -H / 2 + 9, T - 2.2) * Box(3.2, 3.2, 4.5)
-    # magnet pockets (polarity: NORTH out, per the spec)
+    # magnet pockets (frame side: NORTH showing, i.e. away from the robot, INTERFACES I3)
     for sx in (-W / 2 + 10, W / 2 - 10):
         f -= Pos(sx, -H / 2 + 9, T - (PL["magnet_t"] + 0.2) / 2 + 0.1) * \
             Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
@@ -75,7 +77,7 @@ def dovetail_male_coupon():
 
 
 def thumb_knob_m3():
-    """Knurled M3 captive knob: hex pocket for the screw head, 12 dia grip."""
+    """Knurled M3 knob: 5.6 A/F hex pocket (floor z 6.5, 1.5 deep) keys a hex head; 12 dia grip."""
     knob = Pos(0, 0, 4) * Cylinder(IF["leg_port"]["thumbscrew_head_d"] / 2, 8)
     for k in range(12):
         a = k * 30

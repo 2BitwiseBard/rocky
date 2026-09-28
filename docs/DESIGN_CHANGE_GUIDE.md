@@ -42,7 +42,7 @@ ids (`bus.leg_ids`, `bus.hand_ids`).
 
 # 3. regenerate, in this order (a future `rocky.sh regen` will do this, B36 step 9)
 ./rocky.sh cad-check                                   # the 28 CAD checks; rewrites cad/out/*.stl
-./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer, drawings (33/33)
+./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer, drawings, assembly pictures (34/34)
 ./rocky.sh cad-check --fem                             # + the leg stress check (D061; needs gmsh + CalculiX)
 .venv/bin/python sim/mass_audit.py                     # STL volumes + mass_hw -> sim/mass_budget.json
 MUJOCO_GL=egl .venv/bin/python sim/build_mjcf.py       # -> sim/pebble.xml
@@ -204,7 +204,7 @@ Edit `leg.l1_coxa`, `leg.l2_femur`, `leg.l3_tibia` or `leg.hip_axis_z` in
 | Change | Follows automatically | Do by hand |
 |---|---|---|
 | **L1 / L2** | `cad/leg_frame.py` places the hip and knee servos from them. `run_all_checks` rebuilds and re-checks the leg. Then mass_audit, MJCF, URDF, gait IK and parity follow. | `part_bench_jig`'s knee groove sits at a literal x = 140 (= L1 + L2), and so does the `calib_gauge_knee` plumb line (B5). Change both. |
-| **L3** | Gait IK, MJCF, URDF, spawn height (`rm.spawn_dz_mm`), feasibility. | **Nothing in CAD owns L3.** The tibia is a carbon tube between `part_tibia` and the SEA/hand, and no file computes the tube cut length (B36 step 8 adds the check). Work out the stack by hand: knee carrier socket, tube, SEA, hand cone, pad crown. Also update `mass_hw.tibia_tube` (5 g for "~120 mm"). |
+| **L3** | Gait IK, MJCF, URDF, spawn height (`rm.spawn_dz_mm`), feasibility. | **Nothing in CAD owns L3.** The tibia is a carbon tube between `part_tibia` and the SEA/hand, and no file computes the tube cut length (B36 step 8 adds the check). Work out the stack by hand: knee carrier socket, tube, SEA, hand knuckle + cone + tip sphere, pad crown. Also update `mass_hw.tibia_tube` (5 g for "~120 mm"). |
 | **hip_axis_z** | Gait, MJCF, URDF. | It must equal the yaw-stack height CAD builds (`leg_frame.py` `Z_YAW_TOP` and the hub stack). Nothing asserts that yet. |
 
 After a length change, the nominal stance may no longer fit the servos'
@@ -353,12 +353,22 @@ up.
 
 The leg is built to `params.yaml` as it stands. Before assembling:
 
-- **Tibia stack.** Work out the tube cut length so that knee axis to foot
-  contact = `l3_tibia` (135). Use:
-  - `part_tibia` `BOSS_H`, `SOCKET_DEPTH`
-  - the SEA parts
-  - `part_hand` `HUB_H`, `CONE_LEN`
-  - `part_footpad` `CROWN`
+- **Tibia stack.** Work out the tube cut length T so that knee axis to foot
+  contact = `l3_tibia` (135). At rest (the slider at its lowest pose) the
+  stack is T + 136.2 mm:
+  - knee axis to the tube top: `Z_HIP` - (`part_tibia.BOSS_Z0` +
+    `SOCKET_DEPTH`) = 16.7 (`BOSS_Z0` = `leg_frame.Z_CUP_FLOOR_TOP` -
+    `BOSS_H`);
+  - the tube, less the 11 mm it sits in `tibia_sea_outer`'s socket: T - 11;
+  - outer top to the stub face, slider at its lowest pose (the striker on
+    the 0.9 mm lip): 45.6;
+  - stub face to the cone tip: the stub seats at hand z 0.6 and the tip
+    sphere ends at `part_hand` `KNUCKLE_Z` + `CONE_LEN` + `CONE_TIP_R` =
+    82.5, so 81.9 (not `HUB_H` + `CONE_LEN`, which is 12.5 mm short);
+  - `part_footpad` `CROWN`: 3.0.
+
+  With the hand the stack cannot reach 135: T would be -1.2 mm, and the
+  shortest tube (29 mm) gives 165.2 (B95).
 
   No check does this yet (B36 step 8, planned for **before** the first
   assembly). Record the number you cut in `BUILD_LOG.md`.

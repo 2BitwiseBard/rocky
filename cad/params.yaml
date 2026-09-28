@@ -130,7 +130,7 @@ servo_st3215:            # Feetech STS3215 / Waveshare ST3215, 12V 30kg.cm (STS3
   horn_d: 20.0           # metal disc horn, from STEP
   horn_t: 2.5            # from STEP: 30.6 -> 33.1 (horn TOP is 33.1 above the case bottom; v0.1 said 38)
   horn_bcd: 14.0         # nominal; the STEP's holes read as 14-16 BCD depending on the probe -> parts use a radial SLOT
-  horn_bcd_slot: 1.6     # extra radial slot length in every horn-bolted part (covers BCD 14.0..15.6)
+  horn_bcd_slot: 1.6     # radial slot length in every horn-bolted part: hole centres r 7.0..8.6 = BCD 14.0..17.2 (covers the STEP's 14.0-15.6 reading with margin)
   horn_pattern_deg: 45   # from STEP: holes at 45/135/225/315 — NOT 0/90/180/270 as v0.1 assumed
   horn_hole_d: 2.5       # from STEP = M3 tap drill; RobotShop's kit list says "M3 x 6 machine screws"
   horn_screw_m: 3        # VERIFY with ONE screw on arrival; if the horn is M2-tapped use M2 + washer in the same slots (spec only)

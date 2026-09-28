@@ -252,6 +252,8 @@ def _mother():
         Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
 
     # ---- hatch: opening + seat rebate + one seat magnet per sector (az 0)
+    # B88: the rebate (z 49.6..52.4) is deeper than the tier-4 roof, so the seat ledge is a
+    # 0.2 mm skin and this magnet pocket has no walls or floor to sit in
     body -= _ring(41.0, 53.5, HATCH_R, 2.0, HATCH_SEED)
     body -= _ring(49.6, 52.4, HATCH_R + 4.5, 2.0, HATCH_SEED)
     body -= Pos(HATCH_R + 1.0, 0, 49.6 - (PL["magnet_t"] + 0.2) / 2 + 0.01) * \
@@ -297,6 +299,8 @@ def shell_cap():
     cap += _ring(52.2, 58.0, HATCH_R + 7.0, 2.4, 66)
     cap += _ring(58.0, 63.0, HATCH_R - 9.0, 2.2, 77, twist=18)
     # thumb notch + five plug magnets (mate the five seat magnets)
+    # B88: at r 47 these pockets break out of the plug's outer face; a magnet in one
+    # cuts 10.2 mm^3 into the sector's seat wall, so the cap cannot seat with them in
     for k in range(5):
         cap -= Rot(0, 0, 72 * k) * Pos(HATCH_R + 1.0, 0,
                                        49.7 + (PL["magnet_t"] + 0.2) / 2 - 0.01) * \

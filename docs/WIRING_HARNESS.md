@@ -37,6 +37,13 @@ Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
   Measure 6.0 V at the plug before any claw is connected.
 - **Open (B66):** the dock's two XT30 spare taps (I5) break out of the dock
   block, ahead of the fuse. Fuse anything that is plugged into them.
+- **Open (B92):** the 12 V power node is not a part yet. BOM B-24 names
+  the kind (a bus bar or small PDB, ≥ 15 A, ≥ 7 ways: the feed, five leg
+  drops and the tray), and nothing mounts it; the cut-length table only
+  places it at the power grommet (52, −6).
+- **Tethered for now (B84):** the I5 bay is not a part yet, so the pack,
+  sled and dock block stay off the robot. Feed the fuse from an XT60 lead
+  ([build order](#build-order-phase-b) step 1).
 
 ## Per-leg drop (×5, ends at the I1 leg-port connectors)
 
@@ -62,9 +69,17 @@ Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
    2 A connector pins. Data and GND daisy-chain yaw → hip → knee on stock
    Feetech 3-pin leads (A-06). The exact lead construction is VERIFY on
    bench day.
-3. **Down the tube to the SEA and hand.** A JST-SH-3 runs through the I2
-   tool socket (6 V, GND, data), and the microswitch pair runs back up to
-   XH-5 pin 4.
+3. **Down the leg to the SEA and hand.** The hand's 6 V (XH-5 pin 3) runs
+   the whole leg: the coxa channel (~130 mm to the yaw plugs), yaw → hip
+   (~90 with the yaw loop), hip → knee (~125 with the hip and knee loops),
+   knee → hand hub (~110 on the shortest tube, plus the tube's exposed
+   length), about 0.45–0.55 m in all. Data and GND join it for the last
+   hop (from the knee's spare port with the V+ pin pulled, or with it from
+   XH-5 pins 1–2). It ends in a JST-SH-3 above the I2 socket with a loop
+   for the 90° twist, and the microswitch pair runs back up to XH-5 pin 4
+   the same way. B-17 is only the end of this run (100 mm, a plug on both
+   ends), and the hand's mating half is not chosen yet. VERIFY on the
+   first leg (B91).
 
 **Check at the first bench torque test:** the cup's −Y side wall now
 bridges the channel over 10 of its 24.5 mm footing. Watch it for flex.
@@ -88,7 +103,9 @@ the leg's length.
 ### Deck layout (body frame, mm)
 
 - **Avionics tray (I4):** plate centre (0, −38), still an assumption
-  (`part_avionics.TRAY_XY`); the bulkhead faces south at y ≈ −72.
+  (`part_avionics.TRAY_XY`); the bulkhead faces south at y ≈ −72. There
+  the tray and its rails run into the coxa bases at stations 2 and 3, and
+  as drawn no position clears all five legs (B51).
 - **Star board:** the bracket (v0.2) plate is centred at (0, 32), spans
   y 14 to 50, and its zip wings reach y 58. It bolts through its centreline
   to the existing deck grid holes **(0, 20) and (0, 40)**, so the deck needs
@@ -173,7 +190,9 @@ tray: measure it. The longest leg loom is 287 mm (legs 2 and 3), under the
 ## Pi 5 pin map (draft, VERIFY)
 
 A plan, not wiring: nothing is connected yet. The rows are B-03 (Pi),
-C-01 (IMU), D-01 (amplifier), X-01 (INA228) and X-02 (ToF).
+C-01 (IMU), D-01 (amplifier), X-01 (INA228) and X-02 (ToF). The Pi's own
+OS and microSD setup (the image, SPI on, the 5 A setting below, dialout)
+is not written yet (B96).
 
 | function | pins | notes |
 |---|---|---|
@@ -217,7 +236,8 @@ brownouts in `NOTES_INBOX.md`.
 
 ## Build order (phase B)
 
-1. **Bench:** dock + fuse + loop key + one XT30 drop → one leg on the jig.
+1. **Bench:** an XT60 feed lead (the dock block waits for the bay, B84) +
+   fuse + loop key + one XT30 drop → one leg on the jig.
 2. **Measure the loom lengths on the robot** (deck v0.4 printed), starting
    from the star-board table. Don't guess them.
 3. **Colour code:** heat-shrink red for 12 V, yellow for 6 V, black for GND,
@@ -233,7 +253,9 @@ In [`bom/BOM.csv`](../bom/BOM.csv):
 - rows B-08…B-18: the loop key, fuse, buck, UBEC, XT60/XT30, leg splitters,
   wire, JST-XH/SH and the star board;
 - A-06: servo leads;
-- B-07: the balance-lead alarm.
+- B-07: the balance-lead alarm;
+- B-23: cable ties for the zip anchors, bracket wings and tray;
+- B-24: the 12 V power node (B92).
 
 Gauges (B-15): 14 AWG for the pack run, 20 AWG for each leg's 12 V, 24–26
 AWG for data, 6 V and sensors.

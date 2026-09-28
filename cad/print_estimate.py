@@ -100,6 +100,8 @@ PLATES = {
     "Batch 2 one leg": [("coxa_yaw_base", 1, 0.2)] + [(n, q, 0.2) for n, q in _ONE_LEG] + [
         ("servo_blank", 3, 0.2), ("blank_idler", 3, 0.2),
     ],
+    # tray_rail waits for B51, battery_sled + sled_rail for the bay (B84); they stay priced
+    # here as the batch's budget. The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
         ("busboard_bracket", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
@@ -107,8 +109,8 @@ PLATES = {
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
     "Deferred: bench jig": [("jig_base", 1, 0.3), ("jig_column", 1, 0.3)],
-    "Deferred: stand": [
-        ("stand_base", 1, 0.3), ("stand_section", 1, 0.3), ("stand_crown", 1, 0.3),
+    "Deferred: stand": [    # two sections free the leg's full 172 mm reach (part_stand)
+        ("stand_base", 1, 0.3), ("stand_section", 2, 0.3), ("stand_crown", 1, 0.3),
     ],
     "Deferred: carapace": [("shell_sector", 5, 0.25), ("shell_cap", 1, 0.25)],
 }

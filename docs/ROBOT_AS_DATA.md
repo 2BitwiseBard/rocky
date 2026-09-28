@@ -295,9 +295,12 @@ error path.
 
 ### 5.2 `cad/check_params_parity.py` (new, in `run_all_checks` MODULES)
 
-- **Tibia stack:** sums `part_tibia` BOSS_H + SOCKET_DEPTH, the tube cut,
-  SEA, `part_hand` HUB_H/CONE_LEN and `part_footpad` CROWN, and compares the
-  total to `l3_tibia` within ±1 mm.
+- **Tibia stack:** knee axis → sole = (`Z_HIP` - `part_tibia.BOSS_Z0` -
+  `SOCKET_DEPTH`) + (tube - 11, its depth in the SEA outer) + the SEA's
+  outer-top-to-stub-face at the slider's lowest pose (45.6, measured from
+  the solids) + (`part_hand` `KNUCKLE_Z` + `CONE_LEN` + `CONE_TIP_R` - the
+  stub's 0.6 mm seat) + `part_footpad` CROWN, compared to `l3_tibia` within
+  ±1 mm. Today: tube + 136.2, so with the hand no tube reaches 135 (B95).
 - **Tube cut length:** prints it. None exists anywhere in the repo today,
   and the first leg build needs it.
 - **Foot geometry:** `part_hand.CONE_TIP_R == leg.foot.tip_radius` and

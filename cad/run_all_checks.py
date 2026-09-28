@@ -73,7 +73,8 @@ def run_one(m):
 
 
 POST = ["check_printability"]     # runs AFTER every module has exported (D038)
-DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer", "gen_drawings"]
+DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer", "gen_drawings",
+           "gen_assembly_views"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

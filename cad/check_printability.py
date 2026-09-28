@@ -120,7 +120,9 @@ SUPPORT_POLICY = {
     "coxa_yaw_base": "yes", "tibia_knee_carrier": "yes",
     "shell_sector": "yes", "jig_column": "yes", "hand_finger": "yes",
     "servo_blank": "none", "calib_gauge_hip": "none", "stand_crown": "yes",
-    "coxa_fork": "yes",   # D047 C-fork: a 13.7 mm cantilever at z~44 and the upper plate (21 mm step) at z~72.5
+    "coxa_fork": "yes",   # D047 C-fork: the upper plate leaves the web at z~41, the hip cup's
+                          # lower wall steps out 13.7 mm at z~44, and its upper side wall spans
+                          # the hip servo (a 21 mm step at z~72.5)
     "hand_cam": "none", "femur_link": "none",
     "femur_plate_b": "none", "coupon_cup": "none", "coupon_yaw_hub": "none",
     "coupon_hip_hub": "none", "coupon_idler": "none", "servo_cup": "none",

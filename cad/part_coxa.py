@@ -9,11 +9,12 @@ horn toward the deck, rear idler + cable plugs facing up.
                   holes, the cup walls take the torque reaction. Nothing sits
                   over the axis: the fork can be installed on the servo first.
   coxa_fork     : ONE C-shaped part riding BOTH sides of the yaw servo —
-                  lower hub bolted to the horn (Ø20.3 pocket on the horn OD,
-                  four slotted M3 through-holes, heads counterbored from
-                  below), a vertical web in front of the servo, and an upper
-                  plate whose pocket rides the rear IDLER disc. The overturning
-                  couple is reacted horn <-> idler (36 mm arm) instead of
+                  lower hub bolted to the horn (Ø20.3 pocket under the horn
+                  face: 0.3 of it engaged once screwed, B81; four slotted M3
+                  through-holes, heads counterbored from below), a vertical
+                  web in front of the servo, and an upper plate whose pocket
+                  rides the rear IDLER disc. The overturning couple is
+                  reacted horn <-> idler (36 mm arm) instead of
                   horn <-> a 683ZZ in a bolt-on cap 15 mm away (D046, J1:
                   computed at ~240 N on the bearing in a recovery push).
                   The upper plate continues into the HIP servo's cup.
@@ -22,11 +23,13 @@ Vertical stack (leg z): plate -4..0 | hub 1.3..7.3 = horn top | servo case
 11.6..40.4 | idler face 43.7 | upper plate 42.3..48.3 | hip servo 48.6.. |
 hip axis 61 (params leg.hip_axis_z).
 
-Assembly order (asserted below and in check_assembly): fork onto the yaw
-servo's horn (4x M3 x 6 from below, off the base) -> servo + fork slide into
-the base cup from +X -> 2 rim screws from above (idler face) + 2 from below
-the plate (horn face, deep pockets) -> hip servo slides into the fork's cup
-from +X -> 4 rim screws -> module hooks onto the deck (I1).
+Assembly order (the final fits and the servo + fork slide into the base are
+asserted below and in check_assembly; the fork's own path onto the servo is
+not, B80): fork onto the yaw servo's horn (4x M3 x 6 from below, off the
+base) -> servo + fork slide into the base cup from +X -> 2 rim screws from
+above (idler face) + 2 from below the plate (horn face, deep pockets) -> hip
+servo slides into the fork's cup from +X -> 4 rim screws -> module hooks
+onto the deck (I1).
 
 Leg harness (D047 follow-up): the deck's frozen I1 cable pass-through (leg x
 -29) sits UNDER the yaw servo, and the D047 base covered it. The base now
@@ -50,7 +53,9 @@ PR = P["print"]
 IF = P["interfaces"]["leg_port"]
 
 HUB_D = 26.0
-HORN_POCKET_DEPTH = 1.0              # the hub rides the horn OD this deep (plateau is 1.7 further)
+HORN_POCKET_DEPTH = 1.0              # pocket cut DOWN from the hub top, where the horn face sits
+                                     # (leg_frame.HUB_Z1): the screwed hub bears on the horn's
+                                     # centre head, 0.3 into this pocket (B81)
 CB_DEPTH = 3.0                       # head counterbores from the hub underside
 WEB_X0, WEB_X1 = 18.0, 22.0          # vertical web in front of the yaw servo (case front at +10.2)
 WEB_HALF_W = 13.0
@@ -214,8 +219,8 @@ if __name__ == "__main__":
     check("servo + fork slide-in path (+X) vs base", worst, lambda v: v < 1, "OPEN", "BLOCKED")
     worst = max(_v((Pos(dx, 0, 0) * hip_s) & (fork + base)) for dx in (1, 2, 5, 10, 20, 40))
     check("hip servo slide-in path (+X) vs fork + base", worst, lambda v: v < 1, "OPEN", "BLOCKED")
-    # the horn pocket locates the fork radially; the idler pocket the top
-    check("fork nudged +X x yaw servo (horn pocket locates)", _v((Pos(2, 0, 0) * fork) & yaw_s), lambda v: v > 1, "LOCATED", "LOOSE")
+    # the idler pocket locates the fork in these nudges (the horn meets 0 mm^3 as posed, B81)
+    check("fork nudged +X x yaw servo (idler pocket locates)", _v((Pos(2, 0, 0) * fork) & yaw_s), lambda v: v > 1, "LOCATED", "LOOSE")
     check("fork nudged +Y x yaw servo", _v((Pos(0, 2, 0) * fork) & yaw_s), lambda v: v > 1, "LOCATED", "LOOSE")
     # rim-screw driver columns: idler-face screws from above vs the fork at every yaw
     worst = 0.0

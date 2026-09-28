@@ -43,12 +43,12 @@ did not change.
 | batch | what | grams | hours |
 |---|---|---:|---:|
 | 0 | fit ladder | 27 | 1.4 |
-| 1 | four joint coupons + one servo blank | 39 | 2.1 |
-| 2 | one leg | 129 | 6.9 |
-| 3 | the body | 183 | 9.8 |
-| **0–3** | | **378** | **20.2** |
-| deferred | four more legs 257 g / 13.7 h · bench jig 162 / 5.9 · stand 165 / 6.1 · carapace 149 / 7.9 | 733 | 33.6 |
-| **whole plan** | | **1111** | **53.8** |
+| 1 | four joint coupons + one servo blank | 40 | 2.2 |
+| 2 | one leg | 136 | 7.3 |
+| 3 | the body | 183 | 9.7 |
+| **0–3** | | **386** | **20.6** |
+| deferred | four more legs 287 g / 15.3 h · bench jig 162 / 5.9 · stand (two sections) 221 / 8.1 · carapace 149 / 7.9 | 819 | 37.2 |
+| **whole plan** | | **1205** | **57.8** |
 
 ## Batch 0: measure the printer (B28, blocking)
 
@@ -89,7 +89,7 @@ bores only):
 | Row E pins | snug at 2.10 | loose at 2.00: glue the pins in. Binds at 2.20: ream the finger pin holes with a 2 mm drill |
 | Port coupons (`port_coupon_deck` + `port_coupon_plate`) | dock without force: tilt 15°, lip through the slot, slide inboard to hook, pivot flat onto the dowels | binds at the dowels: hold the deck and note which step binds. Slop after the pivot: note it and proceed (the thumbscrews close it) |
 
-## Batch 1: four coupons + one blank (PLA, 39 g, 2.1 h)
+## Batch 1: four coupons + one blank (PLA, 40 g, 2.2 h)
 
 Print these before any full leg part. Each coupon is a boolean clip of the
 production solid (`cad/part_leg_coupons.py`), so a coupon that fits proves
@@ -124,20 +124,20 @@ All print as exported (`check_printability.py` audits that pose).
 
 | part | qty | supports | proves |
 |---|---|---|---|
-| `latch_housing` + `latch_rotor` | 1 each | none | I3 latch: the rotor quarter-turns with a coin and is cam-tight at 90°. A tiny mechanism: 0.15 mm layers if you are patient |
-| `thumb_knob_m3` | 2 | none | an M3 × 10 head seats in the hex pocket, 5.6 A/F and snug on purpose (note if the head needs persuasion). The same knob is the I1 port's thumbscrew |
-| `dovetail_male_coupon` + `dovetail_shoe` | 1 each | none | I6: the shoe slides down the 24 mm spec segment and the knob locks it. I6's load rating is benched later on a shell sector's as-built 16 mm segment |
-| `shell_sector_demo` + `frame_coupon` | 1 each | the demo: yes, under the plate (its two I6 segments stand on the bed and the plate starts at z 4, a 35.9 mm cantilever in the audit); the frame: none | the I3 panel standard, both halves (the panel's lip, latch pocket, magnet pockets and two I6 segments; the frame's groove, latch strike and magnets): exercise them with a latch cartridge before any real shell |
+| `latch_housing` + `latch_rotor` | 1 each | none | I3 latch, as modelled: the two halves cannot be joined (the rotor's pegs have no way into the housing's track), and the rotor does not reach the deck strike (B87). Print only to look at the problem; fit none until the redesign |
+| `thumb_knob_m3` | 2 | none | an M3 × 16 hex-head bolt (A-19, 5.5 A/F) presses into the 5.6 A/F hex pocket from the top, threads out the bottom, and must not turn in it (note if it needs persuasion); 0.5 mm of the head stands proud, the pocket is 1.5 deep. A round socket head spins in it. These two are the port coupon's and then the bench leg's thumbscrews; the robot's other 8 print with batch 3 |
+| `dovetail_male_coupon` + `dovetail_shoe` | 1 each | none | I6: the shoe slides down the 24 mm spec segment (the knob lock waits for B83: its bore misses the dovetail). I6's load rating is benched later on a shell sector's as-built 16 mm segment |
+| `shell_sector_demo` + `frame_coupon` | 1 each | the demo: yes, under the plate (its two I6 segments stand on the bed and the plate starts at z 4, a 35.9 mm cantilever in the audit); the frame: none | the I3 panel standard, both halves (the panel's lip, latch pocket, magnet pockets and two I6 segments; the frame's groove, latch strike and magnets). They are not a mating pair: latch/strike, lip/groove and magnets sit at different positions, and the coupon's second peg slot is misplaced (B87). Feel the lip seat and the magnet pull separately; no latch test until B87 |
 | `tool_hook`, `tool_scoop` | 1 each | yes (3 walls; the audit finds two supported islands on each) | I2 tool socket: on a printed `tibia_sea_slider`, the tool inserts free and quarter-turns, and a tug must not pull it off |
 
 Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
 
-## Batch 2: one leg (129 g, 6.9 h), after batch 1 passes
+## Batch 2: one leg (136 g, 7.3 h), after batch 1 passes
 
 | part | qty | material | pose | supports |
 |---|---|---|---|---|
 | `coxa_yaw_base` | 1 | PETG | plate DOWN | yes. The I1 hook lip stands on the bed and holds the plate about 9.3 mm up (a 32.9 mm cantilever at z 9.5 in `cad/out/printability.json`), so support the whole plate from the bed. The harness channel's roof bridges 11 mm |
-| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, under the upper plate (a 21 mm step at z 72.5) and the 13.7 mm ledge at z 44 |
+| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, in three places: under the upper plate where it leaves the web (z ~41), under the hip cup's lower wall where it steps out past the plate (the 13.7 mm ledge at z 44), and under the hip cup's upper side wall, which spans the hip servo (the 21 mm step at z 72.5). Clear all three before the hip servo goes in |
 | `horn_coupler` | 2 | PETG | disc DOWN | none |
 | `femur_link` | 1 | PETG (CF-PLA later) | plate A outer face DOWN | none: recesses up, bridge walls vertical |
 | `femur_plate_b` | 1 | PETG | outer face DOWN | none: pockets up |
@@ -146,9 +146,14 @@ Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
 | `tibia_sea_slider` | 1 | PETG | flange DOWN | none |
 | `servo_blank` + `blank_idler` | 3 + 3 | PLA | as batch 1 | none |
 
-**Assembly order** (`check_assembly.py` asserts it):
+**Assembly order** (`check_assembly.py` asserts the final fits and the later
+slide-in paths, not step 1's path; step 1 is blocked as drawn: B80).
+The full procedure, with pictures, is [ASSEMBLY_GUIDE.md](ASSEMBLY_GUIDE.md).
+
 1. Put the fork onto the yaw blank's horn, off the base: 4 × M3 × 6 from
-   below the hub (M2 × 6 + washer if the horn is M2).
+   below the hub (M2 × 6 + washer if the horn is M2). **Blocked as drawn
+   (B80):** the horn's centre head and the idler catch the C's lips by
+   1.0 + 1.5 mm, so do not force the fork on until B80 lands.
 2. Slide the yaw blank and fork into the base cup from the front. Drive
    2 self-tappers from above into the idler-face rim holes and 2 from under
    the plate.
@@ -177,19 +182,28 @@ design counts, not a shopping list:
   washers) only if the horn turns out to be M2.
 - A-10, M3 × 8: coupler clamps 4.
 - A-18, M3 × 12: plate B 4.
-- A-11, M3 × 10: the tube pinch bolt 1 + the I1 thumbscrews 2 (batch 3).
+- A-11, M3 × 10: the tube pinch bolt 1.
+- A-19, M3 × 16 hex head: the I1 thumbscrews 2, each pressed into a
+  `thumb_knob_m3` (they dock the leg on the bench jig now, on the deck in
+  batch 3).
 - A-13, heat-set inserts: the deck's thumbscrew pockets.
 - A-14, CA glue: for the blank idlers.
 - A Ø2 pin or drill shank for lining up holes.
 
-## Batch 3: the body (183 g, 9.8 h)
+## Batch 3: the body (183 g, 9.7 h)
 
 | part | qty | notes |
 |---|---|---|
-| `body_deck` | 1 | 190 × 181, flat, brim on, dry filament. Print it after B27 (`deck_t` 4 vs 6 unified) and after the port coupons dock cleanly |
+| `body_deck` | 1 | 190 × 181, flat, brim on, dry filament. Print it after B27 (`deck_t` 4 vs 6 unified), B28 (the fit ladder), B51 (tray, rails, bracket and power entry placed together) and the bay (B84), and after the port coupons dock cleanly: each of them changes holes in the deck. Today's deck has holes only for the star-board bracket |
 | `coxa_yaw_base` | 4 more | one per station |
+| `thumb_knob_m3` | 8 more | 2 per `coxa_yaw_base`; the two interface-coupon knobs are the bench leg's. One A-19 M3 × 16 hex head in each (not in the estimate) |
 | `port_coupon_deck` + `port_coupon_plate` | 1 each | the I1 hook-pivot dance, if not tried yet (not in the estimate) |
-| `busboard_bracket`, `avionics_tray`, `tray_rail` × 2, `battery_sled`, `sled_rail` × 2 | 1 each | the interior; print once the electronics exist ([WIRING_HARNESS.md](WIRING_HARNESS.md)) |
+| `busboard_bracket` | 1 | the star board; print once the electronics exist ([WIRING_HARNESS.md](WIRING_HARNESS.md)) |
+| `avionics_tray` | 1 | a bench carrier for the electronics once its Pi standoffs are 58 × 49 (B89); `tray_rail` × 2 waits for B51 (as drawn, tray + rails fit nowhere between the legs) |
+| `battery_sled`, `sled_rail` × 2, `dock_block` | — | wait for the bay (B84, B86): nothing carries the sled yet |
+
+The estimate above still prices `tray_rail` × 2, `battery_sled` and
+`sled_rail` × 2 with this batch, although they wait.
 
 ## Deferred
 
@@ -212,15 +226,24 @@ design counts, not a shopping list:
   - Carapace: 5 × `shell_sector` + `shell_cap`, 0.25 mm, 3 walls, 12 %
     gyroid, brim. The sector's cavity ceilings are 45° terraces and need
     nothing inside; support the outside overhangs (the audit's widest is a
-    27.7 mm step at z 58.5).
-- **Printable, not planned yet:** `belly_door` (the I3 door demo over the
-  sled: two latches + two magnets), `trim_cup` + `trim_cup_lid` (washer
-  ballast for CoM trimming), `belly_skid` × 2 (the sacrificial skid),
-  `imu_grommet` × 4 (TPU eventually; a PLA one is a placeholder),
-  `tube_clip` and `link_clip` (harness clips, 3–4 each), `whisker_shoe`
-  (an I6 shoe), `coupler_recess_demo` (the coupler pocket alone; batch 1's
-  hip-hub coupon covers it) and the dock (`dock_base`, `dock_tower`,
-  `dock_block`), which waits for the charge-port decision (B14).
+    27.7 mm step at z 58.5). The latch cartridges wait for B87: until
+    then the sectors sit on the seam tongues and are held only by the foot
+    magnets on their deck washers, so do not carry the robot by the shell.
+    The hatch magnets have no seat to sit in (B88): leave them out, and
+    the cap sits on its seat by gravity.
+- **Printable, not planned yet:** `belly_door` (an I3 latch-and-magnet
+  demo: two latches + two magnets; no bay frame exists for it to close on,
+  B84), `trim_cup` + `trim_cup_lid` (washer ballast for CoM trimming),
+  `belly_skid` × 2 (the sacrificial skid; no place yet under the deck,
+  B84, B85), `imu_grommet` × 4 (TPU eventually; a PLA one is a
+  placeholder), `tube_clip` and `link_clip` (harness clips: one per tibia
+  tube, which needs exposed tube, and one per femur once `link_clip`
+  fits, B94; 5 each + spares), `whisker_shoe` (an I6 shoe),
+  `coupler_recess_demo` (the coupler pocket alone; batch 1's hip-hub
+  coupon covers it) and the charging dock (`dock_base`, `dock_tower`),
+  which waits for the charge-port decision (B14). `dock_block` is not
+  part of it: it is the robot's I5 bay receiver (`part_battery`) and waits
+  for the bay (B84, B86).
 - **The hand is a later tool (B25):** `hand_hub`, `hand_cam` and
   3 × `hand_finger` (the tools are already coupons, above).
   `foot_pad_tpu` (TPU) is a sock over the closed hand's cone tip, so it

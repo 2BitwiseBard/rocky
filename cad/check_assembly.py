@@ -49,7 +49,7 @@ for ang in horn_screw_angles(P):
         col = col & Pos(0, 0, HUB_Z0 + CB_DEPTH - 20) * Box(100, 100, 40)   # below the counterbore floor
         check(f"M3 driver column ({ang} deg, r {r:.1f}) from below vs fork", v(col & fork), lambda x: x < 1, "CLEAR", "BLOCKED")
 check("fork x yaw blank (horn + idler pockets)", v(fork & by), lambda x: x < 1, "OK", "CLASH")
-check("fork nudged +X x yaw blank (horn pocket locates)", v((Pos(2, 0, 0) * fork) & by), lambda x: x > 1, "LOCATED", "LOOSE")
+check("fork nudged +X x yaw blank (idler pocket locates)", v((Pos(2, 0, 0) * fork) & by), lambda x: x > 1, "LOCATED", "LOOSE")
 check("fork nudged -X x yaw blank", v((Pos(-2, 0, 0) * fork) & by), lambda x: x > 1, "LOCATED", "LOOSE")
 worst = max(v((Pos(dx, 0, 0) * (fork + by)) & base) for dx in (1, 2, 5, 10, 20, 40))
 check("servo + fork slide-in path (+X) vs base", worst, lambda x: x < 1, "OPEN", "BLOCKED")

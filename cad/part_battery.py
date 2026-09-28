@@ -2,11 +2,13 @@
 
   battery_sled : the 3S pack straps to this; nose carries a panel-mount XT60
                  pocket; tail has the door-retained lip. Slides on two rails.
-  sled_rail    : one of two mirrored rails; bolts to the deck M3 grid
-                 (20 mm pitch) from below.
-  dock_block   : fixed XT60 pocket, FLOATING (+/-0.8 mm) in a frame that
-                 bolts to the deck grid; lead-in chamfers self-align the
-                 blind mate. Bus-bar cavity breaks out 2x XT30 spare taps.
+  sled_rail    : one of two mirrored rails; stands on the bay floor (tabs
+                 flush with the bar's underside), the sled rides on its top.
+                 The floor is not modelled yet (B84).
+  dock_block   : fixed XT60 pocket, FLOATING (+/-0.8 mm) in a frame meant to
+                 bolt into the bay (B84; its floor holes cannot be reached as
+                 drawn, B86); lead-in chamfers self-align the blind mate.
+                 Bus-bar cavity breaks out 2x XT30 spare taps.
   belly_door   : demo door blank: seats on lips, 2x I3 latch inserts, 2x
                  magnet pockets. (The real door joins the shell set later;
                  this one is printable now to exercise the standard.)

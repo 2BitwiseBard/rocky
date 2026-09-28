@@ -9,6 +9,54 @@ indexes them.*
 
 ---
 
+## 2026-09-28 · Session 9l — an assembly guide, and what writing it found (B80–B96)
+
+**Ask:** research what to order (servos, electronics, filament), then: are the ST3215s
+good servos (strong, robust, controllable, fluid motion)? And an assembly guide.
+
+**Ordering:** `bom/BOM.csv` re-priced (bench kit $282, core $1,231). Servos from a source
+that ships the aluminium horn the couplers are cut for; order by suffix (C018/C047);
+Pi 5 4 GB (the brains are on the desk); the D500's real size is 54.0 × 46.3 × 35.0
+(datasheet), not 38.6 × 38.6 × 33.5; magnet strikes must be steel.
+
+**Servos ([docs/SERVO_NOTES.md](docs/SERVO_NOTES.md), B76–B79):** the right servo to
+start with (walking loads the knee ~12 % of stall), but a stiff position servo with no
+current loop. Most of the jerkiness Pebble would show is software: the swing lands at
+188 mm/s, a command change can snap a joint 28° in one tick, the bridge streams ACC 0 /
+speed 0, keyframes stop at every key. The sustained budget `continuous_frac` 0.65 is a
+guess twice the datasheet's rated torque (B77). The HL-series constant-current servo is
+a same-body option to bench one of (B78; the driver writes addr 44, its goal torque).
+
+**The guide ([docs/ASSEMBLY_GUIDE.md](docs/ASSEMBLY_GUIDE.md)):** printed parts + BOM
+to a robot powered up on its stand, in build order, with 13 step pictures drawn from the
+CAD (`cad/gen_assembly_views.py`, now in `cad-check --derived`, 34/34). Five sections
+were written from the code and each checked by a second reader; a critic then found
+contradictions and suspected CAD faults, and each fault was settled by building the parts
+and measuring. **Seventeen are real (B80–B96), and several block a print:**
+- **B80: the coxa fork cannot go onto the yaw servo (leg step 1).** The horn's centre
+  head catches the hub's rear lip by 1.0 mm and the idler the upper plate by 1.5; the C
+  would have to spring 2.5 mm open. `check_assembly` tests the final fit, never this
+  path. A fix (open the idler pocket and a head channel to the mouth) was measured on a
+  scratch fork: 0 mm³ all the way in. Nothing printed from batch 2 until it lands.
+- **B82:** the I1 thumbscrews are M3 × 16 hex head (A-19): an M3 × 10 in the knob stops
+  0.5 mm short of the insert, and a socket head spins in its hex pocket. Not captive.
+- **B84–B86:** the battery bay is not a part, the stand crown fills the belly, and
+  `dock_block` cannot be bolted down: the robot runs tethered until they land.
+- **B51 (rewritten), B89, B90:** no pose of the avionics tray + rails clears the five
+  coxa bases; the Pi standoffs are 58 × 44.1 (a 0.9 scale since the first import), not
+  58 × 49; the IMU pad misses the BNO085's holes and stands 0.6 mm into the Pi.
+- **B87, B88:** the I3 latch cartridge cannot be assembled or reach its strike; the
+  hatch magnets have no seat. The shell sits on its seam tongues and foot magnets.
+- Also B81 (the yaw hub rides the horn's centre head, not its pocket), B83 (the I6
+  set-knob bore misses the dovetail), B91 (the hand's lead is ~0.5 m, B-17 is 100 mm),
+  B92 (no 12 V node part), B93, B94, B95 (with the hand no tube reaches l3 = 135), B96.
+Docs, BOM, print plan and CAD comments were corrected to match (no geometry change).
+
+**Next:** the CAD fixes, B80 first (it blocks the leg print), then B89/B90 and B82 before
+the tray and the port coupon; B84/B85/B51 are one body-layout redesign.
+
+---
+
 ## 2026-09-27 · Session 9k — the femur becomes a box, the sled fits its bay, the print pack is rebuilt (D062)
 
 **Ask:** apply B74 and B72, and redo the print pack.

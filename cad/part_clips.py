@@ -4,11 +4,14 @@
               tunnel (the JST-SH-3 hand lead + microswitch pair run down
               the shin). Snap gap 8 mm (~80 % of d: firm snap, no tools).
   link_clip — C-channel that clips over the 6 mm femur link plate edge
-              with the same tunnel on top (the servo daisy jumpers).
+              (D062: only between the bridge walls and hub B, link x
+              54..80, and there the inner jaw grazes the knee carrier;
+              B94) with the same tunnel on top (the servo daisy jumpers).
 
-Print flat, PLA/PETG, 3-4 per robot each; they ride the post-caliper regen
-for final ID tuning but the geometry ships now (B13 was DEFERRED-trivial —
-it stops being deferred the day looms exist).
+Print flat, PLA/PETG, one per tibia tube and one per femur, 5 each + spares
+(the tube clip needs exposed tube; the link clip fit is B94); they ride the
+post-caliper regen for final ID tuning but the geometry ships now (B13 was
+DEFERRED-trivial — it stops being deferred the day looms exist).
 """
 from build123d import *
 from common import params, export

@@ -50,7 +50,7 @@
 #   rocky.sh eval-walk NAME [args]   deterministic eval of runs/NAME vs the bare gait
 #   rocky.sh cad-check [--derived] [--fem]  whole-tree CAD CI (build123d): 28/28 modules or it didn't happen;
 #                                  --derived also rebuilds the preview, print estimate, print pack,
-#                                  viewer and part drawings (33/33); --fem also runs the leg stress check
+#                                  viewer, part drawings and assembly pictures (34/34); --fem also runs the leg stress check
 #                                  (cad/fem_check.py: gmsh + CalculiX, D061) — SKIPPED without them
 #   rocky.sh cad-drawings [PART...] [--force]  A4 TechDraw sheets of the leg parts (or PART) in
 #                                  cad/out/drawings/ (FreeCAD, no window; a part is redrawn only when

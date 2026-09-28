@@ -1,8 +1,9 @@
 # ros2/: ROS 2 Jazzy workspace packages (D009)
 
 Scaffolded and parity-checked, never built here. `colcon build` needs
-ROS 2 Jazzy (Ubuntu 24.04, or a Pi 5). CI and the dev machine have no ROS,
-so this is what is verified without it:
+ROS 2 Jazzy (Ubuntu 24.04, or a Pi 5; the Pi's own OS and microSD setup is
+not written yet, B96). CI and the dev machine have no ROS, so this is what
+is verified without it:
 
 - `rocky_description/urdf/` is **generated from `cad/params.yaml`**
   (`generate_urdf.py`; CI fails if the committed URDF is stale). It passes

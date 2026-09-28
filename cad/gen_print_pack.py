@@ -97,25 +97,31 @@ PARTS = {
                      "washer if the horn is M2, A-12)."),
     # interface coupons (with batch 1)
     "latch_housing": ("PLA", "as exported", "none", PLA_DEFAULT,
-                      "I3 latch, with latch_rotor: the rotor quarter-turns with a coin and is "
-                      "cam-tight at 90°. Tiny: 0.15 mm layers if you are patient."),
+                      "I3 latch, with latch_rotor. As modelled the two halves cannot be joined "
+                      "(the rotor's pegs have no way into the housing's track) and the rotor does "
+                      "not reach the deck strike (B87): print only to look at the problem, fit none."),
     "latch_rotor": ("PLA", "as exported", "none", PLA_DEFAULT,
-                    "Goes in latch_housing (I3)."),
+                    "Meant for latch_housing (I3); as modelled it cannot go in (B87)."),
     "thumb_knob_m3": ("PLA", "as exported", "none", PLA_DEFAULT,
-                      "An M3 x 10 head seats in the hex pocket, 5.6 A/F and snug on purpose (note "
-                      "if it needs persuasion). The same knob is the I1 port's thumbscrew."),
+                      "An M3 x 16 hex head (A-19) presses into the 5.6 A/F hex pocket and must not "
+                      "turn (note if it needs persuasion); 0.5 mm of the head stands proud. A round "
+                      "socket head spins in it. The same knob is the I1 port's thumbscrew: 10 for "
+                      "the robot, 2 here (the port coupon's, then the bench leg's)."),
     "dovetail_male_coupon": ("PLA", "as exported", "none", PLA_DEFAULT,
                              "I6, with dovetail_shoe: the shoe slides down the 24 mm spec segment "
-                             "and the knob locks it."),
+                             "(the knob lock waits for B83: its bore misses the dovetail)."),
     "dovetail_shoe": ("PLA", "as exported", "none", PLA_DEFAULT,
                       "I6 shoe for dovetail_male_coupon."),
     "shell_sector_demo": ("PLA", "as exported (the two I6 segments on the bed)",
                           "YES, under the plate (it starts above the bed on the I6 segments)",
                           PLA_DEFAULT,
                           "I3 panel standard, the panel half: lip, latch pocket, magnet pockets, "
-                          "two I6 segments. Exercise with a latch cartridge before any real shell."),
+                          "two I6 segments. Not a mating pair with frame_coupon: latch/strike, "
+                          "lip/groove and magnets sit at different positions (B87). Feel the lip "
+                          "seat and the magnet pull separately; no latch test until B87."),
     "frame_coupon": ("PLA", "as exported", "none", PLA_DEFAULT,
-                     "I3 panel standard, the frame half: groove, latch strike, magnets."),
+                     "I3 panel standard, the frame half: groove, latch strike, magnets. Its second "
+                     "peg slot is misplaced (B87)."),
     "tool_hook": ("PLA", "as exported", "YES (the audit finds supported islands)", "3 walls / 25%",
                   "I2 tool socket: on a printed tibia_sea_slider the tool inserts free and "
                   "quarter-turns, and a tug must not pull it off."),
@@ -129,10 +135,14 @@ PARTS = {
                       "D047: I1 plate + servo cup (yaw servo shaft-down), D059 harness channel on "
                       "-Y. 4 rim self-tappers hold the servo (2 from above, 2 from under the plate)."),
     "coxa_fork": ("PETG", "lower hub DOWN, upright as assembled",
-                  "YES under the upper plate and the ledge at mid-height (widths: the audit line)",
+                  "YES in three places: under the upper plate (z ~41), the hip cup's lower wall "
+                  "(z ~44) and its upper side wall over the hip servo (z ~72.5); widths: the "
+                  "audit line",
                   "5 walls / 40%",
                   "D047: C-fork rides the yaw horn (below) and idler (above). 4x M3 x 6 from below "
-                  "the hub into the horn (A-09)."),
+                  "the hub into the horn (A-09). As drawn it cannot go onto the servo: the horn's "
+                  "centre head and the idler catch the C's lips (B80). Clear all three supports "
+                  "before the hip servo goes in."),
     "femur_link": ("PETG (CF-PLA later)", "plate A outer face DOWN",
                    "none: recesses up, bridge walls vertical", "6 walls / 40%",
                    "D047: plate A + bridge walls. 2x M3 x 8 clamps per coupler (A-10); "
@@ -152,7 +162,9 @@ PARTS = {
     # batch 3: the body
     "body_deck": ("PETG or PLA", "flat", "none", "4 walls / 30% gyroid",
                   "The biggest part: brim ON, dry filament, watch the first-layer corners. Print "
-                  "it after B27 (deck_t 4 vs 6 unified) and after the port coupons dock cleanly."),
+                  "it after B27 (deck_t 4 vs 6 unified), B28, B51 and the bay (B84), and after the "
+                  "port coupons dock cleanly: each of them changes holes in the deck. Today's deck "
+                  "has holes only for the star-board bracket."),
     "port_coupon_deck": ("PLA", "as exported", "none", PLA_DEFAULT,
                          "I1, with port_coupon_plate: tilt 15°, lip through the slot, slide "
                          "inboard to hook, pivot flat onto the dowels. Binds: note which step."),
@@ -160,17 +172,20 @@ PARTS = {
                           "slicer preview)", PLA_DEFAULT,
                           "The leg half of the I1 port coupon."),
     "busboard_bracket": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                         "Interior: print once the electronics exist (WIRING_HARNESS.md)."),
+                         "The star board: print once the electronics exist (WIRING_HARNESS.md)."),
     "avionics_tray": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                      "Interior: print once the electronics exist."),
+                      "A bench carrier for the electronics once its Pi standoffs are 58 x 49 "
+                      "(B89). As drawn, tray + rails fit nowhere between the legs (B51)."),
     "tray_rail": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                  "Interior: the avionics tray's rails."),
+                  "The avionics tray's rails. Waits for B51: as drawn, tray + rails fit nowhere "
+                  "between the legs. Do not print it for the robot yet."),
     "battery_sled": ("PETG", "as exported", "none (check the preview for the audit's overhang)",
                      PLA_DEFAULT,
-                     "Interior: print once the battery is in hand; size it from the pack you "
-                     "bought (B72)."),
+                     "Waits for the bay (B84): nothing carries the sled yet. Then size it from the "
+                     "pack you bought (B72)."),
     "sled_rail": ("PETG", "as exported", "none", PLA_DEFAULT,
-                  "Interior: the battery sled's rails."),
+                  "The battery sled's floor rails (the sled rides on top). Waits for the bay "
+                  "(B84)."),
     # deferred: bench jig + calibration gauges
     "jig_base": ("PLA", "flat", "none", "3 walls / 20%, 0.3 mm", "Bench jig base."),
     "jig_column": ("PLA", "on its back, spine down", "YES", "3 walls / 20%, 0.3 mm",
@@ -191,9 +206,12 @@ PARTS = {
     # deferred: the carapace
     "shell_sector": ("PLA or PETG", "as exported", "YES on the outside overhangs; the cavity's "
                      "45° terraces need nothing", "3 walls / 12% gyroid, 0.25 mm, brim",
-                     "Five of them + shell_cap."),
+                     "Five of them + shell_cap. The latch cartridges wait for B87: until then the "
+                     "sectors sit on the seam tongues and the foot magnets; do not carry the robot "
+                     "by the shell."),
     "shell_cap": ("PLA or PETG", "as exported", "none", "3 walls / 12% gyroid, 0.25 mm, brim",
-                  "The carapace's hatch cap."),
+                  "The carapace's hatch cap. The hatch magnets have no seat yet (B88): leave them "
+                  "out; the cap sits on its seat by gravity."),
     # the hand (a later tool, B25)
     "hand_hub": ("PLA first / PETG final", "top face DOWN (boss up, collar ring on the bed)",
                  "YES (tree/organic) under the collar windows + servo-pocket ceiling",
@@ -226,12 +244,16 @@ BATCHES = [
          intro="The standards the body, panels and tools attach by (D020, INTERFACES.md). None "
                "changed at D047: a set printed earlier still counts."),
     dict(key="Batch 2 one leg", title="Batch 2: one leg, after batch 1 passes",
-         intro="PETG for the structure, PLA for the three blanks. Assemble in the order "
-               "check_assembly.py asserts (the list below)."),
+         intro="PETG for the structure, PLA for the three blanks. Assemble in the order below; "
+               "check_assembly.py asserts the final fits, not step 1's path, which is blocked as "
+               "drawn (B80)."),
     dict(key="Batch 3 body", title="Batch 3: the body",
-         extra=[("port_coupon_deck", 1), ("port_coupon_plate", 1)],
-         intro="The deck after B27 and after the port coupons dock cleanly; the interior once "
-               "the electronics exist. The port coupons are not in the estimate."),
+         extra=[("port_coupon_deck", 1), ("port_coupon_plate", 1), ("thumb_knob_m3", 8)],
+         intro="The deck after B27, B28, B51 and the bay (B84), and after the port coupons dock "
+               "cleanly; the star board once the electronics exist; the avionics tray only as a "
+               "bench carrier (B89). tray_rail waits for B51, battery_sled and sled_rail for the "
+               "bay (B84), though the estimate still prices them. 8 more thumb_knob_m3, 2 per "
+               "coxa_yaw_base. The port coupons and the 8 knobs are not in the estimate."),
     dict(key="Deferred: four more legs", title="Deferred: four more legs (servos in hand)",
          intro="4 x batch 2 without the blanks and without coxa_yaw_base (batch 3 prints those)."),
     dict(key="Deferred: bench jig", title="Deferred: bench jig + calibration gauges",
@@ -449,8 +471,9 @@ def print_order(fem):
         "below BEFORE any full leg part.",
         "<b>Batch 2</b>: one leg in PETG (+ 3 PLA blanks) after batch 1 passes. Assemble in the "
         "order on the batch 2 page.",
-        "<b>Batch 3</b>: the deck (after B27 and once the port coupons dock), 4 more "
-        "coxa_yaw_base, the interior once the electronics exist.",
+        "<b>Batch 3</b>: the deck (after B27, B28, B51 and the bay B84, and once the port "
+        "coupons dock), 4 more coxa_yaw_base + 8 thumb_knob_m3, the star board once the "
+        "electronics exist. The tray rails and the battery parts wait (B51, B84).",
         "<b>Deferred</b>, servos in hand: four more legs, the bench jig + calibration gauges. "
         "<b>Print last</b>: the stand and the carapace. The hand is a later tool (B25).",
     ]
@@ -492,7 +515,8 @@ def print_order(fem):
 
 LEG_ASSEMBLY = [
     "Fork onto the yaw blank's horn, off the base: 4x M3 x 6 from below the hub (M2 x 6 + "
-    "washer if the horn is M2).",
+    "washer if the horn is M2). <b>Blocked as drawn (B80)</b>: the horn's centre head and the "
+    "idler catch the C's lips by 1.0 + 1.5 mm, so do not force the fork on until B80 lands.",
     "Yaw blank + fork into the base cup from the front: 2 self-tappers from above into the "
     "idler-face rim holes, 2 from under the plate.",
     "Hip blank into the fork's cup from the front; 4 self-tappers.",
@@ -508,6 +532,7 @@ LEG_HARDWARE = [
     ["A-10", "M3 x 8", "4 (coupler clamps)"],
     ["A-18", "M3 x 12", "4 (plate B)"],
     ["A-11", "M3 x 10", "1 (tube pinch bolt)"],
+    ["A-19", "M3 x 16 hex head", "2 (the I1 thumbscrews, one pressed into each thumb_knob_m3)"],
     ["A-14", "CA glue", "the blank idlers"],
 ]
 
@@ -612,7 +637,9 @@ def batch_section(b, est, audit, fem_by_part, drawings, seen, pages, known):
                      "" if mins is None else mins, where])
     s.append(table(rows, [w * inch for w in (0.3, 1.2, 0.35, 0.75, 1.45, 1.8, 0.45, 0.4, 0.6)]))
     if b["key"] == LEG_BATCH:
-        s += [Paragraph("Assembly order (check_assembly.py asserts it)", H3),
+        s += [Paragraph("Assembly order (check_assembly.py asserts the final fits, not step 1's "
+                        "path: B80)", H3),
+              Paragraph("The full procedure, with pictures, is docs/ASSEMBLY_GUIDE.md.", SMALL),
               table([["[ ]", f"{i}. {t}"] for i, t in enumerate(LEG_ASSEMBLY, 1)],
                     [0.35 * inch, 6.95 * inch], header=False),
               Paragraph("To swap a hip or knee servo later: plate B off (4 screws), clamps out (4), "

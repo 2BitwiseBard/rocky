@@ -18,6 +18,10 @@ clearance). Gravity closes the joint; the trapezoids carry shear/moment.
                   belly bay blocks the az-342/198 webs, and STATIONS are
                   out entirely — the coxa-plate cantilever overhangs the
                   deck edge right where a saddle wall would rise.
+                  The top plate (apothem 47.2) sits 3 mm under the deck
+                  and the spars bear on the deck bottom from r 36 to 86.
+                  Nothing may hang under the deck there; the belly bay
+                  itself does not fit (B85).
 
 Checks: aligned stack must slide (≈0 interference), a 36°-misaligned
 stack must NOT (registration is real), saddle bite vs deck edge, arm
