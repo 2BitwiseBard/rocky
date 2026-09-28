@@ -1,12 +1,12 @@
 # Design backlog
 
-*Ideas and follow-ups with verdicts (B1–B75, started 2026-07-30). Each got a bounded look: a sim
+*Ideas and follow-ups with verdicts (B1–B79, started 2026-07-30). Each got a bounded look: a sim
 test where physics could answer, CAD where the part was cheap, spec-and-defer where it depends on
 hardware not yet in hand. Statuses: work to do — OPEN, PROPOSED, BLOCKING, RECOMMENDED, OPTION,
 COUPON (a print answers it), QUEUED, RERUN PENDING; waiting on hardware — SPEC'D, DEFERRED; partly
 done — HALF / MOSTLY / MECHANICAL / STEP 1 SHIPPED; done — SHIPPED, NEGATIVE (tested, don't build),
 MERGED.
-B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 those of its final pass (2026-09-27), B74–B75 from the first FEM run (D061).*
+B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 those of its final pass (2026-09-27), B74–B75 from the first FEM run (D061), B76–B79 from the servo research ([SERVO_NOTES.md](SERVO_NOTES.md)).*
 
 ## Open
 
@@ -56,6 +56,10 @@ B42–B65 are the follow-ups of the 2026-09-26 review (BUILD_LOG 9i), B66–B73 
 | B67 | The tray's bus trunk: route and length | **OPEN** | The tray's XH-5 trunk leaves the bulkhead at y ≈ −72 (facing south), while the D059 star board sits at y 32, so the trunk runs round the tray; neither the route nor the length is computed ([WIRING_HARNESS](WIRING_HARNESS.md#cut-lengths-computed-from-the-deck-geometry)). Measure it on the printed deck, or compute it once the tray position is fixed (B51). |
 | B68 | Evaluations not rerun on the current model | **RERUN PENDING** | The 2026-09-26 rerun did not repeat `recover5_v3_warm`'s servo-nominal, randomised and pure-RL cells (still labelled `5a32f772ca99` in RL_GUIDE §4) or the `robust_fwd2` / `cmd_sample3` walker evaluations (pre-D052 walkers with no envelope, zeroed in the cockpit). Rerun them with `eval_recover` / `eval_ppo`, or retire the checkpoints. |
 | B75 | Allowables from your own printer | **COUPON** | `params.fem.petg` holds datasheet-derived allowables with a knock-down (35 MPa von Mises, 20 MPa across layers, VERIFY). Pull one dog-bone printed flat and one printed standing, same settings as the leg parts, and file the two breaking stresses; every SF in `cad/out/fem/FEM_REPORT.md` scales with them. |
+| B76 | Fluid motion on position servos | **OPEN** | Today the swing foot lands at 188 mm/s (joint targets step ~2–3 rad/s at lift-off and touchdown), a walking-command change can move a joint target 28° in one 20 ms tick, the bridge streams at ACC 0 / goal speed 0 with no interpolation, keyframes stop at every key, and nothing idles. Ranked fixes in [SERVO_NOTES.md](SERVO_NOTES.md#fluid-motion-what-limits-it-today): rate-limited command, soft-landing swing, per-tick goal speed, splined keyframes with offsets, an idle layer, 100 Hz, runtime P/D, minimum-jerk blends, ACC for gestures only, a 12 V servo-model fit. 1–5 need no hardware. |
+| B77 | The servo's sustained budget is a guess twice the datasheet | **OPEN** (bench) | `actuators.st3215.continuous_frac: 0.65` vs the C018 datasheet's rated 10 kg·cm (0.33 × stall); the 3.0 rad/s loaded speed budget (and so the 45.5 mm/s envelope) derives from it. The firmware's overload rule is 80 % for 2 s → 20 % output, not the model's 85 % for 180 s; the torque audit is at 12 V only (the knee push is ~61 % of stall at the 9.9 V floor if stall scales with voltage). Runbook §7 thermal soak + §8 torque step settle `continuous_frac`, the trip model and the voltage scaling; then re-derive `joints.vel_rad_s` and the envelope. |
+| B78 | Feetech HL-series constant-current servo as a drop-in | **OPTION** | HL-3930 / HL-3950: same 45.2 × 24.7 × 35 body, 25T spline, bus and 9–12.6 V, plus a constant-current mode (soft holds, torque ceilings). Evidence is thin (one datasheet line, no HLS memory table, torque units undocumented), so buy ONE and bench it first. **Driver trap:** `bus.py` writes 0 to addr 44 in every goal block (goal time on STS); on an HL servo addr 44 is goal torque, so an HL needs its own register family before it goes on the bus. HL-3930's rated torque (8.7 kg·cm) is below the ST3215's; +15.5–19.5 g each. |
+| B79 | Dump the registers the motion depends on | **OPEN** (bench tool) | `bench/register_dump.py` archives addr 0–73, so it never sees 85/86 (a hidden acceleration ramp that acts even at ACC 0; LeRobot writes 85 = 254, Open Duck Mini 0). Extend the dump to 0–87 before the first servo is changed, record the 12 V firmware's return delay and Lock behaviour (the public V3.7 table is a 7.4 V, firmware-3.7 document), and pick 85/86 on the bench. |
 
 ## Closed
 

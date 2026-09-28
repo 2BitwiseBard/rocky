@@ -137,6 +137,8 @@ MUJOCO_GL=glfw python sim/playground.py --viewer     # live window + REPL + arro
   sensing and vision plan.
 - **Reinforcement learning** — [docs/RL_GUIDE.md](docs/RL_GUIDE.md): the two
   environments, training and evaluation step by step, the honest results table.
+- **Servos** — [docs/SERVO_NOTES.md](docs/SERVO_NOTES.md): is the ST3215
+  good enough, what limits fluid motion, and the upgrade ladder.
 - **Design changes** — [docs/DESIGN_CHANGE_GUIDE.md](docs/DESIGN_CHANGE_GUIDE.md),
   [docs/ROBOT_AS_DATA.md](docs/ROBOT_AS_DATA.md).
 - **Hardware** — [bench/BENCH_RUNBOOK.md](bench/BENCH_RUNBOOK.md) (bench day),
