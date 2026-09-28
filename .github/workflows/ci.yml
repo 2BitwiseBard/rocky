@@ -103,8 +103,8 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: install (build123d + OCCT pinned in the cad extra, MuJoCo by constraints.txt)
-        run: pip install -e ".[sim,cad]" -c constraints.txt
+      - name: install (build123d + OCCT pinned in the cad extra, MuJoCo by constraints.txt; dev for pytest)
+        run: pip install -e ".[sim,cad,dev]" -c constraints.txt
       - name: run_all_checks (every part module, the joint suite, then printability)
         working-directory: cad
         run: python run_all_checks.py
