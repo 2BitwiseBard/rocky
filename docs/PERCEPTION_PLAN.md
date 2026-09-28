@@ -89,7 +89,7 @@ Rows are in [bom/BOM.csv](../bom/BOM.csv); pins in
   its clock stretching. Not UART-RVC: that mode reports no angular rates,
   and the brace trip (`reflex.gyro_trip`, 1.8 rad/s) and the odometry EKF
   need them.
-- **Lidar: LDRobot D500** (C-02, phase C): 38.6 × 38.6 × 33.5 mm, 45 g,
+- **Lidar: LDRobot D500** (C-02, phase C): 54.0 × 46.3 × 35.0 mm (datasheet; VERIFY), 45 g,
   0.03–12 m, 10 Hz (6–13), ≤ 0.72° resolution, UART 230400 on a
   ZH1.5T-4P plug through its own USB adapter, 5 V 0.29 A. It sits on a
   hatch-cap variant (B12, the D029 cap seat), not a mast. The sim still

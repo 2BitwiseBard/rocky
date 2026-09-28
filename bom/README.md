@@ -2,7 +2,7 @@
 
 `BOM.csv` is the one list of what Pebble needs. GitHub renders it as a table,
 any spreadsheet opens it, and a price change is a one-line diff. Prices are
-USD estimates checked on **2026-09-26**, before tax and shipping. Check them
+USD estimates checked on **2026-09-28**, before tax and shipping. Check them
 again at checkout, and change them in `BOM.csv` only: no other file repeats
 a price. `python3 bom/totals.py` prints the subtotals below and checks that
 every line total is qty × unit.
@@ -20,18 +20,22 @@ every line total is qty × unit.
 | `status` | `to buy` · `wait until one leg walks` (buy later, on purpose) · `optional` · `have` (workshop basics: buy only if missing) · `choice` (buy only if a bench measurement says so) · `alternative` (replaces another row; never summed) |
 | `design_ref` | the `cad/params.yaml` key, CAD part, decision (`docs/decisions.md`) or backlog item (`docs/DESIGN_BACKLOG.md`) that sets the part |
 
-## Totals (2026-09-26)
+## Totals (2026-09-28)
 
 | | to buy | wait | total |
 |---|---:|---:|---:|
-| A bench kit | $280 | | **$280** |
-| B full robot | $615 | $196 (Pi 5 + cooler + card) | $811 |
-| C senses | $167 | | $167 |
-| **Core robot (A-C)** | | | **$1,258** |
-| D voice/brain (optional) | | | $17 |
-| X optional, near term (power monitor, downward ToF, kill relay, Wi-Fi adapter, logic analyzer, second pack, pins, whisker wire) | | | $192 |
+| A bench kit | $276 | | **$276** |
+| B full robot | $644 | $153 (Pi 5 4 GB + cooler + card) | $797 |
+| C senses | $134 | | $134 |
+| **Core robot (A-C)** | | | **$1,207** |
+| D voice/brain (optional) | | | $21 |
+| X optional, near term (power monitor, downward ToF, kill relay, Wi-Fi adapter, logic analyzer, second pack, pins, whisker wire, filament dryer) | | | $216 |
 | X optional, later (sensor pods, depth camera) | | | $214 |
-| Workshop basics, if missing (calipers, meter, scales, iron, crimper, PETG, PLA) | | | $208 |
+| Workshop basics, if missing (calipers, meter, scales, iron, crimper, PETG, PLA) | | | $212 |
+
+Each row carries the cheapest reliable source seen. Buying the bench kit
+all on Amazon costs about $60 more, mostly the servos and the two Waveshare
+boards; the rows' `source` notes carry the Amazon links where they exist.
 
 The brains (speech, vision, tool-calling models) run on a separate computer
 with a GPU over Wi-Fi; that computer is not in this list.
@@ -69,5 +73,10 @@ switches. Everything in B waits until that leg passes
   Driver is the bus-servo tester.
 - **Generic 25T disc horns.** The couplers are cut for the stock ST3215 horn's
   45° hole pattern; the spare servo's bag is the spare horn.
+- **Stainless washers for the magnet strikes.** 304 is barely magnetic: the
+  deck strikes are zinc-plated steel DIN125 (B-20).
+- **PETG-CF for the legs.** Stiffer, but weaker across layers and more
+  brittle, it needs a hardened nozzle, and the FEM check assumes PETG.
+- **KW11 / KW12 microswitches.** ~20 mm long; the foot pocket takes a KW10.
 - **683ZZ bearings, a USB-UART dongle, STS3250 knees, a pan turret.** Older
   plans had them; the current design (D047 and later) does not use them.
