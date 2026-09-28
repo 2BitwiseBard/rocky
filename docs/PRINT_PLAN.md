@@ -26,9 +26,9 @@ cad-drawings`, FreeCAD).
 - **Strength:** `./rocky.sh cad-check --fem` loads each structural leg part
   with the largest force the servos can put through it and reports a safety
   factor ([`cad/out/fem/FEM_REPORT.md`](../cad/out/fem/FEM_REPORT.md), D061).
-  Today the femur FAILS in the sideways cases (SF 1.22, B74): print it for
-  fit, but expect it to twist, and do not run a leg hard on it. The
-  allowables are VERIFY until your own pull coupons say otherwise (B75).
+  All five pass (the femur at 2.18 since D062's deck + 8 mm rails; it was
+  1.22). The allowables are VERIFY until your own pull coupons say
+  otherwise (B75).
 - **Grams and hours** come from
   [`cad/out/print_estimate.json`](../cad/out/print_estimate.json) (0.2 mm
   layers). The fill factors are guesses, so expect ±30 %. If the slicer
@@ -158,7 +158,8 @@ Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
    through the counterbores.
 6. Fit plate A onto both couplers: 2 × M3 × 8 clamps per hub from the outer
    face.
-7. Fit plate B over both idlers: 4 × M3 × 8 into the bridge bosses.
+7. Fit plate B over both idlers: 4 × M3 × 12 into the bridge bosses (the
+   8 mm rails since D062).
 8. Push the tube into the carrier boss; M3 × 10 pinch bolt.
 
 To swap a hip or knee servo later: plate B off (4 screws), clamps out (4),
@@ -174,7 +175,8 @@ design counts, not a shopping list:
   against the servo's own bag first; the STEP pilot is 1.5 mm.
 - A-09, M3 × 6: 4 per horn (yaw hub + two couplers), so 12. A-12 (M2 × 6 +
   washers) only if the horn turns out to be M2.
-- A-10, M3 × 8: coupler clamps 4 + plate B 4.
+- A-10, M3 × 8: coupler clamps 4.
+- A-18, M3 × 12: plate B 4.
 - A-11, M3 × 10: the tube pinch bolt 1 + the I1 thumbscrews 2 (batch 3).
 - A-13, heat-set inserts: the deck's thumbscrew pockets.
 - A-14, CA glue: for the blank idlers.

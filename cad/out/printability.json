@@ -292,10 +292,10 @@
   "size": [
    38.0,
    121.0,
-   9.8
+   11.8
   ],
   "bed_ok": true,
-  "layers": 49,
+  "layers": 59,
   "bed_support_islands": [],
   "part_support_islands": 0,
   "supported_island_area": 0,
@@ -472,10 +472,10 @@
   "size": [
    38.0,
    28.0,
-   9.8
+   11.8
   ],
   "bed_ok": true,
-  "layers": 49,
+  "layers": 59,
   "bed_support_islands": [],
   "part_support_islands": 0,
   "supported_island_area": 0,
@@ -1204,7 +1204,7 @@
   "part": "battery_sled",
   "size": [
    168.0,
-   50.8,
+   48.8,
    14.6
   ],
   "bed_ok": true,

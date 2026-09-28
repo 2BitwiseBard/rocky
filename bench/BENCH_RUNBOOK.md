@@ -264,7 +264,7 @@ loads are the worst joint of each case in `sim/out/torque_audit.json`
 | walking (`walk_4leg`, knee) | 0.34 N·m | ~350 g | ~12 % |
 | 3-leg stance (`stance_3leg`, knee) | 0.45 N·m | ~460 g | ~15 % |
 | untucked carry of 100 g (`carry_100g`, hip) | 0.51 N·m | ~520 g | ~17 % |
-| self-righting push (`selfright_push`, knee; optional, supervised) | 1.46 N·m | ~1500 g | ~50 %, WARM |
+| self-righting push (`selfright_push`, knee; optional, supervised) | 1.48 N·m | ~1500 g | ~50 %, HOT (50.3 %, D062) |
 
 The pre-D039 table (D015: 700 g walking, 1000 g stance) over-tests these
 about twice; a 1000 g step is still a fair margin check, logged as one.

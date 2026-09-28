@@ -19,7 +19,7 @@ Stance (leg frame, mm): hip (45.0, 61.0), knee (123.8, 7.9), foot (75.0, -118.0)
 |---|---|---|---|---|---|---|---|
 | coxa_yaw_base | **PASS** | 2.93 | V | layers | 0.39 at (-14.0, 5.5, 0.0) | 0.150 | 19050 el |
 | coxa_fork | **PASS** | 3.03 | L- | layers | 0.36 at (6.5, -8.8, 49.8) | 0.202 | 17739 el |
-| femur | **FAIL** | 1.22 | L- | von Mises | 1.38 at (21.0, 27.6, -11.0) | 4.516 | 35893 el |
+| femur | **PASS** | 2.18 | L- | von Mises | 0.66 at (52.0, 35.6, -11.0) | 1.058 | 43446 el |
 | tibia_knee_carrier | **PASS** | 3.92 | L- | layers | 0.36 at (139.2, 9.4, 35.6) | 0.068 | 12468 el |
 | horn_coupler | **PASS** | 7.81 | T+ | von Mises | 0.13 at (-11.0, 0.5, 2.9) | 0.015 | 39190 el |
 
@@ -34,7 +34,7 @@ Held: deck (plate underside) (5335 nodes). Loaded: yaw servo case in the cup (39
 | case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |
 |---|---|---|---|---|---|---|
 | V | (0.0, 0.0, 60.29) | (0.0, -4521.8, 0.0) | 6.88 | 6.82 | 2.93 | 0.15 |
-| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.1 | 2.08 | 9.62 | 0.046 |
+| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.15 | 2.08 | 9.62 | 0.046 |
 | R- | (-16.42, 0.0, 0.0) | (0.0, 2365.1, 0.0) | 2.1 | 1.74 | 11.49 | 0.046 |
 | L+ | (0.0, 39.2, 0.0) | (5644.8, -0.0, 2940.0) | 5.43 | 2.9 | 6.45 | 0.099 |
 | L- | (0.0, -39.2, 0.0) | (-5644.8, -0.0, -2940.0) | 5.43 | 5.07 | 3.95 | 0.099 |
@@ -57,15 +57,15 @@ Held: yaw horn pocket + yaw idler pocket (1723 nodes). Loaded: hip servo case in
 
 ![femur](femur.png)
 
-Held: hip coupler recess (plate A) + hip idler pocket (plate B); plates joined at the 4 bosses only (3246 nodes). Loaded: knee coupler recess + knee idler pocket (3303 nodes). Build direction (part frame): (0.0, 1.0, 0.0).
+Held: hip coupler recess (plate A) + hip idler pocket (plate B); plates joined at the 4 bosses only (3246 nodes). Loaded: knee coupler recess + knee idler pocket (3302 nodes). Build direction (part frame): (0.0, 1.0, 0.0).
 
 | case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |
 |---|---|---|---|---|---|---|
-| V | (-33.71, 0.0, 49.99) | (-287.4, 2940.0, -193.8) | 6.08 | 1.59 | 5.75 | 0.982 |
-| R+ | (13.62, 0.0, 9.18) | (-52.8, -2067.6, 78.3) | 3.55 | 0.85 | 9.9 | 0.533 |
-| R- | (-13.62, 0.0, -9.18) | (52.8, 2067.6, -78.3) | 3.55 | 0.86 | 9.9 | 0.533 |
-| L+ | (0.0, 39.2, 0.0) | (5160.1, -0.0, 1174.1) | 28.03 | 11.13 | 1.22 | 4.516 |
-| L- | (0.0, -39.2, 0.0) | (-5160.1, -0.0, -1174.1) | 28.03 | 12.21 | 1.22 | 4.516 |
+| V | (-33.71, 0.0, 49.99) | (-287.4, 2940.0, -193.8) | 4.23 | 1.19 | 8.26 | 0.281 |
+| R+ | (13.62, 0.0, 9.18) | (-52.8, -2067.6, 78.3) | 2.94 | 0.64 | 11.9 | 0.37 |
+| R- | (-13.62, 0.0, -9.18) | (52.8, 2067.6, -78.3) | 2.94 | 0.64 | 11.9 | 0.37 |
+| L+ | (0.0, 39.2, 0.0) | (5160.1, -0.0, 1174.1) | 15.48 | 6.66 | 2.2 | 1.058 |
+| L- | (0.0, -39.2, 0.0) | (-5160.1, -0.0, -1174.1) | 15.48 | 5.71 | 2.18 | 1.058 |
 
 ## tibia_knee_carrier
 

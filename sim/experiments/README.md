@@ -32,6 +32,8 @@ and the `sim/laserscan_spec.json` contract).
 ## The current record
 
 **2026-09-26, robot fingerprint `7d376178fe27`** (`sim/model_fingerprint.py`;
+D062 has since moved it to `1f953c89f979`, +7.6 g per femur; the headline checks were
+re-run on it (the SIM_GUIDE header says which) and the experiments below were not;
 mujoco 3.12.0), every script with its default options. To reproduce it,
 from the repo root:
 

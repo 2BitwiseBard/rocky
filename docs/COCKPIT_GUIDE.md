@@ -282,7 +282,7 @@ Two looks agree on a thing when they give it the same name and, when both placed
 
 ## Model and fingerprint
 
-What the sim believes the robot is: servo stall and continuous torque, speed budgets, soft limits, the gait and its envelope, body geometry, and the studio's slider ranges, all from `cad/params.yaml` through `gait/rocky_model.py`. The **fingerprint** is a short hash of those numbers; every checkpoint is stamped with the fingerprint it was trained on. The header chip turns amber (`?`) when a loaded checkpoint has no fingerprint (pre-D052) and red (`≠ ckpt`) when it was trained on another robot. Today's robot is `7d376178fe27`; `recover6_d052` was trained on `ceb63a1254c3`, before a CAD change took 13.7 g off the torso (D059), so it shows `≠ ckpt`.
+What the sim believes the robot is: servo stall and continuous torque, speed budgets, soft limits, the gait and its envelope, body geometry, and the studio's slider ranges, all from `cad/params.yaml` through `gait/rocky_model.py`. The **fingerprint** is a short hash of those numbers; every checkpoint is stamped with the fingerprint it was trained on. The header chip turns amber (`?`) when a loaded checkpoint has no fingerprint (pre-D052) and red (`≠ ckpt`) when it was trained on another robot. Today's robot is `1f953c89f979`; `recover6_d052` was trained on `ceb63a1254c3`, before a CAD change took 13.7 g off the torso (D059), so it shows `≠ ckpt`.
 
 ## Recordings
 

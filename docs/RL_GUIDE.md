@@ -330,7 +330,10 @@ over 20 random falls on the same seeds, deterministic policy. Columns:
 - **cloud**: the 2026-09-01 measurement;
 - **local pre-D052**: the D047 model, re-measured 2026-09-23 (mujoco 3.12);
 - **current model**: fingerprint `7d376178fe27` (the D052a peak-torque
-  model after D059's torso change), re-measured 2026-09-26. Cells marked
+  model after D059's torso change), re-measured 2026-09-26. D062's femur
+  (`1f953c89f979`, +7.6 g per leg) re-ran `recover1` on 2026-09-27: hw 0/20
+  (hold-pose 1/20), system 20/20 (11/20 with no righter), the same as below;
+  the other cells stand on `7d376178fe27`. Cells marked
   `5a32…` were measured on the first D052 model (`5a32f772ca99`, the
   1.911 N·m clip, D052a) and not re-run (backlog B68); a "not re-measured"
   cell is not a zero.

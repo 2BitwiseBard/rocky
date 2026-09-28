@@ -8,7 +8,7 @@ so this is what is verified without it:
   (`generate_urdf.py`; CI fails if the committed URDF is stale). It passes
   `sim/check_urdf_parity.py`: the 20 joints match the MJCF (axes and
   ranges), FK agrees with the MJCF to 0.05 mm and with the gait engine's
-  closed-form FK to 1e-4 mm, and the total mass is 2.657 kg on both.
+  closed-form FK to 1e-4 mm, and the total mass is 2.694 kg on both.
   **Regenerate after every params change**; never hand-edit the URDF.
 - `hw_bridge_node.py` and `gait_node.py` import the pip-installed core
   (`pip install -e .` at the repo root), the same tested code that runs the

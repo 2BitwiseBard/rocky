@@ -165,15 +165,20 @@
   "scale": 1,
   "bbox_mm": [
    121.0,
-   9.8,
+   11.8,
    38.0
   ],
   "extents_mm": [
    121.0,
    38.0,
-   9.8
+   11.8
   ],
   "holes": [
+   {
+    "dia_mm": 3.4,
+    "count": 4,
+    "axis": "Y"
+   },
    {
     "dia_mm": 7.0,
     "count": 2,
@@ -191,7 +196,7 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "1b36ad2537fcd80f"
+  "step_sha": "dc5aa15fb740c73e"
  },
  "horn_coupler": {
   "scale": 2,

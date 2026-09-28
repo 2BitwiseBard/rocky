@@ -17,7 +17,9 @@ is worth. Elsewhere:
 Commands run from the repo root with the repo venv (`.venv/bin/python`);
 `MUJOCO_GL=egl` (or `osmesa`) renders offscreen, `glfw` opens a window. The
 outputs quoted were re-checked on 2026-09-26, robot fingerprint
-`7d376178fe27`.
+`7d376178fe27`; after D062 (`1f953c89f979`, +7.6 g per femur) `run_sim`, the shove
+envelope, the torque and gesture audits and `recover1` were re-run on
+2026-09-27 and the numbers below are those.
 
 ## 1. How it works
 
@@ -27,7 +29,7 @@ circumradius 110 mm, hip axis height, the servo and joint identity, the
 `robot:` description) and `sim/mass_budget.json` (link masses summed from the
 CAD tree's STL volumes by `sim/mass_audit.py`, D039). Five identical legs at
 72° stations, three hinge joints each (yaw, hip, knee), a claw per leg, a
-foot sphere per leg, and a torso of two stacked cylinders: 2.657 kg compiled,
+foot sphere per leg, and a torso of two stacked cylinders: 2.694 kg compiled,
 equal to the budget. The URDF in `ros2/` is generated from the same inputs,
 and `sim/check_urdf_parity.py` proves the two agree (20 joints, FK within
 0.05 mm over 60 random configurations, identical mass, foot sphere and
@@ -64,7 +66,8 @@ ask for 7.4 rad/s and turn 50 % further than the servo could; D052's first
 cut clipped at 1.911 N·m, which capped every joint at 3.05 rad/s, and D052a
 made the clip the peak and moved the continuous budget into the thermal
 model. `sim/model_fingerprint.py` hashes the robot (not the world):
-`7d376178fe27` since D059's CAD change (torso 1448.9 → 1435.2 g),
+`1f953c89f979` since D062's femur deck + 8 mm rails (+7.6 g per leg, robot
+2694.6 g), `7d376178fe27` after D059's CAD change (torso 1448.9 → 1435.2 g),
 `ceb63a1254c3` for the D052a model before it, `5a32f772ca99` for the
 1.911 N·m clip (`4debe4e83893`, the peak clip with the old claw damping,
 was never trained on). Every RL checkpoint records the fingerprint it was trained on.
@@ -144,12 +147,12 @@ MUJOCO_GL=egl .venv/bin/python sim/run_sim.py         # headless walk, strafe an
 
 `run_sim.py` writes its video and contact sheet to `sim/out/run_sim/`
 (`--out DIR` elsewhere; `--out sim` regenerates the committed
-`sim/pebble_sim.mp4` on purpose). Expected on `7d376178fe27`:
+`sim/pebble_sim.mp4` on purpose). Expected on `1f953c89f979`:
 
 ```
-body height: mean 117.0 mm (target ~118, rigid ideal servos), std 0.34 mm, min 116.1
-tilt: mean 0.31 deg, max 0.84 deg
-walk +X displacement: 246 mm (commanded ~261 mm), lateral drift 3 mm
+body height: mean 117.0 mm (target ~118, rigid ideal servos), std 0.34 mm, min 116.0
+tilt: mean 0.32 deg, max 0.84 deg
+walk +X displacement: 247 mm (commanded ~261 mm), lateral drift 3 mm
 turn in place: 55.4 deg at the budgeted 0.246 rad/s (commanded ~54 deg; asked 0.6 rad/s)
 fell over: no
 ```
@@ -772,12 +775,13 @@ Hardware and the onboard loop:
 The model (B33, D052a):
 
 - **The shove envelope** (`sim/shove_envelope.py`, rim half-sine, 0.4 s; BW on
-  the 2.657 kg torso subtree), 2026-09-26 on a 5 N grid: standing 25 / 35 / 35 /
-  25 / 30 / 30 N at 0 / 60 / 120 / 180 / 240 / 300° (min 0.96 BW, 6.4 N·s;
-  mean 1.15 BW); walking 35 / 20 / 20 / 35 / 30 / 30 N (min 20 N, 0.77 BW,
-  5.1 N·s; mean 1.09 BW). On a 1 N grid the standing floor is 29 N (1.11 BW,
-  7.4 N·s) at 0° and 180°, 31 N (1.19 BW) at 240° / 300° and 36 N (1.38 BW,
-  9.2 N·s) at 60° / 120°; walking 24 N (0.92 BW) at 60° / 120°. More torque
+  the 2.694 kg torso subtree), 2026-09-27 on `1f953c89f979` (D062), 5 N grid: standing
+  30 / 35 / 35 / 30 / 30 / 30 N at 0 / 60 / 120 / 180 / 240 / 300° (min 1.13 BW,
+  7.6 N·s; mean 1.2 BW); walking 35 / 25 / 20 / 35 / 30 / 30 N (min 20 N, 0.76 BW,
+  5.1 N·s; mean 1.1 BW). On a 1 N grid the standing floor is 30 N (1.13 BW,
+  7.6 N·s) at 0° and 180° (29 N on `7d376178fe27`: the heavier femurs help a
+  little), 31 N (1.17 BW) at 240° / 300° and 37 N (1.40 BW) at 60° / 120°;
+  walking 24 N (0.91 BW) at 120°, 25 N at 60°. More torque
   makes Pebble slightly *easier* to tip: D052's 1.911 N·m clip tipped 2–3 N
   later, its clipped legs yielding into a slide (D052a). The sliding limit
   for a CoM push is about 21 N (0.8 × mass × g; ~31 N at μ 1.2).

@@ -4,7 +4,7 @@ Status: step 1 shipped (D053, 2026-09-24); steps 2-10 are backlog B36. How
 to change the design today: [DESIGN_CHANGE_GUIDE.md](DESIGN_CHANGE_GUIDE.md).
 `python gait/rocky_model.py` prints the current description: 5 legs, 20
 actuators, topology hash `7f066d9bd8c0`; `sim/model_fingerprint.py` gives
-the robot fingerprint (`7d376178fe27` since D059).
+the robot fingerprint (`1f953c89f979` since D062).
 
 ---
 

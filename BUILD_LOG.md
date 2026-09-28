@@ -9,6 +9,38 @@ indexes them.*
 
 ---
 
+## 2026-09-27 · Session 9k — the femur becomes a box, the sled fits its bay, the print pack is rebuilt (D062)
+
+**Ask:** apply B74 and B72, and redo the print pack.
+
+**B74, the femur (D062):** plate B gets a deck over the bridge (x 21–52, |z| < 11) and
+8 mm rails. `fem_check` femur **1.22 → 2.18** (predicted 2.16 by the what-if), knee
+deflection 4.5 → 1.06 mm; all five leg parts pass. The four plate-B M3 holes, which broke
+out of the rails, sit in solid plastic now (a new `part_femur` check) and take M3 × 12,
+a new BOM line A-18 (an M3 × 8 through 8 mm reaches nothing; through the old 6 mm it had
+2 mm of thread). Bench kit $284.94.
+
+**B72, the sled (D062):** `pack_w` 46 → 44: the sled is 48.8 mm in the 50 mm bay, and
+`part_battery` fails when sled + pack exceed the bay. The BOM's pack (43 mm) fitted already.
+
+**The loop:** `params_rev` D062, robot 2694.6 g (+37.9), fingerprint `1f953c89f979`.
+Re-run: walk 247 mm, turn 55.4°, standing shove floor 30 N (29 before: the heavier
+femurs help), walking 24 N; knee self-right 1.48 N·m = 50.3 % (HOT by a point);
+`recover1` system 20/20, hw 0/20, unchanged; gestures 0 FAIL. One test pinned the
+MJCF's summed mass to 0.05 g of the budget; the 32 geom masses are written to 0.1 g, so
+it now allows 0.5 g (~3σ of rounding). Fast ladder 768 passed.
+
+**The print pack** (`cad/gen_print_pack.py`, 44 pages): a cover (params revision,
+filament table, batches from `print_estimate.json`, the strength verdicts), the print
+order, then one section per batch in print order with a tick list, a sheet per part
+(three views in the PRINT pose with the bed line, supports, estimate, the live
+printability numbers, the stress verdict + picture for leg parts) and its TechDraw
+sheet merged in (pypdf, pinned; a content-hash `/ID`, so the file is byte-stable). The
+PARTS data was re-checked against PRINT_PLAN.md (fit ladder added, per-batch quantities
+and materials, M3 × 12 for plate B).
+
+---
+
 ## 2026-09-27 · Session 9j — FreeCAD in the loop: a stress check, a viewer, part drawings (D061)
 
 **Ask:** set up the FreeCAD MCP server, then find where FreeCAD improves the workflow:

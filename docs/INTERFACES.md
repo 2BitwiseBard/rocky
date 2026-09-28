@@ -161,7 +161,7 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
 
 ## I5 · Battery sled + XT60 dock
 
-- **Battery:** one 3S 5200 mAh LiPo in a SOFT case, at most 138 × 46 × 25
+- **Battery:** one 3S 5200 mAh LiPo in a SOFT case, at most 138 × 44 × 25
   (VERIFY on purchase; `bom/BOM.csv` B-05). Hard-case packs are ~37 mm tall
   and do not fit the 30 mm bay. The pack straps to a printed **sled**, which
   slides on belly rails into the 175 × 50 × 30 bay.
@@ -217,7 +217,7 @@ All are in `cad/params.yaml → interfaces:` (the I1 cable cutout is in
 | I2 tool socket | lug Ø2.5 × 2.2 @ 9 from the face; entry 6; twist 90°; detent 0.6; JST-SH 3-pin |
 | I3 panel latch | insert housing Ø14 (pocket 14.3), rotor cam rise 0.8, 90° throw; magnet Ø6 × 3 |
 | I4 avionics tray | plate 84 × 70 × 3; rail 3 × 3; bulkhead 70 × 26 face |
-| I5 battery sled | bay 175 × 50 × 30 for a soft-case pack ≤ 138 × 46 × 25 (VERIFY vs the purchased pack); XT60E-M 16.2 × 8.6 × 16.0; XT60 float ±0.8 |
+| I5 battery sled | bay 175 × 50 × 30 for a soft-case pack ≤ 138 × 44 × 25 (VERIFY vs the purchased pack); XT60E-M 16.2 × 8.6 × 16.0; XT60 float ±0.8 |
 | I6 dovetail | base 12 / crest 8 / depth 4; segment 24 spec, 16 on the shell as built; M3 set-knob |
 
 ## Decision

@@ -327,7 +327,9 @@ def test_com_model_matches_mujoco():
     d = mujoco.MjData(m)
     torso = m.body("torso").id
     jadr = [m.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS) for n in rm.LEG_JOINTS]
-    assert m.body_subtreemass[torso] * 1000 == pytest.approx(pf.M_TOTAL, abs=0.05)
+    # build_mjcf writes each of the 32 geom masses to 0.1 g: the sum drifts ~0.16 g (1 sigma)
+    # off the budget (2694.5 vs 2694.6 on 1f953c89f979); 0.5 g is ~3 sigma of rounding
+    assert m.body_subtreemass[torso] * 1000 == pytest.approx(pf.M_TOTAL, abs=0.5)
     rng = np.random.default_rng(3)
     for _ in range(10):
         q = np.column_stack([rng.uniform(-0.6, 0.6, 5), rng.uniform(-1.1, 1.5, 5),

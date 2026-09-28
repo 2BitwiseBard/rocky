@@ -51,7 +51,7 @@ MUJOCO_GL=egl .venv/bin/python sim/check_urdf_parity.py    # URDF == MJCF == ana
 
 # 4. what changed, and does it still work
 git diff --stat sim/ ros2/                             # expect pebble.xml / mass_budget.json to move
-MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py    # the robot fingerprint (today 7d376178fe27)
+MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py    # the robot fingerprint (today 1f953c89f979)
 ./rocky.sh test                                        # the fast suite CI runs
 .venv/bin/python gait/pebble_gait.py                   # the gait's speed envelope + 4 checked commands
 .venv/bin/python gait/pebble_feasibility.py            # walk/strafe PASS; the raw 0.35 rad/s turn and arc
@@ -122,9 +122,9 @@ then `--supervisor`) before you trust it. Refusing on a topology change
 Example: the STS3250, which D015 sanctioned. It uses the same case and the
 same protocol as the ST3215, gives 4.90 N·m at 12 V (`sim/torque_audit.py`),
 and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment). The BOM
-buys none (D058): the worst load, the self-righting knee push, is 1.459 N·m,
-49.6 % of ST3215 stall (WARM) and 29.8 % of STS3250 (`sim/torque_audit.py`,
-2026-09-26).
+buys none (D058): the worst load, the self-righting knee push, is 1.48 N·m,
+50.3 % of ST3215 stall (HOT by one point) and 30.2 % of STS3250
+(`sim/torque_audit.py`, 2026-09-27, D062).
 
 1. **Add an `actuators.<key>` block** next to `st3215` with every key
    `rocky_model.actuator()` reads:

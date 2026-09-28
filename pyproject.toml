@@ -28,9 +28,10 @@ cockpit = ["starlette", "uvicorn", "openai", "httpx", "pillow", "anthropic"]
 hw = ["pyserial"]
 # parametric CAD + the check suite + print pack. build123d + OCCT pinned: the committed cad/out
 # exports and sim/mass_budget.json (0.1 g of STL volume, CI's git-diff gate) depend on the
-# version; bump them deliberately, in the commit that carries the regenerated files
+# version; bump them deliberately, in the commit that carries the regenerated files.
+# pypdf: gen_print_pack merges the TechDraw sheets into the print pack (constraints.txt pins it)
 cad = ["build123d==0.11.1", "cadquery-ocp-novtk==7.9.3.1.1", "trimesh", "networkx", "shapely", "rtree",
-       "numpy-stl", "matplotlib", "reportlab"]
+       "numpy-stl", "matplotlib", "reportlab", "pypdf>=6"]
 # cad/test_viewer.py drives the WebGL viewer in a browser (then: playwright install chromium)
 viewer = ["playwright"]
 dev = ["pytest", "pytest-asyncio", "ruff"]

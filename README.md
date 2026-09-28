@@ -19,13 +19,13 @@ The physical robot is not assembled yet. Everything "green" below is green
 in simulation or in CAD checks, which this project treats as a different
 claim from "it works on hardware".
 
-## Status (2026-09-26)
+## Status (2026-09-27)
 
 | area | state | evidence |
 |---|---|---|
-| **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215** (D047); the leg harness has a channel through the coxa and the star-board bracket sits on real deck holes (D059); four joint coupons gate the next print run | `cad/run_all_checks.py` **28/28**, [docs/PRINT_PLAN.md](docs/PRINT_PLAN.md) |
-| **Physical build** | nothing assembled, nothing ordered; the first prints (pre-D047) did not fit and are retired. The bench kit (one leg: 4 × ST3215, bus adapter, adjustable supply, fasteners) is ~$280 at 2026-09-26 prices, the core robot ~$1,258 | [bom/BOM.csv](bom/BOM.csv), [bom/README.md](bom/README.md), `media/2026-09-22_first_prints.jpg` |
-| **Sim + control** | the sim stops flattering the servo (D052/D052a): a peak-torque clip plus a thermal budget, every motion through one feasibility checker and the gait envelope (45.5 mm/s, 0.246 rad/s). Wave gait: 246 of ~261 mm in 6 s, 0.84° max tilt. An always-on void guard stops walks at an edge, except a lip band (7 of 310 approaches) | [docs/SIM_GUIDE.md](docs/SIM_GUIDE.md) |
+| **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215** (D047); the leg harness has a channel through the coxa and the star-board bracket sits on real deck holes (D059); a FreeCAD/CalculiX stress check loads the leg parts with what the servos can push, and all five pass at SF ≥ 2 since the femur became a closed box (D061, D062); four joint coupons gate the next print run | `cad/run_all_checks.py` **28/28**, [docs/PRINT_PLAN.md](docs/PRINT_PLAN.md) |
+| **Physical build** | nothing assembled, nothing ordered; the first prints (pre-D047) did not fit and are retired. The bench kit (one leg: 4 × ST3215, bus adapter, adjustable supply, fasteners) is ~$285 at 2026-09-26 prices, the core robot ~$1,263 | [bom/BOM.csv](bom/BOM.csv), [bom/README.md](bom/README.md), `media/2026-09-22_first_prints.jpg` |
+| **Sim + control** | the sim stops flattering the servo (D052/D052a): a peak-torque clip plus a thermal budget, every motion through one feasibility checker and the gait envelope (45.5 mm/s, 0.246 rad/s). Wave gait: 247 of ~261 mm in 6 s, 0.84° max tilt. An always-on void guard stops walks at an edge, except a lip band (7 of 310 approaches) | [docs/SIM_GUIDE.md](docs/SIM_GUIDE.md) |
 | **RL / self-righting** | a **hybrid**: RL rights the body, an analytic ramp stands it. No policy earns a hardware handoff on the D052 contract (`recover1` 0/20 `handoff_ok`; the obs-v2 retrain `recover6_d052` negative, B34); the system (supervisor + righter + 3 s stall ramp) stands 20/20 vs 11/20 with no righter. The walkers predate D052 and are zeroed | [docs/RL_GUIDE.md](docs/RL_GUIDE.md) |
 | **Tests** | 1,035 fast tests pass + 2 strict xfail (the void guard's lip band) in ~6 min, with 7 skipped on the reference setup (the brain-install checks, which need local model files); URDF ≡ MJCF ≡ analytic FK; CI also runs `ruff check .`, the slow tests and `run_sim`, and fails if the regenerated MJCF / URDF or `docs/TOOLS.md` differ from the committed ones | `.github/workflows/ci.yml`, `./rocky.sh test` |
 | **Harness** | one tool registry (`harness/capabilities.py`, 23 tools, D056) generates every surface: the MCP server's live list (8 tools on the mock or in-process sim, 15 over a running cockpit, 19 with place recognition), the local brains' schema and the tools page; any OpenAI-compatible model server or Claude drives it | `harness/`, [docs/TOOLS.md](docs/TOOLS.md) |
@@ -161,7 +161,7 @@ These are the ones that have actually cost something when broken.
 ## Where the record lives
 
 - [BUILD_LOG.md](BUILD_LOG.md) — the engineering notebook, newest entry first.
-- [docs/decisions.md](docs/decisions.md) — numbered decisions D001–D060 (with
+- [docs/decisions.md](docs/decisions.md) — numbered decisions D001–D062 (with
   the amendments D052a and D055a), cited everywhere.
 - [docs/DESIGN_BACKLOG.md](docs/DESIGN_BACKLOG.md) — ideas and follow-ups with
   verdicts (B1–B73).

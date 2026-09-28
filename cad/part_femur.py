@@ -40,9 +40,10 @@ YB0 = YB + S["rim"]["h"] + FIT         # 23.8 tower pocket face (clears the case
 POCKET_Y1 = Y_IDLER_FACE + FIT         # 25.6
 HEAD_Y1 = YB - Z["idler_head"] + FIT   # 26.2
 RAIL_Y0 = 27.6                         # above the cup's idler-face bar (26.8) + 0.8
-RAIL_T = 6.0
+RAIL_T = 8.0                           # D062 (B74): 6 -> 8, with the deck closes the torsion box
 YB1 = RAIL_Y0 + RAIL_T                 # 33.6 plate B outer face (flat: prints on it)
-RAIL_Z = (11.0, 19.0)                  # |z| band: outside the plug keep-out (|z| <= 9.45)
+RAIL_Z = (11.0, 19.0)                  # |z| band: outside the plug keep-out (|z| <= 9.45) — at the towers;
+                                       # over the bridge the deck fills |z| < 11 (the plugs are not there)
 NOTCH_X = -9.5                         # tower cut flat behind this (plugs), pocket open toward -X
 NOTCH_HALF_W = 10.3
 BRIDGE_X = (21.0, 52.0)                # link x: clears the hip case sweep (r 17) and the tibia cup sweep (r 42)
@@ -97,6 +98,11 @@ def femur_plate_b():
         z0, z1 = sorted((sz * RAIL_Z[0], sz * RAIL_Z[1]))
         r = _box(-TOWER_D / 2, L2 + TOWER_D / 2, RAIL_Y0, YB1, z0, z1)
         b = r if b is None else b + r
+    # D062 (B74): the deck joins the rails over the bridge. With plate A, the bridge walls
+    # and the servos at both ends the femur becomes a closed box, not an open twin plate
+    # (lateral foot load: SF 1.22 -> 2.16 in fem_check); it also puts the four M3 holes,
+    # which broke out of the rails' inner edge, in solid plastic.
+    b += _box(BRIDGE_X[0], BRIDGE_X[1], RAIL_Y0, YB1, -RAIL_Z[0] - 0.01, RAIL_Z[0] + 0.01)
     for cx in (0.0, L2):
         b += _cyl_y(cx, 0, YB0, YB1, TOWER_D / 2)
         b -= _cyl_y(cx, 0, YB0 - 1, POCKET_Y1, (S["idler_d"] + FIT + 0.1) / 2)
@@ -162,6 +168,16 @@ if __name__ == "__main__":
             pin = _cyl_y(bx, sz * BOSS_ZC, RAIL_Y0 - BOSS_H + 1.0, YB1 + 2, PR["screw_m3_tap"] / 2 - 0.05)
             worst = max(worst, v(pin & link), v(pin & plate_b))
     check("plate B screws coaxial with the bridge bosses", worst, lambda q: q < 1, "COAXIAL", "MISALIGNED")
+    # every plate B screw hole is a HOLE: a 1.5 mm ring round it is solid (B74 found them
+    # breaking 1.2 mm out of the rails' inner edge, the M3 head half on air)
+    worst = 1.0
+    for bx in BOSS_X:
+        for sz in (1, -1):
+            r0 = PR["screw_m3_clear"] / 2
+            ring = _cyl_y(bx, sz * BOSS_ZC, RAIL_Y0 + 0.1, YB1 - 0.1, r0 + 1.5) - \
+                _cyl_y(bx, sz * BOSS_ZC, RAIL_Y0, YB1, r0)
+            worst = min(worst, v(plate_b & ring) / ring.volume)
+    check("plate B screw holes ringed by material (fraction)", worst, lambda q: q > 0.99, "SOLID", "BREAKS OUT")
     # plate B drop-on path (+Y) with the servos in place
     worst = max(v((Pos(0, dy, 0) * plate_b) & (hip_s + knee_s + link)) for dy in (1, 2, 5, 10, 20))
     check("plate B drop-on path (+Y)", worst, lambda q: q < 1, "OPEN", "BLOCKED")

@@ -6,3 +6,6 @@ mujoco==3.12.0
 # The linter CI gates on (`ruff check .`, the dev extra): a new release can add or change an
 # F rule and fail CI with no code change. Bump it on purpose, with any fixes it asks for.
 ruff==0.16.9
+# The print pack's drawing merge (gen_print_pack.py): the committed PRINT_PREP_PACK.pdf bytes depend
+# on how pypdf serialises, so a new release could change the file with no design change.
+pypdf==6.19.0

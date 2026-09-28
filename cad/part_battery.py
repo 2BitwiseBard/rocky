@@ -132,8 +132,13 @@ if __name__ == "__main__":
         bad.append("sled binds on the rail")
     print(f"sled x rail (posed): {v:.2f} mm^3 ({'SLIDES' if v < 1 else 'BINDS'})")
     bb = sled.bounding_box()
-    print(f"sled envelope {bb.size.X:.0f} x {bb.size.Y:.0f} x {bb.size.Z:.0f} "
-          f"vs bay {BS['bay_l']:.0f} x {BS['bay_w']:.0f} x {BS['bay_h']:.0f}")
+    # sled in the bay (B72): the sled was 50.8 wide in a 50 bay while this only printed it
+    stack_h = SLED_T + PACK_H
+    fits = bb.size.X <= BS["bay_l"] and bb.size.Y <= BS["bay_w"] and stack_h <= BS["bay_h"]
+    if not fits:
+        bad.append("sled + pack exceed the bay")
+    print(f"sled envelope {bb.size.X:.1f} x {bb.size.Y:.1f}, floor + pack {stack_h:.1f} "
+          f"vs bay {BS['bay_l']:.0f} x {BS['bay_w']:.0f} x {BS['bay_h']:.0f} ({'FITS' if fits else 'TOO BIG'})")
     rotor, housing = parts["latch_rotor"], parts["latch_housing"]
     inter = rotor & housing
     v = 0.0 if inter is None else inter.volume

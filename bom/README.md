@@ -54,7 +54,7 @@ switches. Everything in B waits until that leg passes
 - **SCS0009 hand servos never touch 12 V.** They get their own 6 V UBEC;
   measure 6.0 V at the plug before a claw goes on. Data and ground are shared,
   V+ is not.
-- **Soft-case pack only**, at most 138 × 46 × 25 mm. Hard-case 3S 5200 packs
+- **Soft-case pack only**, at most 138 × 44 × 25 mm (D062: the sled narrowed to fit its bay). Hard-case 3S 5200 packs
   are ~37 mm tall and do not fit the 30 mm bay.
 - **LiPo:** voltage alarm on the balance lead whenever the robot runs; charge
   in a LiPo bag, never unattended; store at storage charge.

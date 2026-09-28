@@ -52,9 +52,9 @@
    {
     "part": "coupon_idler",
     "qty": 1,
-    "solid_cm3": 6.6,
-    "est_g": 5.8,
-    "est_min": 18
+    "solid_cm3": 8.4,
+    "est_g": 7.3,
+    "est_min": 23
    },
    {
     "part": "horn_coupler",
@@ -64,8 +64,8 @@
     "est_min": 5
    }
   ],
-  "total_g": 39,
-  "total_h": 2.1
+  "total_g": 40,
+  "total_h": 2.2
  },
  "Batch 2 one leg": {
   "parts": [
@@ -100,9 +100,9 @@
    {
     "part": "femur_plate_b",
     "qty": 1,
-    "solid_cm3": 19.4,
-    "est_g": 13.2,
-    "est_min": 42
+    "solid_cm3": 30.4,
+    "est_g": 20.7,
+    "est_min": 66
    },
    {
     "part": "tibia_knee_carrier",
@@ -140,8 +140,8 @@
     "est_min": 8
    }
   ],
-  "total_g": 129,
-  "total_h": 6.9
+  "total_g": 136,
+  "total_h": 7.3
  },
  "Batch 3 body": {
   "parts": [
@@ -183,9 +183,9 @@
    {
     "part": "battery_sled",
     "qty": 1,
-    "solid_cm3": 27.3,
-    "est_g": 17.0,
-    "est_min": 54
+    "solid_cm3": 26.5,
+    "est_g": 16.4,
+    "est_min": 52
    },
    {
     "part": "sled_rail",
@@ -196,7 +196,7 @@
    }
   ],
   "total_g": 183,
-  "total_h": 9.8
+  "total_h": 9.7
  },
  "Deferred: four more legs": {
   "parts": [
@@ -224,9 +224,9 @@
    {
     "part": "femur_plate_b",
     "qty": 4,
-    "solid_cm3": 19.4,
-    "est_g": 52.9,
-    "est_min": 169
+    "solid_cm3": 30.4,
+    "est_g": 82.9,
+    "est_min": 265
    },
    {
     "part": "tibia_knee_carrier",
@@ -250,8 +250,8 @@
     "est_min": 27
    }
   ],
-  "total_g": 257,
-  "total_h": 13.7
+  "total_g": 287,
+  "total_h": 15.3
  },
  "Deferred: bench jig": {
   "parts": [
