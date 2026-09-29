@@ -13,3 +13,7 @@ own cockpit, the MCP server) inherit it. `rocky.sh test` does the same.
 import os
 
 os.environ.setdefault("ROCKY_ENV_FILE", os.devnull)
+
+# cad/test_viewer.py is a browser script (it drives the viewer at import time), not a
+# pytest module: run it directly (`python3 cad/test_viewer.py`), never collect it.
+collect_ignore = ["cad/test_viewer.py"]
