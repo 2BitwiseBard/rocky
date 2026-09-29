@@ -12,7 +12,8 @@ The physical test (after the fit ladder):
   1. present the plate at ~15°, drop the lip through the slot
   2. slide inboard until the foot hooks under
   3. pivot flat — dowels must enter their bores WITHOUT force
-  4. (if inserts on hand) melt 2x M3 inserts, run thumbscrews in
+  4. (if inserts on hand) melt 2x M3 inserts, run the two thumb_knob_m3 in,
+     each keyed onto an M3 x 16 hex bolt (B82: part_panel checks the reach)
   5. tug every direction; note slop/binding in NOTES_INBOX
 
 If this dance works on the coupons, deck v0.3 + coxa v0.2 print with

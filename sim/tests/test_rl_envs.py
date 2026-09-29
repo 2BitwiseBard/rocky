@@ -439,20 +439,22 @@ def test_thermal_warm_start_derates_and_costs(cls):
 
 
 def test_thermal_proxy_does_not_trip_under_the_wave_gait():
-    """The zero-residual wave gait at 45 mm/s for 30 s: stance loads are
-    ~0.07-0.18 x stall mean per joint (peaks ~0.8), so the heat never builds
-    (measured max 0.0002 of the budget) and nothing is derated."""
-    e = PebbleEnv(servo="nominal", ep_seconds=30.0, cmd=(45.0, 0.0, 0.0))
+    """The zero-residual wave gait, asked 45 mm/s (budgeted to the envelope)
+    for 40 s: stance loads are ~0.07-0.18 x stall mean per joint (peaks ~0.8),
+    so the heat never builds (measured max 0.0002 of the budget) and nothing
+    is derated. D063: the envelope is 34.2 mm/s (was 45.5), so the walk runs
+    40 s (was 30) to keep the > 1.0 m "it really walked" bar."""
+    e = PebbleEnv(servo="nominal", ep_seconds=40.0, cmd=(45.0, 0.0, 0.0))
     e.reset(seed=0)
     x0 = float(e.data.xpos[e.torso][0])
     worst = 0.0
-    for _ in range(int(30.0 / rc.CTRL_DT)):
+    for _ in range(int(40.0 / rc.CTRL_DT)):
         _o, _r, term, _tr, info = e.step(np.zeros(15))
         assert not term
         assert info["thermal_tripped"] == 0 and info["thermal_derate_max"] == 0.0
         worst = max(worst, info["thermal_heat_max"])
     assert worst < 0.02, worst
-    assert float(e.data.xpos[e.torso][0]) - x0 > 1.0                # it really walked (~1.26 m)
+    assert float(e.data.xpos[e.torso][0]) - x0 > 1.0                # it really walked (1.30 m; D052 30 s: ~1.26)
 
 
 def test_thermal_heat_is_the_current_not_the_voltage():

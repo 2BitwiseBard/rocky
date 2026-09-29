@@ -40,7 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import WaveGait, N_LEGS                                # noqa: E402
 from pebble_reflex import ReflexSupervisor, FALLEN, RIGHTED, NORMAL    # noqa: E402
-from scenes import (make_data, gyro_xy_of, T_SETTLE, V_X,               # noqa: E402
+from scenes import (make_data, gyro_xy_of, walk_ask, T_SETTLE,          # noqa: E402
                     SHOVE_N, SHOVE_S, T_SHOVE, T_FALLEN as T_TOTAL)
 from righter import PolicyRighter, foot_contacts                        # noqa: E402
 from rocky_recover_env import CTRL_DT                                   # noqa: E402
@@ -81,6 +81,7 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="au
     DT = model.opt.timestep
     righter = PolicyRighter(ckpt, model, data, torso, fids)
     sup = ReflexSupervisor(gait, righter=righter)          # trip / calm from params reflex:
+    ask = walk_ask(gait)[0]                   # D063: V_X fitted into the envelope (45 asks 34.2)
     sm = rc.make_servo()
     rc.apply_servo_params(sm, rc.servo_params(servo_mode_for(righter.contract, servo)))
     sm.reset(q0)
@@ -98,7 +99,7 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="au
         R = data.xmat[torso].reshape(3, 3)
         tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
         w = R.T @ data.cvel[torso][0:3]
-        vx = V_X * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
+        vx = ask * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
         q, state = sup.step(t, vx, 0.0, 0.0, gyro_xy_of(model, data, torso),
                             contacts=foot_contacts(model, data, fids), gyro_vec=w[:2],
                             tilt_deg=tilt, height=float(data.xpos[torso][2]),

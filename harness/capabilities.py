@@ -48,6 +48,7 @@ import difflib
 import functools
 import hashlib
 import json
+import math
 import os
 import sys
 from dataclasses import dataclass, field
@@ -72,18 +73,49 @@ LIVE_LISTS = ("gestures", "lexicon")
 
 # ------------------------------------------------------------------ constants the texts use
 # (the values the four definitions use today; test_capabilities pins them against theirs)
-GOTO_REACH_M = 1.5        # local_brain.GOTO_REACH_M: ~0.045 m/s against goto's 40 s cap ~ 1.8 m of floor
+GOTO_REACH_M = 1.5        # local_brain.GOTO_REACH_M: the reach the goto text advises; goto_cap_s sizes
+#                           goto's cap to walk it GOTO_CAP_MARGIN times over at the envelope
 MOVE_MAX_M = GOTO_REACH_M  # local_brain.MOVE_MAX_M
-GOTO_CAP_S = 40.0         # sim/cockpit.py GOTO_CAP_S
 GOTO_SPEED_MM_S = 45.0    # sim/cockpit.py V_GOTO (WaveGait.budget fits it into the envelope)
+GOTO_CAP_MARGIN = 1.2     # D062's: its 40 s cap walked 1.8 m at 45 mm/s, 1.2x the 1.5 m reach
+# D063: what default_envelope() derives from the params gait (the envelope fell 45.5 -> 34.2 mm/s and
+# the command slew eases a start in), written out for the texts' defaults and the fallback;
+# test_capabilities pins them against the derivation, so a params change that moves them fails there
+GOTO_SPEED_M_S = 0.0342   # min(V_GOTO, the envelope): WaveGait().max_command() on cad/params.yaml
+GOTO_EASE_IN_S = 2.36     # gait_ease_in_s: pebble_gait.CommandSlew, standing -> 34.2 mm/s
+GOTO_CAP_S = 55.0         # sim/cockpit.py GOTO_CAP_S = goto_cap_s: 1.5 m x 1.2 / 0.0342 m/s = 52.6 s,
+#                           + the 2.36 s ease-in = 54.99 -> 55 s (D062: 40 s at 45 mm/s, no slew)
 FIND_MAX_STEPS = 6        # sim/cockpit_brains.FIND_MAX_STEPS
 FIND_MAX_STEPS_CAP = 16   # sim/cockpit_brains.FIND_MAX_STEPS_CAP
 SPAWN_NAME = "start"      # sim/scene_memory.SPAWN_NAME
 
 
+def goto_cap_s(speed_m_s: float, ease_in_s: float = GOTO_EASE_IN_S, reach_m: float = GOTO_REACH_M) -> float:
+    """goto's time cap (s) for the speed it walks at: reach_m x GOTO_CAP_MARGIN at speed_m_s, plus the
+    command slew's ease-in, to the nearest second. D063: 1.5 x 1.2 / 0.0342 + 2.36 = 54.99 -> 55 s.
+    A gait with no walking envelope (speed 0: its goto ends stuck) keeps GOTO_CAP_S."""
+    s, e = float(speed_m_s), float(ease_in_s)
+    if not (math.isfinite(s) and s > 0.0 and math.isfinite(e)):
+        return GOTO_CAP_S
+    return float(round(reach_m * GOTO_CAP_MARGIN / s + max(0.0, e)))
+
+
+def gait_ease_in_s(gait, v_mm_s: float, dt: float = 0.01) -> float:
+    """How long the command slew (pebble_gait.CommandSlew, D063) takes a standing robot to a
+    straight walk at v_mm_s, stepped at dt: 2.36 s to the 34.2 mm/s envelope. 0 for no speed."""
+    v = float(v_mm_s)
+    if not (math.isfinite(v) and v > 0.0):
+        return 0.0
+    slew, t = _gait_import("pebble_gait").CommandSlew(gait), 0.0
+    while slew.step((v, 0.0, 0.0), dt)[0] < v and t < 30.0:     # the slew ENDS exactly (its linear finish)
+        t += dt
+    return round(t + dt, 2)
+
+
 # ------------------------------------------------------------------ the texts, verbatim
-def goto_doc(reach_m: float = GOTO_REACH_M) -> str:
-    """local_brain.GOTO_DOC (reach_m = GOTO_REACH_M today)."""
+def goto_doc(reach_m: float = GOTO_REACH_M, speed_m_s: float = GOTO_SPEED_M_S, cap_s: float = GOTO_CAP_S) -> str:
+    """local_brain.GOTO_DOC (the defaults are the params gait's: GOTO_REACH_M, GOTO_SPEED_M_S,
+    GOTO_CAP_S); the registry fills them from the envelope."""
     return ("Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) "
             "facing +x; +y is its left) — a point the operator gives as coordinates or "
             "a remembered position; for a move relative to the robot ('forward 30 cm') "
@@ -97,7 +129,7 @@ def goto_doc(reach_m: float = GOTO_REACH_M) -> str:
             "something the lidar cannot see, lower than the puck, is in the way "
             "— look, then pick a different target; never re-send the same "
             "one) | timeout "
-            f"(too far: ~0.045 m/s, 40 s cap, keep targets within ~{reach_m:g} m) | user "
+            f"(too far: ~{speed_m_s:.3f} m/s, {cap_s:g} s cap, keep targets within ~{reach_m:g} m) | user "
             "(stop was called) | preempted (a newer goto took over) | FELL. "
             "A veto is a NORMAL result: report it.")
 
@@ -120,6 +152,10 @@ MOVE_DOC = move_doc()
 MCP_MOVE_SUFFIX = " One motion intent at a time; a newer move or goto preempts it."
 MCP_GOTO_SUFFIX = " One motion intent at a time; calling goto again preempts."
 
+# D063: the example re-timed to 1 s per move (0.8 s arm moves peaked at 4.13 rad/s under the
+# minimum-jerk ease, over the 4.0 free limit; 1 s peaks at 3.31). A tool text changed on
+# purpose: the tests' GOLDEN hashes move with it, and they map the fixtures/d056 snapshots'
+# D056 text forward (_as_of_d063) so every other text is still checked byte for byte.
 COMPOSE_DOC = (
     "Create a NEW gesture from keyframes (the owner describes it; you write the frames). It is "
     "checked against the robot's real limits (joint range, servo speed, balance, self-contact); "
@@ -131,11 +167,12 @@ COMPOSE_DOC = (
     "knee -150..-20); claw [5] 0..1 open; say a chord word cue; ease smooth|linear|hold. Legs: "
     "0 = left (+y), then counter-clockwise: 1 rear-left, 2 rear-right, 3 front-right, 4 "
     "front-left. Keep >= 4 feet down (raise ONE leg; shift the body away from it first, "
-    "body [0, -15, 0] for leg 0), give each move >= 0.6 s. Example wave with leg 0: "
-    "[{\"t\":0},{\"t\":1.0,\"body\":[0,-15,0]},{\"t\":1.8,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
-    "{\"t\":2.6,\"body\":[0,-15,0],\"arm\":{\"0\":[25,70,-60]}},{\"t\":3.4,\"body\":[0,-15,0],"
-    "\"arm\":{\"0\":[-25,70,-60]}},{\"t\":4.2,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
-    "{\"t\":5.0,\"body\":[0,-15,0]},{\"t\":5.8}]")
+    "body [0, -15, 0] for leg 0), give each move >= 0.6 s and each arm move >= 1.0 s. Example "
+    "wave with leg 0: "
+    "[{\"t\":0},{\"t\":1.0,\"body\":[0,-15,0]},{\"t\":2.0,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
+    "{\"t\":3.0,\"body\":[0,-15,0],\"arm\":{\"0\":[25,70,-60]}},{\"t\":4.0,\"body\":[0,-15,0],"
+    "\"arm\":{\"0\":[-25,70,-60]}},{\"t\":5.0,\"body\":[0,-15,0],\"arm\":{\"0\":[0,70,-60]}},"
+    "{\"t\":6.0,\"body\":[0,-15,0]},{\"t\":7.0}]")
 FIND_DOC = (
     "Find an object by name with the eye and walk up to it (e.g. 'find the ball', 'go to the "
     "box'). It loops by itself: look (a vision model boxes the object; its bearing and distance "
@@ -242,8 +279,18 @@ def _mcp_gesture_doc(caps: dict) -> str:
             "current list.")
 
 
+def _env_num(env: dict, key: str, default: float) -> float:
+    """env[key] when it is a finite number, else default (a cockpit's snapshot that lacks a field
+    keeps the params gait's value; harness/server.py checks only the two distances)."""
+    v = env.get(key)
+    ok = isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    return float(v) if ok else default
+
+
 def _goto_doc(caps: dict) -> str:
-    return goto_doc(caps["envelope"]["goto_reach_m"])
+    env = caps["envelope"]
+    return goto_doc(env["goto_reach_m"], _env_num(env, "goto_speed_m_s", GOTO_SPEED_M_S),
+                    _env_num(env, "goto_timeout_s", GOTO_CAP_S))
 
 
 def _move_doc(caps: dict) -> str:
@@ -554,7 +601,8 @@ ENVELOPE_FIELDS = {
     "goto_reach_m": "m, the reach the goto text advises ('keep targets within ~N m'); advice, "
                   "not a refusal (goto refuses only past cockpit_brains.GOTO_MAX_M)",
     "move_max_m": "m, the longest relative move: move refuses beyond it (local_brain.validate_move)",
-    "goto_timeout_s": "s, a goto still walking after this ends as stopped=timeout",
+    "goto_timeout_s": f"s, a goto still walking after this ends as stopped=timeout (goto_cap_s: "
+                      f"{GOTO_CAP_MARGIN:g}x the reach at goto_speed_m_s, plus the command slew's ease-in)",
     "goto_speed_m_s": "m/s, the speed goto walks at (what it asks, fitted into the walking envelope)",
     "speed_m_s": "m/s, the top walking speed at any heading (WaveGait.budget)",
     "turn_rad_s": "rad/s, the top turn rate on the spot",
@@ -562,9 +610,9 @@ ENVELOPE_FIELDS = {
                "not the stride length",
 }
 FALLBACK_ENVELOPE = {
-    "source": "fallback: the D052 numbers (gait/pebble_gait not importable)",
+    "source": "fallback: the D063 numbers (gait/pebble_gait not importable)",
     "goto_reach_m": GOTO_REACH_M, "move_max_m": MOVE_MAX_M, "goto_timeout_s": GOTO_CAP_S,
-    "goto_speed_m_s": 0.045, "speed_m_s": 0.0455, "turn_rad_s": 0.246, "step_height_mm": 24.0,
+    "goto_speed_m_s": GOTO_SPEED_M_S, "speed_m_s": 0.0342, "turn_rad_s": 0.185, "step_height_mm": 24.0,
 }
 FALLBACK_ROBOT = {
     "source": "fallback: the D053 description (gait/rocky_model not importable)",
@@ -589,10 +637,12 @@ def _envelope_cached() -> str:
         g = pg.WaveGait()
         mc = g.max_command()
         v = float(mc["v"])                                       # mm/s, any heading
+        gv = min(GOTO_SPEED_MM_S, v)                             # what goto walks at
         env = {
             "source": "gait/pebble_gait.WaveGait().max_command() on cad/params.yaml",
-            "goto_reach_m": GOTO_REACH_M, "move_max_m": MOVE_MAX_M, "goto_timeout_s": GOTO_CAP_S,
-            "goto_speed_m_s": round(min(GOTO_SPEED_MM_S, v) / 1000.0, 4),
+            "goto_reach_m": GOTO_REACH_M, "move_max_m": MOVE_MAX_M,
+            "goto_timeout_s": goto_cap_s(gv / 1000.0, gait_ease_in_s(g, gv)),   # D063: derived (was 40)
+            "goto_speed_m_s": round(gv / 1000.0, 4),
             "speed_m_s": round(v / 1000.0, 4),
             "turn_rad_s": round(float(mc["wz"]), 3),
             "step_height_mm": round(float(g.hstep), 1),                # swing LIFT height, not stride
@@ -600,6 +650,17 @@ def _envelope_cached() -> str:
     except Exception:                                           # noqa: BLE001 — a stated fallback
         env = dict(FALLBACK_ENVELOPE)
     return json.dumps(env)
+
+
+@functools.lru_cache(maxsize=1)
+def default_ease_in_s() -> float:
+    """gait_ease_in_s on the params gait at goto's speed (2.36 s at D063), else GOTO_EASE_IN_S.
+    sim/cockpit.py sizes a detour with it."""
+    try:
+        g = _gait_import("pebble_gait").WaveGait()
+        return gait_ease_in_s(g, min(GOTO_SPEED_MM_S, float(g.max_command()["v"])))
+    except Exception:                                           # noqa: BLE001 — a stated fallback
+        return GOTO_EASE_IN_S
 
 
 def default_envelope() -> dict:

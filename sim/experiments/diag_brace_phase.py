@@ -18,7 +18,7 @@ import exp_paths as X                   # sys.path (sim/, gait/, perception/, au
 HERE = X.SIM                             # sim/: pebble.xml
 from pebble_gait import WaveGait, N_LEGS       # noqa: E402
 from pebble_reflex import ReflexSupervisor            # noqa: E402
-from scenes import make_data, gyro_xy_of, T_SETTLE, V_X             # noqa: E402
+from scenes import make_data, gyro_xy_of, walk_ask, T_SETTLE        # noqa: E402
 
 T_PUSH = 3.5
 DUR = 0.15
@@ -43,6 +43,7 @@ def run(model, dir_deg, force_n, frac, reflex_on, verbose=True):
     torso = model.body("torso").id
     DT = model.opt.timestep
     push_t = T_PUSH + frac * gait.T
+    ask = walk_ask(gait)[0]                 # D063: scenes.V_X fitted into the envelope (45 asks 34.2)
     sup = ReflexSupervisor(gait, gyro_trip=1.8, gyro_calm=0.9) if reflex_on else None
     f = force_n * np.array([np.cos(np.deg2rad(dir_deg)),
                             np.sin(np.deg2rad(dir_deg)), 0.0])
@@ -55,7 +56,7 @@ def run(model, dir_deg, force_n, frac, reflex_on, verbose=True):
     for k in range(int(total / DT)):
         t = k * DT
         gyro = gyro_xy_of(model, data, torso)
-        vx = 0.0 if t < T_SETTLE else V_X * min((t - T_SETTLE) / 0.6, 1.0)
+        vx = 0.0 if t < T_SETTLE else ask * min((t - T_SETTLE) / 0.6, 1.0)
         if sup is not None:
             q, state = sup.step(t, vx, 0.0, 0.0, gyro)
             data.ctrl[:15] = q.flatten()
@@ -98,7 +99,7 @@ def run(model, dir_deg, force_n, frac, reflex_on, verbose=True):
     zaxis = data.xmat[torso].reshape(3, 3)[:, 2]
     tilt_end = np.rad2deg(np.arccos(np.clip(zaxis[2], -1, 1)))
     prog = (data.xpos[torso] - pos_at_push)[0] * 1000 if pos_at_push is not None else 0
-    need = (0.15 if reflex_on else 0.35) * V_X * (DUR + T_AFTER)
+    need = (0.15 if reflex_on else 0.35) * ask * (DUR + T_AFTER)
     ok_fall = not fell and tilt_end < 25 and data.xpos[torso][2] > 0.070
     ok = ok_fall and prog > need
     print(f"\n=== dir {dir_deg} F={force_n}N frac=+{frac:.2f}T "

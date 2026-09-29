@@ -62,8 +62,12 @@ AUTO_TTL_S = 3.0
 CAPS_TIMEOUT_S = 2.0       # GET /api/capabilities: an event-loop route, no sim thread
 COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capabilities.CAPABILITY_FLAGS
 PLACES = "places"          # F3: + this flag only while the cockpit reports its place recognition on
-FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (~10 s) or a turn
-GO_BACK_TIMEOUT_S = 200.0  # go_back_to: up to 4 goto legs of <= 40 s each
+FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (<= 0.4 m: ~16 s at D063's 34.2 mm/s,
+#                            with the ease-in and the 1.5 s the goto answers after it ends) or a turn
+GO_BACK_TIMEOUT_S = 300.0  # go_back_to: up to 4 goto legs (cockpit_brains.GO_BACK_MAX_LEGS) of <= 55 s (D063: the
+#                            envelope's goto_timeout_s, was 40), + up to 15.5 s when a detour is running at the cap
+#                            (cockpit.GOTO_DETOUR_S: it runs out first; measured 66-68 s answers) + 1.5 s each =
+#                            288 s, and slack (was 200 = 4 x (40 + 8 + 1.5) + 2)
 
 
 def cockpit_alive(url=DEFAULT_URL, timeout=2.0):

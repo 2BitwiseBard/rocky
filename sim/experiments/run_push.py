@@ -30,9 +30,9 @@ import mujoco
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 HERE = X.SIM                             # sim/: pebble.xml
 from pebble_gait import WaveGait                                    # noqa: E402
-from scenes import make_data                                        # noqa: E402
+from scenes import make_data, walk_ask                              # noqa: E402
 
-V_X = 45.0
+V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
 T_PUSH = 3.5          # gait has settled by then
 DUR = 0.15            # push duration, s
 T_AFTER = 4.0
@@ -99,7 +99,7 @@ def envelope(walk):
 if __name__ == "__main__":
     print("=== quiet stance (all 5 feet down, holding pose) ===")
     stand = envelope(walk=False)
-    print("=== walking @ 45 mm/s (wave gait, 4 feet down) ===")
+    print(f"=== walking @ {V_X:.1f} mm/s (wave gait, 4 feet down) ===")
     walk = envelope(walk=True)
     res = dict(stand=stand, walk=walk, dur_s=DUR,
                note="force on torso for 0.15 s; last survived per direction")

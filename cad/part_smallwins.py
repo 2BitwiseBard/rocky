@@ -6,6 +6,10 @@
                      washers at any deck grid point. Measured mass, no glue.
   imu_grommet      : TPU top-hat isolator for the BNO085 on the avionics
                      tray (4x). Kills gait-frequency vibration at the IMU.
+                     Grips a 3 mm seat between its flanges; the Ø2.7 bore
+                     does not thread, so each M2.5 x 10 takes a nut under
+                     the tray (D063: the tray's seats sit 1.2 up so the nut
+                     clears the deck; part_avionics poses all of it).
   calib_gauge_hip  : bench-jig tower whose cradle holds the TIBIA CUP floor
                      (knee servo cradle, D047) at leg z 45.0 => femur horizontal
                      (hip = 0) during center calibration.

@@ -39,11 +39,13 @@ The stuck-watchdog (`gait/pebble_watchdog.py`, D023) fires on missing
 (D017). Its `RetryPolicy` escalates nominal → high-step → higher + clear →
 retreat, and each stage is derived from the gait budget (D060): the
 shortest cycle time whose speed envelope is at least 20 mm/s, every command
-through `budget()`. Today that is 24 mm / T 2.0 s / 45.5 mm/s, then
-34.8 mm / T 3.0 s / 40.6 mm/s, then 42 mm with the body 10 mm higher /
-T 4.0 s / 30.4 mm/s. On rubble (`sim/experiments/run_stuck.py`,
-2026-09-26) it lifts crossings from 2/4 to 4/4 at 30 mm, 0/4 to 4/4 at
-35 mm, 0/4 to 2/4 at 40 mm and 1/4 to 2/4 at 45 mm, with no falls (B54
+through `budget()`. Today (D063's soft-landing swing) that is 24 mm /
+T 2.0 s / 34.2 mm/s, then 34.8 mm / T 2.5 s / 21.4 mm/s, then 42 mm with
+the body 10 mm higher / T 3.5 s / 28.1 mm/s. On the D060 ladder (45.5,
+40.6 and 30.4 mm/s at T 2.0 / 3.0 / 4.0 s) and rubble
+(`sim/experiments/run_stuck.py`, 2026-09-26; not re-run since) it lifted
+crossings from 2/4 to 4/4 at 30 mm, 0/4 to 4/4 at 35 mm, 0/4 to 2/4 at
+40 mm and 1/4 to 2/4 at 45 mm, with no falls (B54
 redesigns it against the terrain). It is on no live path yet: the cockpit's
 goto uses its own no-progress rule.
 

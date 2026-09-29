@@ -49,30 +49,37 @@ REP_LEXICON = ['greeting', 'yes', 'no', 'acknowledge', 'found_it', 'thinking', '
 # sha256 of the canonical JSON (sort_keys, compact) of the 2026-09-25 snapshots
 GOLDEN = {
     # build_tools(REP_GESTURES, REP_LEXICON, look=True, extra=cockpit_brains.EXTRA_TOOLS)
-    "openai_rep": "469a6144f7308046c82e4007d205fe0b7caa5d9b47d6656bb758c4e451833fd8",
-    # local_brain.TOOLS = build_tools(GESTURES, CHORD_WORDS)
-    "openai_local_brain_TOOLS": "7efe2065850cf00fe3cf5ae52b47f95cba80c79e36a89848be3aaee7a60629a1",
-    # cockpit_brains.TOOLS = build_tools(look=True, extra=EXTRA_TOOLS)
-    "openai_cockpit_brains_TOOLS": "f932d346fe16bbc9274d9a1fd1501b0837c96aa797c1eed2972d44eb0660c4eb",
+    # D063: the compose_gesture example re-timed and goto's timeout clause (~0.034 m/s, 55 s cap);
+    # was 469a6144f730... at D056, bc5de4faced2... with the compose change alone
+    "openai_rep": "fe8ec983be35c2e35c044ff80a5878b0a13a7247036c38a722aca6ea39ece2a4",
+    # local_brain.TOOLS = build_tools(GESTURES, CHORD_WORDS); D063: goto's clause (was 7efe2065850c...)
+    "openai_local_brain_TOOLS": "ca30fea22e45767733d76a313c69bfd1eb0fcf721d3d20d32911e76d2dd88076",
+    # cockpit_brains.TOOLS = build_tools(look=True, extra=EXTRA_TOOLS); D063 as above (was f932d346fe16...,
+    # then 0df60970f429...)
+    "openai_cockpit_brains_TOOLS": "b3257e6558b22f329a7db204ab26f5ef5403e1120a2a6fc95a06c91b28e0967f",
     # build_server(<every capability, live lists REP_*>).list_tools(): {name, description,
-    # inputSchema, annotations} rows sorted by name
-    "mcp_rep": "3753dc32f7c8ded1a99db7bb642c2c55f6963dbbdf0ba4d18b570be34cb19b1e",
-    # build_server(MockBackend()).list_tools(), same rows
-    "mcp_mock": "eec37bf895676b5a52c0046917424bb65d497232f4622471702a9608966d0aaf",
+    # inputSchema, annotations} rows sorted by name; D063: goto's clause (was 3753dc32f7c8...)
+    "mcp_rep": "b952da712b1784a3669451422462d00872c8cefa3de125c00dd2678869e1d45d",
+    # build_server(MockBackend()).list_tools(), same rows; D063: goto's clause (was eec37bf89567...)
+    "mcp_mock": "30a5f727c33eca78c62717fc885e646094f1fb8544eada418408dff2b54dff33",
 }
 # D057: the tools added after the D056 snapshots (registry order), and the sha256 of the full lists
 ADDED_D057 = ("where_am_i", "name_place", "places", "forget_place")
 GOLDEN_D057 = {       # has_places=True (recognition on); regenerated 2026-09-25 for name_place's `rename`
-    "openai_rep": "0f9b0f0daaa92e85b72416b17a9ca553dbfdf39914202b6f551d2eb54a09a505",
-    "openai_cockpit_brains_TOOLS": "82039933acaad11e465d3f56d14e05bd000378eb6af862629925b021ab6e46fd",
+    # D063: the compose_gesture example re-timed and goto's timeout clause (were 0f9b0f0daaa9... /
+    # 82039933acaa..., then a06880931cdd... / 6baed84766c7... with the compose change alone)
+    "openai_rep": "c00ebabaa336ab6b92246fc0896c94e080fe09a158c588c9200539dea51885c9",
+    "openai_cockpit_brains_TOOLS": "7bb1a198105fb5515a66fcdccc23f6880b3194592a70707880963944bdfa14f3",
     # F3: to_mcp_specs(rep_caps(has_places=True)) = build_server over a cockpit reporting `places`,
-    # {name, description, inputSchema, annotations} rows sorted by name (the D056 rows + the four)
-    "mcp_rep": "bb4b0fd415d5f4ed676d89f17dab1af8020725137eaa32e36815183b50e9166d",
+    # {name, description, inputSchema, annotations} rows sorted by name (the D056 rows + the four);
+    # D063: goto's clause (was bb4b0fd415d5...)
+    "mcp_rep": "4bfdcee5191c2cc5fca4dd06299ad06abdd050b6710339bd636e905ecc96fc18",
 }
 # the no-cockpit snapshot's version at D056 (docs/TOOLS.md then): with has_places off the
 # snapshot is still exactly that one (the D057 tools add nothing unless recognition is on) —
 # except the robot block's params revision, which D059 moved on (_version_at_d056)
-D056_FALLBACK_VERSION = "99615678f55b"
+D056_FALLBACK_VERSION = "39b67053b588"   # D063: the envelope (34.2 mm/s, goto cap 55 s) + the compose
+#                                          example + goto's clause (was 99615678f55b, then 912e8613c551)
 D056_PARAMS_REV = "0.1/D052"
 
 
@@ -92,6 +99,43 @@ DISPATCH_TODAY = frozenset({"say", "gesture", "move", "goto", "stop", "scan_summ
 
 def _sha(obj):
     return hashlib.sha256(C.canonical_json(obj).encode("utf-8")).hexdigest()
+
+
+# D063 changed two tool texts on purpose: compose_gesture's example, re-timed to 1 s per move (the
+# minimum-jerk ease made its 0.8 s arm moves 4.13 rad/s, over the 4.0 free limit), and goto's
+# timeout clause, which quotes the envelope (34.2 mm/s since D063) and the cap derived from it
+# (goto_cap_s: 55 s; 40 s walked only 1.275 m of a 1.5 m goto). The snapshot files keep the D056
+# texts; _as_of_d063 puts today's in their place, so every other text and schema is still checked
+# against them byte for byte.
+D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
+D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
+D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+
+
+def _goto_as_of_d063(description):
+    assert D056_GOTO_TOO_FAR in description, "the snapshot's goto text is not D056's"
+    return description.replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+
+
+def _as_of_d063(tools):
+    out = json.loads(json.dumps(tools))
+    for t in out:
+        f = t["function"]
+        if f["name"] == "compose_gesture":
+            assert D056_COMPOSE_RULE in f["description"], "the snapshot's compose text is not D056's"
+            f["description"] = C.COMPOSE_DOC
+        if f["name"] == "goto":
+            f["description"] = _goto_as_of_d063(f["description"])
+    return out
+
+
+def _mcp_as_of_d063(tools):
+    """The same for an MCP list (compose_gesture is not an MCP tool; goto is)."""
+    out = json.loads(json.dumps(tools))
+    for t in out:
+        if t["name"] == "goto":
+            t["description"] = _goto_as_of_d063(t["description"])
+    return out
 
 
 def _pre_d057(tools):
@@ -169,8 +213,8 @@ def test_openai_tools_equal_the_snapshot_byte_for_byte():
     caps = C.build(call["gestures"], call["lexicon"], call["signed"],
                    has_eye=True, has_memory=True, is_cockpit=True)
     mine = C.to_openai_tools(caps)                                # recognition off: no filtering needed
-    assert C.canonical_json(mine) == C.canonical_json(snap["tools"])
-    assert json.dumps(mine) == json.dumps(snap["tools"])          # same key order too
+    assert C.canonical_json(mine) == C.canonical_json(_as_of_d063(snap["tools"]))
+    assert json.dumps(mine) == json.dumps(_as_of_d063(snap["tools"]))   # same key order too
     # D057 (recognition on): the additions come after every D056 tool, in registry order
     full = C.to_openai_tools(C.build(call["gestures"], call["lexicon"], call["signed"],
                                      has_eye=True, has_memory=True, is_cockpit=True, has_places=True))
@@ -180,7 +224,7 @@ def test_openai_tools_equal_the_snapshot_byte_for_byte():
 
 def test_openai_variants_equal_the_snapshot():
     v = _snap("snapshot_openai_tools_variants.json")
-    by = {k.split(" ")[0]: val for k, val in v.items()}
+    by = {k.split(" ")[0]: _as_of_d063(val) for k, val in v.items()}
     assert C.to_openai_tools(C.build(GESTURES, CHORD_WORDS)) == by["local_brain.TOOLS"]     # no D057 tool there
     assert C.to_openai_tools(C.build(None, None, has_eye=True, has_memory=True,
                                      is_cockpit=True)) == by["cockpit_brains.TOOLS"]
@@ -244,7 +288,7 @@ def test_live_enums_are_filled_and_dropped_when_empty():
 def test_mcp_specs_equal_the_snapshot():
     snap = _snap("snapshot_mcp_tools.json")
     mine = {s["name"]: s for s in C.to_mcp_specs(rep_caps())}
-    theirs = {t["name"]: t for t in snap["tools"]}
+    theirs = {t["name"]: t for t in _mcp_as_of_d063(snap["tools"])}
     assert set(mine) == set(theirs)
     for name, t in theirs.items():
         assert mine[name]["description"] == t["description"], name
@@ -252,7 +296,8 @@ def test_mcp_specs_equal_the_snapshot():
         assert mine[name]["annotations"] == t.get("annotations", {}), name
     assert snap["instructions"] == C.MCP_INSTRUCTIONS
     mock = _snap("snapshot_mcp_tools_mock.json")
-    assert _rows_from_specs(C.to_mcp_specs(C.build(GESTURES, CHORD_WORDS))) == _rows_from_mcp(mock["tools"])
+    assert _rows_from_specs(C.to_mcp_specs(C.build(GESTURES, CHORD_WORDS))) == \
+        _rows_from_mcp(_mcp_as_of_d063(mock["tools"]))
 
 
 def test_mcp_specs_match_the_golden_hashes():
@@ -344,8 +389,32 @@ def test_constants_and_texts_equal_their_sources():
                  "FORGET_DOC", "FIND_MAX_STEPS", "FIND_MAX_STEPS_CAP"):
         assert getattr(C, name) == getattr(cb, name), name
     assert C.SPAWN_NAME == scene_memory.SPAWN_NAME
-    ck = _module_constants("sim/cockpit.py", {"GOTO_CAP_S", "V_GOTO"})
-    assert (C.GOTO_CAP_S, C.GOTO_SPEED_MM_S) == (ck["GOTO_CAP_S"], ck["V_GOTO"])
+    # D063: the cockpit's GOTO_CAP_S is derived (the envelope's goto_timeout_s): test_cockpit_api
+    # checks the value, test_goto_cap_is_derived_from_the_envelope the derivation
+    ck = _module_constants("sim/cockpit.py", {"V_GOTO"})
+    assert C.GOTO_SPEED_MM_S == ck["V_GOTO"]
+
+
+def test_goto_cap_is_derived_from_the_envelope():
+    """D063: the envelope fell 45.5 -> 34.2 mm/s and a goto under the 40 s cap walked 1.275 m of a
+    1.5 m target. The cap is goto_cap_s at the speed goto walks: the reach GOTO_CAP_MARGIN times
+    over (D062's margin) plus the command slew's ease-in, and every text that quotes it follows."""
+    env = C.default_envelope()
+    assert env["source"].startswith("gait/")                                # derived, not the fallback
+    assert env["goto_speed_m_s"] == C.GOTO_SPEED_M_S == C.FALLBACK_ENVELOPE["goto_speed_m_s"]
+    assert C.default_ease_in_s() == C.GOTO_EASE_IN_S                         # CommandSlew: 2.36 s
+    assert env["goto_timeout_s"] == C.goto_cap_s(env["goto_speed_m_s"], C.GOTO_EASE_IN_S) == C.GOTO_CAP_S == 55.0
+    # after the ease-in the cap walks the reach GOTO_CAP_MARGIN times over (1.8 m)
+    assert (C.GOTO_CAP_S - C.GOTO_EASE_IN_S) * env["goto_speed_m_s"] >= C.GOTO_CAP_MARGIN * C.GOTO_REACH_M - 0.02
+    assert C.goto_cap_s(0.045, 0.0) == 40.0                                  # D062: 1.8 m at 45 mm/s, no slew
+    assert C.goto_cap_s(0.0) == C.goto_cap_s(float("nan")) == C.GOTO_CAP_S   # no walking envelope
+    # the goto text quotes the envelope it is built with; the mock walks at the envelope
+    assert "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)" in C.GOTO_DOC
+    faster = C.build(envelope=dict(env, goto_speed_m_s=0.0398, goto_timeout_s=48.0))    # B103's T 2.2
+    goto = next(t for t in faster["tools"] if t["name"] == "goto")
+    assert "(too far: ~0.040 m/s, 48 s cap, keep targets within ~1.5 m)" in goto["description"]
+    from harness.backend import SPEED
+    assert SPEED == env["goto_speed_m_s"]
 
 
 def test_registry_specs_are_well_formed():
@@ -397,10 +466,11 @@ def test_snapshot_shape_envelope_and_robot():
     assert [t["name"] for t in off["tools"]] == [n for n in C.TOOL_NAMES if n not in ADDED_D057]
     assert _version_at_d056(off) == D056_FALLBACK_VERSION
     env = caps["envelope"]
-    assert env["goto_reach_m"] == 1.5 and env["goto_timeout_s"] == 40.0
+    assert env["goto_reach_m"] == 1.5 and env["goto_timeout_s"] == 55.0     # D063: goto_cap_s (was 40)
     assert env["source"].startswith("gait/"), env                   # the gait is importable here
-    assert env["speed_m_s"] == pytest.approx(0.0455, abs=5e-4)
-    assert env["turn_rad_s"] == pytest.approx(0.246, abs=2e-3)
+    # D063: the soft-landing swing costs envelope (was 0.0455 / 0.246 at D052)
+    assert env["speed_m_s"] == pytest.approx(0.0342, abs=5e-4)
+    assert env["turn_rad_s"] == pytest.approx(0.185, abs=2e-3)
     assert env["step_height_mm"] == 24.0
     rb = caps["robot"]
     assert rb["legs"] == 5 and rb["joints_per_leg"] == 3 and rb["joint_names"] == ["yaw", "hip", "knee"]

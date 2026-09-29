@@ -17,6 +17,10 @@ no threads, so a loop that owns its own timing can use it:
   * NaN / inf anywhere in a leg: that leg keeps its last sent target.
   * Rate clamp: no joint target moves faster than hard_rad_s (the ST3215's
     no-load 4.7 rad/s, params joints.vel_rad_s.hard) per real second.
+  * Goal speed (D063, B76 fix 3): after the entry each servo gets
+    bus.goal_speeds — TRACK_K x its goal step / tick_s, floored (never 0 =
+    servo max), capped at hard_rad_s (and run_speed_cps when > 0) — so it
+    moves through the tick instead of rushing each step and waiting.
 
 Not here (and not on the ROS path yet): the reflex supervisor, foot
 contacts, the heartbeat — see ros2/README.md.
@@ -28,6 +32,7 @@ import math
 import numpy as np
 
 HARD_RAD_S = 4.7            # params joints.vel_rad_s.hard (ST3215 no-load, 12 V)
+TICK_S = 0.02               # params actuators.st3215.bus_hz 50 (the ROS node's io_tick)
 BLEND_S = 1.5               # same numbers as sim/hw_bridge.py's soft entry
 ENTRY_SPEED_CPS = 200
 ENTRY_TORQUE_LIMIT = 400
@@ -42,14 +47,17 @@ def _smooth(u):
 
 class SoftStream:
     def __init__(self, robot, hard_rad_s=HARD_RAD_S, blend_s=BLEND_S,
-                 entry_speed_cps=ENTRY_SPEED_CPS, tail_s=TAIL_S, run_speed_cps=0):
+                 entry_speed_cps=ENTRY_SPEED_CPS, tail_s=TAIL_S, run_speed_cps=0,
+                 tick_s=TICK_S):
         self.robot = robot
         self.hard = float(hard_rad_s)
         self.blend_s = float(blend_s)
         self.entry_cps = int(entry_speed_cps)
         self.tail_s = float(tail_s)
-        self.run_cps = int(run_speed_cps)
+        self.run_cps = int(run_speed_cps)   # > 0: a ceiling on every goal speed after entry
+        self.tick_s = float(tick_s)         # the loop's period: goal speeds cover a step in it
         self.q_last = None          # (5,3) rad: the last target sent (or the measured pose)
+        self.goal_last = {}         # {id: servo deg} the last goals written (goal speed steps)
         self.entry = None           # (t0, q_from (5,3), T)
         self.released = False
         self.t_prev = None
@@ -71,10 +79,16 @@ class SoftStream:
                 else:
                     q[leg, j] = np.nan              # never commanded until it has a target
         self.q_last = q
+        self.goal_last = dict(self.present)
         self.entry = None
         self.released = False
         self.t_prev = None
         return sorted(self.present)
+
+    def run_cap_cps(self):
+        """The goal-speed cap after entry: the hard speed, or run_speed_cps below it."""
+        hard = self.hard * 4096 / (2.0 * math.pi)                     # STS counts/s
+        return min(hard, self.run_cps) if self.run_cps > 0 else hard
 
     def step(self, q_cmd, now):
         """One tick: returns the (5,3) rad targets sent, or None (nothing sent)."""
@@ -102,7 +116,11 @@ class SoftStream:
         if not in_entry and not self.released:
             self.robot.release_limits([i for row in self.robot.leg_ids for i in row])
             self.released = True
-        self.robot.send_leg_targets(q_t, self.entry_cps if in_entry else self.run_cps)
+        goals = self.robot.leg_goals_deg(q_t)
+        speed = self.entry_cps if in_entry else \
+            self.robot.bus.goal_speeds(self.goal_last, goals, self.tick_s, cap_cps=self.run_cap_cps())
+        self.robot.bus.sync_positions(goals, speed)
+        self.goal_last = goals
         self.q_last = q_t
         self.t_prev = now
         return q_t

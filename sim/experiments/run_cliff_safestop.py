@@ -33,7 +33,7 @@ from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E40
 import rocky_model as rm                                             # noqa: E402
 from pebble_reflex import ReflexSupervisor, body_gyro_xy             # noqa: E402
 from cliff import CliffDetector, CliffReaction                        # noqa: E402
-from scenes import build_world, foot_contacts, EDGE_X, PLAT_H, V_X   # noqa: E402
+from scenes import build_world, foot_contacts, walk_ask, EDGE_X, PLAT_H   # noqa: E402
 
 T_TOTAL = 16.0
 T_SETTLE = 1.0
@@ -65,6 +65,7 @@ def run(mode, record=None):
     det = CliffDetector()
     react = CliffReaction(gait)
     sup = ReflexSupervisor(gait) if mode == "safestop" else None
+    ask = walk_ask(gait)[0]       # D063: scenes.V_X fitted into the envelope (45 asks 34.2)
 
     fell = False
     max_edge_reach = -1.0
@@ -82,7 +83,7 @@ def run(mode, record=None):
         if t < T_SETTLE:
             data.ctrl[:15] = q0
         else:
-            vx0 = V_X * min(tw / 0.6, 1.0)
+            vx0 = ask * min(tw / 0.6, 1.0)
             vx, vy, wz = react.command(tw, vx0, 0.0, 0.0)
             halted = react.retreat_until is not None and tw >= react.retreat_until
             if halted and halt_t is None:

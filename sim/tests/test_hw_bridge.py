@@ -479,3 +479,54 @@ def test_entry_parks_a_joint_resting_outside_the_range_inside_the_burned_limits(
     lim = -20.0 + 0.5 * 2.0                                        # half a margin inside the burned -18
     assert abs(goal(b, 3) - cnt(lim)) <= 1
     assert b.status()["entry"]["0"]["gap_deg"] < 15.0              # the blend starts from the parked goal
+
+
+# ------------------------------------------------------------------ D063 goal speed (B76 fix 3)
+def test_stream_goal_speed_is_k_step_per_tick_never_zero_and_capped(make):
+    """After the entry the stream wrote GOAL_SPEED 0 (= servo max): each 20 ms
+    step rushed, then waited. Now each servo gets TRACK_K x its step / tick,
+    floored, capped at the hard speed and at speed_cps (the cockpit's slider)."""
+    from rocky_driver.bus import TRACK_K, TRACK_FLOOR_CPS
+    b = make()
+    enter(b)
+    b.alive = False                                                # drive the stream by hand: a known tick
+    b.thread.join(1.0)
+    sent = []
+    real = b.bus.sync_positions
+
+    def spy(targets, speed=0):
+        sent.append((dict(targets), speed))
+        return real(targets, speed)
+    b.bus.sync_positions = spy
+    tick = 1.0 / hw_bridge.TICK_HZ
+    t_base = max(time.monotonic(), b._t_send)
+    hard = int(math.degrees(4.7) * K)                              # 3063 counts/s
+    for k in range(1, 61):
+        q = pose(hip=0.2 + (0.8 * (k - 25) * tick if k > 25 else 0.0))   # 0.8 rad/s hip ramp after entry
+        if k >= 45:
+            q[0, 2] = -1.4                                         # a knee jump: rate-limited, speed capped
+        if k == 55:
+            b.speed_cps = 200                                      # the slider is a ceiling now
+            k_slow = len(sent)
+        b._stream(t_base + k * tick, q)
+        b.mock.advance(tick)
+    runs = [k for k, (_, sp) in enumerate(sent) if isinstance(sp, dict)]
+    assert runs and all(sp == hw_bridge.ENTRY_SPEED_CPS for _, sp in sent[:runs[0]])   # entry unchanged
+    last = dict(sent[runs[0] - 1][0])
+    capped = []
+    for k in runs:
+        goals, sp = sent[k]
+        for sid, deg in goals.items():
+            step = abs(cnt(deg) - cnt(last[sid]))
+            cap = 200 if k >= k_slow else hard
+            want = max(1, min(int(round(max(TRACK_K * step / tick, TRACK_FLOOR_CPS))), int(cap)))
+            assert sp[sid] == want, (k, sid, step)
+            assert 0 < sp[sid] <= hard
+            if sp[sid] == hard:
+                capped.append(sid)
+        last.update(goals)
+    assert 3 in capped                                             # the knee jump hit the hard cap
+    assert all(v == TRACK_FLOOR_CPS for sid, v in sent[runs[0]][1].items() if sid % 3 == 1)   # still yaws
+    assert max(sent[runs[-1]][1].values()) <= 200
+    assert min(b.mock.servo(i).get("GOAL_SPEED") for i in range(1, 16)) > 0   # never 0 after the entry
+    assert b.status()["speed_cap_cps"] == 200 and b.status()["track_k"] == TRACK_K

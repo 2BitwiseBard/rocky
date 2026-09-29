@@ -4,7 +4,7 @@ Status: step 1 shipped (D053, 2026-09-24); steps 2-10 are backlog B36. How
 to change the design today: [DESIGN_CHANGE_GUIDE.md](DESIGN_CHANGE_GUIDE.md).
 `python gait/rocky_model.py` prints the current description: 5 legs, 20
 actuators, topology hash `7f066d9bd8c0`; `sim/model_fingerprint.py` gives
-the robot fingerprint (`1f953c89f979` since D062).
+the robot fingerprint (`87215110e9c4` since D063).
 
 ---
 
@@ -400,18 +400,21 @@ by the loader; the helpers take `spec=`.
 registry, `harness/capabilities.py`, generates every surface (the local
 brains' schema, the cockpit's list, the MCP server's list,
 `docs/TOOLS.md`). Its snapshot carries `envelope` from
-`WaveGait().max_command()` on `cad/params.yaml` (speed 0.0455 m/s, turn
-0.246 rad/s, step 24 mm, goto 0.045 m/s) and `robot` from
+`WaveGait().max_command()` on `cad/params.yaml` (speed 0.0342 m/s, turn
+0.185 rad/s, step 24 mm, goto 0.0342 m/s since D063) and `robot` from
 `rocky_model.robot()` (legs, joints per leg, stations, 20 actuators,
 topology hash, `params_rev`). The goto and move texts take their distance
-from `envelope.goto_max_m` / `move_max_m`: for `move` it is the hard limit
+from `envelope.goto_reach_m` / `move_max_m`: for `move` it is the hard limit
 (a longer move is refused); for `goto` it is the advised reach ("keep
 targets within ~1.5 m"), not a refusal (the cockpit refuses a goto target
 only beyond 3 m, `cockpit_brains.GOTO_MAX_M`). Both are still the constant
-1.5 m (inside the ~1.8 m that goto's 40 s cap covers at ~0.045 m/s), not
-derived from params; the goto text's "~0.045 m/s, 40 s cap" and
-the other numbers in the descriptions (compose_gesture's joint ranges,
-find_object's 0.1-0.4 m steps) are literals in the registry. A params
+1.5 m, not derived from params. The goto text also quotes
+`goto_speed_m_s` and `goto_timeout_s`, and since D063 the cap is derived:
+`goto_cap_s` sizes it to walk that reach 1.2 times over at goto's speed,
+plus the command slew's 2.36 s ease-in (55 s at 0.0342 m/s; the old 40 s
+literal walked only 1.275 m of a 1.5 m goto after D063). The other numbers
+in the descriptions (compose_gesture's joint ranges, find_object's
+0.1-0.4 m steps) are literals in the registry. A params
 change that moves the envelope or the topology changes the snapshot and
 makes `docs/TOOLS.md` stale, and CI refuses a stale page the way it refuses
 a stale `pebble.xml`.

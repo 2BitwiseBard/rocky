@@ -11,7 +11,7 @@ pairs = [
     ("coxa_yaw_base", "coxa_fork"),
     ("coxa_yaw_base", "servo_femur"),
     ("coxa_fork", "servo_femur"),
-    ("coxa_fork", "servo_yaw"),           # rides horn + idler in pockets: ~0
+    ("coxa_fork", "servo_yaw"),           # horn face on the flat hub top, idler in its pocket: ~0
     ("coxa_fork", "femur_link"),
     ("coxa_fork", "femur_plate_b"),
     ("coupler_hip", "servo_femur"),      # disc rests on the horn top: ~0

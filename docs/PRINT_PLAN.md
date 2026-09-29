@@ -26,9 +26,10 @@ cad-drawings`, FreeCAD).
 - **Strength:** `./rocky.sh cad-check --fem` loads each structural leg part
   with the largest force the servos can put through it and reports a safety
   factor ([`cad/out/fem/FEM_REPORT.md`](../cad/out/fem/FEM_REPORT.md), D061).
-  All five pass (the femur at 2.18 since D062's deck + 8 mm rails; it was
-  1.22). The allowables are VERIFY until your own pull coupons say
-  otherwise (B75).
+  All five pass at SF ≥ 2: the femur is lowest at 2.18 (D062's deck + 8 mm
+  rails; it was 1.22), then the fork at 2.47 (D063: an inward foot push, R−,
+  held by the horn face alone, carried by the side cheeks). The allowables
+  are VERIFY until your own pull coupons say otherwise (B75).
 - **Grams and hours** come from
   [`cad/out/print_estimate.json`](../cad/out/print_estimate.json) (0.2 mm
   layers). The fill factors are guesses, so expect ±30 %. If the slicer
@@ -37,18 +38,22 @@ cad-drawings`, FreeCAD).
 Print leg parts only from the current tree. Every leg part from before D047
 was modelled around the wrong servo envelope: coxa base, fork, crown cap,
 femur link, knee carrier, straps, servo blanks v0.2 and the J1/J2 coupons.
-The fit ladder, the port/latch/dovetail coupons, the hand set and the deck
-did not change.
+The fit ladder, the port coupons, the hand set and the deck did not change
+then. D063 (2026-09-28) changed the fork (a fork from before it does not go
+onto the servo) and `coupon_yaw_hub`, the knob, the latch cartridge, the
+dovetail coupon and shoes, the panel demo pair, the deck's latch strikes,
+the shell sector and cap, the tray and `link_clip`: reprint any of those
+printed earlier.
 
 | batch | what | grams | hours |
 |---|---|---:|---:|
 | 0 | fit ladder | 27 | 1.4 |
-| 1 | four joint coupons + one servo blank | 40 | 2.2 |
-| 2 | one leg | 136 | 7.3 |
-| 3 | the body | 183 | 9.7 |
-| **0–3** | | **386** | **20.6** |
-| deferred | four more legs 287 g / 15.3 h · bench jig 162 / 5.9 · stand (two sections) 221 / 8.1 · carapace 149 / 7.9 | 819 | 37.2 |
-| **whole plan** | | **1205** | **57.8** |
+| 1 | four joint coupons + one servo blank | 41 | 2.2 |
+| 2 | one leg | 142 | 7.6 |
+| 3 | the body | 184 | 9.8 |
+| **0–3** | | **394** | **21.0** |
+| deferred | four more legs 310 g / 16.5 h · bench jig 162 / 5.9 · stand (two sections) 221 / 8.1 · carapace 153 / 8.1 | 846 | 38.6 |
+| **whole plan** | | **1240** | **59.6** |
 
 ## Batch 0: measure the printer (B28, blocking)
 
@@ -89,7 +94,7 @@ bores only):
 | Row E pins | snug at 2.10 | loose at 2.00: glue the pins in. Binds at 2.20: ream the finger pin holes with a 2 mm drill |
 | Port coupons (`port_coupon_deck` + `port_coupon_plate`) | dock without force: tilt 15°, lip through the slot, slide inboard to hook, pivot flat onto the dowels | binds at the dowels: hold the deck and note which step binds. Slop after the pivot: note it and proceed (the thumbscrews close it) |
 
-## Batch 1: four coupons + one blank (PLA, 40 g, 2.2 h)
+## Batch 1: four coupons + one blank (PLA, 41 g, 2.2 h)
 
 Print these before any full leg part. Each coupon is a boolean clip of the
 production solid (`cad/part_leg_coupons.py`), so a coupon that fits proves
@@ -100,7 +105,7 @@ the part it came from.
 | `servo_blank` | 1 | bottom DOWN (rims on the bed) | none | the ST3215 stand-in (v0.3, measured from the STEP) |
 | `blank_idler` | 1 | disc DOWN (stub up) | none | glues into the blank's Ø6.2 pocket |
 | `coupon_cup` | 1 | back wall DOWN | none | the cup: slide the blank in rear-first, drive 4 self-tappers into the rim holes. The same cup holds all three servos |
-| `coupon_yaw_hub` | 1 | hub DOWN | none | the fork's yaw hub: Ø20.3 pocket on the horn, four slotted holes, counterbores from below. On a real servo, this print answers M2-or-M3 and the hole radius (B23) |
+| `coupon_yaw_hub` | 1 | hub DOWN | none | the fork's yaw hub (D063): the flat hub top the horn face bears on, the Ø6.4 relief for the horn's centre head (its channel runs out to one side, joined to the two rear slots over its 1.3 mm depth), four slotted holes, counterbores from below. On a real servo, this print answers M2-or-M3 and the hole radius (B23) |
 | `coupon_hip_hub` | 1 | outer face DOWN | none | femur plate A's hub with `horn_coupler`: lobes into the recess, 2 × M3 × 8 clamps from the outer face |
 | `coupon_idler` | 1 | outer face DOWN | none | plate B's tower: the pocket rides the idler, and the notch faces the plugs |
 | `horn_coupler` | 1 | disc DOWN | none | goes with the hip-hub coupon |
@@ -108,8 +113,9 @@ the part it came from.
 Fit criteria (write them in `NOTES_INBOX.md`):
 - **cup:** the blank slides in with finger pressure and doesn't rock. The
   rim holes line up with a Ø2 pin pushed through the coupon.
-- **yaw hub:** seats on the blank's horn with less than 0.3 mm wobble.
-  Screws pass at both ends of the slots.
+- **yaw hub:** the horn face sits flat on the hub top without rocking on its
+  centre head. Screws pass at both ends of the slots, and snug they hold
+  it.
 - **hip hub:** the coupler drops into the recess and the clamps draw it
   flat. A 1 mm sideways push meets the lobes.
 - **idler:** the tower drops over the glued idler without rocking, and the
@@ -118,26 +124,28 @@ Fit criteria (write them in `NOTES_INBOX.md`):
 ## Interface coupons (PLA, 0.2 mm, with batch 1)
 
 The standards the body, panels and tools attach by (D020,
-[INTERFACES.md](INTERFACES.md)) each have a coupon. None changed at D047, so
-a set printed earlier still counts. They are small and not in the estimate.
-All print as exported (`check_printability.py` audits that pose).
+[INTERFACES.md](INTERFACES.md)) each have a coupon. D063 changed all of them
+but the tool coupons, so reprint a set printed before 2026-09-28. They are
+small and not in the estimate. All print as exported
+(`check_printability.py` audits that pose). The steps are in the
+[assembly guide](ASSEMBLY_GUIDE.md#13-batch-1-coupons-and-the-blank), 1.3.
 
 | part | qty | supports | proves |
 |---|---|---|---|
-| `latch_housing` + `latch_rotor` | 1 each | none | I3 latch, as modelled: the two halves cannot be joined (the rotor's pegs have no way into the housing's track), and the rotor does not reach the deck strike (B87). Print only to look at the problem; fit none until the redesign |
-| `thumb_knob_m3` | 2 | none | an M3 × 16 hex-head bolt (A-19, 5.5 A/F) presses into the 5.6 A/F hex pocket from the top, threads out the bottom, and must not turn in it (note if it needs persuasion); 0.5 mm of the head stands proud, the pocket is 1.5 deep. A round socket head spins in it. These two are the port coupon's and then the bench leg's thumbscrews; the robot's other 8 print with batch 3 |
-| `dovetail_male_coupon` + `dovetail_shoe` | 1 each | none | I6: the shoe slides down the 24 mm spec segment (the knob lock waits for B83: its bore misses the dovetail). I6's load rating is benched later on a shell sector's as-built 16 mm segment |
-| `shell_sector_demo` + `frame_coupon` | 1 each | the demo: yes, under the plate (its two I6 segments stand on the bed and the plate starts at z 4, a 35.9 mm cantilever in the audit); the frame: none | the I3 panel standard, both halves (the panel's lip, latch pocket, magnet pockets and two I6 segments; the frame's groove, latch strike and magnets). They are not a mating pair: latch/strike, lip/groove and magnets sit at different positions, and the coupon's second peg slot is misplaced (B87). Feel the lip seat and the magnet pull separately; no latch test until B87 |
+| `latch_housing` + `latch_rotor` | 1 each | none | the I3 cartridge, a bayonet since D063 (B87): the rotor drops through the housing's two keyways and, a quarter turn off them, is captive. On `frame_coupon` it drops in at OPEN, starts to bite at ~40° and stops at 90°, turned from below with a flat screwdriver (blade ≤ 5 mm; a coin does not reach). The housing's walls beside the keyways are 1.2 mm (9.4 mm² under 1.6 mm in a layer: a warning, not a failure). The 0.2 mm cam bite is VERIFY (B99): expect the first turn to set the PLA lugs |
+| `thumb_knob_m3` | 2 | none | an M3 × 16 hex-head bolt (A-19, 5.5 A/F) presses into the 5.6 A/F hex pocket from the top, threads out the bottom, and must not turn in it (note if it needs persuasion). Since D063 (B82) the knob is 8.6 tall and the whole head sits in the 2.1 mm pocket, 0.1 below the top. A round socket head spins in it. These two are the port coupon's and then the bench leg's thumbscrews; the robot's other 8 print with batch 3, plus one per I6 shoe |
+| `dovetail_male_coupon` + `dovetail_shoe` | 1 each | none | I6 (D063, B83): the male is undercut (8 at the root, 12 outboard), so the shoe slides down the 24 mm segment with its knob backed out and cannot lift off; an A-19 M3 × 16 in a `thumb_knob_m3`, on the shoe's 45° spot face, wedges it (the knob ~6.1 mm off the face; an M3 × 12 clamps at 2.1). The shoe's slot roof bridges 12.2 mm (a warning). I6's load rating is benched later on a shell sector's as-built 16 mm segment |
+| `shell_sector_demo` + `frame_coupon` | 1 each | the demo: yes, under the plate (its two I6 segments stand on the bed and the plate starts at z 4, a 37.3 mm cantilever in the audit); the frame: none | the I3 panel standard as one mating pair since D063: the demo flipped onto the 60 × 34 × 6 frame puts its lip in the groove (free at ±0.25 mm, located at ±0.6), its latch cartridge on the frame's strike (the deck's own, 6 mm frame) and its two magnets on the frame's. The demo's magnet pockets are blind now, on bosses. Seat, latch, lift, unlatch; feel the magnet pull (B99 for the bite) |
 | `tool_hook`, `tool_scoop` | 1 each | yes (3 walls; the audit finds two supported islands on each) | I2 tool socket: on a printed `tibia_sea_slider`, the tool inserts free and quarter-turns, and a tug must not pull it off |
 
 Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
 
-## Batch 2: one leg (136 g, 7.3 h), after batch 1 passes
+## Batch 2: one leg (142 g, 7.6 h), after batch 1 passes
 
 | part | qty | material | pose | supports |
 |---|---|---|---|---|
 | `coxa_yaw_base` | 1 | PETG | plate DOWN | yes. The I1 hook lip stands on the bed and holds the plate about 9.3 mm up (a 32.9 mm cantilever at z 9.5 in `cad/out/printability.json`), so support the whole plate from the bed. The harness channel's roof bridges 11 mm |
-| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, in three places: under the upper plate where it leaves the web (z ~41), under the hip cup's lower wall where it steps out past the plate (the 13.7 mm ledge at z 44), and under the hip cup's upper side wall, which spans the hip servo (the 21 mm step at z 72.5). Clear all three before the hip servo goes in |
+| `coxa_fork` | 1 | PETG | lower hub DOWN, upright | yes, in three places: under the upper plate where it leaves the web and the side cheeks (z ~41, the widest cantilever, 11.5 mm since D063), under the hip cup's lower wall where it steps out past the plate (z ~44), and under the hip cup's upper side wall, which spans the hip servo (the 21.1 mm step at z 72.5). Clear all three before the hip servo goes in. D063 (B80, B81): 19.6 g (was 14.1), two 3 mm side cheeks, no horn pocket (the horn face bears on the flat hub top), and the horn-head relief, idler pocket and idler-head relief run out through the C's mouth as channels; the horn channel prints joined to the two rear slots. Its drawing no longer dimensions those channels (B105): caliper them against the model |
 | `horn_coupler` | 2 | PETG | disc DOWN | none |
 | `femur_link` | 1 | PETG (CF-PLA later) | plate A outer face DOWN | none: recesses up, bridge walls vertical |
 | `femur_plate_b` | 1 | PETG | outer face DOWN | none: pockets up |
@@ -146,14 +154,16 @@ Write the verdicts in `NOTES_INBOX.md` with the batch 1 criteria.
 | `tibia_sea_slider` | 1 | PETG | flange DOWN | none |
 | `servo_blank` + `blank_idler` | 3 + 3 | PLA | as batch 1 | none |
 
-**Assembly order** (`check_assembly.py` asserts the final fits and the later
-slide-in paths, not step 1's path; step 1 is blocked as drawn: B80).
+**Assembly order** (`check_assembly.py` asserts the final fits and every
+slide-in path, step 1's included since D063).
 The full procedure, with pictures, is [ASSEMBLY_GUIDE.md](ASSEMBLY_GUIDE.md).
 
-1. Put the fork onto the yaw blank's horn, off the base: 4 × M3 × 6 from
-   below the hub (M2 × 6 + washer if the horn is M2). **Blocked as drawn
-   (B80):** the horn's centre head and the idler catch the C's lips by
-   1.0 + 1.5 mm, so do not force the fork on until B80 lands.
+1. Slide the fork onto the yaw blank from the blank's front, off the base:
+   the blank passes between the side cheeks, horn face along the flat hub
+   top, the horn's centre head and the idler in their channels, until the
+   idler stops at the end of its pocket. Hold it there, hub flat on the horn
+   face (it can still slide back out), and drive 4 × M3 × 6 up through the
+   hub (M2 × 6 + washer if the horn is M2).
 2. Slide the yaw blank and fork into the base cup from the front. Drive
    2 self-tappers from above into the idler-face rim holes and 2 from under
    the plate.
@@ -190,17 +200,17 @@ design counts, not a shopping list:
 - A-14, CA glue: for the blank idlers.
 - A Ø2 pin or drill shank for lining up holes.
 
-## Batch 3: the body (183 g, 9.7 h)
+## Batch 3: the body (184 g, 9.8 h)
 
 | part | qty | notes |
 |---|---|---|
-| `body_deck` | 1 | 190 × 181, flat, brim on, dry filament. Print it after B27 (`deck_t` 4 vs 6 unified), B28 (the fit ladder), B51 (tray, rails, bracket and power entry placed together) and the bay (B84), and after the port coupons dock cleanly: each of them changes holes in the deck. Today's deck has holes only for the star-board bracket |
+| `body_deck` | 1 | 190 × 181, flat, brim on, dry filament. Print it after B27 (`deck_t` 4 vs 6 unified, at least 6: the latch strike asserts it), B28 (the fit ladder), B51 (tray, rails, bracket and power entry placed together) and the bay (B84), and after the port coupons dock cleanly: each of them changes holes in the deck. B51 and B84 are a proposal for the owner, [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md). Today's deck has grid holes only for the star-board bracket, and the five I3 latch strikes of D063 (B87): their underside recess is the cam, a small bridge on the bed side (134.7 mm² of new overhang in the audit, at most 2.5 mm wide at z 2.1, under the 3 mm warning step), so check its 0.8 mm ramp did not print as steps |
 | `coxa_yaw_base` | 4 more | one per station |
-| `thumb_knob_m3` | 8 more | 2 per `coxa_yaw_base`; the two interface-coupon knobs are the bench leg's. One A-19 M3 × 16 hex head in each (not in the estimate) |
+| `thumb_knob_m3` | 8 more | 2 per `coxa_yaw_base`; the two interface-coupon knobs are the bench leg's. One A-19 M3 × 16 hex head in each (not in the estimate). Plus one per I6 shoe |
 | `port_coupon_deck` + `port_coupon_plate` | 1 each | the I1 hook-pivot dance, if not tried yet (not in the estimate) |
 | `busboard_bracket` | 1 | the star board; print once the electronics exist ([WIRING_HARNESS.md](WIRING_HARNESS.md)) |
-| `avionics_tray` | 1 | a bench carrier for the electronics once its Pi standoffs are 58 × 49 (B89); `tray_rail` × 2 waits for B51 (as drawn, tray + rails fit nowhere between the legs) |
-| `battery_sled`, `sled_rail` × 2, `dock_block` | — | wait for the bay (B84, B86): nothing carries the sled yet |
+| `avionics_tray` | 1 | a bench carrier for the electronics: since D063 its Pi standoffs are 58 × 49, 11 mm tall, and its IMU seats fit the BNO085 (B89, B90; 14.7 g, the recess ceilings under the seats add overhang). `tray_rail` × 2 waits for B51 (as drawn, tray + rails fit nowhere between the legs) |
+| `battery_sled`, `sled_rail` × 2, `dock_block` | — | wait for the bay (B84, B86): nothing carries the sled yet (the proposal: [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)) |
 
 The estimate above still prices `tray_rail` × 2, `battery_sled` and
 `sled_rail` × 2 with this batch, although they wait.
@@ -226,19 +236,22 @@ The estimate above still prices `tray_rail` × 2, `battery_sled` and
   - Carapace: 5 × `shell_sector` + `shell_cap`, 0.25 mm, 3 walls, 12 %
     gyroid, brim. The sector's cavity ceilings are 45° terraces and need
     nothing inside; support the outside overhangs (the audit's widest is a
-    27.7 mm step at z 58.5). The latch cartridges wait for B87: until
-    then the sectors sit on the seam tongues and are held only by the foot
-    magnets on their deck washers, so do not carry the robot by the shell.
-    The hatch magnets have no seat to sit in (B88): leave them out, and
-    the cap sits on its seat by gravity.
+    27.7 mm step at z 58.5). Since D063 each sector also has one island
+    to support from the bed: the hatch magnet's seat boss (159 mm² at
+    z 54.5, B88). Five latch cartridges (`latch_housing` + `latch_rotor`,
+    not in the estimate) go into the sectors' pads (B87),
+    and the hatch takes ten magnets in walled pockets (B88). Latches only
+    retain: do not carry the robot by the shell.
 - **Printable, not planned yet:** `belly_door` (an I3 latch-and-magnet
-  demo: two latches + two magnets; no bay frame exists for it to close on,
-  B84), `trim_cup` + `trim_cup_lid` (washer ballast for CoM trimming),
+  demo: two latches + two magnets; no bay frame exists for it to close on
+  and no strike for its latches, B84), `trim_cup` + `trim_cup_lid` (washer ballast for CoM trimming),
   `belly_skid` × 2 (the sacrificial skid; no place yet under the deck,
   B84, B85), `imu_grommet` × 4 (TPU eventually; a PLA one is a
   placeholder), `tube_clip` and `link_clip` (harness clips: one per tibia
-  tube, which needs exposed tube, and one per femur once `link_clip`
-  fits, B94; 5 each + spares), `whisker_shoe` (an I6 shoe),
+  tube, which needs exposed tube, and one per femur, 5 each + spares;
+  since D063 `link_clip` fits the D062 femur (B94), and its 1.2 mm inner
+  jaw is a thin-wall warning, 12.5 mm² under 1.6 mm in a layer), `whisker_shoe` (an I6 shoe; like
+  `dovetail_shoe`, its slot roof bridges 12.2 mm),
   `coupler_recess_demo` (the coupler pocket alone; batch 1's hip-hub
   coupon covers it) and the charging dock (`dock_base`, `dock_tower`),
   which waits for the charge-port decision (B14). `dock_block` is not

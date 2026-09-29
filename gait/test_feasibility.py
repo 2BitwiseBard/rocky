@@ -83,12 +83,16 @@ def test_gait_passes_at_budgeted_command_box_corners(g):
 
 
 def test_default_walk_passes_and_budget_leaves_it_alone(g):
-    assert g.budget(45.0, 0.0, 0.0) == (45.0, 0.0, 0.0)          # the everyday command is inside
-    r = pf.check_gait(g, (45.0, 0.0, 0.0))
+    assert g.budget(30.0, 0.0, 0.0) == (30.0, 0.0, 0.0)          # a command inside comes back unchanged
+    walk = g.budget(45.0, 0.0, 0.0)                               # D063: 45 is outside now, scaled to the edge
+    assert walk[0] == pytest.approx(g.max_command()["v"]) and walk[1:] == (0.0, 0.0)
+    r = pf.check_gait(g, walk)
     assert r.ok, "\n".join(r.lines)
     assert r.support_min >= 4
     mc = g.max_command()
-    assert 40.0 < mc["v"] < 50.0 and 0.2 < mc["wz"] < 0.3       # the envelope SHRANK (D052), on purpose
+    # the envelope SHRANK again, on purpose: D052 45.5 mm/s / 0.246 rad/s; D063's soft-landing swing
+    # lifts through the 15 mm loaded band at its peak lift speed: 34.2 / 0.185
+    assert 30.0 < mc["v"] < 40.0 and 0.16 < mc["wz"] < 0.22
 
 
 def test_budget_scales_uniformly(g):

@@ -36,6 +36,7 @@ def seg_stand(t):
     return Q_NOM.copy(), np.zeros(N_LEGS)
 
 def seg_walk(cmd, gait):
+    cmd = gait.budget(*cmd)             # D063: the ask fitted into the gait's envelope (45 -> 34.2 mm/s)
     def f(t):
         ramp = min(1.0, t / 0.4)
         q, _, _ = gait.joint_targets(t, cmd[0]*ramp, cmd[1]*ramp, cmd[2]*ramp)

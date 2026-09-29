@@ -10,7 +10,8 @@ well-conditioned contacts — an earlier heightfield version produced
 spurious deep contacts at small amplitudes (near-degenerate prisms), see
 BUILD_LOG 2026-07-29.
 
-Sweep: amp 0..20 mm x 3 seeds, walk +X @ 45 mm/s for 8 s, no rendering.
+Sweep: amp 0..20 mm x 3 seeds, walk +X at scenes.walk_ask (45 asked, 34.2
+since D063) for 8 s, no rendering.
 `--video AMP` renders one trial.
 
 Usage: MUJOCO_GL=egl .venv/bin/python sim/experiments/run_terrain.py [--video AMP]
@@ -21,11 +22,11 @@ import mujoco
 
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 from pebble_gait import WaveGait                                    # noqa: E402
-from scenes import build_model, init_robot, N_BOX, FIELD            # noqa: E402,F401  (re-exported)
+from scenes import build_model, init_robot, walk_ask, N_BOX, FIELD  # noqa: E402,F401  (re-exported)
 
 AMPS_MM = [0, 5, 10, 15, 20]
 SEEDS = [0, 1, 2]
-V_X = 45.0            # mm/s
+V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
 T_WALK = 8.0
 T_STAND = 1.0
 

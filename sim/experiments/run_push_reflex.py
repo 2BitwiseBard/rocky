@@ -4,7 +4,7 @@ Same harness as run_push.py (0.15 s torso shove, 12 directions, escalating
 force, recovery judged 4 s later) but:
   * extended force ladder (up to 90 N — we expect to outgrow the old 53 N cap)
   * reflex ON vs OFF measured back-to-back with identical conditions
-  * both quiet stance and walking @ 45 mm/s
+  * both quiet stance and walking (scenes.walk_ask: 45 asked, 34.2 since D063)
   * plus a phase-sensitivity probe: worst direction, push timed at 4 gait
     phases (D017 said envelope deviations from 72 deg symmetry are gait-phase
     effects — check the reflex flattens them)
@@ -25,7 +25,7 @@ import exp_paths as X                   # sys.path (sim/, gait/, perception/, au
 HERE = X.SIM                             # sim/: pebble.xml
 from pebble_gait import WaveGait                                    # noqa: E402
 from pebble_reflex import ReflexSupervisor                          # noqa: E402
-from scenes import make_data, gyro_xy_of, T_SETTLE, V_X             # noqa: E402,F401  (re-exported)
+from scenes import make_data, gyro_xy_of, walk_ask, T_SETTLE        # noqa: E402,F401  (re-exported)
 
 T_PUSH = 3.5
 DUR = 0.15
@@ -41,6 +41,7 @@ def trial(model, walk, dir_deg, force_n, reflex_on, push_t=T_PUSH, trip=1.8):
     DT = model.opt.timestep
     sup = ReflexSupervisor(gait, gyro_trip=trip, gyro_calm=trip / 2) \
         if reflex_on else None
+    ask = walk_ask(gait)[0]                 # D063: scenes.V_X fitted into the envelope (45 asks 34.2)
     f = force_n * np.array([np.cos(np.deg2rad(dir_deg)),
                             np.sin(np.deg2rad(dir_deg)), 0.0])
     tilt_max, gyro_peak, fell = 0.0, 0.0, False
@@ -56,7 +57,7 @@ def trial(model, walk, dir_deg, force_n, reflex_on, push_t=T_PUSH, trip=1.8):
         if t < T_SETTLE or not walk:
             vx = 0.0
         else:
-            vx = V_X * min((t - T_SETTLE) / 0.6, 1.0)
+            vx = ask * min((t - T_SETTLE) / 0.6, 1.0)
         if sup is not None:
             q, _state = sup.step(t, vx, 0.0, 0.0, gyro)
             data.ctrl[:15] = q.flatten()
@@ -84,11 +85,11 @@ def trial(model, walk, dir_deg, force_n, reflex_on, push_t=T_PUSH, trip=1.8):
     ok = (not fell) and tilt_end < 25 and data.xpos[torso][2] > 0.070
     if walk and ok and pos_at_push is not None and not reflex_on:
         prog = (data.xpos[torso] - pos_at_push)[0] * 1000
-        ok = prog > 0.35 * V_X * (DUR + T_AFTER)
+        ok = prog > 0.35 * ask * (DUR + T_AFTER)
     # reflex case: braced robots pause on purpose; require SOME resumed progress
     if walk and ok and reflex_on and pos_at_push is not None:
         prog = (data.xpos[torso] - pos_at_push)[0] * 1000
-        ok = prog > 0.15 * V_X * (DUR + T_AFTER)
+        ok = prog > 0.15 * ask * (DUR + T_AFTER)
     trips = sup.trip_count if sup else 0
     return ok, tilt_max, gyro_peak, gyro_steady, trips
 

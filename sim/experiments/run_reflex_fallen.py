@@ -31,7 +31,7 @@ import exp_paths as X                   # sys.path (sim/, gait/, perception/, au
 HERE = X.SIM                             # sim/: pebble.xml
 from pebble_gait import WaveGait, N_LEGS                            # noqa: E402
 from pebble_reflex import ReflexSupervisor, FALLEN, RIGHTED, NORMAL  # noqa: E402
-from scenes import (make_data, gyro_xy_of, T_SETTLE, V_X,          # noqa: E402,F401  (re-exported)
+from scenes import (make_data, gyro_xy_of, walk_ask, T_SETTLE,     # noqa: E402,F401  (re-exported)
                     SHOVE_N, SHOVE_S, T_SHOVE, T_FALLEN as T_TOTAL)
 from righter import PolicyRighter, default_ckpt, foot_contacts      # noqa: E402  (D048: shared)
 from shove import Shove                                             # noqa: E402
@@ -55,6 +55,7 @@ def episode(model, ckpt, seed=0, record=False, shove_n=SHOVE_N, shove_s=SHOVE_S)
     DT = model.opt.timestep
     righter = PolicyRighter(ckpt, model, data, torso, fids)
     sup = ReflexSupervisor(gait, righter=righter)          # trip / calm from params reflex:
+    ask = walk_ask(gait)[0]                   # D063: scenes.V_X fitted into the envelope (45 asks 34.2)
     az = rng.uniform(0, 2 * np.pi)
     shove = Shove(shove_n * np.cos(az), shove_n * np.sin(az), dur=shove_s, t0=T_SHOVE)
     frames, renderer = [], None
@@ -74,7 +75,7 @@ def episode(model, ckpt, seed=0, record=False, shove_n=SHOVE_N, shove_s=SHOVE_S)
         h = float(data.xpos[torso][2])
         con = foot_contacts(model, data, fids)
         w_body = R.T @ data.cvel[torso][0:3]
-        vx = V_X * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
+        vx = ask * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0)
         q, state = sup.step(t, vx, 0.0, 0.0, gyro, contacts=con,
                             gyro_vec=w_body[:2], tilt_deg=tilt, height=h,
                             q_meas=data.qpos[jadr].reshape(5, 3))   # V2: the handoff_ok criterion

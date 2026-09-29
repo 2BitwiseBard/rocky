@@ -9,24 +9,35 @@ horn toward the deck, rear idler + cable plugs facing up.
                   holes, the cup walls take the torque reaction. Nothing sits
                   over the axis: the fork can be installed on the servo first.
   coxa_fork     : ONE C-shaped part riding BOTH sides of the yaw servo —
-                  lower hub bolted to the horn (Ø20.3 pocket under the horn
-                  face: 0.3 of it engaged once screwed, B81; four slotted M3
-                  through-holes, heads counterbored from below), a vertical
-                  web in front of the servo, and an upper plate whose pocket
-                  rides the rear IDLER disc. The overturning couple is
-                  reacted horn <-> idler (36 mm arm) instead of
-                  horn <-> a 683ZZ in a bolt-on cap 15 mm away (D046, J1:
-                  computed at ~240 N on the bearing in a recovery push).
-                  The upper plate continues into the HIP servo's cup.
+                  lower hub bolted to the horn (D063, B81: the horn face
+                  bears on the FLAT hub top, its centre head sits in a Ø6.4
+                  relief, and four slotted M3 through-holes, heads
+                  counterbored from below, locate it radially, as at the
+                  couplers), a vertical web in front of the servo, and an
+                  upper plate whose pocket rides the rear IDLER disc. The
+                  overturning couple is reacted horn <-> idler (36 mm arm)
+                  instead of horn <-> a 683ZZ in a bolt-on cap 15 mm away
+                  (D046, J1: computed at ~240 N on the bearing in a recovery
+                  push). The upper plate continues into the HIP servo's cup.
+                  The idler pocket and the horn head's relief run out
+                  through the C's mouth (-X) as channels (D063, B80): the
+                  C is 34.9 between its jaws, the servo 38.0 head to head,
+                  so without them the fork could not go on at all. That
+                  leaves the couple one-sided: when the load tips the upper
+                  jaw toward the mouth (an inward push on the foot) the idler
+                  bears on nothing, so two side cheeks outside the servo's
+                  swept case tie the jaws to the web (D063 review).
 
 Vertical stack (leg z): plate -4..0 | hub 1.3..7.3 = horn top | servo case
-11.6..40.4 | idler face 43.7 | upper plate 42.3..48.3 | hip servo 48.6.. |
+11.6..40.4 | idler face 43.7 | upper plate 42.2..48.2 | hip servo 48.6.. |
 hip axis 61 (params leg.hip_axis_z).
 
-Assembly order (the final fits and the servo + fork slide into the base are
-asserted below and in check_assembly; the fork's own path onto the servo is
-not, B80): fork onto the yaw servo's horn (4x M3 x 6 from below, off the
-base) -> servo + fork slide into the base cup from +X -> 2 rim screws from
+Assembly order (every path and final fit below is asserted here and in
+check_assembly): fork onto the yaw servo, off the base: it slides on from
+the servo's front (moving -X; the web closes +X), the horn's centre head and
+the idler running in their channels, and stays free toward the mouth until
+4x M3 x 6 go in from below (hold it seated while driving them) -> servo +
+fork slide into the base cup from +X -> 2 rim screws from
 above (idler face) + 2 from below the plate (horn face, deep pockets) -> hip
 servo slides into the fork's cup from +X -> 4 rim screws -> module hooks
 onto the deck (I1).
@@ -41,7 +52,7 @@ asserts the path clear of every part at every yaw.
 from build123d import *
 from common import params, export
 from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
-from servo_st3215 import servo_body, plug_envelope, horn_slot_cutter, spec, z_levels
+from servo_st3215 import servo_body, plug_envelope, horn_slot_cutter, horn_screw_angles, spec, z_levels
 from servo_mount import servo_cup, cup_extents, cup_screw_columns, FRONT_X, T as CUP_T
 from leg_frame import (YAW_TF, HIP_TF, Z_HIP, HUB_Z0, HUB_Z1, ZC_YAW,
                        Z_YAW_IDLER_FACE, Z_YAW_RIM_TOP, Z_CUP_FLOOR_TOP, FIT, yaw_z)
@@ -53,17 +64,33 @@ PR = P["print"]
 IF = P["interfaces"]["leg_port"]
 
 HUB_D = 26.0
-HORN_POCKET_DEPTH = 1.0              # pocket cut DOWN from the hub top, where the horn face sits
-                                     # (leg_frame.HUB_Z1): the screwed hub bears on the horn's
-                                     # centre head, 0.3 into this pocket (B81)
+# B81 (D063): no horn pocket. The hub top IS the horn face plane (leg_frame.HUB_Z1), so a
+# pocket cut down from it was 1.0 of air the horn never entered, and the screwed hub rode
+# up 0.3 onto the centre head. Now the face bears flat on the hub top, the centre head
+# clears its relief floor by FIT, and the four radial slots locate the hub.
+HORN_HEAD_Z0 = HUB_Z1 - (S["horn_center_head_h"] + FIT)   # 6.0: the centre-head relief floor
+HORN_HEAD_W = S["horn_center_head_d"] + 1.0               # 6.4: the relief and its channel
 CB_DEPTH = 3.0                       # head counterbores from the hub underside
 WEB_X0, WEB_X1 = 18.0, 22.0          # vertical web in front of the yaw servo (case front at +10.2)
 WEB_HALF_W = 13.0
+# The C's side cheeks (D063 review). With the idler pocket open to the mouth (B80), an inward
+# push on the foot (fem_check R-) tips the upper jaw toward the mouth, where the idler bears on
+# nothing: the fork hangs off the horn face alone, and the 4 mm web alone gave SF 0.49 (22.9 mm
+# at the hip cup). Two cheeks, x CHEEK_X0..WEB_X1, and the web and both jaws run out to them:
+# R- is SF 2.47 (1.8 mm), for +8.1 cm^3 (+5.5 g a fork).
+CHEEK_X0 = 2.0                        # from 0, the cheek's rear corner came 1.4 from the base cup at yaw 40
+CHEEK_Y0 = 16.6                       # the servo's front case corners (r 16.06) pass >= 0.67 inside it
+CHEEK_Y1 = CHEEK_Y0 + 3.0             # 19.6
 UP_Z0 = Z_YAW_RIM_TOP + FIT           # 42.2: upper plate underside clears the bottom rim
 UP_T = 6.0
 UP_Z1 = UP_Z0 + UP_T                  # 48.2
 IDLER_POCKET_D = S["idler_d"] + FIT + 0.1
 IDLER_POCKET_Z1 = Z_YAW_IDLER_FACE + FIT   # 44.0
+IDLER_HEAD_W = S["idler_center_head_d"] + 1.0
+IDLER_HEAD_Z1 = yaw_z(Z["idler_head"]) + FIT   # 44.6
+MOUTH_X = -40.0                       # the channels run out through the C's mouth, past everything
+FIN_X = -6.3                          # behind this the Ø26 plate edge left the idler channel's walls < 1.2
+                                      # thick (knife edges to 0 at x -8.1): they are cut square here
 NOTCH_X = -9.5                        # upper hub cut flat here on the -X side: the cable plugs live behind
 NOTCH_HALF_W = 10.3
 BACK_HALF_W = 9.5                     # base cup back wall width: I1 thumbscrew heads at |y| >= 11
@@ -150,6 +177,12 @@ def hip_servo_placed(clearance=0.0):
     return HIP_TF * servo_body(P, clearance)
 
 
+def _to_mouth(d, z0, z1):
+    """A Ø d pocket on the yaw axis, z0..z1, run out through the C's mouth
+    (-X) at its full width: the path a servo feature takes as the fork goes on."""
+    return Pos(0, 0, (z0 + z1) / 2) * Cylinder(d / 2, z1 - z0) + _box(MOUTH_X, 0, -d / 2, d / 2, z0, z1)
+
+
 def coxa_fork():
     # lower hub on the yaw horn (horn faces down; hub sits under it)
     hub = Pos(0, 0, (HUB_Z0 + HUB_Z1) / 2) * Cylinder(HUB_D / 2, HUB_Z1 - HUB_Z0)
@@ -159,20 +192,59 @@ def coxa_fork():
     up += Pos(0, 0, (UP_Z0 + UP_Z1) / 2) * Cylinder(HUB_D / 2, UP_T)
     cup = HIP_TF * servo_cup()
     fork = hub + arm + web + up + cup
-    # --- yaw horn interface (from below): OD pocket, centre-head relief, slots + counterbores
-    fork -= Pos(0, 0, HUB_Z1 - HORN_POCKET_DEPTH / 2 + 0.5) * \
-        Cylinder((S["horn_d"] + FIT) / 2, HORN_POCKET_DEPTH + 1)
-    fork -= Pos(0, 0, HUB_Z1 - (S["horn_center_head_h"] + FIT) / 2 + 0.5) * \
-        Cylinder((S["horn_center_head_d"] + 1.0) / 2, S["horn_center_head_h"] + FIT + 1)
+    for sy in (1, -1):                    # the side cheeks: a block minus the window the servo sweeps
+        ya, yb = sorted((sy * WEB_HALF_W, sy * CHEEK_Y1))
+        side = _box(CHEEK_X0, WEB_X1, ya, yb, HUB_Z0, UP_Z1)
+        ya, yb = sorted((sy * (WEB_HALF_W - 1), sy * CHEEK_Y0))
+        fork += side - _box(CHEEK_X0 - 1, WEB_X0, ya, yb, HUB_Z1, UP_Z0)
+    # The fork's only way on is from the servo's front, moving -X (the web closes +X), and
+    # the servo is 38.0 head to head against a 34.9 C (B80): the horn's centre head (1.0
+    # under the hub top) and the idler (1.5 into the upper plate) each run in a channel
+    # out through the mouth. So the fork is free toward the mouth until the four horn
+    # screws are in (their radial slots at 45 deg take +X in shear). The standing load
+    # (foot pushed up) and an outward push tip the upper plate -X, onto the idler pocket's
+    # kept +X wall; the channel's side walls take the lateral cases. An inward push past
+    # 0.6x the vertical load (or a foot pulled down) loads the open side: then the clamped
+    # horn face alone holds the fork and the cheeks carry the upper jaw down to it.
+    # --- yaw horn interface (from below): flat seat (B81), centre-head relief + channel, slots + counterbores
+    # (the channel passes 0.05 from the two rear slots: over its 1.3 depth they print as one
+    # opening, harmless, as the heads seat 3 lower and the shanks keep 1.7 of slot wall)
+    fork -= _to_mouth(HORN_HEAD_W, HORN_HEAD_Z0, HUB_Z1 + 1)
     fork -= horn_slot_cutter(HUB_Z0 - 1, HUB_Z1 + 1, p=P)
     fork -= horn_slot_cutter(HUB_Z0 - 1, HUB_Z0 + CB_DEPTH,
                              extra=S["horn_screw_head_d"] - S["horn_screw_clear_d"], p=P)
-    # --- yaw idler interface (from above): OD pocket + centre-head relief, open toward the plugs
-    fork -= Pos(0, 0, (UP_Z0 - 1 + IDLER_POCKET_Z1) / 2) * Cylinder(IDLER_POCKET_D / 2, IDLER_POCKET_Z1 - UP_Z0 + 1)
-    fork -= Pos(0, 0, (UP_Z0 - 1 + yaw_z(Z["idler_head"]) + FIT) / 2) * \
-        Cylinder((S["idler_center_head_d"] + 1.0) / 2, yaw_z(Z["idler_head"]) + FIT - UP_Z0 + 1)
+    # --- yaw idler interface (from above): OD pocket + centre-head relief, both open to the mouth
+    fork -= _to_mouth(IDLER_POCKET_D, UP_Z0 - 1, IDLER_POCKET_Z1)
+    fork -= _to_mouth(IDLER_HEAD_W, UP_Z0 - 1, IDLER_HEAD_Z1)
+    fork -= _box(MOUTH_X, FIN_X, -HUB_D / 2 - 1, HUB_D / 2 + 1, UP_Z0 - 1, IDLER_POCKET_Z1)
     fork -= _box(-40, NOTCH_X, -NOTCH_HALF_W, NOTCH_HALF_W, UP_Z0 - 1, UP_Z1 + 1)
     return fork
+
+
+FORK_SLIDE_DX = [0.5 * k for k in range(1, 61)]   # 0.5..30: past 23 the fork is wholly in front of the servo
+
+
+def fork_slide_worst(fork, target, dxs=FORK_SLIDE_DX):
+    """Worst overlap (mm^3) of the fork slid back +dx along its only path
+    against a posed yaw servo or blank. Only the fork inside the target's box
+    (grown 1 mm, stretched back along the travel) can meet it: clip first."""
+    bb = target.bounding_box()
+    zone = _box(bb.min.X - max(dxs) - 1, bb.max.X + 1, bb.min.Y - 1, bb.max.Y + 1, bb.min.Z - 1, bb.max.Z + 1)
+    near = fork & zone
+    return max(_v((Pos(dx, 0, 0) * near) & target) for dx in dxs)
+
+
+def horn_screw_shanks():
+    """The four M3 horn-screw shanks as driven (nominal radius, leg frame):
+    head on the counterbore floor, through the hub's slot band and the horn.
+    They carry the fork's +X (the open mouth) once they are in."""
+    z0, z1 = HUB_Z0 + CB_DEPTH, HUB_Z1 + S["horn_t"]
+    out = None
+    for ang in horn_screw_angles(P):
+        s = Rot(0, 0, ang) * Pos(S["horn_bcd"] / 2, 0, (z0 + z1) / 2) * \
+            Cylinder(S["horn_screw_m"] / 2, z1 - z0)
+        out = s if out is None else out + s
+    return out
 
 
 def _v(x):
@@ -199,8 +271,12 @@ if __name__ == "__main__":
         worst = max(worst, _v(probe & base), _v(probe & fork))
     check("I1 thumbscrew access columns (base + fork)", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
     check("base x yaw servo", _v(base & yaw_s), lambda v: v < 1, "OK", "CLASH")
-    check("fork x yaw servo (rides horn + idler only)", _v(fork & yaw_s), lambda v: v < 1, "OK", "CLASH")
+    check("fork x yaw servo (horn face on the hub top, idler in its pocket)", _v(fork & yaw_s),
+          lambda v: v < 1, "OK", "CLASH")
     check("fork x hip servo", _v(fork & hip_s), lambda v: v < 1, "OK", "CLASH")
+    # the fork turns on the horn against the fixed case: its cheeks must clear the swept case
+    worst = max(_v((Rot(0, 0, yaw) * fork) & yaw_s) for yaw in range(-40, 41, 5))
+    check("fork (side cheeks) x yaw servo over yaw -40..40", worst, lambda v: v < 1, "CLEAR", "CLASH")
     check("base x hip servo", _v(base & hip_s), lambda v: v < 1, "OK", "CLASH")
     worst = 0.0
     for yaw in range(-40, 41, 10):
@@ -214,14 +290,21 @@ if __name__ == "__main__":
     worst = max(_v((Rot(0, 0, yaw) * (fork + hip_s)) & harness) for yaw in range(-40, 41, 10))
     check("leg harness path x (fork + hip servo) over yaw -40..40", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
     check("fork x hip plug keep-out", _v(fork & (HIP_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")
-    # assembly paths
+    # assembly paths, in build order (B80: the first one was never checked and was blocked)
+    check("fork slide-on path (-X) onto the yaw servo, dx 0.5..30", fork_slide_worst(fork, yaw_s),
+          lambda v: v < 1, "OPEN", "BLOCKED")
     worst = max(_v((Pos(dx, 0, 0) * (fork + yaw_s)) & base) for dx in (1, 2, 5, 10, 20, 40))
     check("servo + fork slide-in path (+X) vs base", worst, lambda v: v < 1, "OPEN", "BLOCKED")
     worst = max(_v((Pos(dx, 0, 0) * hip_s) & (fork + base)) for dx in (1, 2, 5, 10, 20, 40))
     check("hip servo slide-in path (+X) vs fork + base", worst, lambda v: v < 1, "OPEN", "BLOCKED")
-    # the idler pocket locates the fork in these nudges (the horn meets 0 mm^3 as posed, B81)
-    check("fork nudged +X x yaw servo (idler pocket locates)", _v((Pos(2, 0, 0) * fork) & yaw_s), lambda v: v > 1, "LOCATED", "LOOSE")
-    check("fork nudged +Y x yaw servo", _v((Pos(0, 2, 0) * fork) & yaw_s), lambda v: v > 1, "LOCATED", "LOOSE")
+    # capture: the idler pocket's kept walls locate -X and +-Y; +X, toward the open mouth, is
+    # the BOLTED direction (the horn meets nothing in any nudge: it bears on a flat face, B81)
+    check("fork nudged -X x yaw servo (idler pocket's +X wall locates)", _v((Pos(-2, 0, 0) * fork) & yaw_s),
+          lambda v: v > 1, "LOCATED", "LOOSE")
+    check("fork nudged +Y x yaw servo (idler pocket's side walls locate)", _v((Pos(0, 2, 0) * fork) & yaw_s),
+          lambda v: v > 1, "LOCATED", "LOOSE")
+    check("fork nudged +X x the 4 horn screws (bolted direction)",
+          _v((Pos(2, 0, 0) * fork) & horn_screw_shanks()), lambda v: v > 1, "BOLTED", "LOOSE")
     # rim-screw driver columns: idler-face screws from above vs the fork at every yaw
     worst = 0.0
     for col in cup_screw_columns("bot"):

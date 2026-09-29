@@ -9,7 +9,7 @@
 meta:
   version: 0.1
   robot: pebble
-  params_rev: D062       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
+  params_rev: D063       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -74,12 +74,15 @@ gait:                    # WaveGait(**rocky_model.gait_defaults()) — keys = it
   body_height: 118.0     # mm, deck plane above the ground (the IK foot point)
   stance_radius: 185.0   # mm, nominal foot circle (BODY frame)
   cycle_time: 2.0        # s. D052: was 1.6 — the 32 mm lift in a 0.32 s swing asked the knee
-                         # for 4.62 rad/s at 45 mm/s (free-leg budget 4.0). Now 2.95; stride 72 mm
+                         # for 4.62 rad/s at 45 mm/s (free-leg budget 4.0). D063 soft swing: the
+                         # envelope is 34.2 mm/s (stride 55 mm there; knee 2.95 rad/s). T 2.2 would
+                         # give 39.8 mm/s / 0.215 rad/s (stride 70 mm): not taken, a cadence change
   duty: 0.8              # 4 of 5 feet always down. 0.75 REJECTED (D052): adjacent legs overlap in
                          # swing and the CoM leaves the stance triangle by 59 mm, 25 % of the cycle
-  step_height: 24.0      # mm swing lift (was 32). The lift's first 15 mm counts as a LOADED leg
-                         # (3.0 rad/s); pi*h/T_swing sets the knee. More clearance: T 2.2/h 26 or
-                         # T 2.4/h 28 also pass check_gait (slower cadence, longer stride)
+  step_height: 24.0      # mm swing lift (was 32). D063: the soft swing (pebble_gait.swing_profile)
+                         # peaks its lift speed, 3 h/T_swing, at h/2 = 12 mm, inside the first 15 mm
+                         # that count as a LOADED leg (3.0 rad/s): that sets the envelope. More
+                         # clearance: T 2.2/h 26 (35.2 mm/s) or T 2.4/h 28 (35.7) keep it
 
 reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults()) — keys = its kwargs
   gyro_trip: 1.8         # rad/s |gyro_xy| that trips a brace (calibration: sim/experiments/results/pre_d052/push_reflex_results.json)
@@ -293,8 +296,9 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through
     xt60_float: 0.8
     xt60_panel_mm: [16.2, 8.6, 16.0]   # Amass XT60E-M body W x H x D (sled nose + dock carrier) — VERIFY with calipers
   dovetail:              # I6 accessory ring
-    base_w: 12.0
-    crest_w: 8.0
+    base_w: 12.0         # the frozen D020 widths, named for the KEY (part_stand's spigots: 12 at
+    crest_w: 8.0         # the root). The I6 ring turns it over (B83, iface.dovetail_male(undercut=
+                         # True)): the 8 is the neck at the root, the 12 the outboard face
     depth: 4.0
     segment_len: 24.0
 

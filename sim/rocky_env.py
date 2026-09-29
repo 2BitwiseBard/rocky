@@ -53,8 +53,9 @@ command envelope; the command is in obs.
 D052 V2 (review) — cmd_budget=True (the default for new runs): every
 command, drawn or fixed, goes through WaveGait.budget() before the gait and
 the obs see it, exactly as the cockpit feeds a walker (cmd_eff). Before,
-33 of 40 draws (seed 0) were outside the gait's envelope (45.5 mm/s, 0.246
-rad/s in place) and 31 exceeded the hard servo speed or a joint limit
+33 of 40 draws (seed 0) were outside the gait's envelope (then 45.5 mm/s,
+0.246 rad/s in place; 34.2 / 0.185 since D063's soft-landing swing, so the
+budget now trims more) and 31 exceeded the hard servo speed or a joint limit
 (median peak 6.5 rad/s): the residual was learned on a gait the robot
 cannot run, and deployed on a different command distribution. Checkpoints
 without `cmd_budget` in their env_config trained on raw commands (flag

@@ -78,7 +78,8 @@ def run_scene(name, T_total, cmd_fn, zupt=False, mag=False, seed=3):
     zupt_fired = 0
     for k in range(int(T_total / DT)):
         t = k * DT
-        vx, vy, wz = (0.0, 0.0, 0.0) if t < t_settle else cmd_fn(t - t_settle)
+        vx, vy, wz = (0.0, 0.0, 0.0) if t < t_settle else gait.budget(*cmd_fn(t - t_settle))
+        #            D063: every scene's ask fitted into the envelope (45 asks 34.2, scenes.walk_ask)
         moving = abs(vx) + abs(vy) + abs(wz) * 100 >= 1.0
         if moving:
             t_gait += DT

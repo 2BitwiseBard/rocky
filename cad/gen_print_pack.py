@@ -83,9 +83,11 @@ PARTS = {
                    "COUPON 1: the cup. Slide the blank in rear-first, drive 4 self-tappers into "
                    "the rim holes. The same cup holds all three servos."),
     "coupon_yaw_hub": ("PLA", "hub DOWN", "none", "4 walls / 30%",
-                       "COUPON 2: the fork's yaw hub (Ø20.3 pocket on the horn, four slotted "
-                       "holes, counterbores from below). On a real servo it answers M2-or-M3 and "
-                       "the hole radius (B23)."),
+                       "COUPON 2: the fork's yaw hub (the horn face bears on its flat top, the "
+                       "centre head in a Ø6.4 relief that runs out to the mouth, four slotted "
+                       "holes, counterbores from below; D063, B80/B81). Slide it on from the "
+                       "front and bolt it. On a real servo it answers M2-or-M3 and the hole "
+                       "radius (B23)."),
     "coupon_hip_hub": ("PLA", "outer face DOWN", "none", "4 walls / 30%",
                        "COUPON 3: femur plate A's hub with horn_coupler: lobes into the recess, "
                        "2x M3 x 8 clamps from the outer face."),
@@ -97,31 +99,44 @@ PARTS = {
                      "washer if the horn is M2, A-12)."),
     # interface coupons (with batch 1)
     "latch_housing": ("PLA", "as exported", "none", PLA_DEFAULT,
-                      "I3 latch, with latch_rotor. As modelled the two halves cannot be joined "
-                      "(the rotor's pegs have no way into the housing's track) and the rotor does "
-                      "not reach the deck strike (B87): print only to look at the problem, fit none."),
+                      "I3 latch cartridge, the outer (B87, a bayonet since D063): Ø14 x 6, a Ø6.6 "
+                      "bore with two keyways. Drop latch_rotor in through the keyways and turn it "
+                      "off them: it is captive. Then push the cartridge into the panel's Ø14.3 "
+                      "pocket from the seating side and glue it flush with the seating face."),
     "latch_rotor": ("PLA", "as exported", "none", PLA_DEFAULT,
-                    "Meant for latch_housing (I3); as modelled it cannot go in (B87)."),
+                    "I3, for latch_housing: a Ø6 shaft, a Ø10 head, two lugs and a 2.0 x 1.5 "
+                    "screwdriver slot across its bottom end, square to the lugs. On frame_coupon "
+                    "it drops in at OPEN, meets the cam at 40° and locks at 90° against a stop: "
+                    "from below, a flat screwdriver (blade up to 5 wide, not a coin), a quarter "
+                    "turn clockwise. The 0.2 mm cam bite is VERIFY: expect PLA lugs to set on "
+                    "the first turn."),
     "thumb_knob_m3": ("PLA", "as exported", "none", PLA_DEFAULT,
                       "An M3 x 16 hex head (A-19) presses into the 5.6 A/F hex pocket and must not "
-                      "turn (note if it needs persuasion); 0.5 mm of the head stands proud. A round "
-                      "socket head spins in it. The same knob is the I1 port's thumbscrew: 10 for "
-                      "the robot, 2 here (the port coupon's, then the bench leg's)."),
+                      "turn (note if it needs persuasion); the whole head sits in the 2.1 pocket, "
+                      "0.1 below the top (B82). A round socket head spins in it. The same knob is "
+                      "the I1 port's thumbscrew (10 for the robot, 2 here: the port coupon's, then "
+                      "the bench leg's) and the I6 shoe's set knob (B83)."),
     "dovetail_male_coupon": ("PLA", "as exported", "none", PLA_DEFAULT,
-                             "I6, with dovetail_shoe: the shoe slides down the 24 mm spec segment "
-                             "(the knob lock waits for B83: its bore misses the dovetail)."),
+                             "I6, with dovetail_shoe: the undercut male (B83: the 8 neck at the "
+                             "root, the 12 face out). The shoe slides along the 24 mm segment with "
+                             "its knob backed off and cannot lift off it; the knob's screw meets "
+                             "the male's flank and wedges it (M3 x 12 is the shortest that "
+                             "reaches; the A-19 x 16 has 6.1 mm of travel)."),
     "dovetail_shoe": ("PLA", "as exported", "none", PLA_DEFAULT,
-                      "I6 shoe for dovetail_male_coupon."),
+                      "I6 shoe for dovetail_male_coupon: the undercut slot and a tapped bore at "
+                      "45° to the flank, with a spot face for its thumb_knob_m3 (B83)."),
     "shell_sector_demo": ("PLA", "as exported (the two I6 segments on the bed)",
                           "YES, under the plate (it starts above the bed on the I6 segments)",
                           PLA_DEFAULT,
-                          "I3 panel standard, the panel half: lip, latch pocket, magnet pockets, "
-                          "two I6 segments. Not a mating pair with frame_coupon: latch/strike, "
-                          "lip/groove and magnets sit at different positions (B87). Feel the lip "
-                          "seat and the magnet pull separately; no latch test until B87."),
+                          "I3 panel standard, the panel half: lip, latch pocket, magnet pockets on "
+                          "bosses, two undercut I6 segments. It mates frame_coupon (B87): glue a "
+                          "latch cartridge flush in the pocket, set the demo on the coupon (lip in "
+                          "the groove, magnets on magnets) and lock it from below. Locked, it must "
+                          "not lift off."),
     "frame_coupon": ("PLA", "as exported", "none", PLA_DEFAULT,
-                     "I3 panel standard, the frame half: groove, latch strike, magnets. Its second "
-                     "peg slot is misplaced (B87)."),
+                     "I3 panel standard, the frame half, 6 thick like the deck: the lip groove, "
+                     "the deck's own latch strike (two entry slots, the cam recess underneath) and "
+                     "two magnets, laid out to mate shell_sector_demo (B87)."),
     "tool_hook": ("PLA", "as exported", "YES (the audit finds supported islands)", "3 walls / 25%",
                   "I2 tool socket: on a printed tibia_sea_slider the tool inserts free and "
                   "quarter-turns, and a tug must not pull it off."),
@@ -139,10 +154,12 @@ PARTS = {
                   "(z ~44) and its upper side wall over the hip servo (z ~72.5); widths: the "
                   "audit line",
                   "5 walls / 40%",
-                  "D047: C-fork rides the yaw horn (below) and idler (above). 4x M3 x 6 from below "
-                  "the hub into the horn (A-09). As drawn it cannot go onto the servo: the horn's "
-                  "centre head and the idler catch the C's lips (B80). Clear all three supports "
-                  "before the hip servo goes in."),
+                  "D047: C-fork on the yaw horn (below) and idler (above). D063: the horn face "
+                  "bears on the flat hub top (B81); the fork slides on from the servo's front "
+                  "between its two side cheeks, the horn's centre head and the idler running out "
+                  "to the C's mouth in channels (B80). Hold it seated, 4x M3 x 6 from below the "
+                  "hub into the horn (A-09). Clear all three supports before the hip servo goes "
+                  "in."),
     "femur_link": ("PETG (CF-PLA later)", "plate A outer face DOWN",
                    "none: recesses up, bridge walls vertical", "6 walls / 40%",
                    "D047: plate A + bridge walls. 2x M3 x 8 clamps per coupler (A-10); "
@@ -174,8 +191,10 @@ PARTS = {
     "busboard_bracket": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
                          "The star board: print once the electronics exist (WIRING_HARNESS.md)."),
     "avionics_tray": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                      "A bench carrier for the electronics once its Pi standoffs are 58 x 49 "
-                      "(B89). As drawn, tray + rails fit nowhere between the legs (B51)."),
+                      "A bench carrier for the electronics: Pi 5 standoffs on 58 x 49, 11 tall "
+                      "(B89; M2.5 x 6 or x 8), the IMU on four imu_grommets on its own pattern "
+                      "(B90; M2.5 x 10 + nut). As drawn, tray + rails fit nowhere between the "
+                      "legs (B51)."),
     "tray_rail": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
                   "The avionics tray's rails. Waits for B51: as drawn, tray + rails fit nowhere "
                   "between the legs. Do not print it for the robot yet."),
@@ -206,12 +225,15 @@ PARTS = {
     # deferred: the carapace
     "shell_sector": ("PLA or PETG", "as exported", "YES on the outside overhangs; the cavity's "
                      "45° terraces need nothing", "3 walls / 12% gyroid, 0.25 mm, brim",
-                     "Five of them + shell_cap. The latch cartridges wait for B87: until then the "
-                     "sectors sit on the seam tongues and the foot magnets; do not carry the robot "
-                     "by the shell."),
+                     "Five of them + shell_cap. Each foot takes one latch cartridge (B87, glued "
+                     "into its pad from the foot side), locked from under the deck with a flat "
+                     "screwdriver. Prove the latch on frame_coupon first; until then do not carry "
+                     "the robot by the shell. The station-162 latch sits over the battery bay's "
+                     "footprint: the bay must leave that column open (B84)."),
     "shell_cap": ("PLA or PETG", "as exported", "none", "3 walls / 12% gyroid, 0.25 mm, brim",
-                  "The carapace's hatch cap. The hatch magnets have no seat yet (B88): leave them "
-                  "out; the cap sits on its seat by gravity."),
+                  "The carapace's hatch cap: five 6 x 3 magnet pockets in its plug at r 42.5, "
+                  "each over the seat magnet in one sector's boss (B88; B-19, poles per "
+                  "INTERFACES I3)."),
     # the hand (a later tool, B25)
     "hand_hub": ("PLA first / PETG final", "top face DOWN (boss up, collar ring on the bed)",
                  "YES (tree/organic) under the collar windows + servo-pocket ceiling",
@@ -241,17 +263,19 @@ BATCHES = [
          extra=[("latch_housing", 1), ("latch_rotor", 1), ("thumb_knob_m3", 2),
                 ("dovetail_male_coupon", 1), ("dovetail_shoe", 1), ("shell_sector_demo", 1),
                 ("frame_coupon", 1), ("tool_hook", 1), ("tool_scoop", 1)],
-         intro="The standards the body, panels and tools attach by (D020, INTERFACES.md). None "
-               "changed at D047: a set printed earlier still counts."),
+         intro="The standards the body, panels and tools attach by (D020, INTERFACES.md). D063 "
+               "redrew all but the tools (latch cartridge, frame_coupon and demo B87, knob B82, "
+               "I6 male and shoe B83): print those from the current tree. An earlier "
+               "tool_hook / tool_scoop still counts."),
     dict(key="Batch 2 one leg", title="Batch 2: one leg, after batch 1 passes",
          intro="PETG for the structure, PLA for the three blanks. Assemble in the order below; "
-               "check_assembly.py asserts the final fits, not step 1's path, which is blocked as "
-               "drawn (B80)."),
+               "check_assembly.py asserts the final fits and the paths of steps 1, 2 and 7 "
+               "(step 1's slide-on since D063, B80)."),
     dict(key="Batch 3 body", title="Batch 3: the body",
          extra=[("port_coupon_deck", 1), ("port_coupon_plate", 1), ("thumb_knob_m3", 8)],
          intro="The deck after B27, B28, B51 and the bay (B84), and after the port coupons dock "
                "cleanly; the star board once the electronics exist; the avionics tray only as a "
-               "bench carrier (B89). tray_rail waits for B51, battery_sled and sled_rail for the "
+               "bench carrier (B51). tray_rail waits for B51, battery_sled and sled_rail for the "
                "bay (B84), though the estimate still prices them. 8 more thumb_knob_m3, 2 per "
                "coxa_yaw_base. The port coupons and the 8 knobs are not in the estimate."),
     dict(key="Deferred: four more legs", title="Deferred: four more legs (servos in hand)",
@@ -503,8 +527,9 @@ def print_order(fem):
           Paragraph("Batch 1 fit criteria (write the verdicts in NOTES_INBOX.md)", H3),
           table([["[ ]", "<b>cup</b>: the blank slides in with finger pressure and doesn't rock; "
                   "the rim holes line up with a Ø2 pin pushed through."],
-                 ["[ ]", "<b>yaw hub</b>: seats on the blank's horn with less than 0.3 mm wobble; "
-                  "screws pass at both ends of the slots."],
+                 ["[ ]", "<b>yaw hub</b>: slides onto the blank's horn from the front; the horn "
+                  "face sits flat on the hub top without rocking; screws pass at both ends of "
+                  "the slots."],
                  ["[ ]", "<b>hip hub</b>: the coupler drops into the recess and the clamps draw it "
                   "flat; a 1 mm sideways push meets the lobes."],
                  ["[ ]", "<b>idler</b>: the tower drops over the glued idler without rocking; the "
@@ -514,9 +539,10 @@ def print_order(fem):
 
 
 LEG_ASSEMBLY = [
-    "Fork onto the yaw blank's horn, off the base: 4x M3 x 6 from below the hub (M2 x 6 + "
-    "washer if the horn is M2). <b>Blocked as drawn (B80)</b>: the horn's centre head and the "
-    "idler catch the C's lips by 1.0 + 1.5 mm, so do not force the fork on until B80 lands.",
+    "Fork onto the yaw blank's horn, off the base: slide it on from the servo's front, the "
+    "servo between its side cheeks, the horn's centre head and the idler running in their "
+    "channels (B80). It stays free toward the mouth until screwed: hold it seated and drive 4x "
+    "M3 x 6 from below the hub (M2 x 6 + washer if the horn is M2).",
     "Yaw blank + fork into the base cup from the front: 2 self-tappers from above into the "
     "idler-face rim holes, 2 from under the plate.",
     "Hip blank into the fork's cup from the front; 4 self-tappers.",
@@ -637,8 +663,8 @@ def batch_section(b, est, audit, fem_by_part, drawings, seen, pages, known):
                      "" if mins is None else mins, where])
     s.append(table(rows, [w * inch for w in (0.3, 1.2, 0.35, 0.75, 1.45, 1.8, 0.45, 0.4, 0.6)]))
     if b["key"] == LEG_BATCH:
-        s += [Paragraph("Assembly order (check_assembly.py asserts the final fits, not step 1's "
-                        "path: B80)", H3),
+        s += [Paragraph("Assembly order (check_assembly.py asserts the final fits and the paths of "
+                        "steps 1, 2 and 7)", H3),
               Paragraph("The full procedure, with pictures, is docs/ASSEMBLY_GUIDE.md.", SMALL),
               table([["[ ]", f"{i}. {t}"] for i, t in enumerate(LEG_ASSEMBLY, 1)],
                     [0.35 * inch, 6.95 * inch], header=False),

@@ -87,6 +87,34 @@ def leg_to_body(i, p_leg):
     st = np.array([R_BODY*c, R_BODY*s, 0.0])
     return st + np.array([c*p_leg[0] - s*p_leg[1], s*p_leg[0] + c*p_leg[1], p_leg[2]])
 
+# ---------------------------------------------------------------- swing (B76)
+def swing_profile(s, duty):
+    """The soft-landing swing (D063, B76 fix 2) at swing progress s in [0, 1]
+    (float or array): (xy, z) as fractions of the stride (lift-off 0 ->
+    touchdown 1) and of the step height.
+
+    xy: a cubic Hermite whose slope at BOTH ends is -k, k = (1-duty)/duty —
+        the stance foot's own velocity in swing time — so the foot neither
+        brakes at lift-off nor lands moving. Peak slope 1.5 + 0.5 k times the
+        mean (1.625 at duty 0.8; the old smoothstep's was 1.5, but it started
+        and ended at rest while stance moves at -v_f).
+    z:  a smoothstep up to the apex at s = 0.5 and a mirrored one down: zero
+        vertical velocity at lift-off, apex and touchdown. Peak 3 h / T_sw.
+    The old h sin(pi s) left and landed at pi h / T_sw (188 mm/s): joint
+    targets stepped 2.7-3.1 rad/s at every lift-off and touchdown. Measured
+    against the D052 budget (h 24 / T 2.0): this pair keeps a 34.2 mm/s
+    envelope; h sin^2(pi s) 29.8; the C2 h 64 s^3 (1-s)^3 only 18.7 — its
+    vertical peak (3.44 h / T_sw) lands inside the 15 mm band where a joint
+    is held to the LOADED 3.0 rad/s."""
+    k = (1.0 - duty) / duty
+    xy = (1.0 + k) * s * s * (3.0 - 2.0 * s) - k * s
+    x = 1.0 - np.abs(2.0 * s - 1.0)
+    return xy, x * x * (3.0 - 2.0 * x)
+
+def swing_xy_peak(duty):
+    """max d(xy)/ds of swing_profile (at s = 0.5): 1.5 (1 + k) - k."""
+    return 1.5 + 0.5 * (1.0 - duty) / duty
+
 # ---------------------------------------------------------------- wave gait
 class WaveGait:
     """Omnidirectional 5-phase wave gait (duty 0.8: always 4 feet down).
@@ -98,15 +126,29 @@ class WaveGait:
     kwarg overrides. D052 retune (checked by pebble_feasibility.check_gait,
     free leg 4.0 / loaded 3.0 rad/s): T 1.6 -> 2.0 s and step 32 -> 24 mm,
     duty stays 0.8. At (45, 0, 0) the old gait asked the knee for 4.62 rad/s
-    (the 32 mm lift in a 0.32 s swing); now 2.95, peak joint 3.60 (yaw).
+    (the 32 mm lift in a 0.32 s swing); then 2.95, peak joint 3.60 (yaw).
     Stride 57.6 -> 72 mm (coxa +/-20.7 -> +/-25.6 deg). Duty 0.75 was
     rejected: two adjacent legs swing together and the CoM leaves the stance
     triangle by up to 59 mm for a quarter of every cycle. Swing speed is
     stride / T_swing = v * duty / (1 - duty): T does not change it at all,
     so the speed envelope is budget()'s job, not the cycle time's.
+
+    D063 (B76): the swing is swing_profile() — velocity-matched at lift-off
+    and touchdown — and the lift fades in with the command (lift_scale), so
+    the gait is continuous in the command down to zero: foot_targets at a
+    zero command IS the planted stance (it used to march in place). The
+    envelope this costs: 45.5 -> 34.2 mm/s, 0.246 -> 0.185 rad/s (the soft
+    lift spends longer inside the 15 mm loaded band). Command changes go
+    through CommandSlew.
     """
     COXA_SWEEP_DEG = 33.0     # budget: half-stride <= (R0 - R_BODY) tan(33) (limit 40 - guard - lean room)
     SPEED_SAFETY = 0.97       # budget: predicted swing peak <= 0.97 x the free-leg limit
+    LIFT_FULL_MM_S = 15.0     # D063: the lift fades in (smoothstep) up to this fastest-foot ground
+    #                           speed: one cockpit tap (15 mm/s) already walks with the full lift,
+    #                           and a slewed start/stop is continuous (no swing foot pops up / slams)
+    CMD_ACCEL_MM_S2 = 25.0    # D063 CommandSlew: fastest-foot ground-speed change, mm/s per s (see there)
+    CMD_LAG_S = 0.2           # D063 CommandSlew: the lag after the rate limit. Without it a ramp ending
+    #                           at the envelope peaked at 3.03 rad/s (loaded 3.0); 0.2 s: 2.992 worst
 
     def __init__(self, body_height=None, stance_radius=None,
                  cycle_time=None, duty=None, step_height=None):
@@ -139,38 +181,48 @@ class WaveGait:
         max_i |v_f,i| (the ground speed under the fastest foot). budget() uses the min.
         coxa:        half-stride |v_f| duty T / 2 <= r_leg tan(33 deg) (~49 mm),
                      r_leg = R0 - R_BODY.
-        tangential:  the swing foot covers the stride in (1-duty) T with a
-                     smoothstep (peak 1.5x the mean), tangential to the coxa at
-                     r_leg, so yaw peaks at 1.5 |v_f| duty / ((1-duty) r_leg) —
-                     matches check_gait to 0.01 rad/s (3.60 at 45 mm/s).
+        tangential:  the swing foot covers the stride in (1-duty) T along
+                     swing_profile (peak swing_xy_peak = 1.625x the mean),
+                     tangential to the coxa at r_leg, so yaw peaks at
+                     1.625 |v_f| duty / ((1-duty) r_leg): 44.8 mm/s.
         lift:        every joint while the foot is within SUPPORT_TOL_MM of the
                      ground (the loaded class, 3.0 rad/s) or airborne (free,
                      4.0): one leg's swing simulated and bisected over 13
-                     stride directions (_lift_limit, cached). It binds at
-                     h 24 / T 2.0: a leg lifting with a RADIAL stride hit
-                     3.02 rad/s on the knee at 48.5 mm/s, where the tangential
-                     formula still allowed 48.5. The lift is nonlinear in
-                     |v_f| (diagonal strides jump past 45 mm/s), hence no fit."""
+                     stride directions (_lift_limit, cached). It binds: D052's
+                     sine swing hit 3.02 rad/s on the knee at 48.5 mm/s (radial
+                     stride); D063's soft swing peaks its vertical speed at
+                     z = h/2 = 12 mm, inside the loaded band, and a radial
+                     stride reaches the knee's 2.985 at 34.2 mm/s. The lift is
+                     nonlinear in |v_f| (diagonal strides jump), hence no fit."""
         r_leg = self.R0 - R_BODY
         coxa = 2.0 * r_leg * np.tan(np.deg2rad(self.COXA_SWEEP_DEG)) / (self.duty * self.T)
         tang = (self.SPEED_SAFETY * _rm.servo_speed("free") * (1.0 - self.duty) * r_leg
-                / (1.5 * self.duty))
+                / (swing_xy_peak(self.duty) * self.duty))
         return float(coxa), float(tang), self._lift_limit()
 
     _LIFT_CACHE = {}
     LIFT_SAFETY = 0.995       # the swing sim IS the checker's computation, sampled 6x finer
 
-    def _swing_speeds(self, u, speed, n=160):
+    def lift_scale(self, vf_max):
+        """Fraction of hstep a swing lifts at this fastest-foot ground speed
+        (mm/s): a smoothstep from 0 at standing to 1 at LIFT_FULL_MM_S (D063).
+        At a zero command the swing foot stays down, so standing, starting and
+        stopping are continuous in the command."""
+        x = min(1.0, max(0.0, float(vf_max) / self.LIFT_FULL_MM_S))
+        return x * x * (3.0 - 2.0 * x)
+
+    def _swing_speeds(self, u, speed, n=160, lift=None):
         """(max joint speed while the foot is near the ground, max while airborne),
-        rad/s, for ONE leg's swing with ground velocity speed*u (LEG frame)."""
+        rad/s, for ONE leg's swing with ground velocity speed*u (LEG frame).
+        lift: mm, default the gait's own at this speed (hstep x lift_scale)."""
         pn = np.array([self.R0 - R_BODY, 0.0, -self.h])
         vf = speed * np.array([u[0], u[1], 0.0])
         T_st, T_sw = self.duty * self.T, (1.0 - self.duty) * self.T
         s = np.linspace(0.0, 1.0, n)
-        sm = s * s * (3 - 2 * s)
+        xy, z = swing_profile(s, self.duty)
         p_lift, p_land = pn - vf * (0.5 * T_st), pn + vf * (0.5 * T_st)
-        P = p_lift + (p_land - p_lift) * sm[:, None]
-        P[:, 2] += self.hstep * np.sin(np.pi * s)
+        P = p_lift + (p_land - p_lift) * xy[:, None]
+        P[:, 2] += (self.hstep * self.lift_scale(speed) if lift is None else lift) * z
         Q = np.array([leg_ik(p) for p in P])
         if not np.isfinite(Q).all():
             return np.inf, np.inf
@@ -185,19 +237,21 @@ class WaveGait:
         """Largest |v_f| (mm/s) whose swing keeps near-ground joints under the
         loaded limit and airborne ones under the free limit, worst of 13 stride
         directions (0..180 deg; the leg is mirror-symmetric). Bisection, cached
-        per gait parameter set (~0.1 s the first time)."""
-        key = (self.h, self.R0, self.T, self.duty, self.hstep)
+        per gait parameter set (~0.1 s the first time). The full lift is
+        tested alone first: lift_scale fades it out near standing, which must
+        not hide a step height the servo cannot lift at any speed."""
+        key = (self.h, self.R0, self.T, self.duty, self.hstep, self.LIFT_FULL_MM_S)
         if key not in self._LIFT_CACHE:
             lo_l = self.LIFT_SAFETY * _rm.servo_speed("loaded")
             lo_f = self.LIFT_SAFETY * _rm.servo_speed("free")
 
-            def ok(u, v):
-                vl, vf = self._swing_speeds(u, v)
+            def ok(u, v, lift=None):
+                vl, vf = self._swing_speeds(u, v, lift=lift)
                 return vl <= lo_l and vf <= lo_f
             best = np.inf
             for ang in np.deg2rad(np.arange(0, 181, 15)):
                 u = (np.cos(ang), np.sin(ang))
-                if not ok(u, 0.0):
+                if not ok(u, 0.0, lift=self.hstep):
                     best = 0.0                   # the lift alone breaks the budget: fix h / T
                     break
                 a, b = 0.0, 150.0
@@ -214,8 +268,8 @@ class WaveGait:
         """(vx, vy, wz) scaled UNIFORMLY (heading and curvature kept) so the
         command fits the coxa sweep and the free-leg speed limit. Commands
         inside the envelope come back unchanged. The step-lift speed does not
-        depend on the command (pi h / ((1-duty) T)): it is the gait
-        parameters' job — check_gait flags it."""
+        depend on the command once the lift is full (3 h / ((1-duty) T)): it
+        is the gait parameters' job — check_gait flags it."""
         m = self._vf_max(vx, vy, wz)
         if m < 1e-9:
             return float(vx), float(vy), float(wz)
@@ -229,33 +283,35 @@ class WaveGait:
         vf = min(self.vf_limit())
         return dict(v=vf, wz=vf / self.R0, vf=vf, vx=vf, vy=vf)
 
+    def _leg_target(self, ph, pn, vf, lift):
+        """(BODY-frame target, in stance) for one leg at gait phase ph (0..1),
+        nominal foothold pn, ground velocity vf (body frame) and lift (mm)."""
+        T_st = self.duty * self.T
+        if ph < self.duty:                                 # STANCE: sweep with the ground
+            return pn - vf * ((ph / self.duty - 0.5) * T_st), True   # s = -0.5 .. +0.5
+        s = (ph - self.duty) / (1 - self.duty)             # SWING: fly to next touchdown, 0..1
+        xy, z = swing_profile(s, self.duty)
+        # continuity: stance ENDS at pn - vf*Tst/2 (behind), so swing
+        # lifts there and flies FORWARD to pn + vf*Tst/2 where the next
+        # stance begins. (Reversed signs here = the walking-in-place bug
+        # that only physics simulation caught, 2026-07-28.)
+        p_lift = pn - vf * (0.5 * T_st)
+        p_land = pn + vf * (0.5 * T_st)
+        p = p_lift + (p_land - p_lift) * xy
+        p[2] += lift * z
+        return p, False
+
     def foot_targets(self, t, vx, vy, wz):
         """BODY-frame foot targets for all legs at time t."""
         v = np.array([vx, vy, 0.0])
-        T_st = self.duty * self.T
+        lift = self.hstep * self.lift_scale(self._vf_max(vx, vy, wz))
         out = np.zeros((N_LEGS, 3))
         stance = np.zeros(N_LEGS, dtype=bool)
         for i in range(N_LEGS):
             ph = (t / self.T + self.phase_off[i]) % 1.0
             pn = self.p_nom[i]
-            wxr = np.cross(np.array([0, 0, wz]), pn)      # rotation-induced velocity
-            vf = v + wxr                                   # body-frame velocity of ground
-            if ph < self.duty:                             # STANCE: sweep with the ground
-                s = ph / self.duty - 0.5                   # -0.5 .. +0.5
-                out[i] = pn - vf * (s * T_st)
-                stance[i] = True
-            else:                                          # SWING: fly to next touchdown
-                s = (ph - self.duty) / (1 - self.duty)     # 0..1
-                s_smooth = s*s*(3 - 2*s)                   # smoothstep for xy
-                # continuity: stance ENDS at pn - vf*Tst/2 (behind), so swing
-                # lifts there and flies FORWARD to pn + vf*Tst/2 where the next
-                # stance begins. (Reversed signs here = the walking-in-place bug
-                # that only physics simulation caught, 2026-07-28.)
-                p_lift = pn - vf * (0.5 * T_st)
-                p_land = pn + vf * (0.5 * T_st)
-                out[i] = p_lift + (p_land - p_lift) * s_smooth
-                out[i, 2] += self.hstep * np.sin(np.pi * s)
-                stance[i] = False
+            vf = v + np.cross(np.array([0, 0, wz]), pn)    # body-frame velocity of ground
+            out[i], stance[i] = self._leg_target(ph, pn, vf, lift)
         return out, stance
 
     def joint_targets(self, t, vx, vy, wz):
@@ -265,6 +321,120 @@ class WaveGait:
         for i in range(N_LEGS):
             q[i] = leg_ik(body_to_leg(i, feet[i]))
         return q, stance, feet
+
+# ---------------------------------------------------------------- command slew (B76)
+class CommandSlew:
+    """The walking command, acceleration-limited (D063, B76 fix 1).
+
+    foot_targets() reads the command at every tick, so a change used to land
+    in one tick: standing -> 45 mm/s moved a joint target up to 28 deg in
+    20 ms (each stance foot sits v_f T_st (ph/duty - 1/2) from its foothold,
+    36 mm at the end of stance). Here a change moves the fastest foot's
+    ground speed (WaveGait._vf_max of the difference: walk and turn judged
+    alike) by at most `accel` mm/s^2, along a straight line in (vx, vy, wz)
+    so the change keeps its heading and curvature. That ramp (u) then runs
+    through a first-order lag of `lag` s (v, what the gait gets), so the
+    command's acceleration eases in and out instead of switching on and off.
+    v is a running average of u, so it stays inside the envelope when the
+    target is (the envelope is convex), and its acceleration never exceeds
+    `accel`. With the lift fading in (WaveGait.lift_scale) a start from
+    standing is continuous too.
+
+    Why the lag: a ramp adds foot motion, up to accel x T_st/2 (20 mm/s at
+    25 mm/s^2), and the envelope keeps no headroom for it at full speed
+    (steady peak 2.982 rad/s against the loaded 3.0). With the bare rate
+    limit, a ramp that ends at the envelope as a leg lifts off peaked at
+    3.03 rad/s (standing -> 34.2 mm/s at 18 deg, t0 0.54 s: SPEED_LOADED),
+    and 5 of 1440 grid ramps failed at 25 (start, reversal, turn -> walk).
+    Lowering accel does not fix that: over 200 start phases at that heading
+    the worst still peaked at 3.012 at 15 and 3.0003 at 10. With the lag,
+    whenever v accelerates at a it is still a x lag short of where u holds,
+    so the foot motion a ramp adds is paid for by speed not yet reached,
+    and the command eases out of a steady speed instead of leaving it at
+    full rate (the onset is what a slowdown or a reversal from full speed
+    runs into). At the defaults (accel 25, lag 0.2 s)
+    none of 1440 grid ramps, 2400 finely phased ramps or 280 mid-ramp
+    retargets fails. The worst is 2.992, at the start of a slowdown or a
+    reversal from full speed; a start never tops the steady gait (2.982).
+    A lag of 0.1 s reached 2.999. Standing -> the 34.2 mm/s envelope takes
+    1.37 s on u and 2.36 s on v (the lag's tail ends, ~4.9 lags after u
+    does: a zero target reads exactly zero). The worst joint step per 20 ms
+    tick is the gait's own 3.4 deg (28.4 deg unslewed at HEAD).
+
+    step() integrates this exactly for a target held over dt, so one step
+    of t is the same as many smaller steps (pebble_feasibility.ramp_fn uses
+    that).
+
+    A STOP is never slewed: stop() — or step(..., direct=True) — sets the
+    command at once. Use it for the safe-stop, the void guard (retreat and
+    hold), a reflex brace, a latch, FALLEN. A zero TARGET is not a stop: it
+    slows down smoothly, which removes the stop snap B76 names. A non-finite
+    target is a stop.
+
+        slew = CommandSlew(g)
+        vx, vy, wz = slew.step(g.budget(*ask), dt)     # every tick
+        vx, vy, wz = slew.stop()                        # a stop: zero now
+    """
+    FINISH_MM_S = 0.1         # the lag's tail closes the last 0.1 mm/s (fastest foot) at a constant
+    #                           0.5 mm/s^2 (FINISH / lag), so it ENDS (an exponential never does) and
+    #                           never steps: a 0.1 mm/s snap instead put a 100 Hz sample 8 mm/s off
+    #                           (0.08 mm in 10 ms) and a ramp at 3.005 rad/s
+
+    def __init__(self, gait, accel=None, lag=None):
+        self.g = gait
+        self.accel = float(gait.CMD_ACCEL_MM_S2 if accel is None else accel)
+        self.lag = float(gait.CMD_LAG_S if lag is None else lag)
+        self.u = np.zeros(3)                     # the rate-limited command
+        self.v = np.zeros(3)                     # what runs: u through the lag
+
+    def hold(self, v):
+        """Set the command to v at once, with nothing still ramping (a stop, a
+        replay, a steady starting point)."""
+        self.u = np.asarray(v, float).reshape(3).copy()
+        self.v = self.u.copy()
+        return tuple(float(x) for x in self.v)
+
+    def stop(self):
+        """Zero the command NOW (never slewed)."""
+        return self.hold(np.zeros(3))
+
+    def step(self, target, dt, direct=False):
+        """Advance dt (s) toward target (vx, vy, wz); returns the command to run.
+        direct=True sets it at once (a stop, the void retreat's replay)."""
+        tgt = np.asarray(target, float).reshape(3)
+        if not np.isfinite(tgt).all():
+            return self.stop()
+        if direct:
+            return self.hold(tgt)
+        dt = max(0.0, float(dt)) if np.isfinite(dt) else 0.0
+        d = tgt - self.u
+        m = self.g._vf_max(*d)
+        arrives = m <= self.accel * dt
+        t_r = (m / self.accel if m > 0.0 else 0.0) if arrives else dt   # u ramps for t_r, then holds
+        w = d * (self.accel / m) if m > 0.0 else np.zeros(3)             # u's rate on the ramp
+        u0, v0 = self.u, self.v
+        self.u = tgt.copy() if arrives else u0 + w * dt
+        if self.lag <= 0.0:
+            self.v = self.u.copy()
+        else:                                    # the lag, solved exactly over the ramp ...
+            v1 = u0 + w * (t_r - self.lag) + (v0 - u0 + w * self.lag) * np.exp(-t_r / self.lag)
+            self.v = self._settle(v1, self.u, dt - t_r) if arrives else v1
+        return tuple(float(x) for x in self.v)
+
+    def _settle(self, v, u, t):
+        """... and over t of holding u: the gap decays by the lag down to
+        FINISH_MM_S, then closes at FINISH_MM_S / lag (same direction, no step)."""
+        g = v - u
+        n = self.g._vf_max(*g)
+        if n <= 0.0:
+            return u.copy()
+        f = self.FINISH_MM_S
+        t_exp = self.lag * np.log(n / f) if n > f else 0.0
+        if t <= t_exp:
+            return u + g * np.exp(-t / self.lag)
+        n1 = min(n, f)                           # the gap when the linear finish starts
+        left = n1 - (f / self.lag) * (t - t_exp)
+        return u + g * (max(0.0, left) / n)
 
 # ---------------------------------------------------------------- arm modes
 def arm_pose(t, phase=0.0):
@@ -301,24 +471,14 @@ class ArmedGait(WaveGait):
 
     def foot_targets(self, t, vx, vy, wz):
         v = np.array([vx, vy, 0.0])
-        T_st = self.duty * self.T
+        lift = self.hstep * self.lift_scale(self._vf_max(vx, vy, wz))
         out = np.zeros((N_LEGS, 3))
         stance = np.zeros(N_LEGS, dtype=bool)
         for i in self.active:
             ph = (t / self.T + self._phase[i]) % 1.0
             pn = self.p_nom[i]
             vf = v + np.cross(np.array([0, 0, wz]), pn)
-            if ph < self.duty:
-                s = ph / self.duty - 0.5
-                out[i] = pn - vf * (s * T_st)
-                stance[i] = True
-            else:
-                s = (ph - self.duty) / (1 - self.duty)
-                sm = s*s*(3 - 2*s)
-                p_lift = pn - vf * (0.5 * T_st)
-                p_land = pn + vf * (0.5 * T_st)
-                out[i] = p_lift + (p_land - p_lift) * sm
-                out[i, 2] += self.hstep * np.sin(np.pi * s)
+            out[i], stance[i] = self._leg_target(ph, pn, vf, lift)   # the same soft swing (D063)
             out[i] = out[i] - self.body_shift        # body leans toward stance side
         return out, stance
 
@@ -400,5 +560,20 @@ if __name__ == "__main__":
         r = pf.check_gait(g, b)
         v, i, jn, _t = r.peak()
         print(f"{name:14s} asked {cmd} -> {tuple(round(x, 3) for x in b)}: peak {v:.2f} rad/s "
-              f"(L{i} {jn}) {'PASS' if r.ok else 'FAIL ' + ','.join(r.fails)}")
+              f"(L{i} {jn}), lift-off/touchdown step {r.kink_max:.3f} rad/s "
+              f"{'PASS' if r.ok else 'FAIL ' + ','.join(r.fails)}")
         assert r.ok
+    # D063: standing -> the envelope through CommandSlew, the worst start phase, 50 Hz ticks
+    q0, dt, worst, t_at = pf.planted_q(g), 0.02, 0.0, None
+    target = g.budget(45.0, 0.0, 0.0)
+    for t0 in np.linspace(0.0, g.T, 10, endpoint=False):
+        slew, q_prev = CommandSlew(g), q0
+        for k in range(1, int(3.0 / dt)):
+            v = slew.step(target, dt)
+            t_at = k * dt if (t_at is None and v == target) else t_at
+            q = g.joint_targets(t0 + k * dt, *v)[0]
+            worst, q_prev = max(worst, float(np.abs(q - q_prev).max())), q
+    assert np.allclose(g.joint_targets(0.7, *slew.stop())[0], q0)      # a stop: planted at once
+    print(f"slewed start ({g.CMD_ACCEL_MM_S2:g} mm/s^2, lag {g.CMD_LAG_S:g} s): at {target[0]:.1f} mm/s "
+          f"after {t_at:.2f} s; worst joint step {np.rad2deg(worst):.2f} deg per 20 ms tick "
+          f"(unslewed at HEAD: 28.4)")

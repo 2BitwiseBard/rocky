@@ -36,7 +36,7 @@ SEGS = []
 for cmd, name in ASK:
     fit = g.budget(*cmd)
     if name.startswith("turn"):
-        name = f"{name} ({fit[2]:.2f} rad/s envelope)"
+        name = f"{name} ({fit[2]:.3f} rad/s envelope)"
     SEGS.append((fit, SEG_S, name))
 DT = 1.0 / FPS
 

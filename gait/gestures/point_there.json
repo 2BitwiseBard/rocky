@@ -78,13 +78,13 @@
    ]
   },
   {
-   "t": 4.5,
+   "t": 4.7,
    "ease": "smooth"
   }
  ],
  "checked": {
   "ok": true,
-  "params": "0.1/D052",
+  "params": "0.1/D063",
   "fails": [],
   "peak_rad_s": 3.58
  }

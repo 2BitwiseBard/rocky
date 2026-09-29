@@ -51,7 +51,8 @@ def run_scene(name, amp_mm, T_total, cmd_fn):
     v_prev = np.zeros(3)
     for k in range(int(T_total / DT)):
         t = k * DT
-        vx, vy, wz = (0.0, 0.0, 0.0) if t < t_settle else cmd_fn(t - t_settle)
+        vx, vy, wz = (0.0, 0.0, 0.0) if t < t_settle else gait.budget(*cmd_fn(t - t_settle))
+        #            D063: every scene's ask fitted into the envelope (45 asks 34.2, scenes.walk_ask)
         ramp = min((t - t_settle) / 0.6, 1.0) if t >= t_settle else 0.0
         q, _, _ = gait.joint_targets(max(t - t_settle, 0), vx * ramp, vy * ramp,
                                      wz * ramp)

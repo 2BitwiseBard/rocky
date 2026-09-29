@@ -30,6 +30,11 @@ What a Report judges (every threshold comes from gait/rocky_model.py):
                (from q_from, default the planted stance) or exit (to q_to),
                or an interior speed violation that is a true discontinuity
                (re-probed at 0.1 ms).
+  KINK         kind="gait" with a stance schedule (D063, B76): a joint
+               VELOCITY step > 0.5 rad/s across one of the gait's own
+               lift-offs or touchdowns (each flip bisected, one-sided
+               differences over 0.1 ms). A position servo takes it as a jolt;
+               the pre-D063 sine swing stepped 2.7-3.1 rad/s at every one.
   SUPPORT      kind="static": fewer than 3 feet on the ground at a sample.
   MARGIN       kind="static": the CoM (torso + every segment, masses from
                sim/mass_budget.json laid out exactly as sim/build_mjcf.py
@@ -64,7 +69,9 @@ the STANCE polygon (< 0 mm = FAIL, < 10 mm = warning). That rule is what
 rejected duty 0.75 for D052: in the 0,4,3,2,1 wave order two ADJACENT legs
 overlap in swing for 25 % of the cycle and the CoM sits up to 59 mm outside
 the remaining triangle — the 15 mm geometric rule alone would have counted
-the low swing feet as support and passed it.
+the low swing feet as support and passed it. The schedule also locates every
+lift-off and touchdown for KINK. check_ramp (D063) judges a command CHANGE
+the way pebble_gait.CommandSlew delivers it, entry step from standing included.
 
 Pure numpy + rocky_model; MuJoCo only if a model is passed.
 """
@@ -78,13 +85,17 @@ from itertools import combinations
 import numpy as np
 
 import rocky_model as rm
-from pebble_gait import (WaveGait, leg_ik, body_to_leg, leg_to_body, N_LEGS,
+from pebble_gait import (WaveGait, CommandSlew, leg_ik, body_to_leg, leg_to_body, N_LEGS,
                          STATION_DEG, L1, L2, L3, Z_HIP, R_BODY, SUPPORT_TOL_MM)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 GUARD_DEG = 2.0                 # margin inside the soft limits
 JUMP_DEG = 2.0                  # consecutive-sample step that counts as a jump
+KINK_RAD_S = 0.5                # D063: joint-velocity step at a lift-off / touchdown: 1/6 of the
+#                                 loaded 3.0 (0.6 deg of lag in one 20 ms bus tick); the old
+#                                 sine swing stepped 2.7-3.1, the soft swing 0.001
+KINK_DT = 1e-4                  # s: the one-sided differences either side of a stance flip
 CLAW_MAX_RAD_S = 8.0            # SCS0009 no-load ~9.5 rad/s (VERIFY) with margin
 THERMAL_FRAC = 0.6              # "hot" = above this fraction of the class limit ...
 THERMAL_WARN = 0.30             # ... for more than this fraction of the samples
@@ -95,7 +106,7 @@ MAX_VIOLATIONS = 60
 JOINTS = rm.LEG_JOINTS
 
 FAIL_CODES = ("NAN", "LIMIT_YAW", "LIMIT_HIP", "LIMIT_KNEE", "LIMIT_CLAW", "SPEED_LOADED",
-              "SPEED_FREE", "SPEED_HARD", "SPEED_CLAW", "JUMP", "SUPPORT", "MARGIN",
+              "SPEED_FREE", "SPEED_HARD", "SPEED_CLAW", "JUMP", "KINK", "SUPPORT", "MARGIN",
               "SELF_CONTACT", "REACH", "LOOP_WRAP", "SPEC", "SLIP", "THERMAL_LOAD")
 WARN_CODES = ("THERMAL", "MARGIN_WARN", "MARGIN_GAIT", "SLIP_WARN", "THERMAL_LOAD_WARN")
 LOAD_WARN = rm.continuous_frac()        # 0.65 x stall: the sustained (thermal) budget
@@ -412,6 +423,8 @@ class Report:
     codes: dict = field(default_factory=dict)            # code -> sample count (FAIL + WARN)
     nan_count: int = 0
     jumps: list = field(default_factory=list)
+    kink_max: float = float("nan")                       # rad/s, worst velocity step at a stance flip
+    kinks: list = field(default_factory=list)            # the flips above KINK_RAD_S
     margin_min: float = float("nan")                     # CoM margin, mm
     margin_t: float = float("nan")
     origin_margin_min: float = float("nan")              # the old body-origin proxy
@@ -445,7 +458,8 @@ class Report:
                     fails=self.fails, warnings=self.warnings, codes=dict(self.codes),
                     vmax=np.round(self.vmax, 3).tolist(), claw_vmax=f(self.claw_vmax),
                     hot_frac=np.round(self.hot_frac, 3).tolist(), nan_count=self.nan_count,
-                    jumps=self.jumps, margin_min=f(self.margin_min), margin_t=f(self.margin_t),
+                    jumps=self.jumps, kink_max=f(self.kink_max), kinks=self.kinks[:10],
+                    margin_min=f(self.margin_min), margin_t=f(self.margin_t),
                     origin_margin_min=f(self.origin_margin_min), support_min=self.support_min,
                     support_t=f(self.support_t), acc_max_g=f(self.acc_max_g),
                     self_contacts=self.self_contacts,
@@ -628,6 +642,10 @@ def check(fn, total, g=None, fs: float = 100.0, q_from=None, q_to=None, kind: st
                                       joint="claw", dq_deg=round(float(np.rad2deg(dc.max())), 2)))
                 _add(rep, "JUMP")
 
+    # --- velocity steps at the schedule's own lift-offs / touchdowns (D063)
+    if kind == "gait" and all(st is not None for st in S):
+        _kinks(rep, fn, g, ts, S)
+
     # --- support / margin
     if good.any():
         k = int(np.argmin(np.where(good, nsup, 99)))
@@ -711,6 +729,35 @@ def check(fn, total, g=None, fs: float = 100.0, q_from=None, q_to=None, kind: st
     return rep
 
 
+def _kinks(rep, fn, g, ts, S):
+    """KINK (D063): bisect every stance flip in the schedule to ~1e-12 s and
+    compare each of that leg's joint velocities just before and just after it.
+    Sets rep.kink_max (rad/s) and flags the flips above KINK_RAD_S."""
+    worst = 0.0
+    for k in range(len(ts) - 1):
+        for i in np.flatnonzero(S[k] != S[k + 1]):
+            a, b, was = float(ts[k]), float(ts[k + 1]), bool(S[k][i])
+            for _ in range(40):
+                m = 0.5 * (a + b)
+                st = _as_q(fn(g, m))[2]
+                if st is None:
+                    return
+                a, b = (m, b) if bool(st[i]) == was else (a, m)
+            q = [_as_q(fn(g, t))[0][i] for t in (a - KINK_DT, a, b, b + KINK_DT)]
+            if not np.isfinite(q).all():
+                continue
+            dv = np.abs((q[3] - q[2]) - (q[1] - q[0])) / KINK_DT
+            j = int(np.argmax(dv))
+            worst = max(worst, float(dv[j]))
+            if dv[j] > KINK_RAD_S:
+                rep.kinks.append(dict(t=round(b, 4), leg=int(i), joint=JOINTS[j],
+                                      where="lift-off" if was else "touchdown",
+                                      dv=round(float(dv[j]), 3)))
+    rep.kink_max = worst
+    if rep.kinks:
+        _add(rep, "KINK", len(rep.kinks), **max(rep.kinks, key=lambda x: x["dv"]))
+
+
 def _lines(rep, V) -> list:
     """The human verdict: one headline, then one line per failing / warning code."""
     out = []
@@ -719,7 +766,9 @@ def _lines(rep, V) -> list:
             f"peak {v:.2f} rad/s at leg {i} {jn} t={t:.2f}s (loaded {V['loaded']:.1f} / free "
             f"{V['free']:.1f} / hard {V['hard']:.1f}); claw {rep.claw_vmax:.1f} rad/s; support >= "
             f"{rep.support_min}; CoM margin {rep.margin_min:.0f} mm (origin {rep.origin_margin_min:.0f})"
-            + (f"; accel {rep.acc_max_g:.2f} g" if rep.kind == "static" else ""))
+            + (f"; accel {rep.acc_max_g:.2f} g" if rep.kind == "static" else "")
+            + (f"; lift-off/touchdown velocity step {rep.kink_max:.2f} rad/s"
+               if np.isfinite(rep.kink_max) else ""))
     if rep.self_contacts is not None:
         head += f"; self-contact samples {rep.self_contacts}"
     if rep.load_rms is not None:
@@ -762,6 +811,9 @@ def _lines(rep, V) -> list:
                        f"(> {vi['limit']:.2f}; foot mu {MU_SLIDE:g}) at t={vi['t']:.2f}s")
         elif c == "SPEED_CLAW":
             out.append(f"  {tag} SPEED_CLAW: {vi['value']:.1f} rad/s > {vi['limit']:.0f}")
+        elif c == "KINK":
+            out.append(f"  {tag} KINK: leg {vi['leg']} {vi['joint']} velocity steps {vi['dv']:.2f} rad/s at "
+                       f"{vi['where']} t={vi['t']:.2f}s (> {KINK_RAD_S:g}; {rep.codes['KINK']} flips)")
         elif c in ("THERMAL_LOAD", "THERMAL_LOAD_WARN"):
             out.append(f"  {tag} {c}:{where} RMS load {vi['value']:.2f} x stall over the motion "
                        f"(> {vi['limit']:.2f}: " + ("the servo's over-temp cut in ~3 min if sustained)"
@@ -812,10 +864,42 @@ def gait_fn(cmd):
 def check_gait(g=None, cmd=(45.0, 0.0, 0.0), cycles: float = 2.0, fs: float = 100.0,
                model=None) -> Report:
     """The wave gait at a steady command for `cycles` cycles (no entry/exit:
-    the gait is cyclic; the command ramp is the caller's)."""
+    the gait is cyclic; a command change is check_ramp's). Judges KINK at
+    every lift-off and touchdown too."""
     g = g or WaveGait()
     return check(gait_fn(cmd), cycles * g.T, g=g, fs=fs, q_from=False, q_to=False,
                  kind="gait", model=model)
+
+
+def ramp_fn(cmd, cmd_from=(0.0, 0.0, 0.0), t0: float = 0.0, accel=None, lag=None):
+    """fn(g, t) for check(): the gait while CommandSlew takes the command from
+    a steady cmd_from to cmd (a constant target, which step() integrates
+    exactly: one step of t IS the ramp), gait clock t0 + t. From a zero
+    command the clock's phase does not matter — the gait is the planted
+    stance there (D063)."""
+    def fn(g, t):
+        sl = CommandSlew(g, accel, lag)
+        sl.hold(cmd_from)
+        q, st, _f = g.joint_targets(t0 + t, *sl.step(cmd, t))
+        return q, np.zeros(N_LEGS), st
+    fn.__name__ = f"ramp({','.join(f'{x:g}' for x in cmd_from)} -> {','.join(f'{x:g}' for x in cmd)})"
+    return fn
+
+
+def check_ramp(g=None, cmd=(45.0, 0.0, 0.0), cmd_from=(0.0, 0.0, 0.0), t0: float = 0.0,
+               accel=None, lag=None, settle_cycles: float = 1.0, fs: float = 100.0) -> Report:
+    """A command change as CommandSlew delivers it (D063, B76 fix 1): the ramp,
+    its lag's tail (6 lags: it ends ~4.9 after the ramp) and settle_cycles at
+    the new command, kind="gait". From standing the entry step from the planted
+    stance is judged (JUMP); commands are taken as given — pass them through
+    g.budget() first, as every caller does."""
+    g = g or WaveGait()
+    sl = CommandSlew(g, accel, lag)
+    m = g._vf_max(*(np.asarray(cmd, float) - np.asarray(cmd_from, float)))
+    total = m / sl.accel + 6.0 * sl.lag + settle_cycles * g.T
+    standing = not np.any(np.asarray(cmd_from, float))
+    return check(ramp_fn(cmd, cmd_from, t0, sl.accel, sl.lag), total, g=g, fs=fs,
+                 q_from=None if standing else False, q_to=False, kind="gait")
 
 
 def check_spec(spec: dict, g=None, fs: float = 100.0, model=None) -> Report:
@@ -835,5 +919,7 @@ def check_spec(spec: dict, g=None, fs: float = 100.0, model=None) -> Report:
 
 if __name__ == "__main__":
     g = WaveGait()
-    for cmd in ((45, 0, 0), (0, 45, 0), (0, 0, 0.35), (45, 0, 0.35)):
+    # walk / strafe at the envelope (D063: 45 mm/s is outside it now, 34.2); the raw turns FAIL by design
+    for cmd in (g.budget(45, 0, 0), g.budget(0, 45, 0), (0, 0, 0.35), (45, 0, 0.35)):
         print("\n".join(check_gait(g, cmd).lines))
+    print("\n".join(check_ramp(g, g.budget(45, 0, 0)).lines))      # D063: standing -> the envelope, slewed

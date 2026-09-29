@@ -552,12 +552,15 @@ async def test_auto_backend_moves_one_robot():
 _REP_GESTURES = ["wave", "sit", "turn_in_place", "sidestep", "look_around", "bow", "shake", "point_there"]
 _REP_LEXICON = ["greeting", "yes", "no", "acknowledge", "found_it", "thinking", "error"]
 _BUILD_TOOLS_BEFORE = {
-    "local_brain.TOOLS": "7efe2065850cf00fe3cf5ae52b47f95cba80c79e36a89848be3aaee7a60629a1",
-    "cockpit_brains.TOOLS": "f932d346fe16bbc9274d9a1fd1501b0837c96aa797c1eed2972d44eb0660c4eb",
-    "rep look extra": "469a6144f7308046c82e4007d205fe0b7caa5d9b47d6656bb758c4e451833fd8",
-    "rep no-look extra": "0f6585445b0ec3f5df6c003c0b1a9074904f5550e477628d63c25c0c7e20734f",
-    "rep look": "b9dc26d6eb986597da7cd6087d34ab5dd44968222480d2ff23367fcbca9032c2",
-    "rep signed sidestep": "2e3bd9f251125fd2e01433ccb7470867564a4ccc1ea18129d64e762a560566ad",
+    # D063: goto's timeout clause (~0.034 m/s, 55 s cap) is in every list (were 7efe2065850c... /
+    # 0df60970f429... / bc5de4faced2... / 884b0cd12818... / b9dc26d6eb98... / 2e3bd9f25112...)
+    "local_brain.TOOLS": "ca30fea22e45767733d76a313c69bfd1eb0fcf721d3d20d32911e76d2dd88076",
+    # D063: and the compose_gesture example re-timed (were f932d346fe16... / 469a6144f730... / 0f6585445b0e...)
+    "cockpit_brains.TOOLS": "b3257e6558b22f329a7db204ab26f5ef5403e1120a2a6fc95a06c91b28e0967f",
+    "rep look extra": "fe8ec983be35c2e35c044ff80a5878b0a13a7247036c38a722aca6ea39ece2a4",
+    "rep no-look extra": "061c89608de418c0eb174fd2e408723c3714bc380b5b1f2eb169e7c0c39bf70f",
+    "rep look": "a0710c0a9b6dc384660b540a2a6b01beebfe786fc00b9ae963c283cce71acead",
+    "rep signed sidestep": "383d69fa6815914dc436cee0b6d7529c82c5e7635c68d3d41eb3ef311fb511cc",
 }
 # the snapshot file's key for each (harness/fixtures/d056/, vendored)
 _SNAPSHOT_KEYS = {
@@ -575,6 +578,28 @@ def _canon_sha(obj):
     import hashlib
     return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"),
                                      ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+# D063 changed two tool texts on purpose (compose_gesture's example, re-timed to 1 s per move, and
+# goto's timeout clause: the 34.2 mm/s envelope and the 55 s cap derived from it); the snapshot
+# files keep the D056 texts, _as_of_d063 puts today's in their place
+D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
+D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
+D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+
+
+def _as_of_d063(tools):
+    import harness.capabilities as C
+    out = json.loads(json.dumps(tools))
+    for t in out:
+        f = t["function"]
+        if f["name"] == "compose_gesture":
+            assert D056_COMPOSE_RULE in f["description"], "the snapshot's compose text is not D056's"
+            f["description"] = C.COMPOSE_DOC
+        if f["name"] == "goto":
+            assert D056_GOTO_TOO_FAR in f["description"], "the snapshot's goto text is not D056's"
+            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+    return out
 
 
 def _build_tools_variants():
@@ -607,9 +632,9 @@ def test_build_tools_equals_the_pre_registry_snapshot_byte_for_byte():
         before = json.load(f)
     got = _build_tools_variants()
     for k, key in _SNAPSHOT_KEYS.items():
-        assert json.dumps(got[k]) == json.dumps(before[key]), k        # key order too
+        assert json.dumps(got[k]) == json.dumps(_as_of_d063(before[key])), k   # key order too
     with open(os.path.join(_SNAP_DIR, "snapshot_openai_tools.json"), encoding="utf-8") as f:
-        assert json.dumps(got["rep look extra"]) == json.dumps(json.load(f)["tools"])
+        assert json.dumps(got["rep look extra"]) == json.dumps(_as_of_d063(json.load(f)["tools"]))
 
 
 def test_build_tools_keeps_its_signature_and_the_texts_stay_importable():

@@ -10,22 +10,24 @@ alignment across both mating parts, driver access against EVERYTHING present
 when the screw is driven, thread/nut path, capture (a 2 mm nudge must meet
 material — or be a declared bolted direction), and the cable plugs' keep-out.
 It found the D046 coxa assembly deadlock and the unlocated femur link
-(D046, docs/decisions.md); it must stay CLEAN from here on. Exit code =
-failures.
+(D046, docs/decisions.md); it missed the fork that could not go onto the yaw
+servo (B80: no check moved the fork against the servo) until D063 added J1's
+slide-on paths. It must stay CLEAN from here on. Exit code = failures.
 """
 import sys
 from build123d import *
 from common import params
-from servo_st3215 import horn_screw_angles, plug_envelope, spec
+from servo_st3215 import horn_screw_angles, plug_envelope, servo_body, spec, z_levels
 from servo_mount import cup_screw_columns
 from leg_frame import YAW_TF, HIP_TF, KNEE_TF, L1, KNEE_X, Z_HIP
-from part_coxa import HUB_Z0, CB_DEPTH, harness_path, harness_solid, HARNESS_W
+from part_coxa import (HUB_Z0, CB_DEPTH, harness_path, harness_solid, HARNESS_W,
+                       fork_slide_worst, horn_screw_shanks)
 from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
 from part_coupler import RECESS_CLAMP_ANGS, TAP_R_POS
 from part_femur import (LINK_TF, YA0, BOSS_X, BOSS_ZC, RAIL_Y0, YB1, BOSS_H)
 from leg_assembly import build_dryfit
 
-P = params(); S = spec(P); PR = P["print"]
+P = params(); S = spec(P); Z = z_levels(P); PR = P["print"]
 v = lambda x: 0.0 if x is None else x.volume
 fails = []
 
@@ -48,9 +50,32 @@ for ang in horn_screw_angles(P):
         col = Rot(0, 0, ang) * Pos(r, 0, HUB_Z0 + CB_DEPTH - 20) * Cylinder(2.2, 40)
         col = col & Pos(0, 0, HUB_Z0 + CB_DEPTH - 20) * Box(100, 100, 40)   # below the counterbore floor
         check(f"M3 driver column ({ang} deg, r {r:.1f}) from below vs fork", v(col & fork), lambda x: x < 1, "CLEAR", "BLOCKED")
-check("fork x yaw blank (horn + idler pockets)", v(fork & by), lambda x: x < 1, "OK", "CLASH")
-check("fork nudged +X x yaw blank (idler pocket locates)", v((Pos(2, 0, 0) * fork) & by), lambda x: x > 1, "LOCATED", "LOOSE")
-check("fork nudged -X x yaw blank", v((Pos(-2, 0, 0) * fork) & by), lambda x: x > 1, "LOCATED", "LOOSE")
+check("fork x yaw blank (horn face on the hub top, idler in its pocket)", v(fork & by),
+      lambda x: x < 1, "OK", "CLASH")
+# step 1, the fork's own path (B80): on from the servo's front, moving -X (the web closes +X)
+ys = YAW_TF * servo_body(P)
+check("fork slide-on path (-X) onto the yaw blank (+ glued idler), dx 0.5..30", fork_slide_worst(fork, by),
+      lambda x: x < 1, "OPEN", "BLOCKED")
+check("fork slide-on path (-X) onto the real yaw servo, dx 0.5..30", fork_slide_worst(fork, ys),
+      lambda x: x < 1, "OPEN", "BLOCKED")
+# the seat (B81): the screws pull the hub onto the horn. Pulled 0.2 (less than the centre
+# head's 0.3 relief gap) it must meet the horn FACE, and the head nothing
+horn_face = YAW_TF * (Pos(0, 0, (Z["horn0"] + Z["horn1"]) / 2) * Cylinder(S["horn_d"] / 2, S["horn_t"]))
+horn_head = YAW_TF * (Pos(0, 0, (Z["horn1"] + Z["horn_head"]) / 2) *
+                      Cylinder(S["horn_center_head_d"] / 2, S["horn_center_head_h"]))
+pulled = Pos(0, 0, 0.2) * fork
+check("fork pulled 0.2 onto the horn x its face (the face bears on the hub top)", v(pulled & horn_face),
+      lambda x: x > 1, "BEARS", "AIR UNDER THE HORN")
+check("fork pulled 0.2 onto the horn x its centre head (clear of the relief floor)", v(pulled & horn_head),
+      lambda x: x < 1, "CLEAR", "BEARS ON THE HEAD")
+# capture (2 mm nudges): the idler pocket's kept walls take -X and +-Y; +X, toward the open
+# mouth, is the BOLTED direction: the four horn screws in their 45 deg radial slots take it
+check("fork nudged -X x yaw blank (idler pocket's +X wall locates)", v((Pos(-2, 0, 0) * fork) & by),
+      lambda x: x > 1, "LOCATED", "LOOSE")
+check("fork nudged +-Y x yaw blank (idler pocket's side walls locate)",
+      min(v((Pos(0, dy, 0) * fork) & by) for dy in (2, -2)), lambda x: x > 1, "LOCATED", "LOOSE")
+check("fork nudged +X x the 4 horn screws (bolted direction)", v((Pos(2, 0, 0) * fork) & horn_screw_shanks()),
+      lambda x: x > 1, "BOLTED", "LOOSE")
 worst = max(v((Pos(dx, 0, 0) * (fork + by)) & base) for dx in (1, 2, 5, 10, 20, 40))
 check("servo + fork slide-in path (+X) vs base", worst, lambda x: x < 1, "OPEN", "BLOCKED")
 check("fork x yaw plug keep-out", v(fork & (YAW_TF * plug_envelope(P))), lambda x: x < 1, "CLEAR", "BLOCKS PLUGS")

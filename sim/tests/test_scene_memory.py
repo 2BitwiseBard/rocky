@@ -367,6 +367,37 @@ def test_go_back_to_refuses_the_unknown_and_the_vague_and_reports_a_veto():
     assert run(b.tool("go_back_to", {"name": "box"}, voice=True))["error"] == "voice_unconfirmed"
 
 
+class SlowLegSim(MemSim):
+    """The first goto walks `walk` of the way and ends 'timeout' (a detour ate goto's cap)."""
+
+    def __init__(self, walk):
+        super().__init__()
+        self.walk = walk
+
+    async def tool_goto(self, x, y):
+        if self.gotos:
+            return await super().tool_goto(x, y)
+        self.gotos.append((x, y))
+        self.p.update(x=self.p["x"] + (x - self.p["x"]) * self.walk, y=self.p["y"] + (y - self.p["y"]) * self.walk)
+        return {"ok": False, "stopped": "timeout", "pose": self.pose()}
+
+
+def test_go_back_to_re_aims_a_leg_that_ran_out_of_time():
+    """D063: a detour costs ~20 s of goto's 55 s cap, so a 1.2 m leg can time out on the way. One
+    that ended closer is re-aimed (the next leg); one that got nowhere is reported like a veto."""
+    ball = {"kind": "find", "text": "ball", "objects": [
+        {"name": "ball", "x": 2.0, "y": 0.0, "confidence": 0.9, "size_m": 0.1}]}
+    sim = SlowLegSim(0.8)
+    sim.memory.remember(ball)
+    r = run(brains(sim).tool("go_back_to", {"name": "ball"}))
+    assert r["ok"] and [leg["stopped"] for leg in r["legs"]] == ["timeout", "arrived"], r
+    assert abs(sim.p["x"] - (2.0 - cb.GO_BACK_STANDOFF_M - 0.05)) < 1e-3
+    sim = SlowLegSim(cb.GO_BACK_MIN_PROGRESS_M / 2 / cb.GO_BACK_LEG_M)       # 5 cm closer: no progress
+    sim.memory.remember(ball)
+    r = run(brains(sim).tool("go_back_to", {"name": "ball"}))
+    assert r["ok"] is False and r["stopped"] == "timeout" and len(sim.gotos) == 1
+
+
 def test_remember_here_pins_the_pose_and_go_back_goes_onto_it():
     sim = MemSim()
     b = brains(sim)

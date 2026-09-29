@@ -38,9 +38,9 @@
    {
     "part": "coupon_yaw_hub",
     "qty": 1,
-    "solid_cm3": 3.1,
-    "est_g": 2.7,
-    "est_min": 8
+    "solid_cm3": 3.2,
+    "est_g": 2.8,
+    "est_min": 9
    },
    {
     "part": "coupon_hip_hub",
@@ -64,7 +64,7 @@
     "est_min": 5
    }
   ],
-  "total_g": 40,
+  "total_g": 41,
   "total_h": 2.2
  },
  "Batch 2 one leg": {
@@ -79,9 +79,9 @@
    {
     "part": "coxa_fork",
     "qty": 1,
-    "solid_cm3": 20.6,
-    "est_g": 14.1,
-    "est_min": 45
+    "solid_cm3": 28.7,
+    "est_g": 19.6,
+    "est_min": 63
    },
    {
     "part": "horn_coupler",
@@ -140,17 +140,17 @@
     "est_min": 8
    }
   ],
-  "total_g": 136,
-  "total_h": 7.3
+  "total_g": 142,
+  "total_h": 7.6
  },
  "Batch 3 body": {
   "parts": [
    {
     "part": "body_deck",
     "qty": 1,
-    "solid_cm3": 128.2,
-    "est_g": 79.5,
-    "est_min": 254
+    "solid_cm3": 128.9,
+    "est_g": 79.9,
+    "est_min": 256
    },
    {
     "part": "coxa_yaw_base",
@@ -169,9 +169,9 @@
    {
     "part": "avionics_tray",
     "qty": 1,
-    "solid_cm3": 22.8,
-    "est_g": 14.2,
-    "est_min": 45
+    "solid_cm3": 23.7,
+    "est_g": 14.7,
+    "est_min": 47
    },
    {
     "part": "tray_rail",
@@ -195,17 +195,17 @@
     "est_min": 15
    }
   ],
-  "total_g": 183,
-  "total_h": 9.7
+  "total_g": 184,
+  "total_h": 9.8
  },
  "Deferred: four more legs": {
   "parts": [
    {
     "part": "coxa_fork",
     "qty": 4,
-    "solid_cm3": 20.6,
-    "est_g": 56.3,
-    "est_min": 180
+    "solid_cm3": 28.7,
+    "est_g": 78.4,
+    "est_min": 251
    },
    {
     "part": "horn_coupler",
@@ -250,8 +250,8 @@
     "est_min": 27
    }
   ],
-  "total_g": 287,
-  "total_h": 15.3
+  "total_g": 310,
+  "total_h": 16.5
  },
  "Deferred: bench jig": {
   "parts": [
@@ -305,19 +305,19 @@
    {
     "part": "shell_sector",
     "qty": 5,
-    "solid_cm3": 24.3,
-    "est_g": 90.3,
-    "est_min": 289
+    "solid_cm3": 25.4,
+    "est_g": 94.4,
+    "est_min": 302
    },
    {
     "part": "shell_cap",
     "qty": 1,
-    "solid_cm3": 78.4,
+    "solid_cm3": 78.3,
     "est_g": 58.3,
-    "est_min": 187
+    "est_min": 186
    }
   ],
-  "total_g": 149,
-  "total_h": 7.9
+  "total_g": 153,
+  "total_h": 8.1
  }
 }

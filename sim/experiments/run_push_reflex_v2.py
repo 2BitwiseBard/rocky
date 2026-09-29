@@ -32,7 +32,7 @@ import exp_paths as X                   # sys.path (sim/, gait/, perception/, au
 HERE = X.SIM                             # sim/: pebble.xml
 from pebble_gait import WaveGait, N_LEGS       # noqa: E402
 from pebble_reflex import ReflexSupervisor            # noqa: E402
-from scenes import make_data, gyro_xy_of, T_SETTLE, V_X             # noqa: E402
+from scenes import make_data, gyro_xy_of, walk_ask, T_SETTLE        # noqa: E402
 
 T_PUSH = 3.5
 DUR = 0.15
@@ -71,6 +71,7 @@ def trial(model, walk, dir_deg, force_n, mode, push_t=T_PUSH, dur=DUR,
     else:
         sup = ReflexSupervisor(gait, gyro_trip=TRIP, gyro_calm=TRIP / 2,
                                contact_aware=(mode == "v2"))
+    ask = walk_ask(gait)[0]                 # D063: scenes.V_X fitted into the envelope (45 asks 34.2)
     fdir = np.array([np.cos(np.deg2rad(dir_deg)),
                      np.sin(np.deg2rad(dir_deg)), 0.0])
     f = force_n * fdir
@@ -84,7 +85,7 @@ def trial(model, walk, dir_deg, force_n, mode, push_t=T_PUSH, dur=DUR,
         if t < T_SETTLE or not walk:
             vx = 0.0
         else:
-            vx = V_X * min((t - T_SETTLE) / 0.6, 1.0)
+            vx = ask * min((t - T_SETTLE) / 0.6, 1.0)
         if sup is not None:
             if mode == "v2":
                 con = foot_contacts(model, data, fids)
@@ -128,7 +129,7 @@ def trial(model, walk, dir_deg, force_n, mode, push_t=T_PUSH, dur=DUR,
     if walk and ok and check_progress and pos_at_push is not None:
         prog = (data.xpos[torso] - pos_at_push)[0] * 1000
         frac_needed = 0.35 if mode == "base" else 0.15   # braced pause is on purpose
-        ok = prog > frac_needed * V_X * (dur + T_AFTER)
+        ok = prog > frac_needed * ask * (dur + T_AFTER)
     return ok, tilt_max, skid
 
 

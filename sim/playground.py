@@ -12,9 +12,13 @@ window; headless (CI, cloud) the same commands run scripted.
 Commands (REPL or --script, ';'-separated):
     walk VX [VY] [WZ]   walk (mm/s, mm/s, rad/s) — adjust any time. Every
                         command is fitted into the gait's speed envelope
-                        (WaveGait.budget, D052): `show` says when it was scaled
+                        (WaveGait.budget, D052): `show` says when it was scaled.
+                        It is eased in (D063 command slew: 25 mm/s^2 on the
+                        fastest foot + a 0.2 s lag, ~2.4 s from standing to
+                        the envelope); `walk 0` slows down the same way
     stop                safe-stop: PLANT -> BRACE -> planted idle (D034);
-                        also ends a running gesture (blended out)
+                        also ends a running gesture (blended out). Never
+                        eased: the command is zero in the same tick
     gesture NAME        jazz_hands | fist_bump | beckon | wave | bow | look_around |
                         shake | sit | turn_in_place | sidestep | any saved keyframe
                         gesture. Needs a planted standstill (state NORMAL, no
@@ -240,6 +244,30 @@ PROBE_LEAD_MM = 3.5         # the SEEK command may lead the MEASURED foot (encod
 #                             12 mm with the servo model (latency + slew + D052 damping), so the
 #                             "3.5 mm preload" became 15 mm, 11 N on one foot and a 2 deg body tilt.
 #                             Leading by <= the preload makes the overshoot the preload.
+PROBE_HOLD_LEAD_MM = 7.0    # D063: the lead for the LATE foot while the touchdown gate holds the gait
+#                             on it (about the SEA's travel), and its seek starts at once, not after
+#                             PROBE_SETTLE_FRAC: the gate has already waited GATE_TICKS for the switch.
+#                             In a hold the robot stands on the other four feet, and one of them can
+#                             be on the edge's lip (the leg the gate put back down). At 3.5 mm the
+#                             foot sank ~40 mm/s (the lead over the servo's lag), the 30 mm probe
+#                             took ~0.75 s, the lip foot slid off first and the void fired 0.90 s
+#                             into the hold with the robot already tipping: it fell while backing
+#                             off (walk 25 @ 11 deg, 35 / 45 @ 12, command slew on). Measured
+#                             2026-09-29: forcing the fire saved both up to 0.70 s into the hold, not
+#                             at 0.75; now it fires 0.56 s in, tilt after <= 1.6 deg, and the 364-
+#                             approach grid falls 8, none after a fire (was 11, 3 after). The verdict
+#                             still needs the real foot 26.5 mm down (probe_out), as at a 3.5 mm lead.
+#                             A foot that finds ground in a hold may preload up to 7 mm (not 3.5).
+#                             Not in the careful walk (gate.wait 1): the same grid fell 7 of 364 with
+#                             it, 6 without (it holds at every touchdown; the late gate is the default)
+PROBE_HOLD_ROLL_DEG = 1.0   # ... and only while the body has not tilted more than this since the hold
+#                             began (from its lowest tilt in the hold): a descent that rolls the body
+#                             pushes on something that is not the switch. Measured on the rough-terrain
+#                             preset (walk 25 at 0 deg): leg 4's shin rests on a bump; without this the
+#                             7 mm seek rolled the body to 7 deg and the foot probed out, a false void.
+#                             Terrain A/B, 90 walks (rubble, stairs, obstacle course, rough 20 / 30 mm,
+#                             +-30 deg, 25 / 45 mm/s): 0 falls and 0 voids before and after, progress
+#                             +1.1 %, but 7 walks tilt 1-2 deg more and 3 probe 25+ mm (none before)
 PROBE_SETTLE_FRAC = 0.12    # of the stance: wait this long after the COMMANDED touchdown before
 #                             lowering. Measured 2026-09-24 (servo realism on, flat floor): the
 #                             switch closes 4-5 ticks (80-100 ms) after the commanded touchdown —
@@ -288,6 +316,8 @@ GATE_WAIT = False           # `set gate.wait 1` — the CAREFUL walk: EVERY touc
 #                             25 @ 15-16, 35 @ 20-21, 15 @ 17.5), careful walk 9 falls at OTHER angles
 #                             (14-20 deg). Mechanism: a leading foot on the edge's lip (sphere centre
 #                             0-8 mm past it). Open — test_void_guard_lip_band_known_gap (strict xfail).
+#                             D063 re-measure (2026-09-29, 364 approaches, command slew on): late gate
+#                             8 falls (with PROBE_HOLD_LEAD_MM; 11 without), careful walk 6.
 # The void retreat plays the approach BACKWARDS (the gait clock runs in reverse
 # with the approach command): every foot goes back to a foothold it already
 # stood on, and the void leg is the first one lifted — back onto the platform.
@@ -393,7 +423,8 @@ class Playground:
         self.DT = self.model.opt.timestep
         self.lock = threading.Lock()
         self.cmd_v = np.zeros(3)              # vx, vy, wz — what was ASKED (walk/teleop/goto)
-        self.cmd_eff = np.zeros(3)            # D052: what the gait got after the guards + budget
+        self.cmd_eff = np.zeros(3)            # D052: what the gait got after the guards + budget;
+        #                                       D063: + the supervisor's command slew (what it ran)
         self.gesture = None                   # (fn, total, t0) — a request; see _gesture_sync
         self.push = None                      # shove.Shove or None
         self.residual = None                  # (15,) rad added to the joint targets (D050 walk policy)
@@ -467,7 +498,7 @@ class Playground:
         self._felt = np.zeros(N_LEGS, bool)       # this stance's switch has closed at least once
         self.gate_wait = GATE_WAIT                # `set gate.wait 0|1` (see GATE_WAIT)
         self.gate_count = 0                       # holds started (a HUD counter; rough ground uses it)
-        self._v_gait = np.zeros(3)                # the command the supervisor got this step
+        self._v_gait = np.zeros(3)                # the command the gait ran this step (after the slew, D063)
         self._ges = None
         self._latch_seen = bool(self.sup.latched)
         self._q_cmd = self.data.ctrl[:15].copy()  # last good, rate-clamped joint target
@@ -555,16 +586,26 @@ class Playground:
             return "the void guard is backing off — wait for its safe-stop"
         if np.any(self.cmd_eff):
             return "the gait is still moving (effective command) — stop first"
+        slew = getattr(self.sup, "slew", None)
+        if slew is not None and np.any(slew.v):          # D063: a zero ask slows down over ~2 s
+            return "the gait is still slowing to a stand (command slew) — wait, or stop"
         if getattr(self.sup, "_stop_req", False):
             return "a safe-stop is pending"
         if self._gate is not None:
             return "the touchdown gate is holding a step"
         return None
 
+    def _running_cmd(self, fallback):
+        """The command the gait is running: the supervisor's slew output (D063),
+        or `fallback` for a supervisor built with slew=False."""
+        slew = getattr(self.sup, "slew", None)
+        return np.array(slew.v, float) if slew is not None else np.asarray(fallback, float).copy()
+
     def is_idle(self):
         """What the hardware bridge may start sim2real from: planted standstill
         (state NORMAL, no velocity asked or still being executed — a void
-        retreat, a pending safe-stop, a gate hold — no gesture or blend, no goto)."""
+        retreat, the command slew still slowing down (D063), a pending
+        safe-stop, a gate hold — no gesture or blend, no goto)."""
         return (self.sup.state == "NORMAL" and not np.any(self.cmd_v)
                 and self.motion_reason() is None
                 and self.gesture is None and self._ges is None
@@ -644,19 +685,25 @@ class Playground:
                 prev = hw.is_idle
                 hw.is_idle = lambda prev=prev: bool(prev()) and self.is_idle()
                 hw._pg_idle = True
-        if self.locomotion_held() and np.any(v):
+        held = self.locomotion_held()
+        if held and np.any(v):
             with self.lock:
                 self.cmd_v[:] = 0
             v = np.zeros(3)
             if self.t - self._loco_note_t > 1.0:
                 self._loco_note_t = self.t
                 self.note("hw", "locomotion held: sim2real without real foot contacts — velocity zeroed")
+        bad = not np.isfinite(v).all()
         # --- gesture requests (start / switch / external end) ------------
         self._gesture_sync(ges_req)
         monitor = self._ges is not None
         # --- velocity pipeline: latch -> void guard -> envelope ----------
         v_eff = self._effective_cmd(v)
         v_sup = np.zeros(3) if monitor else v_eff
+        # D063: the supervisor slews v_sup (CommandSlew: 25 mm/s^2, 0.2 s lag).
+        # direct = it lands at once: the void retreat replays the command the
+        # gait ran, and a held mirror or a non-finite ask is a stop
+        direct = held or bad or self._void_phase == "retreat"
         # --- stance probe (not on the real feet, not during a gesture) ----
         state0 = self.sup.state
         probing = (self.probe_on and not self.sim2real and not monitor
@@ -667,14 +714,21 @@ class Playground:
         elif state0 != "BRACE" and tick:
             self._probe_tick(con, self.sup.last_stance, q_meas)
         # --- touchdown gate + the backwards retreat drive the gait clock ---
-        self._v_gait = v_sup.copy()
         self._gate_update(state0, v_sup, probing, tick)
+        if self._gate is not None:
+            # D063: a hold freezes the command the gait was running (its planted
+            # feet do not slide under a ramp while a foot probes); the gate
+            # itself compares the TARGET (v_sup), so a ramp never ends a hold
+            v_sup, direct = self._gate["run"].copy(), True
         self._drive_clock(state0)
         q, state = self.sup.step(self.t, v_sup[0], v_sup[1], v_sup[2], gxy,
                                  contacts=con, gyro_vec=w_body[:2], tilt_deg=tilt_deg,
                                  height=kin_h, monitor=monitor,
                                  probe_dz=self.probe_dz.copy() if probing else None,
-                                 q_meas=q_meas)
+                                 q_meas=q_meas, direct=direct)
+        self._v_gait = self._running_cmd(v_sup)          # what the gait ran this step (slewed)
+        if self._void_phase != "retreat":                # the retreat reports its reverse itself
+            self.cmd_eff = self._v_gait.copy()
         if self.sup.latched != self._latch_seen:
             self._latch_seen = self.sup.latched
             if self.sup.latched:                 # D052 trip escalation: the ask is dropped too, so
@@ -795,7 +849,8 @@ class Playground:
 
     def _effective_cmd(self, v):
         """cmd_v -> the command the gait gets: latch (zero), void guard
-        (retreat / project out), then WaveGait.budget (uniform scale)."""
+        (retreat / project out), then WaveGait.budget (uniform scale). The
+        supervisor then slews it (D063); step() sets cmd_eff to what it ran."""
         v = np.asarray(v, float).copy()
         if not np.isfinite(v).all():
             v = np.zeros(3)
@@ -888,7 +943,9 @@ class Playground:
         world_deg = _wrap_deg(body_deg + np.degrees(self.yaw()))
         span = VOID_RETREAT_CYCLES * self.gait.T
         # the approach, backwards: the command the gait had, the clock run back
-        # `span` from here (the void leg lifts first — back to its old foothold)
+        # `span` from here (the void leg lifts first — back to its old foothold).
+        # D063: the command it RAN (after the slew), replayed with direct=True,
+        # so the retreat starts from the feet the gait has, not a jump to the target
         self._retreat = dict(v=np.asarray(self._v_gait, float).copy(),
                              tg_end=self.sup.t_gait - span,
                              t_end=self.t + span / VOID_RETREAT_RATE + 2.0)
@@ -964,8 +1021,16 @@ class Playground:
 
         Review fixes: a hold ends when the command CHANGES (not only when it
         goes to zero), and its rewind runs inside the servo budget
-        (_rewind_rate)."""
+        (_rewind_rate).
+
+        D063: v_sup is the TARGET (before the supervisor's slew), so a hold is
+        not ended by the ramp that follows every command change (up to 2.4 s).
+        A hold starts only while the gait is really stepping (the slewed
+        command, `run`), freezes that command for its duration (step()) and
+        rewinds at the rate for it."""
         g = self._gate
+        run = self._running_cmd(v_sup)
+        stepping = abs(run[0]) + abs(run[1]) + abs(run[2]) * 100 >= self.sup.idle_eps
         ok = (probing and not self.sup.latched and bool(np.any(v_sup))
               and self._void_phase is None and self._ges is None)
         if g is not None:
@@ -979,7 +1044,7 @@ class Playground:
                 self.note("gate", f"leg {i} found neither ground nor a void in {GATE_MAX_S:.1f} s — "
                                   f"gait released")
             return
-        if not (ok and tick and state0 == "NORMAL"):
+        if not (ok and stepping and tick and state0 == "NORMAL"):
             return
         stance = self.sup.last_stance
         if stance is None:
@@ -1000,7 +1065,7 @@ class Playground:
         # hold only when the probe confirms ground (or the void guard fires)
         self._gate = dict(leg=i, tg=self.sup.t_gait - ph * gt.T + GATE_EPS_S, t0=self.t,
                           wait=bool(wait and self._probe_age[i] < GATE_TICKS),
-                          v=np.asarray(v_sup, float).copy(), rate=self._rewind_rate(v_sup))
+                          v=np.asarray(v_sup, float).copy(), run=run, rate=self._rewind_rate(run))
         self.gate_count += 1
 
     def _rewind_rate(self, v):
@@ -1067,8 +1132,21 @@ class Playground:
         """One 50 Hz tick of the per-leg stance probe (see the constants).
         q_meas (5,3): measured joints — the seek then leads the real foot by
         at most PROBE_LEAD_MM and the preload is measured from where the foot
-        actually touched (without it: open-loop, the pre-lead behaviour)."""
+        actually touched (without it: open-loop, the pre-lead behaviour).
+        D063: the late foot a touchdown-gate hold waits on (GATE_TICKS without
+        its switch) seeks at once, leading by PROBE_HOLD_LEAD_MM, while the
+        body has not tilted PROBE_HOLD_ROLL_DEG since the hold began, so the
+        void verdict comes in time for the retreat. Not in the careful walk
+        (gate_wait): it holds at every touchdown and was measured with the
+        3.5 mm seek. probe_out also needs the real foot as deep as a
+        PROBE_LEAD_MM lead leaves it at PROBE_MAX (26.5 mm)."""
         dt = PROBE_TICK_S
+        held, g = -1, self._gate
+        if g is not None and not self.gate_wait:            # the fast seek, while the body stays put
+            tilt = float(self.last["tilt"])
+            g["tilt_min"] = min(g.get("tilt_min", tilt), tilt)
+            if tilt - g["tilt_min"] < PROBE_HOLD_ROLL_DEG:
+                held = int(g["leg"])
         meas = None
         raw = self.sup.last_feet_raw
         if q_meas is not None and raw is not None:
@@ -1104,17 +1182,22 @@ class Playground:
                             st = HOLD
                 else:
                     self._probe_hits[i] = 0
-                    if self._probe_age[i] > settle:
+                    late = i == held and self._probe_age[i] >= GATE_TICKS    # D063: a held late foot
+                    if self._probe_age[i] > settle or late:
                         nxt = self.probe_dz[i] + PROBE_RATE * dt
                         if meas is not None:                # never lead the real foot by more than the preload
-                            nxt = min(nxt, max(self.probe_dz[i], meas[i] + PROBE_LEAD_MM))
+                            lead = PROBE_HOLD_LEAD_MM if late else PROBE_LEAD_MM
+                            nxt = min(nxt, max(self.probe_dz[i], meas[i] + lead))
                         self.probe_dz[i] = min(nxt, PROBE_MAX)
             elif st == PRELOAD:
                 self.probe_dz[i] = min(self.probe_dz[i] + PROBE_RATE * dt, self._probe_goal[i])
                 if self.probe_dz[i] >= self._probe_goal[i] - 1e-9:
                     st = HOLD
             self.probe_state[i] = st
-            self.probe_out[i] = (st == SEEK and self.probe_dz[i] >= PROBE_MAX - 1e-6 and not con[i])
+            # out = probed PROBE_MAX and the REAL foot is as deep as a 3.5 mm lead leaves it (26.5 mm):
+            # the hold's longer lead reaches the verdict sooner, never at a shallower foot (D063)
+            self.probe_out[i] = (st == SEEK and self.probe_dz[i] >= PROBE_MAX - 1e-6 and not con[i]
+                                 and (meas is None or meas[i] >= PROBE_MAX - PROBE_LEAD_MM - 1e-6))
 
     # ------------------------------------------------------------ gestures
     def gesture_refusal(self, switching=False, name=None, fn=None):

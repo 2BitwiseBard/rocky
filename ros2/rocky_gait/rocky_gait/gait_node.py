@@ -23,6 +23,12 @@ params gait.body_height (the gait is rebuilt when it changes); its lean /
 roll / pitch / yaw fields are reserved and not applied yet. Not here: the
 reflex supervisor (it needs the IMU and contacts this node does not
 subscribe to) — see ros2/README.md. Not run under ROS in CI (no rclpy).
+
+D063: the budgeted command reaches the gait through pebble_gait.CommandSlew
+(25 mm/s^2 on the fastest foot + a 0.2 s lag), so a new /cmd_vel eases in
+instead of moving a joint target up to 28 deg in one tick, and a zero
+/cmd_vel slows down smoothly. A stop is never eased: IDLE / SLEEP / MANIP and
+a non-finite command zero it at once, and the gait restarts from standing.
 """
 import math
 
@@ -36,7 +42,7 @@ from rocky_msgs.msg import GaitCommand, BodyPoseCommand
 import numpy as np
 
 import rocky_model as rm
-from pebble_gait import WaveGait, ArmedGait, stance_manip_targets
+from pebble_gait import WaveGait, ArmedGait, CommandSlew, stance_manip_targets
 
 RATE_HZ = 50.0
 MM = 1e-3
@@ -60,6 +66,7 @@ class GaitNode(Node):
         self.cmd = [0.0, 0.0, 0.0]                      # vx, vy (m/s), wz
         self.pose = BodyPoseCommand()
         self._gait = self._make_gait()
+        self._slew = CommandSlew(self._gait)            # D063: every walk command is eased
         self._t = 0.0
 
         self.pub_legs = self.create_publisher(
@@ -85,9 +92,15 @@ class GaitNode(Node):
             return ArmedGait(arm_legs=self.arm_legs, **kw)
         return WaveGait(**kw)
 
+    def _set_cmd(self, cmd):
+        if all(math.isfinite(c) for c in cmd):
+            self.cmd = cmd
+        else:                                            # garbage in = a stop, never eased
+            self.cmd = [0.0, 0.0, 0.0]
+            self._slew.stop()
+
     def on_twist(self, msg: Twist):
-        cmd = [float(msg.linear.x), float(msg.linear.y), float(msg.angular.z)]
-        self.cmd = cmd if all(math.isfinite(c) for c in cmd) else [0.0, 0.0, 0.0]
+        self._set_cmd([float(msg.linear.x), float(msg.linear.y), float(msg.angular.z)])
         if self.mode == GaitCommand.MODE_IDLE and any(abs(c) > 1e-3 for c in self.cmd):
             self.mode = GaitCommand.MODE_WALK
 
@@ -97,8 +110,8 @@ class GaitNode(Node):
             if msg.arm_legs:
                 self.arm_legs = tuple(int(a) for a in msg.arm_legs)
             self._gait = self._make_gait()
-        cmd = [float(msg.vx), float(msg.vy), float(msg.wz)]
-        self.cmd = cmd if all(math.isfinite(c) for c in cmd) else [0.0, 0.0, 0.0]
+            self._slew.g = self._gait                    # same command, the new gait's feet
+        self._set_cmd([float(msg.vx), float(msg.vy), float(msg.wz)])
 
     def on_pose(self, msg: BodyPoseCommand):
         """height_m is applied (an offset from params gait.body_height; the gait
@@ -109,13 +122,16 @@ class GaitNode(Node):
         self.pose = msg
         if changed:
             self._gait = self._make_gait()
+            self._slew.g = self._gait
 
     # ------------------------------------------------------------ main loop
     def tick(self):
         self._t += 1.0 / RATE_HZ
         if self.mode in (GaitCommand.MODE_IDLE, GaitCommand.MODE_SLEEP):
+            self._slew.stop()                            # D063: not walking = a stop, never eased
             return                                       # hold last / limp
         if self.mode == GaitCommand.MODE_MANIP:
+            self._slew.stop()
             q, claw = stance_manip_targets(self._gait, self._t,
                                            arm_legs=self.arm_legs or (0, 2))
         else:
@@ -125,6 +141,7 @@ class GaitNode(Node):
                 self._scale_warn_t = self._t
                 self.get_logger().warn(f"cmd {tuple(round(a, 3) for a in ask)} scaled to the envelope "
                                        f"{(round(vx, 1), round(vy, 1), round(wz, 3))} (mm/s, mm/s, rad/s)")
+            vx, vy, wz = self._slew.step((vx, vy, wz), 1.0 / RATE_HZ)   # D063: eased (a stop is not)
             q, stance, _ = self._gait.joint_targets(self._t, vx, vy, wz)
             claw = [0.0] * 5                             # feet stay cones
         q = np.asarray(q, float).reshape(5, 3)

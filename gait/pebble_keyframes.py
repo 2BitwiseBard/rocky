@@ -36,6 +36,7 @@ Per keyframe (all optional, missing = nominal):
     claw         [5] 0..1 open fraction per hand
     say          chord-speak cue fired when the frame is reached
     ease         how to get INTO this frame: smooth (default) | linear | hold
+                 smooth (D063) is the minimum-jerk quintic, not a smoothstep
 Spec level:
     loop         true: plays forever; the last frame must equal the first
                  (LOOP_WRAP fails otherwise — the wrap would be a step)
@@ -47,7 +48,7 @@ Spec level:
 D052 — "the studio cannot author what the robot cannot do":
   * `hold` was a jump at the frame time (216 rad/s at the bus). Now it is
     "arrive early, then hold": leave the previous frame at once, move with
-    a smoothstep sized so every joint stays under 90 % of its speed class
+    the smooth ease sized so every joint stays under 90 % of its speed class
     (loaded 3.0 for planted legs, free 4.0 for arm legs, claw 8), arrive,
     hold until the frame time. If the gap is too short it simply takes the
     whole gap — and check() says too fast.
@@ -57,6 +58,15 @@ D052 — "the studio cannot author what the robot cannot do":
   * KeyframeGesture.report() / pebble_feasibility.check_spec() judge a spec;
     save_keyframe_gesture() refuses an infeasible one (ValueError carrying
     the report lines) unless force=True.
+
+D063 (B76 fix 8) — the smooth ease is the minimum-jerk quintic
+10u^3 - 15u^4 + 6u^5 (Flash & Hogan), not the smoothstep 3u^2 - 2u^3: both
+start and stop at zero speed, but the smoothstep's acceleration jumps from 0
+to 6/T^2 at each start and stop — the kick a servo shows at every key. The
+quintic's acceleration is zero at both ends too. Its peak speed is 1.875 x
+the mean (the smoothstep's 1.5), so every duration this module sizes from a
+speed budget (the hold move, the tail) is 25 % longer for the same peak.
+`linear` and `hold` keep their meaning.
 
 Pure Python, no sim.
 """
@@ -78,6 +88,7 @@ KEYS = ("body", "yaw", "dz", "arm", "reach", "reach_world", "claw", "say", "ease
 EASES = ("smooth", "linear", "hold")
 ENDS = ("stand", "hold")
 BUDGET_FRAC = 0.9                 # tail / hold moves use 90 % of the speed class
+SMOOTH_PEAK = 1.875               # peak / mean speed of the smooth (minimum-jerk) ease; smoothstep was 1.5
 MIN_TAIL_S = 0.6
 _REACH_EPS = 0.5                  # mm inside the reach annulus when clamping
 
@@ -86,7 +97,7 @@ def _ease(a, kind):
     a = float(np.clip(a, 0.0, 1.0))
     if kind == "linear":
         return a
-    return a * a * (3 - 2 * a)                       # smooth (and the hold move)
+    return a * a * a * (10.0 - 15.0 * a + 6.0 * a * a)   # smooth (and the hold move): minimum jerk
 
 
 def _vec(d, key, n, default):
@@ -205,17 +216,17 @@ class Frame:
 
 
 def _max_move_time(fa, fb, g):
-    """Shortest smoothstep duration (s) from frame a to frame b that keeps every
+    """Shortest smooth-ease duration (s) from frame a to frame b that keeps every
     joint under BUDGET_FRAC of its class: loaded for planted legs, free for a
-    leg overridden in either frame, 8 rad/s for the claws. Peak = 1.5 x mean."""
+    leg overridden in either frame, 8 rad/s for the claws. Peak = SMOOTH_PEAK x mean."""
     qa, ca = fa.pose(g)
     qb, cb = fb.pose(g)
     dq = np.abs(qb - qa)
     free = np.zeros(N_LEGS, bool)
     free[list(set(fa.override) | set(fb.override))] = True
     v = np.where(free, _rm.servo_speed("free"), _rm.servo_speed("loaded"))[:, None]
-    t_leg = float(np.nanmax(1.5 * dq / (BUDGET_FRAC * v))) if np.isfinite(dq).all() else 0.0
-    t_claw = float(np.max(1.5 * np.abs(cb - ca) / (BUDGET_FRAC * 8.0)))
+    t_leg = float(np.nanmax(SMOOTH_PEAK * dq / (BUDGET_FRAC * v))) if np.isfinite(dq).all() else 0.0
+    t_claw = float(np.max(SMOOTH_PEAK * np.abs(cb - ca) / (BUDGET_FRAC * 8.0)))
     return max(t_leg, t_claw, 0.05)
 
 

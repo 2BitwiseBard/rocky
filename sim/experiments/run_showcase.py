@@ -24,7 +24,7 @@ from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E40
 import rocky_model as rm                                             # noqa: E402
 from pebble_reflex import ReflexSupervisor                           # noqa: E402
 from cliff import CliffDetector, CliffReaction                       # noqa: E402
-from scenes import make_data, gyro_xy_of, build_world, PLAT_H, EDGE_X   # noqa: E402
+from scenes import make_data, gyro_xy_of, build_world, walk_ask, PLAT_H, EDGE_X   # noqa: E402
 from scenes import foot_contacts as foot_contacts_odom               # noqa: E402
 from run_push_reflex_v2 import foot_contacts                         # noqa: E402
 from chordspeak_events import Narrator                               # noqa: E402
@@ -62,7 +62,7 @@ def scene_medley():
                 cmd = (0.0, 42.0, 0.0)                          # strafe
             else:
                 cmd = (0.0, 0.0, 0.55)                          # turn
-            q, _, _ = gait.joint_targets(tw, *cmd)
+            q, _, _ = gait.joint_targets(tw, *gait.budget(*cmd))   # D063: fitted (34.2 mm/s, 0.185 rad/s)
             data.ctrl[:15] = q.flatten()
         mujoco.mj_step(model, data)
         if k % spf == 0:
@@ -80,6 +80,7 @@ def scene_push_brace():
     torso = model.body("torso").id
     fids = [model.geom(f"foot{i}").id for i in range(N_LEGS)]
     sup = ReflexSupervisor(gait)                  # trip / calm from params reflex:
+    ask = walk_ask(gait)[0]                       # D063: 45 asks 34.2
     renderer, cam = _cam(model, azim=115)
     DT = model.opt.timestep
     spf = int(round(1 / (FPS * DT)))
@@ -90,7 +91,7 @@ def scene_push_brace():
     for k in range(int(T / DT)):
         t = k * DT
         gyro = gyro_xy_of(model, data, torso)
-        vx = 0.0 if t < 1.0 else 45.0 * min((t - 1.0) / 0.6, 1.0)
+        vx = 0.0 if t < 1.0 else ask * min((t - 1.0) / 0.6, 1.0)
         con = foot_contacts(model, data, fids)
         R = data.xmat[torso].reshape(3, 3)
         w = R.T @ data.cvel[torso][0:3]
@@ -127,6 +128,7 @@ def scene_cliff():
     mujoco.mj_forward(model, data)
     torso = model.body("torso").id
     det, react = CliffDetector(), CliffReaction(gait)
+    ask = walk_ask(gait)[0]                       # D063: 45 asks 34.2
     renderer, cam = _cam(model, dist=1.0, elev=-12, azim=150)
     DT = model.opt.timestep
     spf = int(round(1 / (FPS * DT)))
@@ -140,7 +142,7 @@ def scene_cliff():
             data.ctrl[:15] = q0
         else:
             tw = t - 1.0
-            vx, vy, wz = 45.0 * min(tw / 0.6, 1.0), 0.0, 0.0
+            vx, vy, wz = ask * min(tw / 0.6, 1.0), 0.0, 0.0
             vx, vy, wz = react.command(tw, vx, vy, wz)
             q, stance, _ = gait.joint_targets(tw, vx, vy, wz)
             data.ctrl[:15] = q.flatten()

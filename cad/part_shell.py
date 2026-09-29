@@ -10,16 +10,18 @@ Anatomy (body frame, deck TOP at z = -4 per the frozen conventions):
     like the deck) — the stepped-boulder look from the v0.2 preview, now
     printable and hollow (2.8 mm walls, 2.6 mm tier roofs).
   * five LEG ARCHES: trapezoid-prism openings through tiers 1–3 sized from
-    the real sweep geometry — the coxa fork+yaw hardware lives inside a
-    r=26 disc about the yaw axis (yaw rotation NEVER leaves +/-14 deg of
-    the station azimuth; the femur exits above tier 1), plus the coxa
-    plate slab passing through the skirt at deck level. Tier 4 stays a
-    continuous ring — the "neck" the dome caps.
+    the real sweep geometry — the coxa fork + yaw hardware (the fork's side
+    cheeks reach r 29.5 about the yaw axis, its hip cup r 41; the femur
+    exits above tier 1), plus the coxa plate slab passing through the skirt
+    at deck level. The fork yawed -40..40 meets the sector at 0.00 mm^3,
+    15.89 mm apart at the closest (D063). Tier 4 stays a continuous ring —
+    the "neck" the dome caps.
   * skirt drops to z -9: covers the deck edge from outside (turtle
     overbite), clearing the deck (deck corners r=100 < skirt inner face).
   * I6 dovetail ring: one VERTICAL male segment per sector web at +/-27
-    deg (slide a shoe down from above, gravity seats it, set-knob locks) —
-    placed flush against the queried perturbed wall radius.
+    deg (slide a shoe down from above; its set knob, on the ARCH side,
+    wedges it) — the undercut profile (B83), square to the rock wall's
+    chord under a shoe, root 0.5 off the wall on a neck fused into it.
   * B8 LED channel: revolved groove around tier 2 (8.4 mm tall, ~2.4 deep,
     45 deg chamfered top so it prints upright without support), fed from
     an I5 XT30 spare tap through the cable notch.
@@ -28,18 +30,24 @@ Anatomy (body frame, deck TOP at z = -4 per the frozen conventions):
   * attachment (I3): each sector foot carries ONE quarter-turn latch
     insert pocket (az +27.5, r 74.5) and ONE magnet pocket (az -25.5,
     r 76) — every web joint pairs neighbour A's latch with neighbour B's
-    magnet (D030); deck v0.4 carries the washer strikes.
+    magnet (D030); deck v0.4 carries the washer recesses and the latch
+    strikes. The latch is a bayonet (B87): its rotor hangs through the
+    deck's strike and is turned from UNDER the deck.
   * top hatch: rocky cap, plug matches the seat outline with print
-    clearance, five seat magnets (one per sector, az 0 — the only pattern
-    compatible with 5 identical sectors).
+    clearance, five magnet pairs (one per sector, az 0 — the only pattern
+    compatible with 5 identical sectors) at r 42.5, the seat magnet in a
+    boss at the seat ledge that stands 7.3 into the opening (B88).
 
 Checks (run this file): fork-swing keep-out, port-knob keep-out, coxa
-plate slab, deck slab — all must intersect at 0.00 mm^3; bed-fit report.
+plate slab, deck slab — all must intersect at 0.00 mm^3; the seam pair;
+an I6 shoe + knob on every bar (B83); the cap seated with its magnets,
+every hatch pocket walled (B88); the latch cartridge in its pad (B87);
+bed-fit report.
 """
 import numpy as np
 from build123d import *
 from common import params, export
-from iface import IF, dovetail_male
+from iface import IF, dovetail_male, SHELL_LATCH_AZ, SHELL_LATCH_R
 
 P = params()
 PR = P["print"]
@@ -59,6 +67,13 @@ TIERS = [(-9.0, 16.0, 112.0, 4.5, 11, 0.0),
          (42.0, 52.0, 74.0, 4.0, 44, 24.0)]
 HATCH_R = 46.0
 HATCH_SEED = 55
+HATCH_SEAT_Z = 49.6              # the rebate floor the cap's plug sits on (plug from 49.7)
+# B88: the hatch magnet pair (seat + cap plug) at r 42.5, not 47: the plug's edge
+# over a magnet's span at az 0 is only 47.0 (48.9 at az 0 itself, 47.3 at +4 deg),
+# so a Ø6.25 pocket at 47 broke out of it; at 42.5 it keeps a 1.2 wall
+HATCH_MAG_R = 42.5
+MAG_POCKET_D = PL["magnet_d"] + 0.25
+MAG_POCKET_T = PL["magnet_t"] + 0.2
 
 
 def _outline_r(theta, r0, amp, seed, twist_deg=0.0, pent_k=0.55):
@@ -87,6 +102,30 @@ def _outline_r(theta, r0, amp, seed, twist_deg=0.0, pent_k=0.55):
     noise = raw[k0] * (1 - f) + raw[k1] * f
     r = r0 * pent * (1 + noise * amp / r0)
     return r if r.shape[0] > 1 else float(r[0])
+
+
+I6_BARS = (27.0, -27.0)          # web azimuths of the two I6 bars per sector
+I6_BAR_Z, I6_BAR_L = 3.0, 16.0
+I6_ROOT_GAP = 0.5                # the wall stays within 0.12 of the chord plane under a shoe
+I6_SHOE_HALF = 11.3              # half a 20.6 shoe + 1
+
+
+def i6_bar_frame(az):
+    """Frame of the I6 bar at azimuth az: origin on the tier-1 wall, +x the
+    outward normal of the wall's chord across a shoe (+13.1 deg off the radius
+    at +27, -7.8 at -27), z up."""
+    t1 = TIERS[0]
+
+    def pt(a):
+        r = float(_outline_r(np.deg2rad(a), *t1[2:5], t1[5]))
+        return np.array([r * np.cos(np.deg2rad(a)), r * np.sin(np.deg2rad(a))])
+    c = pt(az)
+    da = np.rad2deg(I6_SHOE_HALF / np.linalg.norm(c))
+    t = pt(az + da) - pt(az - da)
+    n_az = float(np.rad2deg(np.arctan2(-t[0], t[1])))
+    a = np.deg2rad(n_az)
+    x, y = c[0] * np.cos(a) + c[1] * np.sin(a), -c[0] * np.sin(a) + c[1] * np.cos(a)
+    return Rot(0, 0, n_az) * Pos(float(x), float(y), 0)
 
 
 def _ring(z0, z1, r0, amp, seed, twist=0.0, dr=0.0, pent_k=0.55):
@@ -181,7 +220,7 @@ def _mother():
         _ring(DECK_TOP - 1, 1.0, 73.0, 0.0, 1, pent_k=0.0)
     for a0, a1 in ((21.0, 36.0), (-36.0, -21.0)):
         body += foot_ring & _az_wedge(a0, a1)
-    body += Rot(0, 0, 27.5) * Pos(74.5, 0, (DECK_TOP + 0.0) / 2) * \
+    body += Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, (DECK_TOP + 0.0) / 2) * \
         Cylinder(9.0, -DECK_TOP)                      # latch pad
 
     # ---- leg arch (station az 0): through tiers 1-3 + the skirt
@@ -233,11 +272,17 @@ def _mother():
     # wall to the seam, and it still lands on the web between arches.
     body -= Rot(0, 0, 30.5) * Pos(90, 0, 21) * Box(18, 8, 9)
 
-    # ---- I6 vertical dovetail bars on the tier-1 wall at the webs
-    for az in (+27.0, -27.0):
-        r_wall = float(_outline_r(np.deg2rad(az), *TIERS[0][2:5], TIERS[0][5]))
-        body += Rot(0, 0, az) * Pos(r_wall - 1.4, 0, 3.0) * Rot(0, 90, 0) * \
-            dovetail_male(length=16.0)
+    # ---- I6 vertical dovetail bars on the tier-1 wall at the webs. B83: the
+    # undercut profile (the old key let a shoe lift off), square to the wall's
+    # chord across a shoe (the rock wall is not square to the radius here: a
+    # radial shoe met it 3.1 mm high on one side), root I6_ROOT_GAP off the wall
+    # on a neck that fuses 1.4 into it
+    for az in I6_BARS:
+        frame = i6_bar_frame(az)
+        body += frame * Pos(I6_ROOT_GAP, 0, I6_BAR_Z) * Rot(0, 90, 0) * \
+            dovetail_male(length=I6_BAR_L, undercut=True)
+        body += frame * Pos((I6_ROOT_GAP - 1.4) / 2, 0, I6_BAR_Z) * \
+            Box(I6_ROOT_GAP + 1.4 + 0.01, IF["dovetail"]["crest_w"], I6_BAR_L)
 
     # ---- I3 attachment on the feet: one latch (pad, az +27.5) + ONE
     # magnet (az -25.5, r 76) — each web joint = neighbor A's latch +
@@ -245,19 +290,30 @@ def _mother():
     # deck-side washer recesses (Ø8-10) would breach the pentagon edge at
     # the az±34 positions (boundary ~81 there) — deck v0.4 taught the
     # shell where the deck actually ends.
-    body -= Rot(0, 0, 27.5) * Pos(74.5, 0, (DECK_TOP + 0.0) / 2) * \
+    body -= Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, (DECK_TOP + 0.0) / 2) * \
         Cylinder(PL["housing_pocket_d"] / 2, 6)
     body -= Rot(0, 0, -25.5) * Pos(76.0, 0, DECK_TOP +
                                    (PL["magnet_t"] + 0.2) / 2 - 0.01) * \
         Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
 
     # ---- hatch: opening + seat rebate + one seat magnet per sector (az 0)
-    # B88: the rebate (z 49.6..52.4) is deeper than the tier-4 roof, so the seat ledge is a
-    # 0.2 mm skin and this magnet pocket has no walls or floor to sit in
     body -= _ring(41.0, 53.5, HATCH_R, 2.0, HATCH_SEED)
-    body -= _ring(49.6, 52.4, HATCH_R + 4.5, 2.0, HATCH_SEED)
-    body -= Pos(HATCH_R + 1.0, 0, 49.6 - (PL["magnet_t"] + 0.2) / 2 + 0.01) * \
-        Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
+    body -= _ring(HATCH_SEAT_Z, 52.4, HATCH_R + 4.5, 2.0, HATCH_SEED)
+    # B88: the rebate is deeper than the tier-4 roof (z 49.4..52), so the seat
+    # ledge is a 0.2 skin, and the old pocket (r 47) hung in the cavity with no
+    # walls or floor. The seat magnet gets a boss instead: 2.0 walls, a 1.0 floor,
+    # reaching out to r 54 to fuse with the full roof (it is an island in the
+    # cavity: the sector prints with supports). The opening's edge is at r 44.7 at
+    # az 0, so the boss's inner 7.3 is a tab into the opening, flush with the seat
+    # (the plug covers it). Between the five bosses the ledge stays a 0.2 skin.
+    rb = MAG_POCKET_D / 2 + 2.0
+    z0 = HATCH_SEAT_Z - MAG_POCKET_T - 1.0
+    boss = Pos(HATCH_MAG_R, 0, (z0 + HATCH_SEAT_Z) / 2) * Cylinder(rb, HATCH_SEAT_Z - z0)
+    boss += Pos((HATCH_MAG_R + 54.0) / 2, 0, (z0 + HATCH_SEAT_Z) / 2) * \
+        Box(54.0 - HATCH_MAG_R, 2 * rb, HATCH_SEAT_Z - z0)
+    body += boss
+    body -= Pos(HATCH_MAG_R, 0, HATCH_SEAT_Z - MAG_POCKET_T / 2 + 0.01) * \
+        Cylinder(MAG_POCKET_D / 2, MAG_POCKET_T)
     return body
 
 
@@ -298,13 +354,11 @@ def shell_cap():
     cap = _ring(49.7, 52.2, HATCH_R + 4.5, 2.0, HATCH_SEED, dr=-FIT)  # seat plug
     cap += _ring(52.2, 58.0, HATCH_R + 7.0, 2.4, 66)
     cap += _ring(58.0, 63.0, HATCH_R - 9.0, 2.2, 77, twist=18)
-    # thumb notch + five plug magnets (mate the five seat magnets)
-    # B88: at r 47 these pockets break out of the plug's outer face; a magnet in one
-    # cuts 10.2 mm^3 into the sector's seat wall, so the cap cannot seat with them in
+    # thumb notch + five plug magnets (mate the five seat magnets). B88: at r 47
+    # these broke out of the plug's face and a magnet cut 10.2 mm^3 into the seat wall
     for k in range(5):
-        cap -= Rot(0, 0, 72 * k) * Pos(HATCH_R + 1.0, 0,
-                                       49.7 + (PL["magnet_t"] + 0.2) / 2 - 0.01) * \
-            Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
+        cap -= Rot(0, 0, 72 * k) * Pos(HATCH_MAG_R, 0, 49.7 + MAG_POCKET_T / 2 - 0.01) * \
+            Cylinder(MAG_POCKET_D / 2, MAG_POCKET_T)
     cap -= Pos(0, -(HATCH_R + 9), 53.5) * Rot(30, 0, 0) * Box(16, 10, 6)
     return cap
 
@@ -314,8 +368,10 @@ def keepouts():
     """Solids the shell must NOT touch (from the frozen frame conventions +
     part_coxa/part_deck geometry)."""
     ko = {}
-    # coxa fork + yaw sweep: hardware stays inside a r=26 disc about the
-    # yaw axis (station r=110); +2 mm margin, z from plate top to fork top
+    # coxa fork + yaw sweep about the yaw axis (station r=110), z 4..52. A
+    # proxy, not an envelope: it was a r=26 disc + 2 mm, but the fork's side
+    # cheeks (D063) reach r 29.5 and its hip cup r 41. Measured directly, the
+    # fork yawed -40..40 vs this sector: 0.00 mm^3, min gap 15.89 at yaw 40
     ko["fork_swing"] = Pos(110, 0, 28) * Cylinder(28, 48)
     # leg-port knobs (dia 12 at leg x -41, y +/-17) + dowel tops: columns
     # to z 13 over leg-local x -49..-22 -> body r 61..88, y +/-25
@@ -332,6 +388,101 @@ def keepouts():
     ko["deck_slab"] = Pos(0, 0, DECK_TOP - 4.1) * \
         extrude(RegularPolygon(100.2, 5), 4.0)
     return ko
+
+
+def _vol(s):
+    return 0.0 if s is None else s.volume
+
+
+def i6_shoe_pose(az, lift=0.0):
+    """The default I6 shoe seated on this sector's bar at az (+ lifted off it along
+    the wall normal), its set knob on the ARCH side: at a seam the two bars' knobs
+    would otherwise meet."""
+    flip = 180 if az > 0 else 0
+    return i6_bar_frame(az) * Pos(I6_ROOT_GAP + lift, 0, I6_BAR_Z) * Rot(0, 90, 0) * \
+        Rot(0, 0, flip)
+
+
+def i6_shoe_checks(sector, nb):
+    """B83: a dovetail_shoe + its set knob on every bar: seats and slides down from
+    above clear of the rock wall, cannot lift off, and clears the leg keep-outs, the
+    neighbour sector and the neighbour's shoe across the seam. On a bar the knob
+    never reaches its spot face (the bolt meets the male first): it works from the
+    M3 x 12 clamp (2.1 out along the bore) to the M3 x 16 one (6.1), and slides on
+    1 further out with the tip clear of the slot, so those are the poses checked."""
+    from iface import dovetail_female_shoe, set_knob_tf
+    from part_panel import thumb_knob_m3, set_knob_reach
+    shoe = dovetail_female_shoe()
+    meet = set_knob_reach(shoe, dovetail_male(undercut=True))[3]      # 9.90
+    backs = (12.0 - meet, (12.0 - meet + 16.0 - meet) / 2, 16.0 - meet, 17.0 - meet)
+    kits = [shoe + set_knob_tf() * Pos(0, 0, s) * thumb_knob_m3() for s in backs]
+    ko = {k: v for k, v in keepouts().items() if k != "deck_slab"}
+    ok = True
+    for az in I6_BARS:
+        tf = i6_shoe_pose(az)
+        seat = max(_vol((tf * kit) & sector) for kit in kits)
+        path = max(_vol((Pos(0, 0, dz) * tf * kits[-1]) & sector) for dz in range(4, 33, 4))
+        lift = _vol((i6_shoe_pose(az, lift=1.0) * shoe) & sector)
+        kov = max(_vol((tf * kit) & s) for s in ko.values() for kit in kits)
+        good = seat < 0.5 and path < 0.5 and lift >= 1.0 and kov < 0.5
+        ok &= good
+        print(f"  I6 shoe + knob ({backs[0]:.1f}-{backs[-1]:.1f} out) on the {az:+.0f} bar: "
+              f"seated {seat:.2f}, slide-down path {path:.2f}, keep-outs {kov:.2f} mm^3; "
+              f"lifted 1.0 {lift:.1f} mm^3 "
+              f"({'OK' if good else '*** SHOE DOES NOT FIT OR LIFTS OFF ***'})")
+    v_nb = v_pair = 0.0
+    for kit in kits:
+        a = i6_shoe_pose(max(I6_BARS)) * kit                    # this sector's seam side ...
+        b = Rot(0, 0, 72) * i6_shoe_pose(min(I6_BARS)) * kit    # ... and the neighbour's
+        v_nb, v_pair = max(v_nb, _vol(a & nb)), max(v_pair, _vol(a & b))
+    ok &= v_nb < 0.5 and v_pair < 0.5
+    print(f"  I6 shoe at the seam x neighbour sector {v_nb:.2f}, x neighbour's shoe "
+          f"{v_pair:.2f} mm^3 ({'CLEAR' if v_nb < 0.5 and v_pair < 0.5 else '*** CLASH ***'})")
+    return ok
+
+
+def hatch_magnet_checks(sector, cap):
+    """B88: the cap seats on the five sectors with its five magnets in (bottomed
+    in their pockets), and every hatch pocket has walls and a floor."""
+    from part_panel import walled
+    md, mt = PL["magnet_d"], PL["magnet_t"]
+    ring = [Rot(0, 0, 72 * k) * sector for k in range(5)]
+    z_cap_open, z_seat_open = 49.7, HATCH_SEAT_Z
+    cap_mag = Pos(HATCH_MAG_R, 0, z_cap_open + MAG_POCKET_T - mt / 2) * Cylinder(md / 2, mt)
+    seat_mag = Pos(HATCH_MAG_R, 0, z_seat_open - MAG_POCKET_T + mt / 2) * Cylinder(md / 2, mt)
+    posed = cap + sum((Rot(0, 0, 72 * k) * cap_mag for k in range(1, 5)), cap_mag)
+    v_seat = sum(_vol(posed & s) for s in ring)
+    v_mags = _vol(seat_mag & cap)
+    gap = (z_cap_open + MAG_POCKET_T - mt) - (z_seat_open - MAG_POCKET_T + mt)
+    ok = v_seat < 0.01 and v_mags < 0.01
+    print(f"  hatch: cap + 5 magnets x 5 sectors {v_seat:.3f} mm^3, seat magnet x cap "
+          f"{v_mags:.3f} mm^3, magnet faces {gap:.2f} apart (bottomed) "
+          f"({'SEATS' if ok else '*** CAP DOES NOT SEAT ***'})")
+    for name, part, z_open, z_closed in (
+            ("seat pocket (sector)", sector, z_seat_open, z_seat_open - MAG_POCKET_T),
+            ("plug pocket (cap)", cap, z_cap_open, z_cap_open + MAG_POCKET_T)):
+        fw, ff = walled(part, (HATCH_MAG_R, 0), z_open, z_closed, MAG_POCKET_D)
+        good = fw > 0.99 and ff > 0.99
+        ok &= good
+        print(f"  hatch {name}: 0.5 mm walls {100 * fw:.1f} %, floor {100 * ff:.1f} % "
+              f"({'WALLED' if good else '*** OPEN POCKET ***'})")
+    return ok
+
+
+def latch_pad_checks(sector):
+    """B87: the latch cartridge in the sector's pad, the housing's bottom flush with
+    the foot's (on the deck top): housing and rotor clear of the sector at OPEN, half
+    way and LOCKED. The lugs hang below the foot into the deck's strike (part_deck
+    checks that side) and the rotor is worked from under the deck."""
+    from iface import latch_insert_housing, latch_insert_rotor, LATCH_ENTRY_DEG
+    tf = Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, DECK_TOP)
+    v_h = _vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + 45) * latch_insert_housing()) & sector)
+    rotor = latch_insert_rotor()
+    v_r = max(_vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + phi) * rotor) & sector) for phi in (0, 45, 90))
+    ok = v_h < 0.01 and v_r < 0.01
+    print(f"  I3 latch cartridge in the pad: housing x sector {v_h:.2f}, rotor x sector "
+          f"(open / 45 / locked) {v_r:.2f} mm^3 ({'CLEAR' if ok else '*** CLASH ***'})")
+    return ok
 
 
 if __name__ == "__main__":
@@ -361,6 +512,9 @@ if __name__ == "__main__":
     ok &= v_engage > 10.0
     print(f"  tongue-in-groove engagement: {v_engage:.1f} mm^3 displaced "
           f"({'ENGAGED' if v_engage > 10 else '*** NOT ENGAGING ***'})")
+    ok &= i6_shoe_checks(sector, nb)
+    ok &= hatch_magnet_checks(sector, cap)
+    ok &= latch_pad_checks(sector)
     for n, p in (("sector", sector), ("cap", cap)):
         bb = p.bounding_box()
         fits = bb.size.X <= PR["bed_mm"][0] and bb.size.Y <= PR["bed_mm"][1] \

@@ -18,7 +18,7 @@ Stance (leg frame, mm): hip (45.0, 61.0), knee (123.8, 7.9), foot (75.0, -118.0)
 | part | verdict | SF | case | governs | peak util (raw) | deflection (mm) | mesh |
 |---|---|---|---|---|---|---|---|
 | coxa_yaw_base | **PASS** | 2.93 | V | layers | 0.39 at (-14.0, 5.5, 0.0) | 0.150 | 19050 el |
-| coxa_fork | **PASS** | 3.03 | L- | layers | 0.36 at (6.5, -8.8, 49.8) | 0.202 | 17739 el |
+| coxa_fork | **PASS** | 2.47 | R- | layers | 0.50 at (2.0, 16.6, 7.3) | 1.763 | 23667 el |
 | femur | **PASS** | 2.18 | L- | von Mises | 0.66 at (52.0, 35.6, -11.0) | 1.058 | 43446 el |
 | tibia_knee_carrier | **PASS** | 3.92 | L- | layers | 0.36 at (139.2, 9.4, 35.6) | 0.068 | 12468 el |
 | horn_coupler | **PASS** | 7.81 | T+ | von Mises | 0.13 at (-11.0, 0.5, 2.9) | 0.015 | 39190 el |
@@ -34,7 +34,7 @@ Held: deck (plate underside) (5335 nodes). Loaded: yaw servo case in the cup (39
 | case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |
 |---|---|---|---|---|---|---|
 | V | (0.0, 0.0, 60.29) | (0.0, -4521.8, 0.0) | 6.88 | 6.82 | 2.93 | 0.15 |
-| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.15 | 2.08 | 9.62 | 0.046 |
+| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.1 | 2.08 | 9.62 | 0.046 |
 | R- | (-16.42, 0.0, 0.0) | (0.0, 2365.1, 0.0) | 2.1 | 1.74 | 11.49 | 0.046 |
 | L+ | (0.0, 39.2, 0.0) | (5644.8, -0.0, 2940.0) | 5.43 | 2.9 | 6.45 | 0.099 |
 | L- | (0.0, -39.2, 0.0) | (-5644.8, -0.0, -2940.0) | 5.43 | 5.07 | 3.95 | 0.099 |
@@ -43,15 +43,15 @@ Held: deck (plate underside) (5335 nodes). Loaded: yaw servo case in the cup (39
 
 ![coxa_fork](coxa_fork.png)
 
-Held: yaw horn pocket + yaw idler pocket (1723 nodes). Loaded: hip servo case in the cup (3876 nodes). Build direction (part frame): (0.0, 0.0, 1.0).
+Held: yaw horn face on the flat hub top + yaw idler pocket (open to the mouth); R-: the horn face alone (1143 nodes). Loaded: hip servo case in the cup (3866 nodes). Build direction (part frame): (0.0, 0.0, 1.0).
 
 | case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |
 |---|---|---|---|---|---|---|
-| V | (0.0, 0.0, 60.29) | (0.0, -1808.7, 0.0) | 10.07 | 4.89 | 3.47 | 0.369 |
-| R+ | (16.42, 0.0, 0.0) | (0.0, -2940.0, 0.0) | 6.88 | 3.24 | 5.08 | 0.246 |
-| R- | (-16.42, 0.0, 0.0) | (0.0, 2940.0, 0.0) | 6.88 | 5.61 | 3.57 | 0.246 |
-| L+ | (0.0, 39.2, 0.0) | (7016.8, -0.0, 1176.0) | 7.79 | 6.16 | 3.25 | 0.202 |
-| L- | (0.0, -39.2, 0.0) | (-7016.8, -0.0, -1176.0) | 7.79 | 6.61 | 3.03 | 0.202 |
+| V | (0.0, 0.0, 60.29) | (0.0, -1808.7, 0.0) | 4.81 | 3.49 | 5.71 | 0.196 |
+| R+ | (16.42, 0.0, 0.0) | (0.0, -2940.0, 0.0) | 3.15 | 2.37 | 8.47 | 0.131 |
+| R- | (-16.42, 0.0, 0.0) | (0.0, 2940.0, 0.0) | 10.9 | 8.1 | 2.47 | 1.763 |
+| L+ | (0.0, 39.2, 0.0) | (7016.8, -0.0, 1176.0) | 4.57 | 3.21 | 5.95 | 0.122 |
+| L- | (0.0, -39.2, 0.0) | (-7016.8, -0.0, -1176.0) | 4.57 | 4.13 | 4.85 | 0.122 |
 
 ## femur
 

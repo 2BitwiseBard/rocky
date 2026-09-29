@@ -22,12 +22,15 @@ Scope:
   * ROCKY_WORLD = cliff (default: the guard tests' platform) | flat | room.
 
 D052 V2 (review) — HONESTY NOTE: this backend is NOT the D052 control loop
-(no ServoModel, no WaveGait.budget, no void-probe, its own CliffDetector
+(no ServoModel, no void-probe, no touchdown gate, its own CliffDetector
 loop); the cockpit (sim/cockpit.py, on sim.playground.Playground) is. What
 it now shares: every joint target is NaN-guarded and rate-clamped (4.7 rad/s,
 params 'hard'), and a stop / the end of a gesture ramps back to the stance at
 the LOADED 3.0 rad/s instead of snapping in one physics step (119 deg for
-fist_bump). AutoBackend tags every result with the backend it ran on.
+fist_bump). D063: goto's command is fitted into the gait's envelope
+(WaveGait.budget) and eased by the supervisor's command slew like the
+cockpit's; a stop and the void back-off are not eased. AutoBackend tags
+every result with the backend it ran on.
 Rebuilding this on the Playground loop is the real fix (design backlog).
 """
 from __future__ import annotations
@@ -223,7 +226,9 @@ class SimBackend:
                 yaw = float(np.arctan2(Rm[1, 0], Rm[0, 0]))
                 cy, sy = np.cos(yaw), np.sin(yaw)
                 ux, uy = cy * ux + sy * uy, -sy * ux + cy * uy
-                vx, vy = V * ramp * ux, V * ramp * uy
+                # D063: fitted into the gait's envelope (45 asked, 34.2 mm/s
+                # today), the one budget every other command source gets
+                vx, vy, _wz = gait.budget(V * ramp * ux, V * ramp * uy, 0.0)
                 vx, vy, wz = react.command(tw, vx, vy, 0.0)
                 halted = (react.retreat_until is not None and
                           tw >= react.retreat_until)
@@ -237,8 +242,12 @@ class SimBackend:
             w_body = R.T @ data.cvel[self.torso][0:3]
             gxy = body_gyro_xy(w_body)
             con = foot_contacts(model, data)
+            # D063: the supervisor slews the command; the void reaction is not
+            # eased (its back-off lands at once, as before), and the stop at
+            # an outcome is immediate inside the supervisor (request_stop)
             q, state = sup.step(tw, vx, vy, wz, gxy, contacts=con,
-                                gyro_vec=w_body[:2])
+                                gyro_vec=w_body[:2],
+                                direct=react.retreat_until is not None)
             data.ctrl[:15] = self._guard(q)
             if k % 10 == 0 and state == "NORMAL" and outcome is None:
                 ph = [(sup.t_gait / gait.T + gait.phase_off[i]) % 1.0

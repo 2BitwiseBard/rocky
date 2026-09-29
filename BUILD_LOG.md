@@ -9,6 +9,169 @@ indexes them.*
 
 ---
 
+## 2026-09-28 · Session 9m — the fork slides on, the panels close, the motion stops snapping (D063)
+
+**Ask:** "fix the fork ... do everything you can on yours": the CAD faults of 9l that one
+part owner can fix, and the software half of the servo notes (B76, B79). Six groups (leg,
+panels, small parts, gait, driver, body layout) each implemented their rows; a second
+agent then reviewed each group, re-measured every claim and fixed what it found. Then the
+slew was wired in, the gestures re-timed and every derived output regenerated.
+
+**The leg (B80, B81):** the idler pocket (Ø20.3), its Ø7 head relief and a 6.4 mm channel
+for the horn's centre head open out through the C's mouth (`part_coxa._to_mouth`): the
+slide-on path reads 45.98 → 0.00 mm³ against the blank and 50.41 → 0.00 against the real
+servo (new J1 checks; on HEAD's fork they read BLOCKED). B81 option (b): no horn pocket,
+the horn face bears on the flat hub top (35.76 mm³ under a 0.2 mm pull, the centre head
+clear); +X is the bolted direction (the four horn screws). **The reviewer caught R−:** the
+inward foot push needs the idler to push the upper plate −X, which is now the mouth, but
+`fem_check` still pinned the idler both ways (SF 3.60). On the horn face alone the fork read
+**SF 0.49**, deflecting 22.96 mm at the hip cup. Fix: two 3 mm side cheeks
+(x 2–22, |y| 16.6–19.6), outside the yaw servo's swept case (≥ 0.67 mm over yaw ±40°),
+**+27.5 g a robot** (the fork 14.07 → 19.60 g over D062, channels included). `fem_check` now runs one CalculiX deck per set of
+grips. Fork SF V / R+ / R− / L+ / L− 3.47 / 5.08 / 3.57 / 3.25 / 3.03 → **5.71 / 8.47 /
+2.47 / 5.95 / 4.85**, R− governing (1.76 mm). The knife-edge fins beside the idler
+channel are cut square.
+
+**The panels (B82, B83, B87, B88):**
+- B82: the knob is 8.6 tall with a 2.1 mm hex pocket; the M3 × 16 hex head sits 0.1 below
+  its top (it stood 0.5 proud) and engages 5.5 mm. Still not captive.
+- B83: the I6 male was a key (wide face at the root), so a shoe lifted straight off it
+  (0 mm³ at any lift). The ring's male is now an undercut dovetail (the stand keeps the
+  key, byte-identical) and the shoe's tapped bore aims 45° at its flank: lifted 1 mm it
+  reads 27.61 mm³ (held); a force balance loads both flanks (1.19 F, 0.40 F).
+- B87, a bayonet: the rotor drops through keyways in the housing and is captive once
+  turned; the deck strike has entry slots, a 0.8 mm cam ramp over 0–50° and a dwell to
+  90°. Rotor into housing 17.78 → 0 mm³, housing skin 73 → 100 %, bite at LOCKED 0 → 2.68
+  mm³, a locked panel lifted 0.2 holds. Turned from under the deck with a flat
+  screwdriver ≤ 5 mm wide: **the reviewer disproved the coin** (it gets ~0.5 mm into the
+  1.5 mm slot before it meets the frame).
+- B88: the hatch magnets sit at r 42.5 on seat bosses: 50.96 → 0.000 mm³, pockets walled
+  100 %.
+- The review also re-posed the I6 check at the knob's real working range, made
+  `latch_strike` refuse a frame under 6.0 mm, and found station 162's latch inside the
+  bay's footprint (B100) and a cam bite that may set PLA lugs (~108 MPa at their roots
+  against ~50 MPa yield, B99).
+
+**The tray and the clip (B89, B90, B94):** Pi standoffs 58 × 49 from `PI_HOLES` unscaled
+(a pin down each hole 14.76 → 0 mm³; a check derives the holes from the Pi 5 drawing), 11 mm
+tall so the IMU fits under the Pi (its top to the Pi's keep-out −2.60 → 1.20 mm); IMU holes
+20.32 × 17.78 over nut recesses (M2.5 × 10 + DIN 934, tail to the deck −0.30 → 0.90 mm).
+`link_clip`: inner jaw 2.4 → 1.2 mm, posed over plate A's slot, against the swinging knee
+parts 14.67 → 0.00 mm³ with 1.0 mm running clearance. The reviewer made the jaw 8.2 deep
+(at 8.0 the nubs cleared the slot edge by 0.1 mm; a new "snaps home" check fails there)
+and added the knee plug to the sweep.
+
+**The motion (B76 fixes 1, 2, 3, 8; B79):**
+- **Fix 2, the soft-landing swing** (`pebble_gait.swing_profile`): the swing leaves and
+  meets the ground at the stance foot's speed, with zero vertical speed. The velocity
+  step at lift-off/touchdown is 3.05 / 3.06 / 2.77 → 0.003 rad/s (walk / strafe / turn),
+  joint peaks 3.54–3.63 → 2.96–2.98 rad/s, and a new `KINK` verdict fails any step over
+  0.5. A zero command is now exactly the standing pose (the lift fades in below 15 mm/s).
+  **The cost:** the lift is fastest 12 mm up, inside the 15 mm band held to the loaded
+  3.0 rad/s, so the envelope fell **45.5 → 34.2 mm/s, 0.246 → 0.185 rad/s**. The owner
+  kept T 2.0; T 2.2 would give 39.8 / 0.215 (B103).
+- **Fix 1, the command slew** (`CommandSlew`, 25 mm/s² on the fastest foot). **The
+  reviewer found its ramps over the loaded budget:** a start to 30.1/16.2 mm/s peaked at
+  3.021 rad/s, 5 of 1440 grid ramps failed (worst 3.036), and a lower acceleration did not
+  cure it (3.0003 at 10 mm/s²). A 0.2 s first-order lag after the rate limit did: 0 fails
+  over 1440 grid, 2400 fine-phased and 280 mid-ramp retargets, worst 2.992 (its first
+  version snapped the tail and the checker caught that too, 3.0047). Standing → 34.2 mm/s
+  takes 2.36 s; a start moves a joint 3.38° per 20 ms tick (was 28.4°). Wired into the
+  supervisor's normal and recover states, the playground (the touchdown gate compares the
+  target, so a ramp never ends a hold), the harness sim and `gait_node`; a stop is never
+  eased (BRACE in the same tick). The review fixed two faults in the wiring patch: a
+  gyro-trip PLANT mid-ramp jumped to full speed (9.11 → 4.04° a tick), and after righting the gait
+  resumed mid-stride (16.75 → 3.38°). The RL envs stay unslewed until a retrain.
+- **Fix 3, a per-tick goal speed** (`bus.goal_speeds`): 1.3 × the goal step per tick,
+  floor 50 counts/s, cap 3063 (4.7 rad/s), the cockpit slider a ceiling. On the mock the
+  servos move 63–77 % of each tick instead of 21 %. The sag under load is B98.
+- **Fix 8, the minimum-jerk ease** (10u³ − 15u⁴ + 6u⁵): 10 ms into a key the acceleration
+  is under 12 % of the smoothstep's, but the peak is 1.875× the mean (was 1.5×).
+  **`point_there` failed** (SPEED_FREE 4.02 rad/s) until its tail moved t 4.5 → 4.7 (3.58
+  rad/s, p95 15.9°); the `compose_gesture` example and the WAVE fixture went to 1 s per arm
+  move (4.13 → 3.31); the pose solver's lead-in sizes itself with the ease.
+- **B79:** `register_dump` reads STS 0–87 and SCS 0–83 (0–73 when a servo refuses) and
+  prints firmware, return delay, Lock, ACC, 85, 86 per servo.
+
+**The body layout (B51, B84–B86, B92, B93), a proposal:**
+[docs/BODY_LAYOUT_PROPOSAL.md](docs/BODY_LAYOUT_PROPOSAL.md). Five measured facts decide
+it (the leg drops meet under the deck, the bay hangs below the hook feet, one east-west
+band is free, the tray fits only at (0, 0) with its tabs inboard, the carapace ceiling);
+option A, a keel tub 8 mm under the deck plus a hub shelf, is recommended. Its review
+rebuilt the parts from the tree after the other groups' edits: B no longer fits (its Pi
+492 mm³ into the carapace), A's carapace margin is 5.5 mm, not 10.5, the strap needs width
+(`bay_w` 53, or no strap inside), the door latch a south-wall boss, and legs 1–4 can fold
+into the tub within their soft limits (B97). Thirteen owner decisions, its §8.
+
+**The loop:** `params_rev` D063, fingerprint `1f953c89f979` → **`87215110e9c4`**, robot
+2694.6 → **2727.7 g** (torso 1434.6 → 1439.7, coxa link 78.3 → 83.9). CAD 34/34 +
+fem_check = 35/35, byte-stable on a third `--derived` pass (0 of 590 files changed; the
+first pass builds the print pack before FEM runs, so it still carried the fork's old
+verdict, B110). `run_sim`: walk 247 → **189 mm** (of ~198 commanded), turn 55.4 →
+**41.8°**, max tilt 0.84 → 0.41°, height std 0.34 → 0.19 mm, drift 3 → 0 mm. Standing
+shove floor 30 N = **1.12 BW** (per direction unchanged); the regen's walking run was not
+like for like (a raw 45 ask, shoved at 3.0 s while the slew was at 43.2 mm/s), re-run
+below (B104; the D062 JSON says walking min 20 N = 0.76 BW at a steady 45, and 9k's
+"walking 24 N" disagrees with it: the JSON is the record). Knee self-right 1.479 → **1.496
+N·m = 50.9 %** (HOT; slightly conservative, the audit counts the hand twice, B106).
+`recover1` system 20/20 (back 6/6, side 7/7, tumble 7/7), hardware 0/20, no righter 11/20,
+unchanged. Gestures 19 rows, 0 FAIL (4 clean, 14 TRACK, 1 MARGIN_WARN); gait-row p95
+16.5–18.5 → 12.9–14.8°. Cliff lip band 11 of 364 (9–15°; 3 fire the void guard, then tip:
+fixed below). Print: one leg 136 g / 7.3 h → 142 g / 7.6 h, four more 287 g / 15.3 h → 310
+g / 16.5 h; the pack is 44 pages, the fork "SF 2.47, governing case R−". Fast ladder 1073
+passed (sim 776, harness 113, gait 96, driver 88); slow 2 passed + 3 strict xfails;
+`cad/test_fem.py` 9; ruff clean. After the fixes below: fast 1074 (sim 777), 2 strict
+xfails; slow 3 passed + 3 strict xfails.
+
+**After the regen (2026-09-29): the cliff and the walking shove.** Three of the 11 lip-band
+falls fired the void guard and tipped while backing off: the gate held the gait on the leg
+over the void while the leg it had put back down stood on the lip, alone holding the front
+up (the CoM ~60 mm outside the other legs' triangle); at the 3.5 mm probe lead the 30 mm
+probe took ~0.75 s, the lip foot slid off first, and the void fired 0.90 s into the hold.
+Nothing after the fire saved them (a 3× retreat, 20–25 mm more lift, a 40–60 mm lean-back);
+a fire forced up to 0.70 s into the hold did. Fix (`sim/playground.py`): a late foot held by
+the gate seeks at once with a 7 mm lead (`PROBE_HOLD_LEAD_MM`; the void still needs the real
+foot 26.5 mm down) while the body has not tilted 1° past its lowest tilt in the hold
+(`PROBE_HOLD_ROLL_DEG`: without it a shin resting on a bump on rough ground rolled the body
+to 7° into a false void); not in the careful walk. The void now fires 0.56 s into the hold,
+tilt after ≤ 1.6°. The 364-approach grid: 11 → **8** falls, none after a fire (slew off 7,
+careful walk 6); the 8 tip during the next leg's swing, before any touchdown to hold on, out
+of a probe's reach (B33 c). Terrain A/B, 90 walks: 0 falls and 0 false voids before and
+after, progress +1.1 %, 7 walks tilt 1–2° more (worst 7.3°), 3 probe 25 mm or deeper.
+`shove_envelope` now asks the envelope (`scenes.walk_ask()`, 34.2 mm/s) and shoves at 5.0 s,
+1.64 s after the ease-in: walking 30 N in all six directions, min and mean **1.12 BW** (B104
+closed).
+
+**Tests that pinned a number D063 moved** got the new number and a reason: the envelope
+(34.2 / 0.185), the `run_sim` refs (189 mm / 41.8°), the RL walk 30 → 40 s (to keep its
+1 m bar), the gyro-trip test 0.3 → 0.05 rad/s (the soft landing peaks the walk's gyro
+at 0.11), the rewind rate at the envelope 1.12 → 1.35, the void-guard grid 10° → 15°
+(10° is in the lip band now) with the strict lip-band xfails re-pinned to the new falls,
+the fall-during-gesture shove 60 → 65 N (a chaotic tumble: on the new model 60 N tips it
+to 129° and it rolls back), and the golden hashes for the re-timed `compose_gesture` text.
+
+**Next:** the owner: the body layout's §8 (option A, and an I4/I5 revision) and T 2.2
+(B103). The bench: the goal-speed sag (B98), `frame_coupon` + a cartridge for the 0.2 mm
+bite and the I6 wedge (B99), 85/86, the return delay and Lock (B32); B80 no longer blocks
+the leg's batch, and the horn coupon still comes first (B23). Done after the regen:
+`point_there.json` re-saved (`checked.params` 0.1/D063, still PASS at 3.58 rad/s), the gait
+GIF and joint plot re-made (`python gait/demo_walk.py`), the new printability warnings in
+PRINT_PLAN, and goto's cap: the old 40 s stopped a 1.5 m goto at 1.275 m, so the cap is
+now derived from the envelope (`harness.capabilities.goto_cap_s`: 1.5 m × 1.2 / 0.0342 m/s
++ the 2.36 s ease-in = 55 s; a 1.5 m goto arrives in 46.1 s), the texts say ~0.034 m/s and
+55 s, a detour walks up to 15.5 s (0.45 m) and its no-progress clock counts its own progress
+(2 cm farther from where it began: a sidestep into a 14 cm box the lidar cannot see ends `stuck`
+after 6.0 s instead of pushing 16.6 s), `go_back_to` re-aims a leg a detour made time out (the
+MCP proxy waits 300 s for it: a detour running at the cap finishes first), and the scan turn
+is timed to the envelope's 10.6°/s (14.2 turned 23.7° of 30°).
+Still open: the fork drawing's open channels (B105), the torque audit's double
+hand (B106), the 8 lip-band falls (a lip landing needs its own detector, or a look-ahead
+sensor, B33 c), the experiments' time limits still sized for 45 mm/s (B111), the cliff
+safe-stop experiment's march-in-place verdict (B112), `ArmedGait`'s envelope (B113), and a
+retrain on `87215110e9c4` with the slew in the RL envs (B34).
+
+---
+
 ## 2026-09-28 · Session 9l — an assembly guide, and what writing it found (B80–B96)
 
 **Ask:** research what to order (servos, electronics, filament), then: are the ST3215s

@@ -55,7 +55,7 @@
       -2365.1,
       0.0
      ],
-     "vm_p999": 2.15,
+     "vm_p999": 2.1,
      "sn_p999": 2.08,
      "util_p999": 0.104,
      "util_peak": 0.115,
@@ -148,18 +148,18 @@
   {
    "part": "coxa_fork",
    "verdict": "PASS",
-   "sf": 3.03,
-   "governing": "L-",
-   "nodes": 33528,
-   "elements": 17739,
-   "held_nodes": 1723,
-   "loaded_nodes": 3876,
+   "sf": 2.47,
+   "governing": "R-",
+   "nodes": 43998,
+   "elements": 23667,
+   "held_nodes": 1143,
+   "loaded_nodes": 3866,
    "build_dir": [
     0.0,
     0.0,
     1.0
    ],
-   "held": "yaw horn pocket + yaw idler pocket",
+   "held": "yaw horn face on the flat hub top + yaw idler pocket (open to the mouth); R-: the horn face alone",
    "loaded": "hip servo case in the cup",
    "cases": [
     {
@@ -174,18 +174,18 @@
       -1808.7,
       0.0
      ],
-     "vm_p999": 10.07,
-     "sn_p999": 4.89,
-     "util_p999": 0.288,
-     "util_peak": 0.309,
+     "vm_p999": 4.81,
+     "sn_p999": 3.49,
+     "util_p999": 0.175,
+     "util_peak": 0.208,
      "peak_at": [
-      11.7,
-      -0.2,
-      42.2
+      22.0,
+      18.2,
+      43.9
      ],
-     "defl_mm": 0.369,
-     "sf": 3.47,
-     "governs": "von Mises"
+     "defl_mm": 0.196,
+     "sf": 5.71,
+     "governs": "layers"
     },
     {
      "case": "R+",
@@ -199,18 +199,18 @@
       -2940.0,
       0.0
      ],
-     "vm_p999": 6.88,
-     "sn_p999": 3.24,
-     "util_p999": 0.197,
-     "util_peak": 0.214,
+     "vm_p999": 3.15,
+     "sn_p999": 2.37,
+     "util_p999": 0.118,
+     "util_peak": 0.141,
      "peak_at": [
-      11.7,
-      -0.2,
-      42.2
+      22.0,
+      18.2,
+      43.9
      ],
-     "defl_mm": 0.246,
-     "sf": 5.08,
-     "governs": "von Mises"
+     "defl_mm": 0.131,
+     "sf": 8.47,
+     "governs": "layers"
     },
     {
      "case": "R-",
@@ -224,17 +224,17 @@
       2940.0,
       0.0
      ],
-     "vm_p999": 6.88,
-     "sn_p999": 5.61,
-     "util_p999": 0.28,
-     "util_peak": 0.298,
+     "vm_p999": 10.9,
+     "sn_p999": 8.1,
+     "util_p999": 0.405,
+     "util_peak": 0.496,
      "peak_at": [
-      6.5,
-      -0.2,
-      48.2
+      2.0,
+      16.6,
+      7.3
      ],
-     "defl_mm": 0.246,
-     "sf": 3.57,
+     "defl_mm": 1.763,
+     "sf": 2.47,
      "governs": "layers"
     },
     {
@@ -249,17 +249,17 @@
       -0.0,
       1176.0
      ],
-     "vm_p999": 7.79,
-     "sn_p999": 6.16,
-     "util_p999": 0.308,
-     "util_peak": 0.329,
+     "vm_p999": 4.57,
+     "sn_p999": 3.21,
+     "util_p999": 0.168,
+     "util_peak": 0.186,
      "peak_at": [
-      20.8,
+      2.0,
       13.0,
-      44.1
+      48.2
      ],
-     "defl_mm": 0.202,
-     "sf": 3.25,
+     "defl_mm": 0.122,
+     "sf": 5.95,
      "governs": "layers"
     },
     {
@@ -274,17 +274,17 @@
       -0.0,
       -1176.0
      ],
-     "vm_p999": 7.79,
-     "sn_p999": 6.61,
-     "util_p999": 0.33,
-     "util_peak": 0.362,
+     "vm_p999": 4.57,
+     "sn_p999": 4.13,
+     "util_p999": 0.206,
+     "util_peak": 0.239,
      "peak_at": [
       6.5,
-      -8.8,
-      49.8
+      -8.7,
+      49.9
      ],
-     "defl_mm": 0.202,
-     "sf": 3.03,
+     "defl_mm": 0.122,
+     "sf": 4.85,
      "governs": "layers"
     }
    ]

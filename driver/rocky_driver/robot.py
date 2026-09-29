@@ -125,13 +125,16 @@ class PebbleRobot:
         self.bus.sync_write_reg("TORQUE_LIMIT", {i: int(torque_limit) for i in ids})
         self.bus.sync_write_reg("ACC", {i: int(acc) for i in ids})
 
-    def send_leg_targets(self, q_rad_5x3, speed_cps: int = 0) -> None:
-        """q_rad_5x3: anything indexable [leg][joint] in radians (gait output)."""
-        targets: dict[int, float] = {}
-        for leg in range(5):
-            for j in range(3):
-                targets[self.leg_ids[leg][j]] = self.q_to_deg(leg, j, q_rad_5x3[leg][j])
-        self.bus.sync_positions(targets, speed_cps)
+    def leg_goals_deg(self, q_rad_5x3) -> dict[int, float]:
+        """{servo id: center-relative servo deg} for a (5,3) gait-space target,
+        soft limits and calibration applied (ValueError on NaN, as q_to_deg)."""
+        return {self.leg_ids[leg][j]: self.q_to_deg(leg, j, q_rad_5x3[leg][j])
+                for leg in range(5) for j in range(3)}
+
+    def send_leg_targets(self, q_rad_5x3, speed_cps: int | dict[int, int] = 0) -> None:
+        """q_rad_5x3: anything indexable [leg][joint] in radians (gait output).
+        speed_cps: one speed, or {id: cps} per servo (bus.goal_speeds, D063)."""
+        self.bus.sync_positions(self.leg_goals_deg(q_rad_5x3), speed_cps)
 
     def send_claws(self, open_frac_5) -> None:
         """open_frac in 0..1 per hand -> 0..55 deg (D018 cap until hand v0.3)."""

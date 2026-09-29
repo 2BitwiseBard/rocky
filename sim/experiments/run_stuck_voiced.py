@@ -32,11 +32,15 @@ import mujoco
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 from pebble_gait import WaveGait                                     # noqa: E402
 from pebble_watchdog import ProgressWatchdog, RetryPolicy            # noqa: E402
-from scenes import build_model, init_robot                           # noqa: E402
+from scenes import build_model, init_robot, walk_ask                 # noqa: E402
 from chordspeak_events import Narrator                               # noqa: E402
 from chordspeak2 import write_wav                                # noqa: E402
 
-AMP, V_X = 40, 45.0
+AMP = 40
+V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
+#                                 T_WALK_MAX was sized at 45: on the D063 gait seed 1 does not cross within
+#                                 it (nor at a raw 45: 394 mm); run_stuck at 33 s (25 x 45 / 34.2) crosses it
+#                                 at 31.5 s. No crossing to narrate until the owner re-times it (run_stuck.py)
 T_STAND = 1.0
 T_WALK_MAX = 25.0
 GOAL_X = 0.40

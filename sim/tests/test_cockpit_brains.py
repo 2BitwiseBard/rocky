@@ -278,8 +278,16 @@ def test_tools_are_built_with_live_enums():
 # The sha256 is over EXTRA_TOOLS' canonical JSON (sort_keys, compact): no file needed.
 EXTRA_BEFORE = ("compose_gesture", "check_gesture", "save_gesture", "find_object", "remember",
                 "where_is", "recall", "go_back_to", "forget")
-EXTRA_BEFORE_SHA = "5c53a90ca8083e8679fd70ca2170cf0c67a786e7ffb49eff43710e342333d4e4"
+# D063: compose_gesture's example re-timed on purpose (1 s per move: the minimum-jerk ease made its
+# 0.8 s arm moves 4.13 rad/s, over the 4.0 free limit); was 5c53a90ca808... at D056
+EXTRA_BEFORE_SHA = "5af48acd8c83b5d63bb2acc0302cf4c22d7db2817ead3eb8405194e3fd7d0421"
 GATED_BEFORE = frozenset({"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn", "move"})
+# the D056 compose_gesture text and goto's timeout clause (the texts D063 changed: the compose example
+# re-timed; the 34.2 mm/s envelope and the 55 s cap derived from it): _as_of_d063 puts today's in
+# their place, so every other tool text and schema is still checked against the D056 snapshot byte for byte
+D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
+D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
+D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
 # the D056 snapshot, vendored with the harness tests (ROCKY_D056_SNAPSHOTS overrides the directory)
 REGISTRY_SNAPSHOTS = (os.environ.get("ROCKY_D056_SNAPSHOTS")
                       or os.path.join(ROOT, "harness", "fixtures", "d056"))
@@ -289,6 +297,21 @@ def _canon_sha(obj):
     import hashlib
     return hashlib.sha256(json.dumps(obj, sort_keys=True, separators=(",", ":"),
                                      ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _as_of_d063(tools):
+    """A D056 OpenAI tool list with D063's compose_gesture and goto texts in place of the D056 ones."""
+    import harness.capabilities as C
+    out = json.loads(json.dumps(tools))
+    for t in out:
+        f = t["function"]
+        if f["name"] == "compose_gesture":
+            assert D056_COMPOSE_RULE in f["description"], "the snapshot's compose text is not D056's"
+            f["description"] = C.COMPOSE_DOC
+        if f["name"] == "goto":
+            assert D056_GOTO_TOO_FAR in f["description"], "the snapshot's goto text is not D056's"
+            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+    return out
 
 
 def test_extra_tools_and_gated_are_registry_views_equal_to_before():
@@ -315,7 +338,7 @@ def test_extra_tools_and_gated_equal_the_pre_registry_snapshot():
     if not os.path.exists(path):
         pytest.skip(f"no D056 snapshot at {path} (the hashes above still pin it)")
     with open(path, encoding="utf-8") as f:
-        before = json.load(f)["cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))"]
+        before = _as_of_d063(json.load(f)["cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))"])
     assert json.dumps(cb.TOOLS) == json.dumps(before)                                  # key order too
     assert json.dumps(cb.EXTRA_TOOLS) == json.dumps(
         [t for t in before if t["function"]["name"] in EXTRA_BEFORE])
@@ -324,6 +347,37 @@ def test_extra_tools_and_gated_equal_the_pre_registry_snapshot():
     assert cb.GATED == frozenset(sets["GATED_raw"]) == frozenset(sets["GATED"])
     assert list(cb.TOOL_NAMES) == sets["cockpit_dispatch (CockpitSim.tool -> Brains.tool accepts TOOL_NAMES)"]
     assert list(cb.NOTED) == sets["NOTED"] and list(cb.MEMORY_TOOLS) == sets["MEMORY_TOOLS"]
+
+
+def test_goto_texts_and_waits_follow_the_envelope():
+    """D063: the envelope fell to 34.2 mm/s and goto's cap, derived from it, grew 40 -> 55 s. The
+    texts quote it, a clear go_back_to leg fits it, and the MCP proxy still waits long enough."""
+    import harness.capabilities as C
+    import harness.cockpit_backend as cbk
+    import harness.local_brain as lb
+    cap = C.default_envelope()["goto_timeout_s"]
+    assert "in its 55 s" in cb.goto_range_error(3.5, 0.0, {"x": 0.0, "y": 0.0})
+    assert "~0.034 m/s in 55 s" in lb.validate_move(2.0, 0.0)[2] and "walks ~0.034 m/s" in lb.MOVE_RULE
+    assert cb.GO_BACK_LEG_M / C.GOTO_SPEED_M_S + C.GOTO_EASE_IN_S < cap - 15.0     # ~37 s of 55
+    import cockpit
+    assert cockpit.GOTO_CAP_S == cap
+    settle = 1.5                                   # a goto answers 1.5 s after it ends (cockpit _goto_post)
+    # a detour still running at the cap runs out its own limit first (measured: answers at 66-68 s)
+    longest = cap + cockpit.GOTO_DETOUR_S + settle
+    assert longest < cbk.CockpitBackend("http://127.0.0.1:9").client.timeout.read    # a goto, a move
+    assert cbk.GO_BACK_TIMEOUT_S >= cb.GO_BACK_MAX_LEGS * longest
+
+
+def test_turn_is_timed_to_the_envelope_turn_rate():
+    """D063: the scan turn runs at pg2.TURN_WZ fitted into the budget, the envelope's turn rate
+    (0.185 rad/s); the D052 literal 14.2 deg/s turned 23.7 deg of a turn(30) at that rate."""
+    import math
+    import harness.capabilities as C
+    import pebble_gait as pg
+    import pebble_gestures2 as pg2
+    env = C.default_envelope()
+    assert pg.WaveGait().budget(0.0, 0.0, pg2.TURN_WZ)[2] == pytest.approx(env["turn_rad_s"], abs=1e-3)
+    assert cb.TURN_RATE_DPS == round(math.degrees(env["turn_rad_s"]), 1) == 10.6
 
 
 def test_every_registry_tool_this_cockpit_has_is_dispatchable():
@@ -504,10 +558,12 @@ def test_voice_gate_holds_for_llm_tool_calls():
 
 
 # ---------------------------------------------------------- gesture composing
+# D063: 1 s per move — the minimum-jerk ease peaks at 1.875x the mean, so the old 0.8 s
+# arm moves hit 4.13 rad/s (> the 4.0 free limit); 1 s peaks at 3.31
 WAVE = [{"t": 0}, {"t": 1.0, "body": [0, -15, 0]},
-        {"t": 1.8, "body": [0, -15, 0], "arm": {"0": [0, 70, -60]}},
-        {"t": 2.6, "body": [0, -15, 0], "arm": {"0": [25, 70, -60]}},
-        {"t": 3.4, "body": [0, -15, 0]}, {"t": 4.2}]
+        {"t": 2.0, "body": [0, -15, 0], "arm": {"0": [0, 70, -60]}},
+        {"t": 3.0, "body": [0, -15, 0], "arm": {"0": [25, 70, -60]}},
+        {"t": 4.0, "body": [0, -15, 0]}, {"t": 5.0}]
 
 
 def test_compose_previews_a_feasible_gesture_and_saves_on_request(tmp_path, monkeypatch):

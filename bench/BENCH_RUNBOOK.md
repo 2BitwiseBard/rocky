@@ -23,7 +23,8 @@ python3 torque_step.py --mock --id 2 --mass-g 350 --arm-mm 100
 
 Each command finishes within about 3 s. Expected: 20 servos found and
 assigned, 20 offsets, limits 20/20 verified, pose check 0.00° PASS, a
-register dump, the soak ending at 55 °C (PASS), torque step
+register dump with one summary line per servo (the mock's STS report
+firmware 3.10), the soak ending at 55 °C (PASS), torque step
 measured/predicted = 0.86.
 
 A `--mock` run writes only under `bench/out/mock/` (git-ignored): its
@@ -97,9 +98,23 @@ mode) jumper, if it has one.
 ```bash
 python3 register_dump.py --port /dev/ttyACM0
 ```
-- [ ] Take one dump of the very first servo; it lands in `bench/out/`.
-  It is the factory-defaults reference from then on. Re-run after any
-  EEPROM change (`--diff` shows what moved).
+- [ ] Take one dump of the very first servo; it lands in `bench/out/`
+  (`--out DIR` puts it elsewhere). It is the factory-defaults reference from
+  then on. Re-run after any EEPROM change (`--diff` shows what moved; it
+  also reads a pre-D063 0–73 dump, on the bytes both have).
+- **What it reads (D063, B79):** an STS servo 0–87, past the public V3.7
+  table's 73 into the factory block, where 85/86 set a hidden acceleration
+  ramp that acts even at ACC 0 (LeRobot writes 85 = 254, Open Duck Mini 0);
+  an SCS0009 0–83. A servo that refuses the long read falls back to 0–73,
+  blank above, with a warning.
+- [ ] **Copy the summary line into `NOTES_INBOX.md`:** one per servo,
+  firmware, return delay, Lock, ACC, 85 (MAX_ACC) and 86 (ACC_MULTIPLIER).
+  The mock's reads:
+  ```
+  id  1 [STS] fw 3.10  return delay 500 us  lock 1  ACC 0  MAX_ACC(85) 0  ACC_MULTIPLIER(86) 0
+  ```
+  The real 12 V values are the bench half of B79, now in B32
+  ([SERVO_NOTES](../docs/SERVO_NOTES.md)).
 
 ## 3. ID assignment, ONE AT A TIME
 
@@ -210,8 +225,13 @@ enforces, so you know what a refusal means:
 6. **sim2real** only with the sim standing still (refused otherwise). The
    entry is soft: goal parked where the leg IS, 40 % torque limit,
    200 cps, a smoothstep blend of ≥ 1.5 s (longer for big gaps), released
-   after ≥ 3 s. Walking stays disabled while streaming (no real foot
-   contacts yet).
+   after ≥ 3 s. After the entry each tick writes every servo its own goal
+   speed (D063): 1.3 × its goal step per 20 ms tick, at least 50 counts/s
+   (never 0, the servo's maximum), at most the hard speed (3063 counts/s)
+   or the panel's speed slider, which is now a ceiling (0 = the hard
+   speed). Whether that tracks under load is
+   [§8b](#8b-goal-speed-sag-per-tick-speed-under-load-d063). Walking stays
+   disabled while streaming (no real foot contacts yet).
 7. **What cuts the mirror by itself:**
    - a fault bit or ≥ 65 °C on any servo of a leg limps that whole leg
      (`hw:cut`);
@@ -237,16 +257,16 @@ Any session longer than a smoke test runs with the monitor in the loop
 ## 7. Thermal soak: the #1 hardware risk, measured
 
 Put the femur servo in the bench jig, with a lever and mass per §8's table
-(3-leg stance load ≈ 0.45 N·m). Note the room temperature.
+(3-leg stance load ≈ 0.47 N·m). Note the room temperature.
 
 ```bash
 python3 thermal_soak.py --port /dev/ttyACM0 --ids 2 --minutes 20 \
-        --note "stance load 0.45Nm, 22C room"
+        --note "stance load 0.47Nm, 22C room"
 ```
 - [ ] Walking-load soak (~0.35 N·m): expect a comfortable steady state.
-- [ ] Stance-load soak (~0.45 N·m): the number that matters. Time-to-60 °C
+- [ ] Stance-load soak (~0.47 N·m): the number that matters. Time-to-60 °C
   is the robot's standing-still budget before the sleep pose must trigger.
-- [ ] (Optional, supervised) self-righting load (~1.46 N·m): D044's one
+- [ ] (Optional, supervised) self-righting load (~1.50 N·m): D044's one
   warm case, which the righter asks for seconds, not minutes; watching it
   climb is the point. Abort early; there is no need to reach 65 °C.
 
@@ -261,16 +281,20 @@ loads are the worst joint of each case in `sim/out/torque_audit.json`
 
 | test | load | mass @ 100 mm arm | predicted % stall |
 |---|---|---|---|
-| walking (`walk_4leg`, knee) | 0.34 N·m | ~350 g | ~12 % |
-| 3-leg stance (`stance_3leg`, knee) | 0.45 N·m | ~460 g | ~15 % |
-| untucked carry of 100 g (`carry_100g`, hip) | 0.51 N·m | ~520 g | ~17 % |
-| self-righting push (`selfright_push`, knee; optional, supervised) | 1.48 N·m | ~1500 g | ~50 %, HOT (50.3 %, D062) |
+| walking (`walk_4leg`, knee) | 0.35 N·m | ~355 g | ~12 % |
+| 3-leg stance (`stance_3leg`, knee) | 0.47 N·m | ~475 g | ~16 % |
+| untucked carry of 100 g (`carry_100g`, hip) | 0.52 N·m | ~525 g | ~18 % |
+| self-righting push (`selfright_push`, knee; optional, supervised) | 1.50 N·m | ~1525 g | ~51 %, HOT (50.9 %, D063) |
+
+D063's robot is 2727.7 g (+33.1 g, 27.6 of it the fork's side cheeks);
+the audit weighs 2920.7 g because it counts the hands twice (B106), so these loads
+are slightly high: on the safe side.
 
 The pre-D039 table (D015: 700 g walking, 1000 g stance) over-tests these
 about twice; a 1000 g step is still a fair margin check, logged as one.
 
 ```bash
-python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 460 --arm-mm 100
+python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 475 --arm-mm 100
 ```
 - [ ] measured/predicted within 0.8–1.3 means the audit's margins are real.
   Outside that, investigate: lever geometry, supply sag under load, the
@@ -287,6 +311,66 @@ today):
 | echo test (no script yet) | `actuators.st3215.latency_s` (0.02) |
 | SCS0009 sweep: command 0→300° in steps and watch where it stops | `actuators.scs0009.sweep_deg` (300) |
 | `register_dump.py` | the driver's VERIFY-ON-BENCH registers ([driver/README.md](../driver/README.md)) |
+| §8b goal-speed sag | `TRACK_K` (1.3) in `driver/rocky_driver/bus.py`, not a params key (B98) |
+
+## 8b. Goal-speed sag: per-tick speed under load (D063)
+
+Since D063 a stream writes each servo its own goal speed every tick (§5b
+step 6; `bus.goal_speeds`, `TRACK_K` 1.3). The speed follows how far the
+*goal* moves, not how far the servo still is from it, so a joint that falls
+behind under load catches up only at the next ticks' speed (the 50
+counts/s floor once the target stops). And if the firmware replans each
+write from where the servo *is*, a loaded joint may sag its ~2–2.6° droop
+again every tick at slow speeds. The mock has no droop and moves in
+bus-transaction time, so there is nothing to rehearse. **Run this before
+the robot stands on a stream** (B98;
+[SERVO_NOTES](../docs/SERVO_NOTES.md#fluid-motion-what-limits-it)).
+
+Setup as §8: the hip (id 2) in the jig with the lever and the 3-leg stance
+mass (~475 g at 100 mm), loop key in, under a minute of torque in all.
+
+```python
+# python3 - <<'EOF'   (from bench/)
+import sys, time; sys.path.insert(0, "../driver")
+from rocky_driver import FeetechBus, SerialTransport, soft_enable
+bus = FeetechBus(SerialTransport("/dev/ttyACM0", 1_000_000))
+SID, TICK, RATE = 2, 0.02, 11.5     # id, s, deg/s (11.5 = 0.2 rad/s; then 3.0)
+HOLD, SPAN = 0.0, 20.0              # lever horizontal at HOLD (torque_step's --hold-deg);
+                                    # SPAN < 0 if the + side lowers the mass
+soft_enable(bus, [SID], torque_limit=1000)
+A0, A1, n = HOLD - SPAN, HOLD + SPAN, int(abs(2 * SPAN) / RATE / TICK)
+for mode in ("per-tick", "speed 0"):
+    bus.set_position(SID, A0, speed_cps=400); time.sleep(3)    # park at the start, loaded
+    bus.sync_write_reg("ACC", {SID: 0})                         # as a stream runs after its entry
+    prev, lag, t0 = {SID: A0}, [], time.monotonic()
+    for k in range(1, n + 51):                                  # the ramp, then 1 s held at A1
+        goal = {SID: A0 + (A1 - A0) * min(1.0, k / n)}
+        bus.sync_positions(goal, bus.goal_speeds(prev, goal, TICK) if mode == "per-tick" else 0)
+        prev = goal
+        behind = goal[SID] - bus.telemetry(SID).position_deg
+        lag.append(behind if SPAN > 0 else -behind)
+        time.sleep(max(0.0, t0 + k * TICK - time.monotonic()))
+    ramp = lag[n // 2:n]
+    print(f"{mode:8s}: ramp lag mean {sum(ramp) / len(ramp):+.2f}, "
+          f"worst {max(ramp):+.2f} deg; 1 s after: {lag[-1]:+.2f} deg")
+bus.set_position(SID, HOLD, speed_cps=400); time.sleep(3)
+bus.torque(SID, False)                                          # support the mass first
+# EOF
+```
+
+- [ ] Run it at `RATE` 11.5 (0.2 rad/s), then 3.0 (0.05 rad/s, near the
+  4.4°/s floor). The ramp runs from `HOLD − SPAN` to `HOLD + SPAN` and must
+  lift the mass (make `SPAN` negative if a rising angle lowers it); keep it
+  inside the joint's limits.
+- [ ] **Read it:** `speed 0` (the pre-D063 stream, the servo's maximum)
+  trails by the load's droop. `per-tick` should trail it by about one
+  tick's step and no more (0.23° at 11.5°/s: an ideal servo, the mock with
+  its clock stepped per tick, shows +0.23 against +0.06), not grow along the
+  ramp, and be back within the droop 1 s after the ramp stops.
+- [ ] A gap nearer a whole droop, or one that grows, means `TRACK_K` is too
+  low or the firmware replans from the present position: raise `TRACK_K`
+  and re-run, or note it for a distance term in `goal_speeds` (B98). Both
+  lines, the rates and the mass go in `NOTES_INBOX.md`.
 
 ## 9. End of day
 
@@ -299,8 +383,8 @@ today):
   answer, caliper measurements (if the calipers are out anyway) and every
   surprise. The measured numbers (IDs, offsets, soak times, torque ratios)
   go on into `BUILD_LOG.md` and params.
-- [ ] Next: the whole leg on the jig and checked in its jig pose, then the
-  gait engine on real metal through the cockpit (B32).
+- [ ] Next: the whole leg on the jig and checked in its jig pose, then, once
+  §8b has passed, the gait engine on real metal through the cockpit (B32).
 
 ---
 

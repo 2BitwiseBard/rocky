@@ -47,6 +47,7 @@ import rocky_model as rm
 from pebble_gait import WaveGait, N_LEGS, L1, L2, L3, Z_HIP, body_to_leg, leg_ik
 from pebble_gestures2 import posed, _rotz, CLAW_MAX
 import pebble_feasibility as pf
+from pebble_keyframes import SMOOTH_PEAK, BUDGET_FRAC, MIN_TAIL_S   # the smooth ease's own sizing (D063)
 
 OFFSET_XY_MM = 40.0
 OFFSET_Z_MM = (-45.0, 25.0)
@@ -326,7 +327,7 @@ def keyframes_from_stream(qs, fs: float = 50.0, claw=None, tol_deg: float = 2.0,
     dq = float(np.max(np.abs(Q[0].reshape(N_LEGS, 3) - q0)))
     if lead_in_s is None:
         lead_in_s = 0.0 if math.degrees(dq) <= pf.JUMP_DEG else \
-            math.ceil(max(0.6, 1.5 * dq / (0.9 * rm.servo_speed("loaded"))) * 10) / 10
+            math.ceil(max(MIN_TAIL_S, SMOOTH_PEAK * dq / (BUDGET_FRAC * rm.servo_speed("loaded"))) * 10) / 10
     if lead_in_s > 0:
         for fr in frames:
             fr["t"] = round(fr["t"] + lead_in_s, 3)

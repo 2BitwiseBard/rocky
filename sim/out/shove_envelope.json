@@ -1,287 +1,316 @@
 {
  "model": "half-sine at the shell rim (shove.py), 0.4 s",
  "dur_s": 0.4,
- "mass_kg": 2.694,
+ "mass_kg": 2.728,
+ "t_shove_s": {
+  "stand": 3.0,
+  "walk": 5.0
+ },
+ "walk_ask_mm_s": 34.2,
  "rows": [
   {
    "walk": false,
    "dir_deg": 0,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 81,
-    "vmax": 0.66
+    "disp_mm": 79,
+    "vmax": 0.64,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 606,
-    "vmax": 1.03
+    "disp_mm": 603,
+    "vmax": 0.99,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": false,
    "dir_deg": 60,
    "survive_peak_n": 35,
-   "survive_bw": 1.32,
+   "survive_bw": 1.31,
    "survive_impulse_ns": 8.9,
    "last_ok": {
     "peak_n": 35,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 424,
-    "vmax": 1.43
+    "disp_mm": 410,
+    "vmax": 1.4,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 40,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 792,
-    "vmax": 1.6
+    "disp_mm": 771,
+    "vmax": 1.54,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": false,
    "dir_deg": 120,
    "survive_peak_n": 35,
-   "survive_bw": 1.32,
+   "survive_bw": 1.31,
    "survive_impulse_ns": 8.9,
    "last_ok": {
     "peak_n": 35,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 424,
-    "vmax": 1.43
+    "disp_mm": 410,
+    "vmax": 1.4,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 40,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 792,
-    "vmax": 1.6
+    "disp_mm": 771,
+    "vmax": 1.54,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": false,
    "dir_deg": 180,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 81,
-    "vmax": 0.66
+    "disp_mm": 79,
+    "vmax": 0.64,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 606,
-    "vmax": 1.03
+    "disp_mm": 603,
+    "vmax": 0.99,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": false,
    "dir_deg": 240,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 127,
-    "vmax": 0.82
+    "disp_mm": 131,
+    "vmax": 0.81,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 68.0,
-    "disp_mm": 335,
-    "vmax": 1.17
+    "end_tilt": 67.9,
+    "disp_mm": 328,
+    "vmax": 1.15,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": false,
    "dir_deg": 300,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.0,
-    "disp_mm": 127,
-    "vmax": 0.82
+    "disp_mm": 131,
+    "vmax": 0.81,
+    "cmd_mm_s": 0.0
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 68.0,
-    "disp_mm": 335,
-    "vmax": 1.17
+    "end_tilt": 67.9,
+    "disp_mm": 328,
+    "vmax": 1.15,
+    "cmd_mm_s": 0.0
    }
   },
   {
    "walk": true,
    "dir_deg": 0,
-   "survive_peak_n": 35,
-   "survive_bw": 1.32,
-   "survive_impulse_ns": 8.9,
+   "survive_peak_n": 30,
+   "survive_bw": 1.12,
+   "survive_impulse_ns": 7.6,
    "last_ok": {
-    "peak_n": 35,
+    "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.3,
-    "disp_mm": 323,
-    "vmax": 0.98
+    "disp_mm": 236,
+    "vmax": 0.73,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
-    "peak_n": 40,
+    "peak_n": 35,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 700,
-    "vmax": 1.19
+    "disp_mm": 641,
+    "vmax": 1.0,
+    "cmd_mm_s": 34.2
    }
   },
   {
    "walk": true,
    "dir_deg": 60,
-   "survive_peak_n": 25,
-   "survive_bw": 0.95,
-   "survive_impulse_ns": 6.4,
+   "survive_peak_n": 30,
+   "survive_bw": 1.12,
+   "survive_impulse_ns": 7.6,
    "last_ok": {
-    "peak_n": 25,
+    "peak_n": 30,
     "ok": true,
     "fallen": false,
-    "end_tilt": 0.4,
-    "disp_mm": 120,
-    "vmax": 0.66
+    "end_tilt": 0.3,
+    "disp_mm": 314,
+    "vmax": 1.08,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
-    "peak_n": 30,
+    "peak_n": 35,
     "ok": false,
     "fallen": true,
     "end_tilt": 180.0,
-    "disp_mm": 633,
-    "vmax": 0.88
+    "disp_mm": 692,
+    "vmax": 1.23,
+    "cmd_mm_s": 34.2
    }
   },
   {
    "walk": true,
    "dir_deg": 120,
-   "survive_peak_n": 20,
-   "survive_bw": 0.76,
-   "survive_impulse_ns": 5.1,
+   "survive_peak_n": 30,
+   "survive_bw": 1.12,
+   "survive_impulse_ns": 7.6,
    "last_ok": {
-    "peak_n": 20,
+    "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.3,
-    "disp_mm": 76,
-    "vmax": 0.51
+    "disp_mm": 149,
+    "vmax": 0.9,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
-    "peak_n": 25,
+    "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 64.4,
-    "disp_mm": 271,
-    "vmax": 0.67
+    "end_tilt": 54.7,
+    "disp_mm": 378,
+    "vmax": 1.2,
+    "cmd_mm_s": 34.2
    }
   },
   {
    "walk": true,
    "dir_deg": 180,
-   "survive_peak_n": 35,
-   "survive_bw": 1.32,
-   "survive_impulse_ns": 8.9,
+   "survive_peak_n": 30,
+   "survive_bw": 1.12,
+   "survive_impulse_ns": 7.6,
    "last_ok": {
-    "peak_n": 35,
+    "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.3,
-    "disp_mm": 64,
-    "vmax": 0.96
+    "disp_mm": 38,
+    "vmax": 0.66,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
-    "peak_n": 40,
+    "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 180.0,
-    "disp_mm": 694,
-    "vmax": 1.24
+    "end_tilt": 0.3,
+    "disp_mm": 56,
+    "vmax": 0.85,
+    "cmd_mm_s": 34.2
    }
   },
   {
    "walk": true,
    "dir_deg": 240,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.3,
-    "disp_mm": 135,
-    "vmax": 0.83
+    "disp_mm": 110,
+    "vmax": 0.78,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 0.0,
-    "disp_mm": 142,
-    "vmax": 1.12
+    "end_tilt": 0.2,
+    "disp_mm": 118,
+    "vmax": 1.17,
+    "cmd_mm_s": 34.2
    }
   },
   {
    "walk": true,
    "dir_deg": 300,
    "survive_peak_n": 30,
-   "survive_bw": 1.13,
+   "survive_bw": 1.12,
    "survive_impulse_ns": 7.6,
    "last_ok": {
     "peak_n": 30,
     "ok": true,
     "fallen": false,
     "end_tilt": 0.3,
-    "disp_mm": 301,
-    "vmax": 0.98
+    "disp_mm": 339,
+    "vmax": 1.06,
+    "cmd_mm_s": 34.2
    },
    "first_fail": {
     "peak_n": 35,
     "ok": false,
     "fallen": true,
-    "end_tilt": 0.4,
-    "disp_mm": 164,
-    "vmax": 1.17
+    "end_tilt": 0.2,
+    "disp_mm": 201,
+    "vmax": 1.19,
+    "cmd_mm_s": 34.2
    }
   }
  ],
- "stand_min_bw": 1.13,
- "stand_mean_bw": 1.2,
- "walk_min_bw": 0.76,
- "walk_mean_bw": 1.1
+ "stand_min_bw": 1.12,
+ "stand_mean_bw": 1.18,
+ "walk_min_bw": 1.12,
+ "walk_mean_bw": 1.12
 }

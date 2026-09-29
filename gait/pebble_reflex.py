@@ -87,6 +87,14 @@ D052 options (a caller that passes none of them gets the plain supervisor):
                    harness that must reproduce pre-D052 numbers passes
                    trip_escalate_n=None.
 
+D063 command slew (ON by default; slew=False is the pre-D063 pass-through):
+  the velocity reaches the gait through pebble_gait.CommandSlew (25 mm/s^2 on
+  the fastest foot, then a 0.2 s lag: standing -> the 34.2 mm/s envelope in
+  2.36 s, the worst joint step 3.4 deg per 20 ms tick instead of 20). A stop
+  is never slewed: request_stop() zeroes it in any state, and until the brace
+  (or while latched, or with step(direct=True)) the caller's command lands at
+  once. A gesture (monitor), FALLEN and RIGHTED hold it at zero.
+
 Tuning: clean walking peaks |gyro_xy| ~1 rad/s in sim; trip defaults 1.8.
 contact_aware=False reproduces the D022 v1 reflex (for A/B harnesses). Without a
 contacts feed, PLANT falls back to the commanded swing state alone.
@@ -96,7 +104,7 @@ import os
 import sys
 
 import numpy as np
-from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS, L1, L2, L3, Z_HIP
+from pebble_gait import WaveGait, CommandSlew, leg_ik, body_to_leg, N_LEGS, L1, L2, L3, Z_HIP
 import rocky_model as _rm
 
 _HANDOFF = None
@@ -144,7 +152,7 @@ class ReflexSupervisor:
                  handoff_tilt_deg=25.0, handoff_h=0.09, handoff_hold_s=0.5,
                  right_ramp_s=None, right_hold_s=0.5, fallen_max_s=None,
                  stall_s=None, stall_tilt_deg=None,
-                 trip_escalate_n=3, trip_escalate_s=5.0):
+                 trip_escalate_n=3, trip_escalate_s=5.0, cmd_accel=None, slew=True):
         # D052: a None kwarg comes from params.yaml `reflex:` (rocky_model.
         # reflex_defaults()); anything passed wins, so every existing caller
         # (gait only, or gait + gyro_trip/stall_s/...) behaves as before —
@@ -157,6 +165,9 @@ class ReflexSupervisor:
         stall_s = d["stall_s"] if stall_s is None else stall_s
         stall_tilt_deg = d["stall_tilt_deg"] if stall_tilt_deg is None else stall_tilt_deg
         self.g = gait
+        # D063 (B76 fix 1): every velocity reaches the gait through the slew;
+        # slew=False passes commands straight through (the pre-D063 behaviour)
+        self.slew = CommandSlew(gait, cmd_accel) if slew else None
         self.gyro_trip = gyro_trip
         self.gyro_calm = gyro_calm
         self.crouch = crouch_mm
@@ -319,9 +330,14 @@ class ReflexSupervisor:
         freezes into a full-contact crouch, then RECOVERs into the idle
         planted stance (caller is expected to command zero velocity).
         This replaces 'just zero the velocity', which leaves the wave gait
-        marching in place — worst possible behavior at a cliff edge."""
+        marching in place — worst possible behavior at a cliff edge.
+        D063: in every state the slewed command is zeroed at once, so a stop
+        that lands in PLANT or BRACE (where it is not queued) does not leave
+        the gait to resume at the old speed and slow down for ~2 s."""
         if self.state in (NORMAL, RECOVER):
             self._stop_req = True
+        if self.slew is not None:
+            self.slew.stop()
 
     def clear_latch(self):
         """Operator acknowledgement of a latched safe stop (trip escalation):
@@ -446,7 +462,7 @@ class ReflexSupervisor:
 
     def step(self, t, vx, vy, wz, gyro_xy: float, contacts=None,
              gyro_vec=None, tilt_deg=None, height=None, monitor=False,
-             probe_dz=None, q_meas=None):
+             probe_dz=None, q_meas=None, direct=False):
         """Advance the supervisor; returns (q[5,3], state).
 
         t: monotonic time (s). gyro_xy: |body roll/pitch rate| rad/s (IMU).
@@ -461,7 +477,16 @@ class ReflexSupervisor:
         the caller's stance-probe offsets, added below the foot targets;
         q_meas (5,3) rad — measured joints, which (with contacts) switch the
         handoff to rocky_recover_env.handoff_ok. While `latched` the velocity
-        command is ignored."""
+        command is ignored.
+        D063: the velocity is slewed (CommandSlew). A stop never is: from
+        request_stop() until the brace is reached, and while latched, the
+        caller's command lands at once, exactly as before D063 (the playground
+        zeroes it); direct=True does the same on demand (the void retreat
+        replays its approach command). A gyro-trip PLANT keeps the slewed
+        command — the step it finishes is the one that was running. While the
+        legs are not on the gait (a gesture, FALLEN, RIGHTED) the command is
+        held at zero, so the gait comes back from the planted stance by the
+        ramp, not by a jump to mid-stride."""
         if self._t0 is None:
             self._t0 = t
         if self.latched:
@@ -470,6 +495,13 @@ class ReflexSupervisor:
         armed = (t - self._t0) >= self.arm_after
         dt = 0.0 if self._last_t is None else max(0.0, t - self._last_t)
         self._last_t = t
+        if self.slew is not None:                        # D063: a stop is never slewed
+            if monitor or self.state in (FALLEN, RIGHTED):
+                vx, vy, wz = self.slew.stop()            # not on the gait: restart from standing
+            else:
+                vx, vy, wz = self.slew.step(
+                    (vx, vy, wz), dt,
+                    direct=direct or self.latched or self._stop_req or self._stopping)
         calm = gyro_xy < self.gyro_calm
 
         # --- fall detection (any state but FALLEN/RIGHTED, D042) ---------

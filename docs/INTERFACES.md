@@ -45,10 +45,11 @@ thumbscrews, plug two connectors.*
   each keyed into a printed knurled knob (`thumb_knob_m3`), at the inboard
   corners (−41, ±17). They are reachable from above WITH the servo
   installed and thread into deck heat-set inserts, 5.5 mm into the 5.7 mm
-  insert. The knob holds the head 6.5 mm above the plate, so an M3 × 10
-  never reaches the insert. They are not captive yet (B82): nothing retains
-  them in the plate, so they lift out with the leg. They only clamp down
-  and carry no shear.
+  insert. The knob (8.6 tall since D063) holds the head 6.5 mm above the
+  plate, the whole head inside its 2.1 mm hex pocket, so an M3 × 10 never
+  reaches the insert. They are not captive yet (B82): nothing retains them
+  in the plate, so they lift out with the leg. They only clamp down and
+  carry no shear.
 - **Load path:** vertical forces go plate face onto deck face; shear and
   torque go into the dowels and the hook lip; tension (leg hanging
   upside-down) goes into the thumbscrews and the hook.
@@ -112,15 +113,27 @@ being removed hundreds of times, and never carry structure.
 
 - **Location:** every panel seats on printed lips or bosses (0.3 fit),
   which take all the impact and handling loads.
-- **Retention: a quarter-turn cam latch as a REPLACEABLE INSERT.** It is a
-  printed two-part cartridge: rotor plus a Ø14 housing, glued or
-  press-fitted into a Ø14.3 pocket. The wear part is the ~1 g insert, not
-  the panel. The rotor has a coin/fingernail slot and turns 90° from OPEN
-  to CAM-TIGHT (0.8 mm cam rise). As modelled (2026-09-28) the cartridge
-  does not work (B87): the rotor's pegs have no way into the housing's
-  track, the rotor ends flush with the housing bottom so it never reaches
-  the deck strike, and the strike has no undercut to turn under. The tray
-  tongue and the belly door have no strike at all.
+- **Retention: a quarter-turn bayonet latch as a REPLACEABLE INSERT**
+  (D063, B87; `iface.py`). It is a printed two-part cartridge: a Ø14 × 6
+  housing, glued into a Ø14.3 through-pocket with its bottom flush with the
+  panel's seating face, and a rotor: a Ø6 shaft with a Ø10 head on top and
+  two lugs at its bottom end, which reaches 5.8 mm below the seating face.
+  The rotor drops through two keyways in the housing and, turned off them,
+  is captive. The wear part is the ~1 g insert, not the panel.
+- **Strike (frame side, `iface.latch_strike`):** a Ø6.6 bore and two entry
+  slots through a 3.2 mm land, at 45° to the frame's +x (radial on the
+  deck), and an underside recess shaped to the lugs' quarter-turn path. Its
+  ceiling is the cam: 0.8 mm of rise over 0–50°, a dwell to 90°, a stop.
+  At LOCKED the lugs bite 0.2 mm into the land (`LATCH_BITE`, VERIFY in
+  PLA, B99). The frame must be ≥ 6.0 mm thick (the function asserts it; the
+  deck is 6, B27).
+- **Operating end: the rotor's bottom,** a 2.0 × 1.5 slot 0.2 mm above the
+  frame's underside, square to the lugs. From below, a flat screwdriver
+  (blade ≤ 5 mm), a quarter turn clockwise to lock: it starts to bite at
+  ~40° and stops at 90°. Not a coin: one reaches only ~0.5 mm of the slot
+  before it meets the frame. Nothing indexes the housing's keyways (B107):
+  a rotor turned to them drops out of a panel that is off the robot. The
+  tray tongue and the belly door have no strike yet (B51, B84).
 - **Magnets:** Ø6 × 3 glue-in pockets (N35+) wherever a soft-close seat is
   wanted. Polarity convention: every magnet, panel side and frame side, has
   its NORTH face pointing away from the robot (the way the panel lifts
@@ -132,12 +145,12 @@ being removed hundreds of times, and never carry structure.
     2 latch inserts and 2 magnets;
   - the carapace sectors (`part_shell`): each sector foot has one latch
     (az +27.5°, r 74.5) and one magnet (az −25.5°, r 76), mating the deck's
-    latch strikes and washer recesses (D030);
-  - the top hatch (`shell_cap`): five plug magnets on five seat magnets,
-    one per sector. It has no latch. As modelled the magnets cannot go in
-    (B88): each seat pocket hangs in a 0.2 mm ledge with no floor, and a
-    magnet in a plug pocket cuts into the seat wall, so the cap would not
-    seat. Both magnets of a pair go in N up.
+    latch strikes and washer recesses (D030). The latch is turned from under
+    the deck; station 162's sits inside the battery bay's footprint, so the
+    bay must leave that column open (B100);
+  - the top hatch (`shell_cap`): five plug magnets on five seat magnets at
+    r 42.5, one per sector, each seat in a walled boss under the seat ledge
+    (D063, B88). It has no latch. Both magnets of a pair go in N up.
 
 **Rocky-scale:** the same cartridge in glass-filled nylon, Ø22, with a
 captive lanyard so field panels don't drop.
@@ -156,25 +169,32 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   deck-bolted C-channel rail blocks (`tray_rail`). The rails carry the
   load.
 - **Single latch:** an I3 insert in the tongue at the tray front; it only
-  retains.
+  retains. Nothing under the tongue has a strike yet (the rotor hangs 5.8
+  mm below it; B51).
 - **Bulkhead** at the tray rear (70 × 26 face): a panel wall carrying every
   connection that crosses the tray boundary. That is the XT30 power in, the
   JST-XH 5-pin trunk to the star board, 2 × JST-SH spares, a Qwiic/JST-SH
   4-pin I²C (the sensor mux, [PERCEPTION_PLAN.md](PERCEPTION_PLAN.md)) and
   a USB-C pass-through slot. Removing the tray means one latch plus
   unplugging the bulkhead face, with no reaching inside.
-- **IMU:** sits on four TPU grommets (B4) on the tray's IMU pad, under the
-  Pi, so it goes on before the Pi. Each M2.5 needs a nut: the grommet bore
-  does not thread. It talks over SPI
-  ([WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify)). As
-  drawn the pad does not fit (B90): its 16 × 12 holes miss the BNO085's
-  20.32 × 17.78, and the 4.6 mm board stands 0.6 mm into the Pi's
-  underside.
+- **Pi 5:** on four thread-forming standoffs, 58 × 49 and 11 mm tall
+  (D063, B89, B90), M2.5 × 6 or × 8.
+- **IMU:** the BNO085 sits on four TPU grommets (B4) under the Pi, so it
+  goes on before the Pi. The grommet seats are on the board's 20.32 ×
+  17.78 holes about (0, 13.5), each lifted 1.2 mm over a recess for the
+  grommet's bottom flange (D063, B90). Each M2.5 × 10 needs a standard nut
+  (the grommet bore does not thread); the tail ends 0.9 mm above the deck,
+  and the IMU's top 1.2 mm below the Pi's underside keep-out. It talks over
+  SPI ([WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify)).
+  The bus adapter, buck and UBEC have no envelope yet (B108).
 - **Deck position:** the tray's place on the deck, (0, −38) in the body
   frame, is still an assumption (`part_avionics.TRAY_XY`), and there the
   tray and its rails run into the coxa bases at stations 2 and 3. As drawn,
   no position clears all five legs, and the rail tabs' holes miss the deck
-  grid (B51).
+  grid (B51). D063 measured a layout that fits: the tray at (0, 0), turned
+  180°, tabs inboard, the wings cut into lugs that release after 16 mm of
+  slide. It is a proposal for the owner and revises this interface
+  ([BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)).
 
 **Rocky-scale:** a 19" subrack-style card cage with locking DIN connectors.
 
@@ -188,6 +208,9 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   slides on belly rails into the 175 × 50 × 30 bay. The bay itself (floor,
   walls, the door's frame) is not modelled yet (B84). Until it is, nothing
   on the robot carries or retains the sled, and the robot runs tethered.
+  D063 measured three layouts for it (a tub hung under the deck, option A
+  recommended), which would revise this interface: a proposal for the
+  owner, [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md).
 - **XT60 blind-mate dock:** the sled nose carries a panel-mount XT60E-M
   (body 16.2 × 8.6 × 16.0, `xt60_panel_mm`). The bay's fixed XT60 sits in a
   floating pocket (±0.8 mm) with lead-in chamfers, so you push to seat.
@@ -195,7 +218,7 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   part of the B14 charging dock). As drawn it cannot be bolted down: its
   two floor holes sit under its own roof, where no driver reaches (B86).
   The belly door (I3) closes over the sled's tail lip and does the
-  retaining; the connector does not.
+  retaining; the connector does not. Its latches have no strike yet.
 - **Spare power taps:** the dock's bus bar breaks out 2 × XT30 pigtails
   (the B8 LED ring and later accessories); today they sit ahead of the
   15 A fuse, so fuse anything plugged in (B66).
@@ -211,18 +234,24 @@ SB120 / SurLok; add precharge and battery BMS CAN to the bulkhead.
 
 One profile for everything that clips onto the carapace perimeter:
 
-- **Male profile (on the shell):** a trapezoid dovetail, 12 wide at the
-  base, 8 wide at the crest, 4 deep. As built, each sector web has one
-  VERTICAL 16 mm segment at ±27°, giving 10 stations and no top station.
-  A shoe slides down from above, gravity seats it and the set-knob is
-  meant to lock it (D029; not yet, B83). The params `segment_len` (24) is
-  the spec length, used by the demo coupons (`part_panel`).
-- **Female shoe (on the accessory):** a matching slot plus an M3 printed
-  set-knob from below, meant to clamp into the dovetail groove. As modelled
-  the knob's bore runs 2.0 mm above the male's crest and a screw in it
-  touches nothing, so the shoe does not lock yet (B83). The knob is
-  `thumb_knob_m3`, so it takes a hex head (B82); the screw length waits
-  for the bore.
+- **Male profile (on the shell):** an undercut trapezoid dovetail, 4 deep:
+  the frozen widths turned over since D063 (B83), 8 wide at the root (the
+  neck) and 12 at the outboard face, so a shoe cannot lift off
+  (`iface.dovetail_male(undercut=True)`; `part_stand`'s spigots keep the
+  12-at-the-root key, and the params names `base_w` / `crest_w` read for
+  that key). As built, each sector web has one VERTICAL 16 mm segment at
+  ±27°, square to the wall's chord under a shoe, giving 10 stations and no
+  top station. A shoe slides down from above, gravity seats it and the
+  set-knob locks it (D029, D063). The params `segment_len` (24) is the spec
+  length, used by the demo coupons (`part_panel`).
+- **Female shoe (on the accessory):** the matching undercut slot plus a
+  printed set-knob (`thumb_knob_m3`, a hex head, B82) on a 45° spot face at
+  the shoe's upper edge. Its tapped bore aims at the male's flank: the screw
+  meets it first and wedges the shoe against both flanks (6.0 mm of thread
+  in the shoe). An M3 × 12 is the shortest that reaches (the knob 2.1 mm off
+  its spot face); BOM A-19's M3 × 16 clamps with the knob 6.1 mm off, and
+  backed out to ~7 mm its tip clears the slot for sliding on. On the shell
+  the knob faces the leg's arch: two knobs facing one seam would meet.
 - **Users:** sensor pods ([PERCEPTION_PLAN.md](PERCEPTION_PLAN.md)),
   whisker mounts (B11), LED ring segments and shell tool docks. The camera
   is fixed behind a gill (B16) and the lidar goes on a hatch-cap variant
@@ -245,10 +274,10 @@ All are in `cad/params.yaml → interfaces:` (the I1 cable cutout is in
 |---|---|
 | I1 leg port | dowel Ø4 × 8 @ (−28, ±19); thumbscrew M3 × 16 hex head @ (−41, ±17); inboard hook lip 24 wide through a 4.2 deck slot @ x = −48; cable cutout 11 × 11 @ x = −29; XT30 + JST-XH 5-pin |
 | I2 tool socket | lug Ø2.5 × 2.2 @ 9 from the face; entry 6; twist 90°; detent 0.6; JST-SH 3-pin |
-| I3 panel latch | insert housing Ø14 (pocket 14.3), rotor cam rise 0.8, 90° throw; magnet Ø6 × 3 |
+| I3 panel latch | insert housing Ø14 × 6 (pocket 14.3), bayonet rotor, cam rise 0.8 with a 0.2 bite, 90° throw, frame ≥ 6 thick; magnet Ø6 × 3 |
 | I4 avionics tray | plate 84 × 70 × 3; rail 3 × 3; bulkhead 70 × 26 face |
 | I5 battery sled | bay 175 × 50 × 30 for a soft-case pack ≤ 138 × 44 × 25 (VERIFY vs the purchased pack); XT60E-M 16.2 × 8.6 × 16.0; XT60 float ±0.8 |
-| I6 dovetail | base 12 / crest 8 / depth 4; segment 24 spec, 16 on the shell as built; M3 set-knob |
+| I6 dovetail | 12 / 8 / depth 4 (on the ring: 8 at the root, 12 outboard, D063); segment 24 spec, 16 on the shell as built; M3 set-knob on a 45° spot face |
 
 ## Decision
 

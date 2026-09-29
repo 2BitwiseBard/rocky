@@ -18,13 +18,14 @@ swallowed the NoResponse silently kept stale positions). `sync_telemetry`
 keeps the strict contract for the bench scripts on top of it.
 """
 from __future__ import annotations
+import math
 import time
 from dataclasses import dataclass, field
 from . import protocol as fp
 from .protocol import Family, ChecksumError
 from .registers import (MAPS, BAUD_TO_CODE, CURRENT_LSB_A,
                         VOLTAGE_LSB_V, LOAD_LSB_PCT, counts_to_deg,
-                        deg_to_counts, Reg, COUNTS as MAPS_COUNTS)
+                        deg_to_counts, max_speed_cps, Reg, COUNTS as MAPS_COUNTS)
 from .transport import Transport
 
 
@@ -41,6 +42,25 @@ class NoResponse(BusError):
 # delay, so 1 ms/servo is ~30 % headroom). The old timeout_s * n budget was
 # 0.3 s for 15 servos — longer than seven bridge ticks.
 SYNC_REPLY_S = 0.001
+
+# D063 (B76 fix 3): the per-tick goal speed a stream writes after its entry.
+# goal speed = TRACK_K * |goal step| / tick, so the servo covers each step in
+# 1/TRACK_K of the tick (15 ms of 20) and meets the next goal still moving,
+# instead of rushing at GOAL_SPEED 0 (= servo max, 4.7 rad/s) and standing
+# still for the rest of the tick: a joint whose target turns 1 rad/s moved for
+# 4 ms of every 20 and stood for 16. 1.3 is 30 % speed headroom for tick jitter
+# and the servo's own ramp; lower lags the target (SERVO_NOTES "tune on the bench").
+# VERIFY-ON-BENCH before the robot stands on it: the speed follows the GOAL's
+# step, not the servo's distance to its goal, so a servo that fell behind (load,
+# the cap) closes the gap only at the next steps' speed, the floor once the target
+# stops; and if the firmware replans each write from the PRESENT position, a
+# loaded joint re-sags its ~2-2.6 deg droop every tick at a slow speed (the mock
+# has no droop, so it cannot show this). One servo, a hanging load, a slow ramp:
+# per-tick speed vs speed 0.
+TRACK_K = 1.3
+# never 0 (= servo max): 50 counts/s is one count per 20 ms tick (4.4 deg/s),
+# the slowest step the encoder can show; a joint the target holds still gets it
+TRACK_FLOOR_CPS = 50
 
 
 @dataclass
@@ -213,13 +233,13 @@ class FeetechBus:
                     None)
 
     @staticmethod
-    def _speed_block(fam: Family, speed_cps: int) -> bool:
+    def _speed_block(fam: Family, speeds) -> bool:
         """Write pos+time+speed as one block? Always on STS (D052): speed 0
         means "servo max" and must be WRITTEN, or a slow speed left by a jog
         or a sim2real entry lingers in GOAL_SPEED forever. SCS keeps the old
-        rule (speed only when asked) until its speed-0 semantics are bench-
-        verified."""
-        return "GOAL_SPEED" in MAPS[fam] and (fam is Family.STS or bool(speed_cps))
+        rule (speed only when asked — by EVERY servo of the write, D063) until
+        its speed-0 semantics are bench-verified. speeds: the group's cps."""
+        return "GOAL_SPEED" in MAPS[fam] and (fam is Family.STS or all(int(v) > 0 for v in speeds))
 
     def set_position(self, servo_id: int, deg: float, speed_cps: int = 0,
                      acc: int | None = None) -> None:
@@ -229,7 +249,7 @@ class FeetechBus:
         counts = deg_to_counts(deg, fam)
         r = MAPS[fam]["GOAL_POSITION"]
         data = fp.encode_u16(counts, fam)
-        if self._speed_block(fam, speed_cps):
+        if self._speed_block(fam, [speed_cps]):
             # write pos+time+speed as one block (addr 42..47) — atomic move
             data = data + fp.encode_u16(0, fam) + fp.encode_u16(int(speed_cps), fam)
         self.write_raw(servo_id, r.addr, data)
@@ -254,24 +274,51 @@ class FeetechBus:
                             else fp.encode_u16(v, fam)) for i, v in group]
             self._transact(fp.sync_write(r.addr, r.nbytes, entries), None)
 
-    def sync_positions(self, targets: dict[int, float], speed_cps: int = 0) -> None:
+    def sync_positions(self, targets: dict[int, float],
+                       speed_cps: int | dict[int, int] = 0) -> None:
         """One SYNC_WRITE per family. targets: id -> degrees (center-relative).
-        speed_cps 0 = servo max (written explicitly on STS, see _speed_block)."""
+        speed_cps: one speed for every servo, or {id: cps} per servo (D063: a
+        stream's per-tick goal speeds, still one write; a missing id gets 0).
+        0 = servo max (written explicitly on STS, see _speed_block)."""
         for fam in (Family.STS, Family.SCS):
             group = {i: d for i, d in targets.items() if self.family_of(i) is fam}
             if not group:
                 continue
             r = MAPS[fam]["GOAL_POSITION"]
-            if self._speed_block(fam, speed_cps):
+            spd = {i: int(speed_cps.get(i, 0) if isinstance(speed_cps, dict) else speed_cps)
+                   for i in group}
+            if self._speed_block(fam, spd.values()):
                 entries = [(i, fp.encode_u16(deg_to_counts(d, fam), fam)
                             + fp.encode_u16(0, fam)
-                            + fp.encode_u16(int(speed_cps), fam))
+                            + fp.encode_u16(spd[i], fam))
                            for i, d in group.items()]
                 self._transact(fp.sync_write(r.addr, 6, entries), None)
             else:
                 entries = [(i, fp.encode_u16(deg_to_counts(d, fam), fam))
                            for i, d in group.items()]
                 self._transact(fp.sync_write(r.addr, 2, entries), None)
+
+    def goal_speeds(self, prev_deg: dict[int, float], goals_deg: dict[int, float],
+                    tick_s: float, k: float = TRACK_K, floor_cps: int = TRACK_FLOOR_CPS,
+                    cap_cps: float | None = None) -> dict[int, int]:
+        """D063 (B76 fix 3): per-servo goal speed for one stream tick, in the
+        GOAL_SPEED unit (counts/s): k * |goal step| / tick_s, the step measured
+        in the counts the goal register gets (so a sub-count wobble is 0),
+        floored at floor_cps (never 0 = servo max) and capped at cap_cps (the
+        caller's hard speed; None = the family's no-load max). An id with no
+        previous goal gets the floor: an unknown step is never rushed."""
+        out = {}
+        for i, d in goals_deg.items():
+            fam = self.family_of(i)
+            cap = max_speed_cps(fam) if cap_cps is None else float(cap_cps)
+            p = prev_deg.get(i)
+            if p is None or not math.isfinite(p):
+                v = float(floor_cps)
+            else:
+                step = abs(deg_to_counts(d, fam) - deg_to_counts(p, fam))
+                v = k * step / tick_s
+            out[i] = max(1, min(int(round(max(v, floor_cps))), int(cap)))   # never past the cap
+        return out
 
     # ------------------------------------------------------------ telemetry
     def telemetry(self, servo_id: int, retries: int | None = None) -> Telemetry:

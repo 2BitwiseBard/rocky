@@ -27,6 +27,16 @@ from .transport import Transport
 MEM_SIZE = 96
 
 
+def _eeprom_addrs(family: Family) -> frozenset:
+    """Bytes a LOCKed servo refuses to write: the EEPROM area below 40 plus the
+    registers the map marks EEPROM above it (the factory block, D063)."""
+    hi = {r.addr + k for r in MAPS[family].values() if r.eeprom for k in range(r.nbytes)}
+    return frozenset(range(40)) | frozenset(hi)
+
+
+_EEPROM = {f: _eeprom_addrs(f) for f in MAPS}
+
+
 def _default_memory(family: Family, servo_id: int) -> bytearray:
     m = bytearray(MEM_SIZE)
     R = MAPS[family]
@@ -39,6 +49,11 @@ def _default_memory(family: Family, servo_id: int) -> bytearray:
             m[r.addr:r.addr + 2] = encode_u16(value, family)
 
     put("MODEL", 0x0309 if family is Family.STS else 0x0505)  # arbitrary mock IDs
+    if family is Family.STS:
+        put("FIRMWARE_MAJOR", 3)       # 3.10: what the 12 V units reportedly ship with (B79)
+        put("FIRMWARE_MINOR", 10)
+        put("MAX_ACC", 0)              # the mock has no hidden ramp: 85/86 = 0 (Open Duck Mini's value)
+        put("ACC_MULTIPLIER", 0)
     put("ID", servo_id)
     put("BAUD", 0)                     # 1 Mbps
     put("RETURN_DELAY", 250)           # 500 us, Feetech default
@@ -212,7 +227,7 @@ class MockServo:
             if a >= MEM_SIZE:
                 break
             # EEPROM area writable only when unlocked (LOCK itself always writable)
-            if a < 40 and locked and a != lock_reg.addr:
+            if locked and a in _EEPROM[self.family] and a != lock_reg.addr:
                 continue
             self.mem[a] = b
         # an accepted ID write means the servo now answers on the new ID

@@ -2,7 +2,7 @@
 
 Why: servos are the joints; without them the chain can't hang together. This
 is a dimensionally exact PLA stand-in for the ST3215 envelope as MEASURED on
-the STEP (servo_st3215 v2) so every cup, hub pocket and coupler interface can
+the STEP (servo_st3215 v2) so every cup, hub seat and coupler interface can
 be exercised before hardware lands — and, once the servos are here, kept as
 the bench dummy for print-fit tests.
 

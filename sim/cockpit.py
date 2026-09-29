@@ -109,20 +109,33 @@ from cockpit_brains import EYE_HFOV_DEG, EYE_FWD_M, place_scope, PLACE_TOOLS   #
 from cockpit_brains import sighting_to_map, FIND_MIN_CONF, FIND_TRUSTED_M      # noqa: E402
 from cockpit_brains import floor_to_pixel                                      # noqa: E402
 
-V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (45.5 mm/s today)
-GOTO_CAP_S = 40.0            # a goto that has not ended by then ends as "timeout"
+V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (WaveGait().max_command();
+#                              docs/TOOLS.md prints it as goto_speed_m_s: 0.0342 since D063)
+_GOTO_ENV = tool_registry.default_envelope()          # the params gait's envelope (the registry's)
+GOTO_CAP_S = _GOTO_ENV["goto_timeout_s"]              # a goto that has not ended by then ends as "timeout".
+#                              D063: derived, the number the goto text quotes (harness.capabilities.goto_cap_s:
+#                              1.5 m x 1.2 / 0.0342 m/s + the 2.36 s ease-in = 55 s; D062's 40 s at 45 mm/s
+#                              walked only 1.275 m of a 1.5 m goto at 34.2 mm/s)
 GOTO_STUCK_S = 3.0           # D052: no 2 cm of progress for this long -> "stuck" (was 6 s: a
 #                              robot shoving a low box for 6 s is 6 s of stalled servos)
 GOTO_SCAN_HZ = LIDAR_HZ      # the reactive layer reads the puck at its own rate (8 Hz)
 GOTO_CONE_DEG = 30.0         # a lidar return within +-30 deg of the travel heading ...
 GOTO_CLEAR_M = 0.35          # ... closer than this (from the puck = torso centre) is in the way.
 #                              The feet reach ~0.19 m out, so 0.35 m leaves ~15 cm to stop in.
+GOTO_HALF_W = 0.25           # m: half the leg span (R0 185 mm + foot) — the corridor that must be clear
 GOTO_DETOURS = 2             # detour 1 = +-45 deg off the target heading, 2 = a sidestep (90 deg);
 #                              blocked a third time -> stopped='blocked' (bearing + range)
-GOTO_DETOUR_S = 8.0          # a detour walks at most this long (~36 cm at 45 mm/s: past a
-#                              0.25 m-wide object with the leg span clear) ...
+GOTO_DETOUR_M = 0.45         # m a detour is sized to walk: the corridor (+-GOTO_HALF_W) clears a 0.25 m-wide
+#                              object 0.375 m to its side, and 0.45 also takes the object's corner out of the
+#                              cone when the target is 0.6 m behind it (D063, measured below)
+GOTO_DETOUR_S = round(GOTO_DETOUR_M / _GOTO_ENV["goto_speed_m_s"] + tool_registry.default_ease_in_s(), 1)
+#                              ... so it walks at most this long: 0.45 m at 0.0342 m/s + the 2.36 s ease-in =
+#                              15.5 s (D062 had 8 s, ~36 cm at 45 mm/s, which walks ~27 cm now). Measured
+#                              (flat, head-on at a 0.25 m wall or box at x 0.6, the cap lifted): with the target
+#                              0.9 m behind it a detour clears the wall from 12 s and the box from 13 s (neither at
+#                              8, 10.5, 11; the box not at 12), 0.6 m behind both at 15.5 s (the wall from 15; not
+#                              at 13.3); 0.35 m behind needs 18 s, 0.3 m not even that (no planner) ...
 GOTO_RESUME_S = 0.8          # ... or until the corridor toward the target has been clear this long
-GOTO_HALF_W = 0.25           # m: half the leg span (R0 185 mm + foot) — the corridor that must be clear
 GOTO_DETOUR_RESET_M = 0.15   # this much new progress after a detour earns the detours back
 TEACH_HZ = 20.0              # the studio's pose-stream recorder
 TEACH_MAX_S = 60.0           # ... stops itself after this long (1200 samples)
@@ -1002,7 +1015,9 @@ class CockpitSim(Playground):
         # D052: is_idle gates sim2real (the Playground also ANDs its own is_idle in);
         # on_event must not block — append + log only
         hw = HardwareBridge(port, on_event=self._hw_event, is_idle=self.is_idle)
-        hw.speed_cps = hw_bridge.ENTRY_SPEED_CPS    # the stream-speed slider starts gentle (200 c/s), not servo max
+        # the stream-speed slider starts gentle: ENTRY_SPEED_CPS as the ceiling on every per-tick
+        # goal speed (D063, hw_bridge.run_cap_cps), not the hard speed
+        hw.speed_cps = hw_bridge.ENTRY_SPEED_CPS
         self.hw = hw
         return hw.status()
 
@@ -1386,7 +1401,9 @@ class CockpitSim(Playground):
         if side is None:                                     # pick the clearer side once, then commit
             left, right = self._cone_min(angles, ranges, hd_goal + mag), self._cone_min(angles, ranges, hd_goal - mag)
             side = gs["side"] = 1.0 if left >= right else -1.0
-        gs["detour"] = dict(offset=side * mag, until=self.t + GOTO_DETOUR_S)
+        p = self.data.xpos[self.torso]                       # where it began: its progress is away from here
+        gs["detour"] = dict(offset=side * mag, until=self.t + GOTO_DETOUR_S, x0=float(p[0]), y0=float(p[1]),
+                            away=0.0)
         gs["best_t"] = tw                                    # a fresh no-progress window for the detour
         gs["best_at_detour"] = gs["best"]
         self.log(f"goto: obstacle {rng_m:.2f} m at {bear:.0f} deg — detour {gs['tries']}/{GOTO_DETOURS}: "
@@ -1397,6 +1414,8 @@ class CockpitSim(Playground):
         p = self.data.xpos[self.torso]
         dx, dy = gs["tx"] - p[0], gs["ty"] - p[1]
         dist = float(np.hypot(dx, dy))
+        det = gs.get("detour")
+        away = float(np.hypot(p[0] - det["x0"], p[1] - det["y0"])) if det is not None else 0.0
         v = self.void
         if gs["outcome"] is None and v is not None and v["t"] >= gs["t0"] - 1e-9:
             # D052: the Playground's always-on void guard fired during this goto. It
@@ -1416,14 +1435,18 @@ class CockpitSim(Playground):
                 gs["block"] = dict(detail="locomotion held: the real legs are mirroring (sim2real)")
             elif dist < gs["best"] - 0.02:
                 gs["best"], gs["best_t"] = dist, tw
-            elif gs.get("detour") is not None:
-                gs["best_t"] = tw                    # a sidestep makes no progress by design; the
-                #                                      detour has its own time limit
+            elif det is not None and away > det["away"] + 0.02:
+                det["away"], gs["best_t"] = away, tw  # a sidestep makes no progress toward the target by
+                #   design: a detour's progress is 2 cm more away from where it began. D063: no longer a
+                #   reset on every tick — with 15.5 s detours a sidestep into a 14 cm box beside a wall
+                #   (below the puck) pushed on until 16.6 s after the detour began (8 s detours: 9.1 s);
+                #   now the rule below ends it 'stuck' (6.0 s; test_cockpit_api, slow)
             elif tw - gs["best_t"] > GOTO_STUCK_S and tw > 2.0:
                 gs["outcome"] = ("stuck", tw)          # D050: blocked, not a void
                 self.sup.request_stop()
                 self.log(f"goto stuck {dist*100:.0f} cm short (no progress for {GOTO_STUCK_S:.0f} s)")
-            elif tw > GOTO_CAP_S:
+            elif tw > GOTO_CAP_S and det is None:      # a detour runs out its own limit first, as before
+                #                                        (so a goto can answer up to GOTO_DETOUR_S late)
                 gs["outcome"] = ("timeout", tw)
                 self.sup.request_stop()
         if self._stop_req and gs["outcome"] is None:

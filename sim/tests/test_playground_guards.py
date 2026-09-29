@@ -20,7 +20,7 @@ for sub in ("sim", "gait", "perception"):
 import mujoco                                                     # noqa: E402
 import rocky_model as rm                                          # noqa: E402
 from pebble_gait import WaveGait, N_LEGS                          # noqa: E402
-from pebble_reflex import ReflexSupervisor, NORMAL, BRACE         # noqa: E402
+from pebble_reflex import ReflexSupervisor, NORMAL, PLANT, BRACE  # noqa: E402
 
 
 def make(**kw):
@@ -104,7 +104,9 @@ def test_fall_during_gesture_ends_in_fallen():
     assert pg.do("gesture wave").startswith("wave")
     run(pg, 1.0)
     assert pg.gesture_phase == "run"
-    pg.do("push 60 0 0.4")
+    # D063: 65 N (was 60). The tumble is chaotic: on the D063 model (+27.5 g of fork cheeks) 60 N
+    # tips it to 129 deg and it rolls back upright; 62-70 N all land it upside down (164 deg)
+    pg.do("push 65 0 0.4")
     states = set()
     run(pg, 3.0, lambda p: states.add(p.sup.state))
     assert "FALLEN" in states
@@ -122,7 +124,8 @@ def test_void_guard_stops_a_plain_walk_at_the_cliff(how):
     else:
         for _ in range(3):
             pg.teleop("up")
-    assert pg.cmd_v[0] == pytest.approx(45.0)
+    # walk asks 45 (the budget fits it); teleop caps each tap at the envelope (D063: 34.2 mm/s, was 45.5)
+    assert pg.cmd_v[0] == pytest.approx(45.0 if how == "walk" else min(45.0, pg.V_MAX[0]))
     log = []
     run(pg, 14.0, lambda p: log.append((p.t, p.sup.state, p.probe_out.any(), p.cmd_eff.copy(),
                                         p.void is not None, p.last["height"])))
@@ -155,7 +158,7 @@ def test_void_guard_stops_a_plain_walk_at_the_cliff(how):
         assert pg.void is None and pg.data.xpos[pg.torso][0] - x0 < -0.05
 
 
-@pytest.mark.parametrize("approach_deg", [0, 10, 20, 30, 45])
+@pytest.mark.parametrize("approach_deg", [0, 15, 20, 30, 45])
 def test_void_guard_holds_at_every_approach_angle(approach_deg):
     """D052 P2 (review V2): approached at 10-20 deg the robot walked off the
     cliff — the two leading legs (3 at -54, 4 at +18 deg) straddle the edge, one
@@ -163,7 +166,11 @@ def test_void_guard_holds_at_every_approach_angle(approach_deg):
     rear feet cannot hold the CoM. Before the fix: 10 deg fired and still fell,
     15 deg never fired, 20 deg fired late on the wrong leg after falling; 0 / 30 /
     45 deg stopped. Now the touchdown gate holds the gait on the late foot, the
-    probe finds the void and the retreat plays the approach backwards."""
+    probe finds the void and the retreat plays the approach backwards.
+    D063: 10 deg now sits in the lip band (the soft-landing swing and the
+    command slew moved it to 9-15 deg, see _LIP), so the grid's second point
+    is 15; the approach is slower (34.2 mm/s after a 2.4 s ease-in: 45 deg
+    fires at t 11.4 s), so it runs 15 s (was 10) to see the settle after it."""
     pg = make(cliff=True)
     a = np.radians(approach_deg) / 2
     pg.data.qpos[3:7] = [np.cos(a), 0, 0, np.sin(a)]    # yaw the spawn: walk 45 = the approach
@@ -171,9 +178,9 @@ def test_void_guard_holds_at_every_approach_angle(approach_deg):
     run(pg, 1.0)
     assert pg.do("walk 45").startswith("walking")
     log = []
-    run(pg, 10.0, lambda p: log.append((p.t, p.sup.state, bool(p.probe_out.any()), p.cmd_eff.copy(),
+    run(pg, 15.0, lambda p: log.append((p.t, p.sup.state, bool(p.probe_out.any()), p.cmd_eff.copy(),
                                         p.void is not None, float(p.data.xpos[p.torso][0]),
-                                        float(p.data.xpos[p.torso][2]))))
+                                        float(p.data.xpos[p.torso][2]), float(p.data.xpos[p.torso][1]))))
     xs = [r[5] for r in log]
     assert max(xs) < 0.33, max(xs)                      # the edge is at x = 0.35
     assert pg.void is not None and pg.sup.fall_count == 0
@@ -181,7 +188,12 @@ def test_void_guard_holds_at_every_approach_angle(approach_deg):
     t_out = next(r[0] for r in log if r[2])
     i_fire = next(k for k, r in enumerate(log) if r[4])
     assert log[i_fire][0] - t_out < 0.5
-    assert xs[-1] < xs[i_fire] - 0.02                    # it backed off (the approach, played backwards)
+    # it backed off (the approach, played backwards) — measured along the approach: D063's
+    # slower back-off (0.6 cycles at 34.2 mm/s) measured 2026-09-29: 40 mm at 0 deg, 38 at 30,
+    # and at 45 deg 33 mm along the approach but only 20.0 in x, on the old x-only bar
+    head = np.array([np.cos(np.radians(approach_deg)), np.sin(np.radians(approach_deg))])
+    back = float(np.dot([xs[-1] - xs[i_fire], log[-1][7] - log[i_fire][7]], head))
+    assert back < -0.02, back
     u = np.radians(pg.void["world_bearing_deg"] - np.degrees(pg.yaw()))
     u = np.array([np.cos(u), np.sin(u)])                # body frame (yaw is held through the stop)
     assert all(float(np.dot(r[3][:2], u)) <= 1.0 for r in log[i_fire + 1:])
@@ -193,36 +205,78 @@ def test_void_guard_holds_at_every_approach_angle(approach_deg):
 _LIP = ("KNOWN GAP (review round 3, 2026-09-24): a leading foot lands on the edge's lip "
         "(its sphere centre 0-8 mm past it); the late-foot gate reacts 140 ms after the next "
         "touchdown and the rewind cannot put the lifted leg back before the tip. 7 of 310 "
-        "approaches fall (1 deg grid, walk 15/25/35/45, -30..60 deg); the careful walk "
-        "(gate.wait 1) falls in 9 of 310 at other angles")
+        "approaches fell (1 deg grid, walk 15/25/35/45, -30..60 deg); the careful walk "
+        "(gate.wait 1) fell in 9 of 310 at other angles. D063 (2026-09-28, the soft-landing "
+        "swing + the command slew, same grid, 364 approaches): 11 fell at 9-15 deg, 3 of them "
+        "after the void fired; with the hold's faster seek (PROBE_HOLD_LEAD_MM, 2026-09-29) "
+        "8 fall, none after a fire: 15 @ 14-15, 25 @ 9-10, 35 / 45 @ 10-11 (35 and 45 are "
+        "the same run: both are fitted to 34.2 mm/s). Slew off, the D063 gait alone: 7, "
+        "before and after. Careful walk (unchanged by the fix): 6, at 15 @ 15-16, "
+        "25 @ 10-11, 35 / 45 @ 9. None of these fires the void guard")
 
 
-def _approach_falls(speed, approach_deg, seconds=14.0):
+def _approach(speed, approach_deg, seconds=20.0):
+    """Walk at the cliff: (fell, t_fire, t_hold, tilt_after) — t_hold is when the
+    last touchdown-gate hold before the fire began, tilt_after the most tilt
+    (deg) after the fire. It runs on 3 s after the fire: a robot that fires and
+    then tips over while it backs off is a fall too (D063)."""
     pg = make(cliff=True)
     a = np.radians(approach_deg) / 2
     pg.data.qpos[3:7] = [np.cos(a), 0, 0, np.sin(a)]
     mujoco.mj_forward(pg.model, pg.data)
     run(pg, 1.0)
     pg.do(f"walk {speed}")
-    zmin = 9.0
+    zmin, t_fire, t_hold, n_hold, tilt = 9.0, None, None, pg.gate_count, 0.0
     for _ in range(int(seconds / pg.DT)):
         pg.step()
         zmin = min(zmin, float(pg.data.xpos[pg.torso][2]))
-        if pg.sup.fall_count or zmin < 0.24 or pg.void is not None:
+        if pg.gate_count != n_hold and t_fire is None:
+            n_hold, t_hold = pg.gate_count, pg.t
+        if t_fire is None and pg.void is not None:
+            t_fire = pg.t
+        if t_fire is not None:
+            tilt = max(tilt, pg.last["tilt"])
+        if pg.sup.fall_count or zmin < 0.24 or (t_fire is not None and pg.t > t_fire + 3.0):
             break
-    return pg.sup.fall_count > 0 or zmin < 0.24 or pg.void is None
+    return pg.sup.fall_count > 0 or zmin < 0.24, t_fire, t_hold, tilt
+
+
+def _approach_falls(speed, approach_deg, seconds=20.0):
+    """True when the approach falls or never fires the void guard."""
+    fell, t_fire, _h, _t = _approach(speed, approach_deg, seconds)
+    return fell or t_fire is None
 
 
 @pytest.mark.parametrize("speed,approach_deg", [
-    (45, 13), (25, 15),
-    pytest.param(45, 12.5, marks=pytest.mark.slow), pytest.param(45, 14, marks=pytest.mark.slow),
-    pytest.param(35, 20, marks=pytest.mark.slow)])
+    (45, 10), (45, 11),
+    pytest.param(15, 14, marks=pytest.mark.slow), pytest.param(25, 9, marks=pytest.mark.slow),
+    pytest.param(25, 10, marks=pytest.mark.slow)])
 @pytest.mark.xfail(strict=True, reason=_LIP)
 def test_void_guard_lip_band_known_gap(speed, approach_deg):
     """The review's counter-examples to "the void guard stops at every approach
     angle": deterministic falls where the grid of the test above steps over
-    them. Strict xfail: when a fix lands these must start passing."""
+    them. Strict xfail: when a fix lands these must start passing. D063 moved
+    the band (the D052 cases 45 @ 13, 25 @ 15, 45 @ 12.5 / 14, 35 @ 20 now stop);
+    these are the re-measured falls with the hold's faster seek. None of them
+    fires the void guard: the robot tips before the probe runs out."""
     assert not _approach_falls(speed, approach_deg)
+
+
+@pytest.mark.parametrize("speed,approach_deg", [
+    (45, 12), pytest.param(25, 11, marks=pytest.mark.slow)])
+def test_a_fired_void_guard_backs_off_without_tipping(speed, approach_deg):
+    """D063: these fired the void guard and still fell while it backed off. The
+    gate held the gait on leg 3 (in the void) while the leg it had put back
+    down, 4, stood on the lip; at a 3.5 mm lead the 30 mm probe took ~0.75 s,
+    leg 4 slid off first and the void fired 0.90 s into the hold with the
+    robot already tipping. A held late foot now seeks at once with a 7 mm
+    lead (PROBE_HOLD_LEAD_MM): measured, the void fires 0.56 s into the hold
+    (both cases) and the tilt after it peaks at 1.6 deg (25 @ 11: 1.0).
+    Forcing the fire saved both up to 0.70 s into the hold, not at 0.75."""
+    fell, t_fire, t_hold, tilt = _approach(speed, approach_deg)
+    assert t_fire is not None and not fell
+    assert t_hold is not None and t_fire - t_hold < 0.65, (t_fire, t_hold)
+    assert tilt < 3.0, tilt
 
 
 def test_careful_walk_holds_at_every_touchdown_and_saves_a_lip_foothold():
@@ -339,7 +393,8 @@ def test_three_trips_latch_a_safe_stop_until_clear():
     pg = make()
     run(pg, 1.0)
     pg.do("walk 45")
-    pg.sup.gyro_trip = 0.3                    # every step of the walk now "trips"
+    pg.sup.gyro_trip = 0.05                   # every step of the walk now "trips" (D063: the soft landing
+    #                                           peaks the walk's gyro at 0.11 rad/s; 0.3 no longer trips it)
     for _ in range(int(6.0 / pg.DT)):
         pg.step()
         if pg.sup.latched:
@@ -589,6 +644,9 @@ def test_sim2real_is_refused_during_a_void_retreat_and_the_retreat_obeys_a_held_
             break
     assert pg._void_phase == "retreat" and not np.any(pg.cmd_v) and np.any(pg.cmd_eff)
     assert not pg.is_idle() and "void guard" in pg.motion_reason()
+    pg.step()                                         # D063: the retreat replays what the gait RAN, not eased
+    assert np.array_equal(pg.sup.slew.v, pg._retreat["v"]) and np.any(pg._retreat["v"])
+    assert np.allclose(pg.cmd_eff, -pg._retreat["v"])
     # a mirror that holds locomotion (as sim2real would) ends the retreat where it is
     pg.hw = FakeHW(mirror="sim2real", allow_locomotion=False)
     run(pg, 0.1)
@@ -620,8 +678,9 @@ def test_gate_rewind_stays_inside_the_servo_budget():
     command: on the step-down every non-probing joint stays <= the free budget."""
     model, drop = _step_down_model()
     pg = make(model=model, z0=drop)
-    assert 1.0 <= pg._rewind_rate(np.array([45.0, 0, 0])) < 1.3        # 1.12 at the envelope
-    assert pg._rewind_rate(np.array([10.0, 0, 0])) > pg._rewind_rate(np.array([45.0, 0, 0]))
+    env = np.array([pg.V_MAX[0], 0, 0])
+    assert 1.0 <= pg._rewind_rate(env) < 1.5            # 1.35 at the D063 envelope (34.2 mm/s; 1.12 at D052's 45.5)
+    assert pg._rewind_rate(np.array([10.0, 0, 0])) > pg._rewind_rate(env)
     run(pg, 1.0)
     orig, worst = pg._guard_target, [0.0]
 
@@ -655,3 +714,168 @@ def test_playground_accounts_servo_heat_and_refuses_nothing_while_cool():
     assert th["tripped"] == ["leg 1 hip"] and th["hot"] == "leg 1 hip"
     assert any(k == "thermal" and "PAST its thermal budget" in m for _t, k, m in pg.notes)
     assert pg.model.actuator_forcerange[4, 1] == pytest.approx(rm.stall_nm())   # accounting only
+
+
+# ------------------------------------------------------------------ D063 command slew
+_TICK = 0.02                                          # the 50 Hz tick the D063 numbers are per
+
+
+def _sup_ticks(sup, t, n, cmd, gyro=0.1, q_prev=None, **kw):
+    """n 20 ms ticks of the bare supervisor: (t, worst joint-target step deg/tick, states, last q)."""
+    worst, states = 0.0, []
+    for _ in range(n):
+        t += _TICK
+        q, st = sup.step(t, *cmd, gyro, **kw)
+        if q_prev is not None:
+            worst = max(worst, float(np.degrees(np.abs(q - q_prev).max())))
+        q_prev = q.copy()
+        states.append(st)
+    return t, worst, states, q_prev
+
+
+def test_supervisor_start_from_standing_eases_every_joint():
+    """D063 (B76 fix 1): standing -> the envelope through the supervisor. Passed
+    straight through, a start moved a joint target ~20 deg in one 20 ms tick;
+    through the slew the worst is the gait's own ~3.4 deg (review: 3.38), at
+    every start phase, for a walk, a strafe, a turn and a mix."""
+    g = WaveGait()
+    cmds = [g.budget(*c) for c in ((45, 0, 0), (0, 45, 0), (0, 0, 0.35), (-30, 30, 0.1))]
+    worst = {True: 0.0, False: 0.0}
+    for slew in (True, False):
+        for ph in np.linspace(0.0, 1.0, 5, endpoint=False):
+            for cmd in cmds:
+                sup = ReflexSupervisor(WaveGait(), arm_after=0.0, slew=slew)
+                sup.t_gait = ph * sup.g.T                 # the clock only runs while moving
+                t, _w, _s, q0 = _sup_ticks(sup, 0.0, 5, (0.0, 0.0, 0.0))
+                _t, w, states, _q = _sup_ticks(sup, t, 150, cmd, q_prev=q0)
+                assert set(states) == {NORMAL}
+                worst[slew] = max(worst[slew], w)
+    assert worst[True] <= 4.0, worst                      # ~4 deg per 20 ms = 3.5 rad/s, under the hard 4.7
+    assert worst[False] > 10.0, worst                     # the check sees the slew go missing
+
+
+def test_supervisor_stop_reaches_brace_in_one_tick_with_the_slew():
+    """D063: the slew never delays a stop. Walking at the envelope, request_stop()
+    and a zero command land in the SAME tick: BRACE, command exactly zero. A stop
+    that arrives in a gyro-trip PLANT (not queued there) zeroes the command too,
+    so the gait does not come back at the old speed and ease down for ~2 s."""
+    g = WaveGait()
+    walk = g.budget(45.0, 0.0, 0.0)
+    sup = ReflexSupervisor(WaveGait(), arm_after=0.0)
+    assert sup.slew is not None                           # wired by default
+    t, _w, _s, _q = _sup_ticks(sup, 0.0, 150, walk)       # 3 s: past the 2.36 s ramp
+    assert np.allclose(sup.slew.v, walk)
+    sup.request_stop()
+    _t, _w, states, _q = _sup_ticks(sup, t, 1, (0.0, 0.0, 0.0))
+    assert states == [BRACE] and not np.any(sup.slew.v) and not np.any(sup.slew.u)
+    # a gyro trip while a swing foot is high -> PLANT (finishing the step at the slewed command)
+    sup = ReflexSupervisor(WaveGait(), arm_after=0.0)
+    t, _w, _s, _q = _sup_ticks(sup, 0.0, 150, walk)
+    for _ in range(100):
+        feet, stance = sup.g.foot_targets(sup.t_gait + _TICK, *sup.slew.v)
+        if (feet[~stance, 2] > -sup.g.h + sup.plant_z_low + 0.5).any():     # near the 24 mm top
+            break
+        t, _w, _s, _q = _sup_ticks(sup, t, 1, walk)
+    t, _w, states, _q = _sup_ticks(sup, t, 1, walk, gyro=5.0)
+    assert states == [PLANT] and np.allclose(sup.slew.v, walk)
+    sup.request_stop()                                    # the operator's stop, mid-PLANT
+    assert not np.any(sup.slew.v)
+    _t, _w, states, _q = _sup_ticks(sup, t, 1, (0.0, 0.0, 0.0))
+    assert states == [BRACE] and not np.any(sup.slew.v)
+
+
+def test_supervisor_gyro_trip_mid_ramp_keeps_the_slewed_command():
+    """Review of the D063 wiring: a PLANT used to take the raw command, so a trip
+    0.4 s into a start jumped the gait to full speed mid-shove (9.1 deg/tick)."""
+    g = WaveGait()
+    walk = g.budget(45.0, 0.0, 0.0)
+    sup = ReflexSupervisor(WaveGait(), arm_after=0.0)
+    t, _w, _s, _q = _sup_ticks(sup, 0.0, 20, walk)
+    v0 = sup.slew.v.copy()
+    assert 0.0 < v0[0] < 0.5 * walk[0]                    # mid-ramp
+    _t, _w, states, _q = _sup_ticks(sup, t, 1, walk, gyro=5.0)
+    assert states[0] in (PLANT, BRACE)
+    assert sup.g._vf_max(*(sup.slew.v - v0)) <= sup.slew.accel * _TICK + 1e-9
+
+
+def test_supervisor_resumes_from_righted_by_the_ramp():
+    """D063 review: FALLEN / RIGHTED hold the command at zero, so after righting
+    the gait starts from the planted stance by the ramp (review: 3.38 deg/tick)
+    instead of jumping to mid-stride at the asked speed (16.75)."""
+    g = WaveGait()
+    walk = g.budget(45.0, 0.0, 0.0)
+    sup = ReflexSupervisor(WaveGait(), arm_after=0.0)
+    t, _w, _s, _q = _sup_ticks(sup, 0.0, 100, walk)
+    sup._enter_fallen(t)
+    seen, q_prev, worst = [], None, 0.0
+    for _ in range(400):
+        t += _TICK
+        q, st = sup.step(t, *walk, 0.1, tilt_deg=5.0, height=0.12)     # upright: the handoff runs
+        if st in ("FALLEN", "RIGHTED"):
+            assert not np.any(sup.slew.v)
+        elif q_prev is not None and seen and seen[-1] in ("RIGHTED", NORMAL):
+            worst = max(worst, float(np.degrees(np.abs(q - q_prev).max())))
+        if not seen or seen[-1] != st:
+            seen.append(st)
+        q_prev = q.copy()
+    assert seen == ["FALLEN", "RIGHTED", NORMAL], seen
+    assert np.allclose(sup.slew.v, walk)                  # it did walk again, eased in
+    assert worst <= 4.0, worst
+
+
+def test_playground_stop_is_never_eased():
+    """`stop` with the slew wired: BRACE on the next physics step, command zero."""
+    pg = make()
+    run(pg, 1.0)
+    pg.do("walk 45")
+    run(pg, 3.0)
+    assert pg.cmd_eff[0] == pytest.approx(pg.V_MAX[0])   # eased up to the envelope (2.36 s)
+    pg.do("stop")
+    pg.step()
+    assert pg.sup.state == BRACE
+    assert not np.any(pg.sup.slew.v) and not np.any(pg.cmd_eff)
+
+
+def test_playground_zero_ask_eases_down_and_idle_waits_for_the_slew():
+    """A zero ASK (not a stop) slows down on the slew; the robot is not idle for
+    sim2real until the command has come to rest (D063)."""
+    pg = make()
+    run(pg, 1.0)
+    pg.do("walk 30")
+    run(pg, 3.0)
+    assert pg.cmd_eff[0] == pytest.approx(30.0)
+    assert pg.set_velocity(0.0) is None
+    pg.step()
+    assert pg.sup.state == NORMAL and 29.0 < pg.cmd_eff[0] < 30.0      # still walking, easing down
+    assert not pg.is_idle() and pg.motion_reason() is not None
+    t0, t_rest = pg.t, None
+    for _ in range(int(4.0 / pg.DT)):
+        pg.step()
+        if t_rest is None and not np.any(pg.sup.slew.v):
+            t_rest = pg.t - t0
+    assert t_rest is not None and 1.5 < t_rest < 3.0, t_rest           # 30 / 25 s on the ramp + the lag's tail
+    assert pg.is_idle() and pg.sup.trip_count == 0                      # eased to a stand, never braced
+
+
+def test_a_gate_hold_freezes_the_running_command_and_outlives_the_ramp():
+    """D063: the gate compares the TARGET, so the slew's ramp (up to 2.4 s after
+    a command change) does not end a hold; while it holds, the command the gait
+    runs is frozen (the planted feet do not slide under a ramp while a foot probes)."""
+    model, drop = _step_down_model()
+    pg = make(model=model, z0=drop)
+    run(pg, 1.0)
+    pg.do("walk 0 30")
+    holds, cur = [], None
+    for _ in range(int(8.0 / pg.DT)):
+        pg.step()
+        g = pg._gate
+        if g is None:
+            cur = None
+            continue
+        assert np.array_equal(pg.sup.slew.v, g["run"])            # frozen
+        if cur is None or cur["g"] is not g:
+            cur = dict(g=g, n=0, ramping=bool(np.abs(g["run"] - g["v"]).max() > 0.5))
+            holds.append(cur)
+        cur["n"] += 1
+    assert holds
+    assert any(h["ramping"] and h["n"] > 10 for h in holds), [(h["n"], h["ramping"]) for h in holds]

@@ -27,8 +27,9 @@ the D051 review, all confirmed on the mock:
     torque, and blends real -> sim with a smoothstep over
     max(BLEND_S, 1.5 * gap / (0.8 * entry speed)) at ENTRY_SPEED_CPS
     (never 0 = servo max), then releases to the configured torque limit /
-    ACC / speed after max(ENTRY_S, blend + ENTRY_TAIL_S). A leg that re-joins the
-    stream later (re-armed) gets the same entry. Before D052 the first tick
+    ACC and the per-tick goal speed (D063) after max(ENTRY_S, blend +
+    ENTRY_TAIL_S). A leg that re-joins the stream later (re-armed) gets the
+    same entry. Before D052 the first tick
     streamed the sim pose at servo max speed and full torque.
     V2 (review): the parked goal is clamped half a margin inside the range
     apply_limits burns (soft +- MARGIN_DEG), so a leg resting outside it is
@@ -63,6 +64,14 @@ the D051 review, all confirmed on the mock:
   * Rate limit at the bus: a goal that moves more than hard_speed * dt from
     the last sent goal is capped (default) or refused; hard speed from
     rocky_model.servo_speed('hard') = 4.7 rad/s (event "rate", <= 1/s).
+  * Goal speed (D063, B76 fix 3): after the entry the stream no longer writes
+    GOAL_SPEED 0 (= servo max: every 20 ms step rushed, then waited). Each
+    servo gets bus.goal_speeds: TRACK_K (1.3) x its goal step / the 20 ms
+    tick, floored at TRACK_FLOOR_CPS (never 0), capped at the hard speed and
+    at `speed_cps` when that is > 0 (the cockpit's stream-speed slider is a
+    ceiling now). The entry, the stops and the limp paths are unchanged.
+    VERIFY-ON-BENCH (bus.TRACK_K): a loaded joint behind its goal, or one the
+    firmware replans from its present position, may lag at low speeds.
   * Heartbeat: sim2real with no push_targets for STALE_S drops the mirror to
     off (event "stale"; torque stays on, the legs hold).
   * Port loss: LOST_ERRORS consecutive failed ticks -> mirror off, limp if the
@@ -112,6 +121,7 @@ if os.path.join(ROOT, "bench") not in sys.path:     # appended: bench script nam
 from rocky_driver import (FeetechBus, Family, SerialTransport, PebbleRobot,     # noqa: E402
                           make_pebble_mock, load_bus_params, load_calibration)
 from rocky_driver.registers import CENTER, COUNTS, SWEEP_DEG                    # noqa: E402
+from rocky_driver.bus import TRACK_K                                            # noqa: E402
 import rocky_model as rm                                                        # noqa: E402
 import apply_limits as limits_mod                                               # noqa: E402
 
@@ -188,7 +198,7 @@ class HardwareBridge:
         self.q_in = np.zeros((5, 3))            # (5,3) rad measured (real2sim)
         self.legs_present = np.zeros(5, bool)   # all three servos answered the scan
         self.degraded = np.zeros(5, bool)       # dropped from the mirror for silence
-        self.speed_cps = 0                      # 0 = servo max; the sim2real stream can be slowed
+        self.speed_cps = 0                      # > 0: caps every streamed goal speed (0: the hard speed)
         self.torque_limit = 1000                # released-to TORQUE_LIMIT (0.1 %)
         self.acc = 0                            # released-to ACC (0 = no ramp)
         self.rate_mode = "cap"                  # "cap" | "refuse": a target past the rate limit
@@ -402,6 +412,7 @@ class HardwareBridge:
         with self.lock:
             blend = {k: dict(v) for k, v in self._blend.items()}
             need = set(self._need_entry)
+            prev = dict(self._last_goal)                         # the goals the servos hold now
             dt = min(max(now - self._t_send, 1e-3), 0.1)
         entry, run, release, sent = {}, {}, [], {}
         for leg in range(5):
@@ -437,8 +448,9 @@ class HardwareBridge:
         with self.bus_lock:
             if entry:
                 self.bus.sync_positions(entry, ENTRY_SPEED_CPS)
-            if run:
-                self.bus.sync_positions(run, self.speed_cps)
+            if run:                                              # D063: per-servo k * step / tick, never 0
+                self.bus.sync_positions(run, self.bus.goal_speeds(prev, run, 1.0 / TICK_HZ,
+                                                                  cap_cps=self.run_cap_cps()))
             if release:
                 ids = [sid for leg in release for sid in self.leg_ids[leg]]
                 self._release_limits(ids)
@@ -450,7 +462,12 @@ class HardwareBridge:
                 self._limited.discard(leg)
         if release:
             self._emit("entry", f"legs {release}: soft entry done — torque limit {self.torque_limit / 10:.0f} %, "
-                                f"speed {'max' if not self.speed_cps else self.speed_cps}")
+                                f"goal speed {TRACK_K:g} x step / tick up to {int(self.run_cap_cps())} cps")
+
+    def run_cap_cps(self):
+        """The streamed goal-speed cap (counts/s): the hard speed, or speed_cps below it."""
+        hard = rm.servo_speed("hard") * COUNTS[Family.STS] / (2.0 * math.pi)
+        return min(hard, self.speed_cps) if self.speed_cps > 0 else hard
 
     def _rate_limit(self, sid, deg, dt):
         """Last line at the bus (D052): cap (or refuse) a goal step bigger than
@@ -1015,7 +1032,8 @@ class HardwareBridge:
                 nan_skips=self.nan_skips, rate_mode=self.rate_mode, rate_capped=self.rate_capped,
                 rate_refused=self.rate_refused,
                 cal=dict(dir=dict(self.cal.get("dir", {}) or {}), offset=dict(self.cal.get("offset", {}) or {})),
-                speed_cps=self.speed_cps, torque_limit=self.torque_limit, acc=self.acc,
+                speed_cps=self.speed_cps, speed_cap_cps=int(self.run_cap_cps()), track_k=TRACK_K,
+                torque_limit=self.torque_limit, acc=self.acc,
                 bus_stats=dict(self.bus.stats))
 
     def close(self):

@@ -48,7 +48,8 @@ SIGNED = ["turn_in_place", "sidestep"]
 
 EDGE_X = 0.35          # the mock world's void, same as sim/scenes.py (sim/experiments/run_cliff.py)
 SAFE_MARGIN = 0.18     # the detector historically stops ~185 mm short
-SPEED = 0.045          # m/s, the gait's V_X
+SPEED = 0.0342         # m/s, what goto walks at: the gait's envelope (D063; was 0.045). A literal, as this
+#                        module imports nothing from the harness: test_capabilities pins it to the envelope
 
 
 def derived_capabilities(be) -> set:

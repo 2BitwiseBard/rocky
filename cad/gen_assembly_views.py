@@ -3,12 +3,11 @@
 from the CAD itself. Writes PNGs to cad/out/assembly/:
 
   leg_01.png .. leg_08.png  the eight steps of docs/PRINT_PLAN.md "Assembly
-                            order" (check_assembly.py does not assert step 1's
-                            path: see below). Grey = already assembled (dark
-                            grey: a servo), purple = moves in this step, pulled
-                            back 30 mm along the way it goes in, pale purple =
-                            new in this step but stays put; the dashed arrow
-                            is the motion
+                            order". Grey = already assembled (dark grey: a
+                            servo), purple = moves in this step, pulled back
+                            30 mm along the way it goes in, pale purple = new
+                            in this step but stays put; the dashed arrow is
+                            the motion
   leg_done.png              the leg skeleton, assembled
   leg_harness.png           the leg on a patch of deck with the 11 x 11 harness
                             path (part_coxa.harness_solid) in orange; where a
@@ -27,12 +26,11 @@ from the CAD itself. Writes PNGs to cad/out/assembly/:
 
 The servos are servo_st3215.servo_body (the envelope measured from the real
 servo's STEP) posed by leg_assembly.build(), not the dry-fit blanks. Step 1
-draws the fork coming on from the front (its C opens to the back), but as
-drawn it cannot slide on: the horn's centre head sits 1.0 mm below the hub
-top and catches the hub's rear lip, and the idler stands 1.5 mm up into the
-upper plate's pocket, so the C would have to spring ~2.5 mm open, and no
-rigid order (idler or horn fitted later) works either. check_assembly does
-not assert this step's path, only the fork's final fit and screw access.
+draws the fork sliding on from the front (its C opens to the back): the servo
+passes between the fork's side cheeks (labelled: from LEG_CAM the near one
+hides the jaws), and the horn's centre head and the idler run out to the
+mouth in channels (D063, B80). check_assembly asserts that path
+(part_coxa.fork_slide_worst), onto the blank and the real servo.
 
 How it draws: each solid is tessellated (TOL), projected by an orthographic
 camera and rasterised by a small numpy z-buffer at SS times the output size
@@ -336,8 +334,8 @@ def leg_steps_table():
     from servo_st3215 import case_xspan
     mx, py, my, pz = (-1.0, 0, 0), (0, 1.0, 0), (0, -1.0, 0), (0, 0, 1.0)
     return [
-        ("Fork onto the yaw servo", "As drawn it does not slide on: the horn head and idler need "
-         "the C sprung ~2.5 mm open (untested). Then 4 × M3 × 6 from below into the horn.",
+        ("Fork onto the yaw servo", "Slide it on from the front, between its cheeks; horn head and "
+         "idler run in channels. Hold it seated: 4 × M3 × 6 from below into the horn.",
          ["servo_yaw"], ["coxa_fork"], mx, [(0.0, 0.0, HUB_Z1)]),
         ("Yaw servo + fork into the base", "Slide them into the base cup from the front. "
          "2 self-tappers from above into the rim, 2 from under the plate.",
@@ -380,8 +378,17 @@ def _arrows(frame, moved, u, seats):
     return [(to_px(frame, np.asarray(p) - u * PULL), to_px(frame, p)) for p in seats]
 
 
+def leg_step_labels():
+    """{step: [(text, a point on the moving part at its seat (mm), text px)]}. Step 1:
+    from LEG_CAM the fork's near side cheek (D063) hides the C's jaws, so name it."""
+    from part_coxa import CHEEK_X0, WEB_X0, CHEEK_Y1, HUB_Z1, UP_Z0
+    return {1: [("side cheek (one each side)",
+                 ((CHEEK_X0 + WEB_X0) / 2, -CHEEK_Y1, HUB_Z1 + 0.15 * (UP_Z0 - HUB_Z1)), (375, 885))]}
+
+
 def leg_steps(m, frames, want):
     out, done = [], []                   # done: assembled by the end of the previous step
+    step_labels = leg_step_labels()
     for k, (title, sub, new, moving, u, seats) in enumerate(leg_steps_table(), 1):
         if want(f"leg_{k:02d}"):
             frame = frames[k - 1]
@@ -389,8 +396,10 @@ def leg_steps(m, frames, want):
             items += [(m[p], NEW) for p in new]
             moved = [shift(m[p], [-PULL * c for c in u]) for p in moving]
             items += [(t, MOVE) for t in moved]
+            labels = [(t, to_px(frame, np.asarray(a) - PULL * np.asarray(u)), at)
+                      for t, a, at in step_labels.get(k, [])]
             out.append(save(render(items, frame), f"leg_{k:02d}", f"Step {k}: {title}", sub,
-                            arrows=_arrows(frame, moved, u, seats), legend=LEGEND))
+                            arrows=_arrows(frame, moved, u, seats), labels=labels, legend=LEGEND))
         done += [p for p in new + moving if p not in done]
     return out
 

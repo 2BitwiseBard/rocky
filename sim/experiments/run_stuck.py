@@ -19,11 +19,14 @@ import numpy as np
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 from pebble_gait import WaveGait       # noqa: E402
 from pebble_watchdog import ProgressWatchdog, RetryPolicy           # noqa: E402
-from scenes import build_model, init_robot                          # noqa: E402
+from scenes import build_model, init_robot, walk_ask                # noqa: E402
 
 AMPS_MM = [30, 35, 40, 45]
 SEEDS = [0, 1, 2, 3]
-V_X = 45.0
+V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
+#                                 T_WALK was sized at 45 and did not move: at 34.2 it cuts crossings. Measured
+#                                 with the watchdog, 35 / 40 / 45 mm: 1/4, 0/4, 0/4 at 25 s; 4/4, 2/4, 1/4 at
+#                                 33 s (25 x 45 / 34.2, the same commanded distance) — the owner's call
 T_STAND = 1.0
 T_WALK = 25.0            # retries slow the gait: give recoveries time to pay
 GOAL_X = 0.40            # m: through the worst of the field

@@ -844,6 +844,33 @@ def test_goto_into_a_wall_ends_blocked_with_bearing_and_range():
         sim.alive = False
 
 
+@pytest.mark.slow
+def test_a_goto_detour_into_what_the_lidar_cannot_see_ends_stuck_inside_it():
+    """D063: detours grew 8 -> 15.5 s (cockpit.GOTO_DETOUR_S) and the no-progress clock was reset on
+    every detour tick, so a sidestep into a box below the puck plane pushed until the detour ran out
+    (this scene: blocked 16.6 s after the first detour; 8 s detours: 9.1 s). A detour's progress is now
+    its distance from where it began, so 'stuck' fires GOTO_STUCK_S after it stops getting away."""
+    import cockpit
+    sim = _make_sim()
+    sim.set_world({"base": "flat", "objects": [
+        {"kind": "wall", "pos": [0.6, 0.0], "len_m": 0.25, "yaw_deg": 90}] + [      # the lidar sees this
+        {"kind": "box", "pos": [0.45, s * 0.36], "size": [0.4, 0.25, 0.14]} for s in (1, -1)]},  # not these
+        "low_boxes")
+    sim.speed = 8.0
+    logs = []
+    _log = sim.log
+    sim.log = lambda m, *a, **k: (logs.append((sim.t, m)), _log(m, *a, **k))
+    c = _start(sim)
+    try:
+        r = c.post("/api/tool/goto", json={"x": 1.5, "y": 0.0}).json()
+        assert r["stopped"] == "stuck", (r, logs)
+        t_detour = min(t for t, m in logs if "detour 1/" in m)
+        t_stuck = min(t for t, m in logs if "goto stuck" in m)
+        assert t_stuck - t_detour < cockpit.GOTO_DETOUR_S, logs    # measured 6.0 s of 15.5
+    finally:
+        sim.alive = False
+
+
 def test_residual_walker_gets_its_trained_contract():
     """A pre-D052 walker (obs v1, T 1.6 s / step 32 mm) is fed the legacy obs and
     its own gait — and the note says that gait has no envelope on the D052 servo."""

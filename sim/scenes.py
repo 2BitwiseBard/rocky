@@ -34,8 +34,16 @@ from pebble_reflex import body_gyro_xy                                    # noqa
 
 MODEL_XML = os.path.join(HERE, "pebble.xml")
 MM = 1e-3
-V_X = 45.0               # mm/s: the experiments' walking speed
+V_X = 45.0               # mm/s: the experiments' walking speed (an ASK; walk_ask() fits it)
 T_SETTLE = 1.0           # s: planted stance before the walk starts
+
+
+def walk_ask(gait, vx=V_X):
+    """(vx, vy, wz): the walking ask fitted into the gait's envelope
+    (WaveGait.budget, the budget every command source gets; D063). 45 mm/s
+    asks 34.2 today. Pass this to a ReflexSupervisor, not V_X: its command
+    slew would otherwise ramp toward 45, above the envelope."""
+    return gait.budget(vx, 0.0, 0.0)
 
 
 def load_xml():

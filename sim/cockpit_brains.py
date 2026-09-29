@@ -276,10 +276,14 @@ FIND_SCAN_DEG = 30.0        # a scan turn (counter-clockwise); at most one full 
 BEARING_LIMIT_DEG = 60.0
 FIND_MAX_TOKENS = 120
 FIND_METHODS = ("bbox", "estimate")
-# turn(): the gaited turn runs at pg2.TURN_WZ fitted into the gait budget. MEASURED in
-# the cockpit (flat world, D052 gait, 2026-09-24): turn_in_place (4.8 s) turns ~47 deg;
-# with these constants turn(30) turned 31.3-31.7 deg, turn(-45) -45.2, turn(90) 86.1.
-TURN_RATE_DPS = 14.2
+# turn(): the gaited turn runs at pg2.TURN_WZ fitted into the gait budget, i.e. at the
+# envelope's turn rate (0.35 rad/s asked is above it). MEASURED in the cockpit (flat world,
+# D052 gait, 2026-09-24): turn_in_place (4.8 s) turns ~47 deg; with 14.2 deg/s (the D052
+# 0.246 rad/s) turn(30) turned 31.3-31.7 deg, turn(-45) -45.2, turn(90) 86.1. D063: the rate
+# is derived (0.185 rad/s = 10.6 deg/s): the 14.2 literal turned 23.7 / -34.1 / 65.3 deg for
+# 30 / -45 / 90, so find_object's 12-scan "full circle" was ~285 deg; derived, turn(30) turned
+# 30.5-30.6, turn(-30) -30.7, turn(-45) -45.0 / -45.1, turn(90) 86.9, turn(180) 171.2 (2026-09-29).
+TURN_RATE_DPS = round(math.degrees(tool_registry.default_envelope()["turn_rad_s"]), 1)
 TURN_EXTRA_S = 1.4
 TURN_MIN_DEG, TURN_MAX_DEG = 5.0, 180.0
 
@@ -306,7 +310,9 @@ FIND_ESTIMATE_PROMPT = (
 # ------------------------------------------------------------ scene memory tools
 # (sim/scene_memory.py; the cockpit owns one SceneMemory per world — sim.memory)
 GO_BACK_STANDOFF_M = FIND_NEAR_M + EYE_FWD_M   # 0.35 m torso-to-near-edge: where find_object stops
-GO_BACK_LEG_M = 1.2         # one goto leg (goto's 40 s cap is ~1.8 m at 45 mm/s)
+GO_BACK_LEG_M = 1.2         # one goto leg: ~37 s clear at D063's 34.2 mm/s of goto's 55 s cap (was ~1.8 m at
+#                             45 mm/s in 40 s). A detour costs ~20 s (the sidestep), so a leg can run out of time
+GO_BACK_MIN_PROGRESS_M = 0.10   # ... and a leg that timed out this much closer is re-aimed, not a veto (D063)
 GO_BACK_MAX_LEGS = 4
 GO_BACK_DEFAULT_SIZE_M = 0.10
 MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the robot's own awareness "
@@ -715,8 +721,9 @@ def validate_goto(x, y):
 def goto_range_error(tx, ty, pose, max_m=GOTO_MAX_M):
     d = math.hypot(tx - float(pose["x"]), ty - float(pose["y"]))
     if d > max_m:
-        return (f"target is {d:.2f} m away; goto is capped at {max_m:.0f} m (and ~1.5 m is what "
-                f"fits in its 40 s) — pick a closer waypoint")
+        return (f"target is {d:.2f} m away; goto is capped at {max_m:.0f} m (and ~{tool_registry.GOTO_REACH_M:g} m "
+                f"is what fits in its {tool_registry.default_envelope()['goto_timeout_s']:g} s) — pick a closer "
+                "waypoint")
     return None
 
 
@@ -2103,7 +2110,10 @@ class Brains:
         """Walk back to a remembered object: gotos of at most GO_BACK_LEG_M
         toward it until within the standoff (find_object's stopping distance
         plus half its size; 0 for a place pinned with 'X is here'). Every leg
-        is an ordinary goto (tool_goto: every guard); any veto ends it."""
+        is an ordinary goto (tool_goto: every guard); any veto ends it. A leg
+        that ran out of time (D063: a detour around an obstacle costs ~20 s of
+        goto's 55 s cap) but ended GO_BACK_MIN_PROGRESS_M closer is no veto:
+        the next leg re-aims from there (GO_BACK_MAX_LEGS still bounds it)."""
         mem = self.memory
         if mem is None:
             return self._no_memory()
@@ -2162,6 +2172,10 @@ class Brains:
             r = await self.tool("goto", {"x": tx, "y": ty})
             how = r.get("stopped") or ("refused" if r.get("ok") is False else "?")
             legs.append({"x": tx, "y": ty, "stopped": how})
+            p1 = r.get("pose")
+            if how == "timeout" and isinstance(p1, dict) and \
+                    math.hypot(w["x"] - p1["x"], w["y"] - p1["y"]) < d - GO_BACK_MIN_PROGRESS_M:
+                continue                                  # slow (a detour), not vetoed: the next leg re-aims
             if how != "arrived":
                 why = r.get("detail") or r.get("error") or how
                 return result(False, f"stopped on the way: goto {how} ({why})", r.get("pose") or pose,

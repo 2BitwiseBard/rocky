@@ -15,9 +15,10 @@ M3 x 6 in the kit), so the screw holes are radial SLOTS with a counterbore
 that seats an M3 head or an M2 head + washer: the coupler is the part you
 reprint in an hour once one screw has been tried on the real horn.
 
-The coupler is used at the hip and knee. The yaw joint rides the horn OD in
-a pocket and bolts through the fork's hub directly (part_coxa) — the clamp
-screws of a coupler would have to be driven from under the base plate.
+The coupler is used at the hip and knee. The yaw joint has none: the horn
+face bears on the fork's flat hub top and 4x M3 go through the hub into the
+horn directly, their radial slots locating it (part_coxa; D063, B81) — the
+clamp screws of a coupler would have to be driven from under the base plate.
 
 Parts:
   horn_coupler       : disc on the horn, 4 shear lobes on top

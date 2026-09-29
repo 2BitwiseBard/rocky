@@ -6,9 +6,12 @@ that fits proves the production part fits.
   coupon_cup      : one servo cup (the same shape holds all three servos).
                     Slide a blank (or a real servo) in, drive the four rim
                     screws. Proves case fit, rim clearance, screw positions.
-  coupon_yaw_hub  : the fork's lower hub — horn OD pocket + slotted holes.
-                    Bolt it to a blank's horn (or the real horn: this is the
-                    print that answers M2-or-M3 and the hole radius).
+  coupon_yaw_hub  : the fork's lower hub — the flat horn seat, the centre-
+                    head relief and its channel to the mouth, slotted holes
+                    (D063, B80/B81). Slide it onto a blank's horn from the
+                    front and bolt it (or onto the real horn: this is the
+                    print that answers M2-or-M3 and the hole radius); the
+                    horn face must sit flat on it with no rock.
   coupon_hip_hub  : femur plate A hub A with the coupler recess + clamp holes
                     (+ horn_coupler, 2x M3 x 8).
   coupon_idler    : femur plate B hub A tower — the idler pocket with its
@@ -16,7 +19,7 @@ that fits proves the production part fits.
 """
 from build123d import *
 from common import export
-from part_coxa import coxa_fork
+from part_coxa import coxa_fork, WEB_HALF_W
 from part_femur import femur_link, femur_plate_b, YA0, YB0, YB1
 from servo_mount import servo_cup
 
@@ -26,7 +29,8 @@ def coupon_cup():
 
 
 def coupon_yaw_hub():
-    return coxa_fork() & Pos(0, 0, 5) * Box(30, 30, 10)
+    # the hub and its arm stub, |y| <= 13: the jaw strips out to the side cheeks stay off
+    return coxa_fork() & Pos(0, 0, 5) * Box(30, 2 * WEB_HALF_W, 10)
 
 
 def coupon_hip_hub():

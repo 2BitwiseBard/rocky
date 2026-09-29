@@ -44,6 +44,12 @@ Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
 - **Tethered for now (B84):** the I5 bay is not a part yet, so the pack,
   sled and dock block stay off the robot. Feed the fuse from an XT60 lead
   ([build order](#build-order-phase-b) step 1).
+- **Proposed, not built (D063):** one layout for the bay, the tray and the
+  hub, measured in three options for the owner
+  ([BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)). Option A puts
+  the fuse and the loop key in the bay's nose (the key reachable with the
+  carapace on), the node on a hub shelf under the deck with the star
+  board, and the dock's spare taps on the node, after the fuse (B66).
 
 ## Per-leg drop (×5, ends at the I1 leg-port connectors)
 
@@ -79,7 +85,9 @@ Parts are rows in [`bom/BOM.csv`](../bom/BOM.csv); nothing is wired yet.
    for the 90° twist, and the microswitch pair runs back up to XH-5 pin 4
    the same way. B-17 is only the end of this run (100 mm, a plug on both
    ends), and the hand's mating half is not chosen yet. VERIFY on the
-   first leg (B91).
+   first leg (B91). Along the femur the leads ride a `link_clip` over plate
+   A's top edge, above its lightening slot (D063, B94; the tunnel is 4 × 6
+   through a 2.6 mm slot).
 
 **Check at the first bench torque test:** the cup's −Y side wall now
 bridges the channel over 10 of its 24.5 mm footing. Watch it for flex.
@@ -105,7 +113,8 @@ the leg's length.
 - **Avionics tray (I4):** plate centre (0, −38), still an assumption
   (`part_avionics.TRAY_XY`); the bulkhead faces south at y ≈ −72. There
   the tray and its rails run into the coxa bases at stations 2 and 3, and
-  as drawn no position clears all five legs (B51).
+  as drawn no position clears all five legs (B51). The D063 proposal
+  puts it at (0, 0), turned 180° (bulkhead north).
 - **Star board:** the bracket (v0.2) plate is centred at (0, 32), spans
   y 14 to 50, and its zip wings reach y 58. It bolts through its centreline
   to the existing deck grid holes **(0, 20) and (0, 40)**, so the deck needs
@@ -120,12 +129,16 @@ the leg's length.
   bulkhead trunk to J0.
 - **Loom ring lane, r ≈ 62:** outboard of the electronics grid and clear of
   the strap slots (r ≤ 47); inboard of the leg-port cable cutouts (r 81) and
-  of the shell feet (r 73–82, at the webs only). The battery is below the
-  deck, so nothing else is in the way.
+  of the shell feet (r 73–82, at the webs only). **Not on the deck top
+  (B109):** the coxa plates start at r 60.5 and cover the cutout, so a
+  lead on the deck top meets 697 mm³ of plate, while the column under the
+  cutout is clear (D063 proposal, §1). Every drop reaches its port from
+  under the deck, where r 62 is the hook feet's, so the lane and the table
+  below wait for the body layout.
 - **Open:** the bracket sits over the north battery-strap run (y 7 to 37).
   It clears the slots, but if the fallback straps are ever used it needs
   feet or a new spot. At its assumed position the tray already covers the
-  south strap run.
+  south strap run. The D063 proposal drops the deck straps (B50).
 
 ### The board
 
@@ -162,7 +175,10 @@ the short way, then radial out to the leg-port cable cutout (r = 81). Add
 then multiply by 1.15 for the service loop. The lengths end at the deck
 cutout; the in-leg run through the coxa channel is extra, so measure it on
 the first leg. Verify every length on the printed deck before cutting, then
-write the real numbers next to these.
+write the real numbers next to these. The route above the deck cannot reach
+the cutouts (B109), so these are estimates until the body layout settles;
+the proposal's option A puts the XH-5 looms at 113 / 116 / 191 / 235 /
+166 mm for legs 0–4, from a hub under the deck.
 
 | leg | station az | XH-5 loom from the star board (0, 32) | XT30 12 V pair from the power node (52, −6) |
 |---|---|---|---|

@@ -61,9 +61,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 # not retried: D052 saw a local model re-issue the same goto after "stuck".
 GOTO_OUTCOMES = ("arrived", "cliff", "stuck", "blocked", "timeout", "user",
                  "preempted", "FELL")
-# The goto envelope: ~0.045 m/s against goto's 40 s cap is ~1.8 m of flat floor, so a
-# target within ~1.5 m is what reliably arrives (the cockpit's hard argument cap,
-# cockpit_brains.GOTO_MAX_M = 3 m, is only the refusal for nonsense). `move` refuses
+# The goto envelope: goto's cap is sized to walk ~1.5 m 1.2 times over at the gait's
+# envelope (D063: 0.0342 m/s against a 55 s cap, ~1.8 m of flat floor; harness.capabilities.
+# goto_cap_s), so a target within ~1.5 m is what reliably arrives (the cockpit's hard argument
+# cap, cockpit_brains.GOTO_MAX_M = 3 m, is only the refusal for nonsense). `move` refuses
 # anything farther than this. D056: the numbers and the tool texts live in the one tool
 # registry, harness/capabilities.py; these names are re-exported from it (server.py and
 # the tests import GOTO_DOC / MOVE_DOC / GOTO_REACH_M / MOVE_MAX_M from here).
@@ -90,9 +91,10 @@ def validate_move(forward_m, left_m=0.0, max_m=MOVE_MAX_M):
         return None, None, f"move needs finite numbers, got forward_m={forward_m!r}, left_m={left_m!r}"
     d = math.hypot(f, l)
     if d > max_m:
+        env = _caps.default_envelope()
         return None, None, (f"move of {d:.2f} m refused: at most {max_m:g} m (the goto envelope, "
-                            f"~0.045 m/s in 40 s). forward_m and left_m are METERS — 30 cm = 0.3; "
-                            f"for farther, move in legs")
+                            f"~{env['goto_speed_m_s']:.3f} m/s in {env['goto_timeout_s']:g} s). forward_m "
+                            f"and left_m are METERS — 30 cm = 0.3; for farther, move in legs")
     if d < MOVE_MIN_M:
         return None, None, ("move needs a distance: forward_m (+ ahead / - back) and/or left_m "
                             "(+ left / - right) in meters; to turn, use gesture turn_in_place")
@@ -195,7 +197,8 @@ MOVE_RULE = (
     "move(forward_m=-0.2), 'half a meter to your left' = move(forward_m=0, left_m=0.5) — the "
     "robot's own frame, no status call, no trigonometry. goto is for map targets (x, y) or "
     "remembered positions: the map starts at (0, 0) with the robot facing +x, +y is its left. "
-    f"Distances are METERS; it walks ~0.045 m/s: keep moves and targets within ~{GOTO_REACH_M:g} m.")
+    f"Distances are METERS; it walks ~{_caps.default_envelope()['goto_speed_m_s']:.3f} m/s: keep moves and "
+    f"targets within ~{GOTO_REACH_M:g} m.")
 
 
 def build_system(gestures=None, lexicon=None, extra=""):

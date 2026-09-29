@@ -452,7 +452,7 @@
         <div class="row"><label>mirror</label><select id="hw-mirror"><option value="off">off (telemetry only)</option><option value="sim2real">sim → robot</option><option value="real2sim">robot → sim</option></select>
           <button id="hw-torque-on">torque on</button><button id="hw-limp" style="color:var(--bad)">LIMP</button><span id="hw-loco" class="chip caution" style="display:none">locomotion held</span></div>
         <div id="hw-s2r-why" class="small" style="display:none; color:var(--warn)"></div>
-        <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="200" style="width:120px"><span id="hw-speedv" class="small">200 c/s</span><span class="small">(counts/s cap on every goal; 0 = servo max)</span></div>
+        <div class="row"><label>stream speed</label><input id="hw-speed" type="range" min="0" max="1000" step="50" value="200" style="width:120px"><span id="hw-speedv" class="small">200 c/s</span><span class="small">(counts/s ceiling on each servo's per-tick goal speed, k × its goal step / tick, never 0; 0 = the hard speed)</span></div>
         <div class="row"><button id="hw-limits">apply limits…</button><span class="small">burn the params soft limits (+ calibration, 2° margin) into each servo's EEPROM angle limits — dry-run preview first</span></div>
         <div id="hw-limits-plan" class="small"></div>
         <div id="hw-tel" class="small">not connected</div>
@@ -1717,7 +1717,7 @@ function hwRender(st) {
   if (!st) { $('#hw-tel').textContent = 'not connected'; $('#hw-legs').innerHTML = ''; $('#hw-count').textContent = '—'; $('#hw-banner').style.display = 'none'; $('#hw-loco').style.display = 'none'; return; }
   $('#hw-banner').style.display = st.port_ok ? 'none' : ''; $('#hw-banner').textContent = st.port_ok ? '' : `PORT ${st.port} LOST — mirror off, limp attempted; reopening every 2 s (then rescan / re-arm)`;
   if (document.activeElement !== $('#hw-mirror')) $('#hw-mirror').value = st.mirror;
-  if (document.activeElement !== $('#hw-speed')) { $('#hw-speed').value = st.speed_cps; $('#hw-speedv').textContent = st.speed_cps ? st.speed_cps + ' c/s' : 'servo max'; }
+  if (document.activeElement !== $('#hw-speed')) { $('#hw-speed').value = st.speed_cps; $('#hw-speedv').textContent = st.speed_cps ? st.speed_cps + ' c/s' : 'hard ' + (st.speed_cap_cps ?? '') + ' c/s'; }
   $('#hw-loco').style.display = st.allow_locomotion ? 'none' : '';
   $('#hw-loco').textContent = st.entry ? 'soft entry — locomotion held' : 'locomotion held (no real foot contacts)';
   $('#hw-legs').innerHTML = st.legs.map((l, i) => {
@@ -1738,7 +1738,7 @@ $('#hw-scan').onclick = async () => { $('#hw-msg').textContent = 'scanning…'; 
 $('#hw-mirror').onchange = async () => { const want = $('#hw-mirror').value; const r = await hwPost({action: 'mirror', mode: want}); if (!r.ok) $('#hw-mirror').value = r.mirror || (HW_ST ? HW_ST.mirror : 'off'); };
 $('#hw-torque-on').onclick = () => hwPost({action: 'torque', on: true});
 $('#hw-limp').onclick = () => hwPost({action: 'limp'});
-$('#hw-speed').oninput = () => { $('#hw-speedv').textContent = +$('#hw-speed').value ? $('#hw-speed').value + ' c/s' : 'servo max'; hwPost({action: 'speed', speed_cps: +$('#hw-speed').value}); };
+$('#hw-speed').oninput = () => { $('#hw-speedv').textContent = +$('#hw-speed').value ? $('#hw-speed').value + ' c/s' : 'hard speed'; hwPost({action: 'speed', speed_cps: +$('#hw-speed').value}); };
 $('#hw-limits').onclick = async () => {
   $('#hw-limits-plan').textContent = 'planning…';
   const p = await hwPost({action: 'limits', dry_run: true});

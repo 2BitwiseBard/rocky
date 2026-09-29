@@ -12,25 +12,25 @@ drive it by text, voice or MCP.
 </p>
 <p align="center">
   <img src="gait/pebble_gait_demo.gif" width="480" alt="the wave gait"><br>
-  <em>The five-phase wave gait, closed-form IK, no learning: 2.0 s cycle, 24 mm step, walking at 45 mm/s and turning at 0.246 rad/s, both inside the servo's budget.</em>
+  <em>The five-phase wave gait, closed-form IK, no learning: 2.0 s cycle, 24 mm step, and since D063 a soft-landing swing: walking at up to 34.2 mm/s and turning at 0.185 rad/s, both inside the servo's budget.</em>
 </p>
 
 The physical robot is not assembled yet. Everything "green" below is green
 in simulation or in CAD checks, which this project treats as a different
 claim from "it works on hardware".
 
-## Status (2026-09-27)
+## Status (2026-09-29)
 
 | area | state | evidence |
 |---|---|---|
-| **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215** (D047); the leg harness has a channel through the coxa and the star-board bracket sits on real deck holes (D059); a FreeCAD/CalculiX stress check loads the leg parts with what the servos can push, and all five pass at SF ≥ 2 since the femur became a closed box (D061, D062); four joint coupons gate the next print run | `cad/run_all_checks.py` **28/28**, [docs/PRINT_PLAN.md](docs/PRINT_PLAN.md) |
-| **Physical build** | nothing assembled, nothing ordered; the first prints (pre-D047) did not fit and are retired. The bench kit (one leg: 4 × ST3215, bus adapter, adjustable supply, fasteners) is ~$282 at 2026-09-28 prices, the core robot ~$1,231 | [bom/BOM.csv](bom/BOM.csv), [bom/README.md](bom/README.md), `media/2026-09-22_first_prints.jpg` |
-| **Sim + control** | the sim stops flattering the servo (D052/D052a): a peak-torque clip plus a thermal budget, every motion through one feasibility checker and the gait envelope (45.5 mm/s, 0.246 rad/s). Wave gait: 247 of ~261 mm in 6 s, 0.84° max tilt. An always-on void guard stops walks at an edge, except a lip band (7 of 310 approaches) | [docs/SIM_GUIDE.md](docs/SIM_GUIDE.md) |
+| **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215** (D047); the leg harness has a channel through the coxa and the star-board bracket sits on real deck holes (D059); a FreeCAD/CalculiX stress check loads the leg parts with what the servos can push, and all five pass at SF ≥ 2 (D061; the femur a closed box since D062). D063 fixed the part faults the assembly guide found: the coxa fork now slides onto its servo, with side cheeks for the inward push (SF 2.47), a bayonet shell latch, a real dovetail at the I6 shoe, and the Pi / IMU tray on the boards' real holes; four joint coupons gate the next print run | `cad/run_all_checks.py` **28/28**, [docs/PRINT_PLAN.md](docs/PRINT_PLAN.md) |
+| **Physical build** | nothing assembled, nothing ordered; the first prints (pre-D047) did not fit and are retired. The assembly guide walks the build step by step from the CAD; its geometry check found B80–B96, D063 fixed nine, and the body layout (B51, B84–B86, B92, B93) is a proposal for the owner ([docs/BODY_LAYOUT_PROPOSAL.md](docs/BODY_LAYOUT_PROPOSAL.md)). The bench kit (one leg: 4 × ST3215, bus adapter, adjustable supply, fasteners) is ~$282 at 2026-09-28 prices, the core robot ~$1,231 | [docs/ASSEMBLY_GUIDE.md](docs/ASSEMBLY_GUIDE.md), [bom/BOM.csv](bom/BOM.csv), [bom/README.md](bom/README.md), `media/2026-09-22_first_prints.jpg` |
+| **Sim + control** | the sim stops flattering the servo (D052/D052a): a peak-torque clip plus a thermal budget, every motion through one feasibility checker and the gait envelope (34.2 mm/s, 0.185 rad/s). Smoother since D063: the swing foot lifts off and lands at zero vertical speed, and a new command eases in (a stop never waits). Wave gait: 189 of ~198 mm in 6 s, 0.41° max tilt. An always-on void guard stops walks at an edge, except a lip band (8 of 364 approaches) | [docs/SIM_GUIDE.md](docs/SIM_GUIDE.md) |
 | **RL / self-righting** | a **hybrid**: RL rights the body, an analytic ramp stands it. No policy earns a hardware handoff on the D052 contract (`recover1` 0/20 `handoff_ok`; the obs-v2 retrain `recover6_d052` negative, B34); the system (supervisor + righter + 3 s stall ramp) stands 20/20 vs 11/20 with no righter. The walkers predate D052 and are zeroed | [docs/RL_GUIDE.md](docs/RL_GUIDE.md) |
-| **Tests** | 1,035 fast tests pass + 2 strict xfail (the void guard's lip band) in ~6 min, with 7 skipped on the reference setup (the brain-install checks, which need local model files); URDF ≡ MJCF ≡ analytic FK; CI also runs `ruff check .`, the slow tests and `run_sim`, and fails if the regenerated MJCF / URDF or `docs/TOOLS.md` differ from the committed ones | `.github/workflows/ci.yml`, `./rocky.sh test` |
+| **Tests** | 1,078 fast tests pass + 2 strict xfail (the void guard's lip band) in ~9.5 min, with 7 skipped on the reference setup (the brain-install checks, which need local model files); URDF ≡ MJCF ≡ analytic FK; CI also runs `ruff check .`, the slow tests and `run_sim`, and fails if the regenerated MJCF / URDF or `docs/TOOLS.md` differ from the committed ones | `.github/workflows/ci.yml`, `./rocky.sh test` |
 | **Harness** | one tool registry (`harness/capabilities.py`, 23 tools, D056) generates every surface: the MCP server's live list (8 tools on the mock or in-process sim, 15 over a running cockpit, 19 with place recognition), the local brains' schema and the tools page; any OpenAI-compatible model server or Claude drives it | `harness/`, [docs/TOOLS.md](docs/TOOLS.md) |
 | **Cockpit** | one running sim in the browser (D049–D057): cameras, map, switchable brains behind a stop gate (installed and benched, D055), ~1 s speech, `look` / `find_object` and a scene memory (D054), world editor, recordings, RL panel, gesture studio; the phone over HTTPS. Place recognition (D057, off by default): 21/21 verdicts, changes 3/6 | [docs/COCKPIT_GUIDE.md](docs/COCKPIT_GUIDE.md), [docs/BRAINS.md](docs/BRAINS.md), [docs/PLACES.md](docs/PLACES.md) |
-| **Hardware bridge** | `rocky_driver` + the cockpit's bridge, made safe before any servo touched it (D052): standstill-only mirror, a soft first move (parked goal, 40 % torque, 200 c/s), whole-leg fault cuts, EEPROM angle limits. **Mock-verified only: no real servo has been on the bus** | `sim/hw_bridge.py`, [bench/BENCH_RUNBOOK.md](bench/BENCH_RUNBOOK.md), B32 |
+| **Hardware bridge** | `rocky_driver` + the cockpit's bridge, made safe before any servo touched it (D052): standstill-only mirror, a soft first move (parked goal, 40 % torque, 200 c/s), then a per-servo goal speed every tick (D063), whole-leg fault cuts, EEPROM angle limits. **Mock-verified only: no real servo has been on the bus** | `sim/hw_bridge.py`, [bench/BENCH_RUNBOOK.md](bench/BENCH_RUNBOOK.md), B32 |
 | **Design changes** | the robot's shape is data (D053): params `robot:` is validated by `rocky_model.robot()`, and the MJCF / URDF read their stations and actuator order from it; servo, length, foot and material changes follow a documented loop; a 4th joint or a 6th leg validates but does not run yet (B36) | [docs/DESIGN_CHANGE_GUIDE.md](docs/DESIGN_CHANGE_GUIDE.md), [docs/ROBOT_AS_DATA.md](docs/ROBOT_AS_DATA.md) |
 
 ## Layout
@@ -42,7 +42,7 @@ rocky/
 ├── rocky.env.example    every machine setting (ROCKY_*) with its default; copy to rocky.env (git-ignored)
 ├── pyproject.toml       pip-installable core (gait modules + bus driver) and the extras
 ├── cad/                 build123d parametric parts; params.yaml is the single source of truth
-│   ├── run_all_checks.py   the CAD CI: 28 modules incl. the joint suite + printability (--derived: +5 generators, --fem: the stress check)
+│   ├── run_all_checks.py   the CAD CI: 28 modules incl. the joint suite + printability (--derived: +6 generators, --fem: the stress check)
 │   ├── fem_check.py     will a leg part break? CalculiX stress check under servo-limited loads (D061)
 │   ├── ref/             the measured ST3215 STEP every leg part is derived from (+ its Apache-2.0 license)
 │   ├── out/             exported STL/STEP/PNG (git-lfs) and PRINT_PREP_PACK.pdf, the print pack;
@@ -164,10 +164,10 @@ These are the ones that have actually cost something when broken.
 ## Where the record lives
 
 - [BUILD_LOG.md](BUILD_LOG.md) — the engineering notebook, newest entry first.
-- [docs/decisions.md](docs/decisions.md) — numbered decisions D001–D062 (with
+- [docs/decisions.md](docs/decisions.md) — numbered decisions D001–D063 (with
   the amendments D052a and D055a), cited everywhere.
 - [docs/DESIGN_BACKLOG.md](docs/DESIGN_BACKLOG.md) — ideas and follow-ups with
-  verdicts (B1–B73).
+  verdicts (B1–B115).
 - Reviews: [docs/REVIEW_2026-09-22.md](docs/REVIEW_2026-09-22.md) (mechanical,
   electronics, repo), BUILD_LOG sessions 9f (2026-09-24, sim honesty, D052) and
   9i (2026-09-26, the whole-repo audit).

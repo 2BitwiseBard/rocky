@@ -6,6 +6,13 @@ runs it), climb the peak force per direction until the robot ends up
 fallen (tilt > 60°) or displaced more than 0.5 m, and report the last
 survivable peak in newtons and bodyweights plus how far/fast it went.
 
+D063 (B104): the walking case asks what a walk command gets, V_X fitted
+into the envelope (scenes.walk_ask: 45 -> 34.2 mm/s), and is shoved at
+T_SHOVE_WALK, after the supervisor's command slew has reached it (2.36 s
+from standing): steady walking, like the D062 run's steady 45. It used to
+ask a raw 45 with its own 0.6 s ramp and shove at 3.0 s, so under the slew
+the shove landed mid-ramp at 43.2 mm/s. The standing case is unchanged.
+
   MUJOCO_GL=egl .venv/bin/python sim/shove_envelope.py            # 6 directions x {stand, walk}, ~2 min
   MUJOCO_GL=egl .venv/bin/python sim/shove_envelope.py --quick    # 2 directions
 writes sim/out/shove_envelope.json
@@ -22,11 +29,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 from pebble_gait import WaveGait, N_LEGS                                # noqa: E402
 from pebble_reflex import ReflexSupervisor, FALLEN                     # noqa: E402
-from scenes import make_data, gyro_xy_of, T_SETTLE, V_X                 # noqa: E402
+from scenes import make_data, gyro_xy_of, walk_ask, T_SETTLE           # noqa: E402
 from righter import foot_contacts                                       # noqa: E402
 from shove import Shove, bodyweights, impulse_ns                        # noqa: E402
 
-T_SHOVE = 3.0
+T_SHOVE = 3.0            # s: the standing shove
+T_SHOVE_WALK = 5.0       # s: the walking shove — the slew reaches the ask at T_SETTLE + 2.36 s,
+#                          so this is 1.64 s of steady walking (trial() checks it has settled)
 DUR = 0.4
 FORCES = [10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80]
 
@@ -38,23 +47,29 @@ def trial(model, walk, dir_deg, peak_n, dur=DUR):
     fids = [model.geom(f"foot{i}").id for i in range(N_LEGS)]
     sup = ReflexSupervisor(gait)
     DT = model.opt.timestep
+    t_shove = T_SHOVE_WALK if walk else T_SHOVE
+    ask = walk_ask(gait)[0] if walk else 0.0        # the supervisor's slew eases it in
     sh = Shove(peak_n * np.cos(np.radians(dir_deg)), peak_n * np.sin(np.radians(dir_deg)),
-               dur=dur, t0=T_SHOVE)
+               dur=dur, t0=t_shove)
     p0 = None
+    cmd = 0.0
     vmax = 0.0
     fallen = False
-    for k in range(int((T_SHOVE + dur + 3.0) / DT)):
+    for k in range(int((t_shove + dur + 3.0) / DT)):
         t = k * DT
         R = data.xmat[torso].reshape(3, 3)
         tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
         w = R.T @ data.cvel[torso][0:3]
-        vx = V_X * min(max(t - T_SETTLE, 0.0) / 0.6, 1.0) if walk else 0.0
+        vx = ask if t >= T_SETTLE else 0.0
         q, state = sup.step(t, vx, 0.0, 0.0, gyro_xy_of(model, data, torso),
                             contacts=foot_contacts(model, data, fids), gyro_vec=w[:2],
                             tilt_deg=tilt, height=float(data.xpos[torso][2]))
         data.ctrl[:15] = q.flatten()
-        if t >= T_SHOVE and p0 is None:
+        if t >= t_shove and p0 is None:
             p0 = data.xpos[torso][:2].copy()
+            cmd = float(sup.slew.v[0])                  # what the gait ran when the shove landed
+            if walk and abs(cmd - ask) > 1e-6:
+                raise RuntimeError(f"not steady at the shove: {cmd:.2f} of {ask:.2f} mm/s")
         sh.apply(model, data, torso, t)
         mujoco.mj_step(model, data)
         if p0 is not None:
@@ -66,7 +81,7 @@ def trial(model, walk, dir_deg, peak_n, dur=DUR):
     end_tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
     ok = (not fallen) and end_tilt < 25 and disp < 0.5
     return ok, dict(peak_n=peak_n, ok=ok, fallen=fallen, end_tilt=round(end_tilt, 1),
-                    disp_mm=round(disp * 1000), vmax=round(vmax, 2))
+                    disp_mm=round(disp * 1000), vmax=round(vmax, 2), cmd_mm_s=round(cmd, 2))
 
 
 def climb(model, walk, dir_deg):
@@ -88,7 +103,9 @@ def main():
     model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
     dirs = [0, 180] if args.quick else [0, 60, 120, 180, 240, 300]
     out = {"model": "half-sine at the shell rim (shove.py), 0.4 s", "dur_s": DUR,
-           "mass_kg": round(float(model.body_subtreemass[0]), 3), "rows": []}
+           "mass_kg": round(float(model.body_subtreemass[0]), 3),
+           "t_shove_s": {"stand": T_SHOVE, "walk": T_SHOVE_WALK},
+           "walk_ask_mm_s": round(walk_ask(WaveGait())[0], 2), "rows": []}
     for walk in (False, True):
         floors = []
         for d in dirs:

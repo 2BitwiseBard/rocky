@@ -202,8 +202,9 @@ _PLANT_S = 0.5                                   # last 0.5 s: blend to the plan
 def _gaited(g, t, total, cmd):
     """The wave gait at budget(cmd), ramped in/out over 0.6 s, and blended
     onto the all-planted stance over the last _PLANT_S so the gesture ENDS
-    standing (zero command still steps in place — the old exit was a step
-    from a lifted foot to the floor)."""
+    standing (before D063 a zero command still stepped in place, and the old
+    exit was a step from a lifted foot to the floor; since D063 the lift
+    fades out with the command, and the blend is kept as a guard)."""
     if t >= total:
         return _planted_q(g, np.zeros(3)), np.zeros(N_LEGS)
     env = max(0.0, min(1.0, t / 0.6, (total - _PLANT_S - t) / 0.6))
@@ -216,9 +217,9 @@ def _gaited(g, t, total, cmd):
 
 
 def turn_in_place(g: WaveGait, t: float):
-    """Turn on the spot at min(0.35 rad/s, the budget) — 0.246 at the D052
-    gait (the servo cannot swing the coxa any faster; an earlier derated
-    physics run reached ~0.3 of a commanded 0.5 anyway)."""
+    """Turn on the spot at min(0.35 rad/s, the budget) — 0.185 at the D063
+    gait, 0.246 at D052 (the servo cannot swing the coxa any faster; an
+    earlier derated physics run reached ~0.3 of a commanded 0.5 anyway)."""
     return _gaited(g, t, TURN_TOTAL, (0.0, 0.0, TURN_WZ))
 
 

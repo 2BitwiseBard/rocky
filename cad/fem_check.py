@@ -23,8 +23,10 @@ beyond stall back-drive a servo; the safety factor target covers that.
 MODEL: each part alone, linear elastic, one solid of printed material (no
 infill, no layer lines: those enter through the allowables). "Held" nodes
 (the mating servo / horn / deck) are pinned; "loaded" nodes are tied by a
-rigid body to a reference point that takes the force + moment. The twin-
-plate femur is analysed as plate A + plate B bolted into one piece.
+rigid body to a reference point that takes the force + moment. A pin holds
+both ways, so a case that lifts a part off one of its seats names its own
+grips (held_cases: the coxa fork's R-, whose idler meets the open mouth).
+The twin-plate femur is analysed as plate A + plate B bolted into one piece.
 
 VERDICT per part = the worst case of
   von Mises                    vs fem.<material>.strength_xy_mpa
@@ -170,18 +172,26 @@ def part_specs(P):
         ref=ref, loads=from_foot(foot_leg, np.eye(3), ref),
         held_what="deck (plate underside)", loaded_what="yaw servo case in the cup")
 
-    # coxa_fork: the yaw servo holds it (horn pocket + idler pocket), the hip servo pushes its cup
+    # coxa_fork: the yaw servo holds it where it bears (D063): the Ø20 horn face clamped on the
+    # FLAT hub top (B81: there is no horn pocket) + the idler in its pocket, whose mouth side
+    # is open (B80: the kept +X wall, the side walls, the roof). The hip servo pushes its cup.
+    # R- (foot pushed in) needs the idler to push the upper plate -X, from the open side:
+    # nothing bears there, so that case is held by the horn face alone (with the idler held
+    # too it read SF 3.60; horn-only, before the side cheeks, 0.49).
     hip_local = lambda p: np.c_[p[:, 0] - lf.L1, p[:, 2] - lf.Z_HIP, lf.YB - p[:, 1]]
-    horn_r = (S["horn_d"] + FIT) / 2 + 0.35
+    horn_r = S["horn_d"] / 2 + 0.35
     idl_r = pc.IDLER_POCKET_D / 2 + 0.35
     ref = np.array([lf.L1, 0.0, lf.Z_HIP])
+    horn_face = lambda p: cyl(p, (0, 0, 0), "z", horn_r, lf.HUB_Z1 - 0.35, lf.HUB_Z1 + 0.35)
     specs["coxa_fork"] = dict(
         solid=pc.coxa_fork,
-        held=lambda p: (cyl(p, (0, 0, 0), "z", horn_r, lf.HUB_Z1 - pc.HORN_POCKET_DEPTH - 0.35, lf.HUB_Z1 + 0.35)
-                        | cyl(p, (0, 0, 0), "z", idl_r, pc.UP_Z0 - 0.35, pc.IDLER_POCKET_Z1 + 0.35)),
+        held=lambda p: horn_face(p) | cyl(p, (0, 0, 0), "z", idl_r, pc.UP_Z0 - 0.35, pc.IDLER_POCKET_Z1 + 0.35),
+        held_cases={"R-": horn_face},
         loaded=lambda p: servo_case(p, hip_local, S, Z, G),
         ref=ref, loads=from_foot(foot_leg, np.eye(3), ref),
-        held_what="yaw horn pocket + yaw idler pocket", loaded_what="hip servo case in the cup")
+        held_what="yaw horn face on the flat hub top + yaw idler pocket (open to the mouth); "
+                  "R-: the horn face alone",
+        loaded_what="hip servo case in the cup")
 
     # femur: plate A + plate B bolted; the hip holds hub A, the knee pushes hub B
     Rf = _rot_xz(-st["q_femur"])                        # leg -> link (link x along the femur)
@@ -289,57 +299,65 @@ def analyse(name, sp, P, fine=False, tools=None):
     remap[used] = np.arange(len(used))
     nodes, tets = nodes[used], remap[tets]
     tets = ft.to_c3d10(nodes, tets)
-    held, loaded = sp["held"](nodes), sp["loaded"](nodes)
-    loaded &= ~held
-    if held.sum() < 10 or loaded.sum() < 10:
-        raise RuntimeError(f"{name}: grip zones missed the mesh (held {held.sum()}, loaded {loaded.sum()})")
-    cases = list(sp["loads"].items())
-    ft.write_ccx(base + ".inp", nodes, tets, held, loaded, sp["ref"],
-                 [(k, F, M) for k, (F, M) in cases], mat["E_mpa"], mat["nu"])
-    ft.run_ccx(ccx, base + ".inp", base + ".ccx.log")
-    res = ft.read_frd(base + ".frd", len(nodes))
-    if len(res) != len(cases):
-        raise RuntimeError(f"{name}: {len(res)} result steps for {len(cases)} cases")
-
-    # judge on the surface, away from the grips
     tris = ft.boundary_faces(tets)
     surf = np.zeros(len(nodes), bool)
     surf[tris] = True
-    grip = held | loaded
-    gp = nodes[grip]
-    from scipy.spatial import cKDTree
-    d, _ = cKDTree(gp).query(nodes, k=1)
-    judge = surf & (d > FP["grip_margin_mm"])
     n_build = build_dir(sp.get("orient_as", name))
     sxy, sz = mat["strength_xy_mpa"], mat["strength_z_mpa"]
-    rows, worst = [], None
-    for (k, (F, M)), r in zip(cases, res):
-        vm = ft.von_mises(r["S"])
-        sn = np.maximum(ft.normal_stress(r["S"], n_build), 0.0)
-        util = np.maximum(vm / sxy, sn / sz)
-        j = np.flatnonzero(judge)
-        p999 = lambda a: float(np.percentile(a[j], 99.9))
-        ipk = j[np.argmax(util[j])]
-        row = dict(case=k, F_N=[round(float(x), 2) for x in F], M_Nmm=[round(float(x), 1) for x in M],
-                   vm_p999=round(p999(vm), 2), sn_p999=round(p999(sn), 2),
-                   util_p999=round(p999(util), 3), util_peak=round(float(util[ipk]), 3),
-                   peak_at=[round(float(x), 1) for x in nodes[ipk]],
-                   defl_mm=round(float(np.linalg.norm(r["U"][loaded], axis=1).max()), 3))
-        row["sf"] = round(1.0 / row["util_p999"], 2) if row["util_p999"] > 0 else float("inf")
-        row["governs"] = "layers" if p999(sn / sz) > p999(vm / sxy) else "von Mises"
-        rows.append(row)
-        if worst is None or row["util_p999"] > worst[0]["util_p999"]:
-            worst = (row, util, nodes[ipk])
+    from scipy.spatial import cKDTree
+    # one deck per set of grips: a case whose load lifts the part off one of its seats is
+    # held only where it still bears (held_cases; the fork's R-, D063)
+    decks = {}
+    for k, FM in sp["loads"].items():
+        decks.setdefault(sp.get("held_cases", {}).get(k, sp["held"]), []).append((k, FM))
+    held = sp["held"](nodes)
+    counts = int(held.sum()), int((sp["loaded"](nodes) & ~held).sum())    # the default grips, reported
+    rows, worst = {}, None
+    for i, (held_fn, cases) in enumerate(decks.items()):
+        held, loaded = held_fn(nodes), sp["loaded"](nodes)
+        loaded &= ~held
+        if held.sum() < 10 or loaded.sum() < 10:
+            raise RuntimeError(f"{name}: grip zones missed the mesh (held {held.sum()}, loaded {loaded.sum()})")
+        job = base + (f"_{i}" if i else "")
+        ft.write_ccx(job + ".inp", nodes, tets, held, loaded, sp["ref"],
+                     [(k, F, M) for k, (F, M) in cases], mat["E_mpa"], mat["nu"])
+        ft.run_ccx(ccx, job + ".inp", job + ".ccx.log")
+        res = ft.read_frd(job + ".frd", len(nodes))
+        if len(res) != len(cases):
+            raise RuntimeError(f"{name}: {len(res)} result steps for {len(cases)} cases")
+
+        # judge on the surface, away from the grips
+        grip = held | loaded
+        d, _ = cKDTree(nodes[grip]).query(nodes, k=1)
+        judge = surf & (d > FP["grip_margin_mm"])
+        for (k, (F, M)), r in zip(cases, res):
+            vm = ft.von_mises(r["S"])
+            sn = np.maximum(ft.normal_stress(r["S"], n_build), 0.0)
+            util = np.maximum(vm / sxy, sn / sz)
+            j = np.flatnonzero(judge)
+            p999 = lambda a: float(np.percentile(a[j], 99.9))
+            ipk = j[np.argmax(util[j])]
+            row = dict(case=k, F_N=[round(float(x), 2) for x in F], M_Nmm=[round(float(x), 1) for x in M],
+                       vm_p999=round(p999(vm), 2), sn_p999=round(p999(sn), 2),
+                       util_p999=round(p999(util), 3), util_peak=round(float(util[ipk]), 3),
+                       peak_at=[round(float(x), 1) for x in nodes[ipk]],
+                       defl_mm=round(float(np.linalg.norm(r["U"][loaded], axis=1).max()), 3))
+            row["sf"] = round(1.0 / row["util_p999"], 2) if row["util_p999"] > 0 else float("inf")
+            row["governs"] = "layers" if p999(sn / sz) > p999(vm / sxy) else "von Mises"
+            rows[k] = row
+            if worst is None or row["util_p999"] > worst[0]["util_p999"]:
+                worst = (row, util, nodes[ipk], grip)
+    rows = [rows[k] for k in sp["loads"]]
     sf = worst[0]["sf"]
     verdict = "PASS" if sf >= FP["sf_target"] else ("WARN" if sf >= FP["sf_warn"] else "FAIL")
     if not fine:
-        ft.render(os.path.join(OUT, f"{name}.png"), nodes, tris, worst[1], grip,
+        ft.render(os.path.join(OUT, f"{name}.png"), nodes, tris, worst[1], worst[3],
                   f"{name}: case {worst[0]['case']}, SF {sf:.2f} ({verdict}) — "
                   f"{mat['name']}, {len(tets)} C3D10\npeak {worst[0]['util_peak']:.2f} at "
                   f"{tuple(worst[0]['peak_at'])} mm (part frame, ringed)", peak=worst[2])
     return dict(part=name, verdict=verdict, sf=sf, governing=worst[0]["case"],
-                nodes=len(nodes), elements=len(tets), held_nodes=int(held.sum()),
-                loaded_nodes=int(loaded.sum()), build_dir=[round(float(x), 3) for x in n_build],
+                nodes=len(nodes), elements=len(tets), held_nodes=counts[0],
+                loaded_nodes=counts[1], build_dir=[round(float(x), 3) for x in n_build],
                 held=sp["held_what"], loaded=sp["loaded_what"], cases=rows,
                 _seconds=round(time.time() - t0, 1))
 

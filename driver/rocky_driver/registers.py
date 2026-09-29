@@ -3,7 +3,7 @@
 Sources: Feetech SCServo SDK header tables (SMS_STS_* / SCSCL_*) cross-checked
 against the Waveshare ST3215 register table. Addresses we could not confirm
 from two independent sources carry VERIFY-ON-BENCH — `bench/register_dump.py`
-prints every byte 0..73 so day-one hardware settles them.
+archives every byte (STS 0..87, SCS 0..83) so day-one hardware settles them.
 
 Conventions
 -----------
@@ -12,8 +12,8 @@ A register is (addr, nbytes, kind):
   kind "u16" — plain 16-bit (endianness per family)
   kind "sm16"— signed-magnitude 16-bit; the sign sits in `sign_bit` (15 for
               STS speed/current; 10 for PRESENT_LOAD, 11 for POSITION_OFFSET)
-EEPROM registers (addr < 40) persist and need LOCK released before writing
-on STS (LOCK addr 55) and SCS (LOCK addr 48).
+EEPROM registers (addr < 40, and the factory block past 77, D063) persist and
+need LOCK released before writing on STS (LOCK addr 55) and SCS (LOCK addr 48).
 """
 from __future__ import annotations
 import math
@@ -33,6 +33,8 @@ class Reg:
 # ------------------------------------------------------------------ STS map
 # ST3215 / STS3250 — protocol 1, little-endian, 4096 counts/rev
 STS = {
+    "FIRMWARE_MAJOR":     Reg(0, 1, eeprom=True),   # read-only; the V3.7 table vs the 12 V units' 3.10 (B79)
+    "FIRMWARE_MINOR":     Reg(1, 1, eeprom=True),
     "MODEL":              Reg(3, 2, "u16", eeprom=True),
     "ID":                 Reg(5, 1, eeprom=True),
     "BAUD":               Reg(6, 1, eeprom=True),
@@ -85,11 +87,24 @@ STS = {
     "STATUS":             Reg(65, 1),               # fault bits, see ERROR_BITS
     "MOVING":             Reg(66, 1),
     "PRESENT_CURRENT":    Reg(69, 2, "sm16"),       # 6.5 mA units
+    # ---- factory (D063, B79) ---- names/addresses from LeRobot's STS table (the
+    # Feetech SMS/STS manual); not in the public V3.7 sheet. Treated as EEPROM
+    # (LeRobot unlocks before writing 85): VERIFY-ON-BENCH. Nothing writes them yet.
+    "MOVING_THRESHOLD":   Reg(80, 1, eeprom=True),
+    "DTS":                Reg(81, 1, eeprom=True),  # ms
+    "SPEED_UNIT":         Reg(82, 1, eeprom=True),
+    "HTS":                Reg(83, 1, eeprom=True),  # ns, firmware >= 2.54
+    "MAX_SPEED_LIMIT":    Reg(84, 1, eeprom=True),
+    # the hidden ramp: acts even at ACC 0 (LeRobot writes 85 = 254, Open Duck Mini 0)
+    "MAX_ACC":            Reg(85, 1, eeprom=True),
+    "ACC_MULTIPLIER":     Reg(86, 1, eeprom=True),  # "in effect when acceleration is 0"
 }
 
 # ------------------------------------------------------------------ SCS map
 # SCS0009 — protocol 0, big-endian, 1024 counts over ~300 deg (VERIFY sweep)
 SCS = {
+    "FIRMWARE_MAJOR":     Reg(0, 1, eeprom=True),
+    "FIRMWARE_MINOR":     Reg(1, 1, eeprom=True),
     "MODEL":              Reg(3, 2, "u16", eeprom=True),
     "ID":                 Reg(5, 1, eeprom=True),
     "BAUD":               Reg(6, 1, eeprom=True),
@@ -117,6 +132,13 @@ SCS = {
     "PRESENT_VOLTAGE":    Reg(62, 1),
     "PRESENT_TEMP":       Reg(63, 1),
     "MOVING":             Reg(66, 1),
+    # ---- factory (D063, B79) ---- from LeRobot's SCS table; VERIFY-ON-BENCH
+    "PWM_MAX_STEP":       Reg(78, 1, eeprom=True),
+    "MOVING_THRESHOLD":   Reg(79, 1, eeprom=True),  # x50
+    "DTS":                Reg(80, 1, eeprom=True),  # ms
+    "MIN_SPEED_LIMIT":    Reg(81, 1, eeprom=True),  # x50
+    "MAX_SPEED_LIMIT":    Reg(82, 1, eeprom=True),  # x50
+    "ACC_2":              Reg(83, 1, eeprom=True),  # meaning unknown
 }
 
 MAPS = {Family.STS: STS, Family.SCS: SCS}

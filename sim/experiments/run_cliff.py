@@ -17,9 +17,9 @@ import exp_paths as X                   # sys.path (sim/, gait/, perception/, au
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
 import rocky_model as rm   # noqa: E402  (D052 spawn height)
 from cliff import CliffDetector, CliffReaction                       # noqa: E402
-from scenes import build_world, foot_contacts, EDGE_X, PLAT_H        # noqa: E402,F401  (re-exported)
+from scenes import build_world, foot_contacts, walk_ask, EDGE_X, PLAT_H   # noqa: E402,F401  (re-exported)
 
-V_X = 45.0
+V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
 T_TOTAL = 14.0
 
 

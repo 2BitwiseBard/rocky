@@ -79,6 +79,7 @@ switches. Everything in B waits until that leg passes
   brittle, it needs a hardened nozzle, and the FEM check assumes PETG.
 - **KW11 / KW12 microswitches.** ~20 mm long; the foot pocket takes a KW10.
 - **M3 × 10 socket heads for the leg-port thumbscrews.** The knob keys a hex
-  head and an M3 × 10 stops short of the insert (B82); they are A-19.
+  head and an M3 × 10 stops short of the insert (B82); they are A-19, as
+  are the I6 shoes' set screws (D063).
 - **683ZZ bearings, a USB-UART dongle, STS3250 knees, a pan turret.** Older
   plans had them; the current design (D047 and later) does not use them.

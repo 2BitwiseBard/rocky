@@ -6,7 +6,7 @@ Every tool a brain can call, from one registry (`harness/capabilities.py` `REGIS
 
 This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`harness/backend.py`) and every capability on. A running cockpit's lists also carry its saved keyframe gestures and custom chord words.
 
-- snapshot version: `54b7cc1b7adb` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
+- snapshot version: `925466ca53cf` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
 - capabilities: cockpit, eye, memory, places
 
 ## Summary
@@ -47,10 +47,10 @@ This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`h
 |---|---|---|
 | `goto_reach_m` | 1.5 | m, the reach the goto text advises ('keep targets within ~N m'); advice, not a refusal (goto refuses only past cockpit_brains.GOTO_MAX_M) |
 | `move_max_m` | 1.5 | m, the longest relative move: move refuses beyond it (local_brain.validate_move) |
-| `goto_timeout_s` | 40.0 | s, a goto still walking after this ends as stopped=timeout |
-| `goto_speed_m_s` | 0.045 | m/s, the speed goto walks at (what it asks, fitted into the walking envelope) |
-| `speed_m_s` | 0.0455 | m/s, the top walking speed at any heading (WaveGait.budget) |
-| `turn_rad_s` | 0.246 | rad/s, the top turn rate on the spot |
+| `goto_timeout_s` | 55.0 | s, a goto still walking after this ends as stopped=timeout (goto_cap_s: 1.2x the reach at goto_speed_m_s, plus the command slew's ease-in) |
+| `goto_speed_m_s` | 0.0342 | m/s, the speed goto walks at (what it asks, fitted into the walking envelope) |
+| `speed_m_s` | 0.0342 | m/s, the top walking speed at any heading (WaveGait.budget) |
+| `turn_rad_s` | 0.185 | rad/s, the top turn rate on the spot |
 | `step_height_mm` | 24.0 | mm, how high a swinging foot LIFTS (params.yaml gait.step_height, WaveGait.hstep); not the stride length |
 
 Source: gait/pebble_gait.WaveGait().max_command() on cad/params.yaml.
@@ -66,7 +66,7 @@ Source: gait/pebble_gait.WaveGait().max_command() on cad/params.yaml.
 | `stations_deg` | 90.0, 162.0, 234.0, 306.0, 378.0 |
 | `actuators` | 20 |
 | `topology_hash` | 7f066d9bd8c0 |
-| `params_rev` | 0.1/D062 |
+| `params_rev` | 0.1/D063 |
 
 Source: gait/rocky_model.robot() (cad/params.yaml robot:).
 
@@ -153,11 +153,11 @@ Description (MCP):
 
 Description (local brains):
 
-> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it.
+> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it.
 
 Description (MCP):
 
-> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it. One motion intent at a time; calling goto again preempts.
+> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it. One motion intent at a time; calling goto again preempts.
 
 ### `stop`
 
@@ -257,7 +257,7 @@ Description (MCP):
 
 Description:
 
-> Create a NEW gesture from keyframes (the owner describes it; you write the frames). It is checked against the robot's real limits (joint range, servo speed, balance, self-contact); when feasible it is previewed once on the robot and kept as a draft until save_gesture. Frame fields (all optional except t; missing = standing): t seconds from start (first frame {"t": 0} = standing); body [dx, dy, dz] mm body shift, feet planted (z < 0 crouches; +-30 mm is a lot); yaw deg body twist (+-15); dz [5] mm extra crouch per leg; arm {"leg": [yaw, hip, knee] deg} lifts that leg as an arm (yaw -40..40, hip -70..90 (up), knee -150..-20); claw [5] 0..1 open; say a chord word cue; ease smooth|linear|hold. Legs: 0 = left (+y), then counter-clockwise: 1 rear-left, 2 rear-right, 3 front-right, 4 front-left. Keep >= 4 feet down (raise ONE leg; shift the body away from it first, body [0, -15, 0] for leg 0), give each move >= 0.6 s. Example wave with leg 0: [{"t":0},{"t":1.0,"body":[0,-15,0]},{"t":1.8,"body":[0,-15,0],"arm":{"0":[0,70,-60]}},{"t":2.6,"body":[0,-15,0],"arm":{"0":[25,70,-60]}},{"t":3.4,"body":[0,-15,0],"arm":{"0":[-25,70,-60]}},{"t":4.2,"body":[0,-15,0],"arm":{"0":[0,70,-60]}},{"t":5.0,"body":[0,-15,0]},{"t":5.8}]
+> Create a NEW gesture from keyframes (the owner describes it; you write the frames). It is checked against the robot's real limits (joint range, servo speed, balance, self-contact); when feasible it is previewed once on the robot and kept as a draft until save_gesture. Frame fields (all optional except t; missing = standing): t seconds from start (first frame {"t": 0} = standing); body [dx, dy, dz] mm body shift, feet planted (z < 0 crouches; +-30 mm is a lot); yaw deg body twist (+-15); dz [5] mm extra crouch per leg; arm {"leg": [yaw, hip, knee] deg} lifts that leg as an arm (yaw -40..40, hip -70..90 (up), knee -150..-20); claw [5] 0..1 open; say a chord word cue; ease smooth|linear|hold. Legs: 0 = left (+y), then counter-clockwise: 1 rear-left, 2 rear-right, 3 front-right, 4 front-left. Keep >= 4 feet down (raise ONE leg; shift the body away from it first, body [0, -15, 0] for leg 0), give each move >= 0.6 s and each arm move >= 1.0 s. Example wave with leg 0: [{"t":0},{"t":1.0,"body":[0,-15,0]},{"t":2.0,"body":[0,-15,0],"arm":{"0":[0,70,-60]}},{"t":3.0,"body":[0,-15,0],"arm":{"0":[25,70,-60]}},{"t":4.0,"body":[0,-15,0],"arm":{"0":[-25,70,-60]}},{"t":5.0,"body":[0,-15,0],"arm":{"0":[0,70,-60]}},{"t":6.0,"body":[0,-15,0]},{"t":7.0}]
 
 ### `check_gesture`
 

@@ -26,37 +26,22 @@
   "step_sha": "c87d5aa9e8bdb0f8"
  },
  "coxa_fork": {
-  "scale": 0.75,
+  "scale": 0.5,
   "bbox_mm": [
    44.0,
-   39.8,
+   46.4,
    75.4
   ],
   "extents_mm": [
    44.0,
    75.4,
-   39.8
+   46.4
   ],
   "holes": [
    {
     "dia_mm": 2.4,
     "count": 4,
     "axis": "Y"
-   },
-   {
-    "dia_mm": 6.4,
-    "count": 1,
-    "axis": "Z"
-   },
-   {
-    "dia_mm": 7.0,
-    "count": 1,
-    "axis": "Z"
-   },
-   {
-    "dia_mm": 20.3,
-    "count": 1,
-    "axis": "Z"
    }
   ],
   "template_fields": [
@@ -70,7 +55,7 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "495e1d5df132d8dc"
+  "step_sha": "ea54cd2920b19ca1"
  },
  "coxa_yaw_base": {
   "scale": 0.75,

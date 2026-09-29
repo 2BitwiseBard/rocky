@@ -9,11 +9,11 @@ is verified without it:
   (`generate_urdf.py`; CI fails if the committed URDF is stale). It passes
   `sim/check_urdf_parity.py`: the 20 joints match the MJCF (axes and
   ranges), FK agrees with the MJCF to 0.05 mm and with the gait engine's
-  closed-form FK to 1e-4 mm, and the total mass is 2.694 kg on both.
+  closed-form FK to 1e-4 mm, and the total mass is 2.728 kg on both.
   **Regenerate after every params change**; never hand-edit the URDF.
 - `hw_bridge_node.py` and `gait_node.py` import the pip-installed core
   (`pip install -e .` at the repo root), the same tested code that runs the
-  bench and the sim. The bus I/O is the Python driver (79 tests on the
+  bench and the sim. The bus I/O is the Python driver (88 tests on the
   byte-level mock, [driver/README.md](../driver/README.md)).
 - The C++ `RockySystem` skeleton was compiled against stub ROS headers
   (a one-off check, not in CI).
@@ -68,14 +68,19 @@ it doesn't yet). `on_activate` must follow the D052 V2 soft-enable order:
 `hw_bridge_node.py`:
 - streams through `rocky_driver.SoftStream`: the goal is parked where each
   servo is, at 40 % torque, before enable; then a smoothstep entry at
-  200 cps, NaN hold and a 4.7 rad/s clamp;
+  200 cps, NaN hold and a 4.7 rad/s clamp; after the entry every tick writes
+  a per-servo goal speed (1.3 × the goal's move per tick, at least 50 cps,
+  D063);
 - ignores a joint command that misses a leg joint;
 - publishes the real status error bits;
 - publishes NO contacts until the switches are wired.
 
 `gait_node.py`:
 - takes its gait from `cad/params.yaml`;
-- fits every `/cmd_vel` into `WaveGait.budget()`, with the same rate clamp;
+- fits every `/cmd_vel` into `WaveGait.budget()`, with the same rate clamp,
+  and eases it in through `CommandSlew` (D063: 25 mm/s² on the fastest foot
+  plus a 0.2 s lag); IDLE, SLEEP, MANIP and a non-finite command stop at
+  once, never eased;
 - turns a non-finite velocity command into a stop and holds the last good
   joint targets when one is not finite.
 

@@ -16,25 +16,27 @@ from pebble_keyframes import (KeyframeGesture, save_keyframe_gesture,        # n
                               load_keyframe_gestures, delete_keyframe_gesture)
 from servo_model import ServoModel                                           # noqa: E402
 
+# D063: 0.8 s -> 1.0 s per move. The smooth ease is minimum-jerk now (peak 1.875 x mean,
+# was 1.5): the arm's 0.8 s raise peaked 4.25 rad/s > free 4.0 and save refused it.
 SPEC = {"name": "peek", "keyframes": [
     {"t": 0.0},
-    {"t": 0.8, "body": [10, 0, -15], "yaw": 12, "dz": [0, 0, 8, 8, 0],
+    {"t": 1.0, "body": [10, 0, -15], "yaw": 12, "dz": [0, 0, 8, 8, 0],
      "arm": {"0": [0, 70, -50]}, "claw": [1, 0, 0, 0, 0], "say": "greeting"},
-    {"t": 1.6}]}
+    {"t": 2.0}]}
 
 
 def test_keyframe_gesture_interpolates_and_cues():
     g = WaveGait()
     kg = KeyframeGesture(SPEC)
-    assert kg.total == pytest.approx(1.6) and kg.cues == [(0.8, "greeting")]
+    assert kg.total == pytest.approx(2.0) and kg.cues == [(1.0, "greeting")]
     q0, c0 = kg(g, 0.0)
-    q1, c1 = kg(g, 0.8)
-    qm, _ = kg(g, 0.4)
+    q1, c1 = kg(g, 1.0)
+    qm, _ = kg(g, 0.5)
     assert q0.shape == (N_LEGS, 3) and np.all(c0 == 0)
     assert np.degrees(q1[0]) == pytest.approx([0, 70, -50])          # the arm override lands exactly
     assert c1[0] > 0.9 and c1[1] == 0                                 # one open claw (rad)
     assert q0[0, 1] < qm[0, 1] < q1[0, 1]                             # smooth in between
-    assert np.allclose(kg(g, 1.6)[0], kg(g, 5.0)[0])                  # holds the last frame
+    assert np.allclose(kg(g, 2.0)[0], kg(g, 5.0)[0])                  # holds the last frame
     assert not np.allclose(q0[2], q1[2])                              # corner dz moved leg 2
 
 
@@ -42,7 +44,7 @@ def test_keyframe_gesture_round_trip(tmp_path):
     p = save_keyframe_gesture(dict(SPEC, name="my peek!"), str(tmp_path))
     assert os.path.basename(p) == "my_peek_.json"
     lib = load_keyframe_gestures(str(tmp_path))
-    assert list(lib) == ["my_peek_"] and lib["my_peek_"].total == pytest.approx(1.6)
+    assert list(lib) == ["my_peek_"] and lib["my_peek_"].total == pytest.approx(2.0)
     (tmp_path / "broken.json").write_text("{not json")
     assert list(load_keyframe_gestures(str(tmp_path))) == ["my_peek_"]   # a bad file is skipped, not fatal
     assert delete_keyframe_gesture("my_peek_", str(tmp_path)) and not load_keyframe_gestures(str(tmp_path))

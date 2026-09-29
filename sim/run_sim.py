@@ -7,9 +7,11 @@ Usage: MUJOCO_GL=egl .venv/bin/python sim/run_sim.py [--out DIR]
 Exit code 1 on a fall, a short walk or a turn outside its band (CI runs it).
 
 D052 V2 (review): every segment's command goes through WaveGait.budget()
-(the turn asked 0.6 rad/s, 2.4x the 0.246 rad/s envelope, and nothing
+(the turn asked 0.6 rad/s, 2.4x the then 0.246 rad/s envelope, and nothing
 checked what it did), and the turn's yaw is checked against a band like
-the walk.
+the walk. D063 (soft-landing swing): the envelope is 34.2 mm/s / 0.185
+rad/s, so the walk asks 45 and runs 34.2 and the turn asks 0.6 (3.2x) and
+runs 0.185; the refs below moved with it.
 """
 import argparse
 import os, sys
@@ -140,13 +142,14 @@ if frames:
 h = np.array(metrics["height"]); tilt = np.array(metrics["tilt"])
 seg = np.array(metrics["seg"])
 walk_disp = (pos_end_walk - pos_start_walk) * 1000
-commanded = 45 * (6.0 - 0.2)     # ramp-adjusted approx, mm
+walk_vx = next(vx for vx, _vy, _wz, _d, lab in SEGMENTS if lab == "walk +X")
+commanded = walk_vx * (6.0 - 0.2)     # ramp-adjusted approx, mm (D063: the budgeted vx, not the asked 45)
 print("=== SIM METRICS ===")
 print(f"body height: mean {h.mean():.1f} mm (target ~{rm.stance_torso_z_m(H_MM) * 1000:.0f}, rigid ideal servos), "
       f"std {h.std():.2f} mm, min {h.min():.1f}")
 print(f"tilt: mean {tilt.mean():.2f} deg, max {tilt.max():.2f} deg")
-print(f"walk +X displacement: {walk_disp[0]:.0f} mm (commanded ~{commanded:.0f} mm), "
-      f"lateral drift {walk_disp[1]:.0f} mm")
+print(f"walk +X displacement: {walk_disp[0]:.0f} mm (commanded ~{commanded:.0f} mm at the budgeted "
+      f"{walk_vx:.1f} mm/s; asked 45), lateral drift {walk_disp[1]:.0f} mm")
 turn_wz = next(wz for _vx, _vy, wz, _d, lab in SEGMENTS if lab == "turn in place")
 turn_want = float(np.degrees(turn_wz * (4.0 - 0.2)))
 print(f"turn in place: {np.degrees(turn_yaw):.1f} deg at the budgeted {turn_wz:.3f} rad/s "
@@ -166,19 +169,22 @@ print(f"fell over: {'YES' if fell else 'no'}")
 # re-measured 2026-09-24 — walk 246 mm (drift -14), turn 55.4 deg. Both inside their
 # bands, so the refs stay: this walk barely touches the clip (mean joint load 0.07-0.18 x
 # stall at 45 mm/s, measured in PebbleEnv), so peak vs continuous hardly moves it.
-WALK_REF_MM = 246.0
+# D063 (soft-landing swing): the envelope moved 45.5 -> 34.2 mm/s / 0.246 -> 0.185 rad/s on
+# purpose, so the budgeted walk and turn are slower; re-measured 2026-09-28: walk 189 mm of
+# ~198 commanded (95 %, was 94 %), drift 0, turn 41.8 deg of ~40. The refs move with it.
+WALK_REF_MM = 189.0
 WALK_BAND = (0.7 * WALK_REF_MM, 1.3 * WALK_REF_MM)
 walk_ok = WALK_BAND[0] <= walk_disp[0] <= WALK_BAND[1]
 if not walk_ok:
     print(f"walk +X displacement {walk_disp[0]:.0f} mm outside the smoke band "
-          f"{WALK_BAND[0]:.0f}..{WALK_BAND[1]:.0f} mm (ref {WALK_REF_MM:.0f} mm, 2026-09-24)")
+          f"{WALK_BAND[0]:.0f}..{WALK_BAND[1]:.0f} mm (ref {WALK_REF_MM:.0f} mm, 2026-09-28)")
 # V2: the turn segment, budgeted to the envelope, measured 2026-09-24 (band +-30 %)
-TURN_REF_DEG = 55.8               # of ~54 commanded at 0.246 rad/s (it asked 0.6: 2.4x the envelope)
+TURN_REF_DEG = 41.8               # of ~40 commanded at 0.185 rad/s (D063; was 55.8 at 0.246; it asks 0.6)
 TURN_BAND = (0.7 * TURN_REF_DEG, 1.3 * TURN_REF_DEG)
 turn_ok = TURN_BAND[0] <= np.degrees(turn_yaw) <= TURN_BAND[1]
 if not turn_ok:
     print(f"turn in place {np.degrees(turn_yaw):.1f} deg outside the smoke band "
-          f"{TURN_BAND[0]:.0f}..{TURN_BAND[1]:.0f} deg (ref {TURN_REF_DEG:.0f} deg, 2026-09-24)")
+          f"{TURN_BAND[0]:.0f}..{TURN_BAND[1]:.0f} deg (ref {TURN_REF_DEG:.0f} deg, 2026-09-28)")
 
 if frames:
     # contact sheet for inspection
