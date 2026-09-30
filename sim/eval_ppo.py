@@ -104,7 +104,8 @@ def main():
     env_kw = dict(cmd=cmd, randomize=args.randomize, push_prob=args.push_prob, servo=servo,
                   ema_alpha=contract.get("ema_alpha", 1.0), obs_version=contract["obs_version"],
                   gait_params=contract.get("gait"),
-                  cmd_budget=bool(contract.get("cmd_budget", False)))   # V2: replay what it trained on
+                  cmd_budget=bool(contract.get("cmd_budget", False)),   # V2: replay what it trained on
+                  cmd_slew=bool(contract.get("cmd_slew", False)))       # B34: slewed from standing, or not
 
     def policy(obs):
         on = (obs - obs_rms.mean) / np.sqrt(obs_rms.var + 1e-8)

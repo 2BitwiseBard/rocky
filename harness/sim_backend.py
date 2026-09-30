@@ -10,7 +10,9 @@ halted on a simulated table edge.
 Scope:
   * goto blocks the tool call on real physics (runs in a worker thread so
     the event loop stays live; the mock covers async interleaving tests);
-    planar targets, straight-line steering, 25 mm arrival window, 20 s cap.
+    planar targets, straight-line steering, 25 mm arrival window, and the
+    cockpit's time cap (goto_cap_for: 55 s on the params gait, the number
+    the goto text quotes; B114, it was a fixed 20 s).
   * scan_summary: one sim_lidar scan from the puck pose, summarised into
     8 sectors (walls yes, voids no), in any world.
   * say validates against the chord lexicon and plays audio/samples_v2/<word>.wav
@@ -49,6 +51,18 @@ for sub in ("gait", "perception", "sim"):
     sys.path.insert(0, os.path.join(HERE, "..", sub))
 
 from harness.backend import CHORD_WORDS, GESTURES, derived_capabilities   # noqa: E402
+from harness.capabilities import GOTO_SPEED_MM_S, gait_ease_in_s, goto_cap_s   # noqa: E402
+
+V_GOTO = GOTO_SPEED_MM_S      # mm/s asked (the cockpit's V_GOTO); WaveGait.budget fits it into the envelope
+
+
+def goto_cap_for(gait) -> float:
+    """goto's time cap (s) on this gait, derived the way the cockpit's is (B114):
+    harness.capabilities.goto_cap_s at the speed goto walks (V_GOTO fitted into the
+    gait's envelope) plus the command slew's ease-in — 55 s on the params gait (D063),
+    the number the goto text quotes. It was a fixed 20 s."""
+    gv = min(V_GOTO, float(gait.max_command()["v"]))
+    return goto_cap_s(gv / 1000.0, gait_ease_in_s(gait, gv))
 
 
 class SimBackend:
@@ -85,6 +99,7 @@ class SimBackend:
         self.mode = "idle"
         self._stop_req = False
         self._reset()
+        self.goto_cap_s = goto_cap_for(self.gait)     # s of walking; a goto still going ends "timeout"
         # laptop 2026-09-08: optional live window + speakers (both default off)
         self.viewer = None
         self._t_wall = 0.0
@@ -194,12 +209,15 @@ class SimBackend:
         react = CliffReaction(gait)
         sup = ReflexSupervisor(gait)
         DT = model.opt.timestep
-        V = 45.0
-        t_settle, t_cap = 1.0, 20.0
+        V = V_GOTO
+        # B114: the cap counts walking time (tw), as the cockpit's does, and a
+        # timeout is a safe-stop like any other outcome (the loop used to end
+        # mid-stride, 1 s of settle included in its 20 s)
+        t_settle, t_cap, t_linger = 1.0, self.goto_cap_s, 1.5
         stop_sent = False
         outcome = None
         self._t_wall = time.monotonic()
-        for k in range(int(t_cap / DT)):
+        for k in range(int((t_settle + t_cap + t_linger + 1.0) / DT)):
             t = k * DT
             p = data.xpos[self.torso]
             if t < t_settle:
@@ -215,6 +233,9 @@ class SimBackend:
                 sup.request_stop()
             if self._stop_req and outcome is None:
                 outcome = ("user", tw)
+                sup.request_stop()
+            if outcome is None and tw > t_cap:
+                outcome = ("timeout", tw)
                 sup.request_stop()
             ramp = min(tw / 0.6, 1.0)
             if outcome is None:
@@ -263,7 +284,7 @@ class SimBackend:
                 return {"ok": False, "stopped": "FELL", "pose": self._pose(),
                         "detail": "physics says no — this is a bug, report it"}
             # linger 1.5 s after an outcome so the safe-stop completes
-            if outcome is not None and tw > outcome[1] + 1.5:
+            if outcome is not None and tw > outcome[1] + t_linger:
                 break
         self._stop_req = False
         self.mode = "safe_stop" if outcome and outcome[0] != "arrived" \

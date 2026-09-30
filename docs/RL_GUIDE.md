@@ -100,7 +100,7 @@ voltage" v ~ U(0.85, 1.0) that scales both the slew and the forcerange.
 | env | dim | contents |
 |---|---|---|
 | recover | 57 | gravity direction (3) and gyro (3) from `sim_imu` · joint q (15): quantised to encoder counts, one tick late · joint qd (15): finite difference of that q at 50 Hz, one tick late (the Pi has no velocity sensor) · 5 foot switches (floor only, 2.0/1.0 N hysteresis) · tilt/π · the filtered action (15) |
-| gait | 56 | the same IMU, q and qd · gait phase sin/cos · command (vx/60, vy/60, wz/0.6) · the filtered residual (15) |
+| gait | 56 | the same IMU, q and qd · gait phase sin/cos · the command the gait runs (vx/60, vy/60, wz/0.6; slewed since B34, below) · the filtered residual (15) |
 
 There is no torso height in the recover observation: the robot cannot
 measure it. Height stays in the *reward*, which is allowed to be
@@ -112,7 +112,8 @@ p ~ U(0, 0.1), and a 5 % chance of one stuck switch. These noise levels
 are guesses, not measurements. Obs version 1 (41 / 39 values, true state)
 is kept only so old checkpoints replay.
 
-**Rewards.** Gait: velocity and yaw-rate tracking, −0.02·|a|², −0.1·|Δa|²
+**Rewards.** Gait: velocity and yaw-rate tracking (of the command the gait
+runs), −0.02·|a|², −0.1·|Δa|²
 (the raw action), tilt (weight 1.2), |h − stance height| (from
 `rocky_model`), −5 for a fall, +1 for surviving the episode. Recover `v1`:
 uprightness + height + a standing bonus, success when standing is held 1 s.
@@ -159,6 +160,33 @@ in a random direction, starting between 1 s and 6.5 s, applied inside the
 physics substeps. (Tipping the robot takes 6–8 N·s; the pre-D048 push was a
 one-tick N(0, 12) N tap at the CoM, about 0.24 N·s.)
 
+**The command slew** (gait env, B34). The budgeted command reaches the
+gait through `pebble_gait.CommandSlew` (D063: 25 mm/s² on the fastest foot,
+then a 0.2 s lag), as in the supervisor, the playground, the harness sim and
+`gait_node`. An episode starts standing and the command eases in: at the
+default 45 mm/s ask (budgeted to 34.2) it reaches the target at 2.36 s, the
+largest joint-target step is 3.38° per tick (20.04° unslewed) and the
+zero-action robot walks 228 mm in 8 s (255 unslewed; servo nominal, seed 0,
+measured 2026-09-30). The observation and the velocity reward use the
+slewed command, which is what the cockpit feeds a walker (`cmd_eff`).
+`cmd_slew=False` is the pre-B34 pass-through; a checkpoint without
+`cmd_slew` in its `env_config` replays that way and is flagged
+`unslewed cmd`. The recover env has no velocity command.
+
+**The side → back curriculum** (recover env, B34; `--curriculum side-back`,
+training only). No checkpoint rights the robot from its back. With the
+curriculum, a drop that lands more than 110° from upright is kept with
+probability *reach* and otherwise drawn again (mode, pose and joints; the
+episode's DR and servo draws stay). *reach* ramps 0 → 1 between the two
+fractions of `--total-steps` in `--curriculum-ramp` (default `0.15,0.75`);
+the trainer sets the progress before every rollout and logs `reach`. The
+test is on the landed tilt because the drop's orientation does not decide
+it (a side drop landed past 120° 29 % of the time over 120 seeds). Landings
+past 110° at reach 0 / 0.25 / 0.5 / 0.75 / 1: 0 / 23 / 33 / 40 / 46 % of
+120 (servo random + DR), 2.06 drops per reset at reach 0. At reach 1 nothing
+is redrawn and the episode is the default env's, draw for draw; evaluation
+never uses the curriculum, so every number in §4 is on the full fall mix.
+
 **Domain randomisation** (on by default, `--no-randomize` to disable;
 `rl_common.DomainRandomizer`). Every episode draws fresh values from the
 stored base values:
@@ -194,7 +222,7 @@ policy replaces the analytic stack; both are gated by it.
 | file | content |
 |---|---|
 | `latest.pt` | the checkpoint: model, optimizer, normalisers, RNG state, `global_step`, `update`, the args, and **`env_config`** (below) |
-| `train_log.jsonl` | one JSON line per update: `step`, `ep_return`, `ep_len`, policy/value/entropy losses, `kl`, `kl_stop`, `lr`, `sps` |
+| `train_log.jsonl` | one JSON line per update: `step`, `ep_return`, `ep_len`, policy/value/entropy losses, `kl`, `kl_stop`, `lr`, `sps`, and `reach` on a curriculum run |
 | `train.out` | stdout, only if you redirect it: `mkdir -p sim/runs/NAME && ./rocky.sh train-recover NAME > sim/runs/NAME/train.out 2>&1 &`; `rocky.sh jobs` prints its last line |
 
 `env_config` is the env's own `config()`: obs version, dim and names,
@@ -211,7 +239,10 @@ evaluators and `PolicyRighter` read it back with
 - A pre-D052 checkpoint (no `env_config`) replays under the legacy
   contract (obs v1, ideal servo, no filter, 5 rad/s, and for the gait env
   the old T 1.6 s / 32 mm gait) and is flagged **`legacy obs`**. A rate
-  limit above 4.7 rad/s is flagged **`exceeds servo`**.
+  limit above 4.7 rad/s is flagged **`exceeds servo`**. A gait checkpoint
+  trained on commands outside the gait's envelope is flagged
+  **`unbudgeted cmd`**, and one trained without the command slew
+  **`unslewed cmd`** (every walker on disk is both).
 - A legacy checkpoint cannot be resumed under obs v2; the trainer says so.
 
 Reading the log: `python sim/rl_dashboard.py` prints a table of every run
@@ -224,6 +255,9 @@ playground's `rl` command prints the same table live. What to look for:
   episodes are ending in success.
 - `ent` (entropy) climbing without bound is the D045 failure (sigma
   inflating into bang-bang control); cap it with `--log-std-max -0.5`.
+- On a curriculum run the early returns come from easier episodes (side
+  landings only until `reach` leaves 0), so compare returns with a flat run
+  only after `reach` has reached 1.
 
 ## 3. Step by step: train, evaluate, resume
 
@@ -299,10 +333,23 @@ columns do.
 
 ```bash
 ./rocky.sh train-walk    walk1                      # residual gait, 8 envs, DR on
-./rocky.sh train-recover recover7 --total-steps 3000000
+./rocky.sh train-recover recover8 --total-steps 3000000
 ./rocky.sh jobs                                     # what is training, + the last train.out line
 ./rocky.sh eval-walk     walk1
-./rocky.sh eval-recover  recover7
+./rocky.sh eval-recover  recover8
+```
+
+A run that must outlive the terminal goes in a transient systemd unit,
+with a CPU quota on a shared machine. B34's `recover7_d063_curriculum` was
+started this way (from the repo root):
+
+```bash
+mkdir -p sim/runs/recover7_d063_curriculum
+systemd-run --user --collect --unit=rocky-train-recover7 -p CPUQuota=800% \
+  --working-directory="$PWD" sh -c './rocky.sh train-recover recover7_d063_curriculum \
+  --curriculum side-back --total-steps 12000000 --device cpu --torch-threads 2 \
+  > sim/runs/recover7_d063_curriculum/train.out 2>&1'
+systemctl --user status rocky-train-recover7     # running? `./rocky.sh jobs` shows its last line
 ```
 
 Defaults are overnight-sized (`--total-steps`, `--num-envs 8`,
@@ -347,13 +394,14 @@ Terms in the current-model column: **legacy** = the old handoff test
 no-righter row in brackets; **jitter** = `audit_righter.py --servo
 nominal`. Training return is the last logged `ep_return`.
 
-**Every checkpoint except `recover6_d052` is legacy** (obs v1, true-state
+**Every checkpoint except `recover6_d052` and `recover7_d063_curriculum` is legacy** (obs v1, true-state
 observation, ideal actuator, 5 rad/s; the gait ones on the old T 1.6 s /
 32 mm gait): the evaluators replay them under that contract and flag them
 `legacy obs, exceeds servo`, and none can be resumed or warm-started under
-obs v2. `recover6_d052` (B34) is the only run trained on the D052 contract
-(obs v2, fingerprint `ceb63a1254c3`, so it now loads with a fingerprint
-warning).
+obs v2. `recover6_d052` and `recover7_d063_curriculum` (B34) are the runs
+trained on the D052 contract (obs v2): `recover6_d052` on fingerprint
+`ceb63a1254c3`, so it now loads with a fingerprint warning,
+`recover7_d063_curriculum` on the current `87215110e9c4`.
 
 | run | env | steps | training return | stood (cloud / local pre-D052) | pure-RL (pre-D052) | current model | note |
 |---|---|---|---|---|---|---|---|
@@ -364,8 +412,9 @@ warning).
 | `recover3_capped` | recover1 → v2 capped | 4 M | 543 | — / 7/20 | 0/20 | (checkpoint removed; see git history) | every dimension pinned at the cap; success carried by noise |
 | `recover3_scratch` | recover v2 capped, scratch | 3 M | — | — / 3/20 | 0/20 | (checkpoint removed; see git history) | never rights from the back |
 | `recover5_v3` | recover v3 capped, 3 rad/s, scratch | 3 M | 215 | — / 2/20 | 2/20 | (checkpoint removed; see git history) | D048 negative: smoothness cost, lower rate limit; back 0/6, side 0/7 |
-| `recover5_v3_warm` | recover1 → v3 capped, 3 rad/s | 5 M | 483 | — / 4/20 | 4/20 | stood **3/20** legacy · **0/20** hw · system 20/20 (11/20) · jitter: 55 % pinned, 3.6 rev/s, 1.95°/tick, ctrl 4.4 rev/s · on `5a32…`: servo 0/20, rand 0/20, pure-RL 0/20 | legacy. D048 negative on the handoff (4 < 7) but the smoothest righter so far (pre-D052: 58 % pinned, 7 reversals/s, 2.1°/tick); on D052 its pure-RL 4/20 is gone |
+| `recover5_v3_warm` | recover1 → v3 capped, 3 rad/s | 5 M | 483 | — / 4/20 | 4/20 | stood **3/20** legacy · **0/20** hw · system 20/20 (11/20) · jitter: 55 % pinned, 3.6 rev/s, 1.95°/tick, ctrl 4.4 rev/s (4.5 on `87215110e9c4`, 2026-09-30) · on `5a32…`: servo 0/20, rand 0/20, pure-RL 0/20 | legacy. D048 negative on the handoff (4 < 7) but the smoothest righter so far (pre-D052: 58 % pinned, 7 reversals/s, 2.1°/tick); on D052 its pure-RL 4/20 is gone |
 | `recover6_d052` | recover v2, obs v2, servo random, 4.0 rad/s | 3 M | 268 | — | — | **0/20** hw (end tilt median 7.5°) · system 11/20 = no-righter 11/20 · jitter: 69 % pinned, ctrl 9.3 rev/s; in the shove demo it never stood (0/5, FALLEN re-entered 6× each) | B34's first obs-v2 run (CPU, 25 min; nominal eval mean return 421 at training, 423 on the current model): the servo model in the loop, IMU/encoder/switch noise, no torso height. It lowers the end tilt but earns no handoff, and the supervisor does no better with it than without. NEGATIVE; `recover1` stays shipped |
+| `recover7_d063_curriculum` | recover v2, obs v2, servo random, 4.0 rad/s, `--curriculum side-back` | 12 M | 330 | — | — | on `87215110e9c4` (2026-09-30): **3/20** hw (back 0/6, side 3/7, tumble 0/7; end tilt median 0.5°, best 0.1°; mean return 474; hold-pose 1/20, random 0/20) · rand 4/20 (back 0/9, side 2/9, tumble 2/2) · system **11/20 = no-righter 11/20** (back 0/6, side 5/7, tumble 6/7), 9 declared falls: **0 handoff**, 9 stall, 0 deadline exits, t_stood median 0.48 s · jitter (beside `recover5_v3_warm`, 40 N, 5 seeds): 5 % pinned, 2.1 rev/s, 0.29°/tick, ctrl 1.9 rev/s (`recover5_v3_warm` 4.5), but it lands on its back every time and never stands (0/5 upright, FALLEN entered 6× each; `recover5_v3_warm` 5/5 upright, by the ramp) | B34's curriculum run (CPU, unit `rocky-train-recover7`, 10:46 → 12:28, 1.96 k steps/s averaged; `reach` 1 from 9.0 M steps): the `recover6_d052` recipe + side → back (no landing past 110° for the first 1.8 M steps, back landings phased in by 9 M, the full fall mix for the last 3 M = `recover6_d052`'s whole budget). One knob against `recover6_d052` besides the budget (4× longer, so a slower learning-rate anneal) and the robot (D063's `87215110e9c4`, not `ceb63a1254c3`). The first handoffs on the D052 contract, all from side landings, but none survives into the supervisor (every declared fall exits on the stall ramp, and the ramp stands no more than with no righter), and the back is still 0. Its 15 log σ sit at the `--log-std-max -0.5` cap by 6 M steps and stay there (entropy 13.69 at 3.6 M, 13.78 = the cap from 6 M; `recover6_d052` ended at −0.80 … −0.94): the D045 inflation, held by the cap. Misses the rung 9 bar on the handoff exit. NEGATIVE; `recover1` stays shipped |
 
 **What it means.** The PPO infrastructure works and reproduces; the
 learned policies are marginal. Self-righting is a hybrid: the policy does
@@ -374,11 +423,15 @@ planted ramp does the standing. From the BACK no checkpoint rights the
 robot and the ramp does (5/5 in the demo), which is why the supervisor
 ramps after 3 s without progress (D048 stall rule). The pre-D052 7/20 was
 flattered twice, by an ideal actuator and by a handoff test that could not
-tell standing from kneeling: on the current robot and `handoff_ok` **no
-checkpoint earns a handoff**. The system still stands 20/20 against 11/20
-without a righter, so the policies leave the body in a pose the stall ramp
-can stand (back landings 6/6 vs 0/6), but that number cannot tell
-`recover1` from `recover5_v3_warm`, so it is not a righter score. The v3
+tell standing from kneeling: on the current robot and `handoff_ok` only
+`recover7_d063_curriculum` earns any (3/20, all side landings, in the plain
+eval), and **no checkpoint earns a handoff under the supervisor**. With the
+legacy righters the system still stands 20/20 against 11/20 without a
+righter, so they leave the body in a pose the stall ramp can stand (back
+landings 6/6 vs 0/6), but that number cannot tell `recover1` from
+`recover5_v3_warm`, so it is not a righter score. The two obs-v2 runs do
+no better than no righter (system 11/20; `recover7_d063_curriculum`'s back
+landings 0/6 where `recover1`'s are 6/6). The v3
 runs showed the trade: the smoothness cost halves the staircase but costs
 handoffs at this budget. With the servo in the loop the staircase mostly
 disappears. `recover1` stays the
@@ -390,17 +443,35 @@ wins anything on D052.
 In order, each teaching one thing:
 
 0. **Retrain on the D052 contract.** Done once for the righter:
-   `recover6_d052`, 3 M steps, negative (§4). Open, in order (B34): a
-   side → back curriculum (no checkpoint rights from the back), v3 at
-   10 M steps, `thermal_heat0` warm starts; the bar is rung 9. Then the
-   first obs-v2 walker: `./rocky.sh train-walk walk1` (budgeted commands,
-   rim shoves) and
-   `eval-walk walk1`; every walker on disk is zeroed by the D052 envelope.
-   The RL envs still drive the gait without D063's `CommandSlew` (the
-   `--supervisor` system run has it); wire it in with this retrain.
-   For a righter, evaluate in this order: `eval-recover NAME` (hw),
-   `--randomize`, `--supervisor` (count the `handoff` exits, not just
-   stood), `audit_righter.py --servo nominal`.
+   `recover6_d052`, 3 M steps, negative (§4), then B34's side → back
+   curriculum (§1) as `recover7_d063_curriculum` (12 M steps, 2026-09-30),
+   negative too: 3/20 hw from side landings, 0 `handoff` exits under the
+   supervisor, back 0/6 (§4). Next in order: v3 at 10 M steps, then
+   `thermal_heat0` warm starts. Then the first obs-v2 walker:
+   `./rocky.sh train-walk walk1` (budgeted and slewed commands, rim
+   shoves) and `eval-walk walk1`; every walker on disk is zeroed by the
+   D052 envelope. The gait env slews the command since B34 (§1).
+   For a righter, evaluate in this order (from the repo root):
+
+   ```bash
+   systemctl --user status rocky-train-recover7          # finished? (the unit is gone when it is)
+   tail -n 3 sim/runs/recover7_d063_curriculum/train.out # "done: 11,999,232 steps -> ..." (5859 updates of 2048)
+   ./rocky.sh eval-recover recover7_d063_curriculum                 # hw: handoff_ok, 20 falls
+   ./rocky.sh eval-recover recover7_d063_curriculum --randomize     # + servo-random/DR/noise
+   ./rocky.sh eval-recover recover7_d063_curriculum --supervisor    # the system; count `handoff` exits
+   cd sim
+   python audit_righter.py runs/recover7_d063_curriculum/latest.pt \
+       runs/recover5_v3_warm/latest.pt --servo nominal   # ctrl rev/s, the baseline in the same audit
+   python rl_dashboard.py         # the table + sim/out/rl_curves.png (`reach` is in train_log.jsonl)
+   ```
+
+   **The bar** (rung 9): `stood-after-handoff` ≥ 1/20 in the hw row, at
+   least one `handoff` exit under `--supervisor`, and `ctrl rev/s` no
+   worse than `recover5_v3_warm`'s in the same audit (4.5 on
+   `87215110e9c4`, servo nominal, 5 seeds, measured 2026-09-30; the 4.4 in
+   §4 is from a pre-D063 model). The header must read `robot fingerprint
+   match` and `[D052 contract]`. Then write the numbers into §4 and B34
+   either way (a miss is a negative result: `BUILD_LOG.md` too).
 1. **Watch before you train.** `MUJOCO_GL=egl python eval_ppo.py
    runs/cmd_sample3/latest.pt --video a.mp4 --compare-zero` and the same
    with `eval_recover.py runs/recover1/latest.pt --video b.mp4`. Read mean |residual|: how loud is the correction the
@@ -432,7 +503,9 @@ In order, each teaching one thing:
    state in the observation). **The bar on the current model**: any
    handoff at all — more than `recover1`'s 0/20 on `handoff_ok` and at
    least one `handoff` exit under `--supervisor` (both legacy checkpoints:
-   0 of 9) — with ctrl rev/s no worse than `recover5_v3_warm`'s 4.4.
+   0 of 9) — with ctrl rev/s no worse than `recover5_v3_warm`'s, audited
+   side by side with `--servo nominal` (4.5 on `87215110e9c4`, 2026-09-30;
+   4.4 on a pre-D063 model).
 
 ## 6. In the playground and the cockpit
 

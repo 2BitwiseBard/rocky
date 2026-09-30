@@ -329,8 +329,10 @@ class ReflexSupervisor:
         machinery a gyro trip uses. The gait finishes its current step,
         freezes into a full-contact crouch, then RECOVERs into the idle
         planted stance (caller is expected to command zero velocity).
-        This replaces 'just zero the velocity', which leaves the wave gait
-        marching in place — worst possible behavior at a cliff edge.
+        This replaced 'just zero the velocity', which before D063 left the
+        wave gait marching in place — worst possible behavior at a cliff
+        edge. (Since D063 a zero command settles to the standing pose, but
+        only as the slew eases down; this still stops mid-step at once.)
         D063: in every state the slewed command is zeroed at once, so a stop
         that lands in PLANT or BRACE (where it is not queued) does not leave
         the gait to resume at the old speed and slow down for ~2 s."""

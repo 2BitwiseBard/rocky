@@ -15,7 +15,9 @@ pre-D052 observation (true state, torso height) — replayable, not
 deployable; 'exceeds servo' = its rate limit is above the ST3215's 4.7
 rad/s no-load speed (every v1-v3 recover run: 5.0); 'unbudgeted cmd' = a
 gait run whose commands were not fitted to WaveGait.budget() (every gait
-run before D052 V2: cmd_sample3 drew mostly outside the envelope).
+run before D052 V2: cmd_sample3 drew mostly outside the envelope);
+'unslewed cmd' = a gait run whose command reached the gait unslewed (every
+gait run before B34 wired D063's CommandSlew into the env; the cockpit slews).
 """
 import argparse
 import json
@@ -36,6 +38,8 @@ RESULTS = {
     "recover1": "stood 4/20 legacy, 0/20 handoff_ok; system 20/20 vs 11/20 no-righter — SHIPPED",
     "recover5_v3_warm": "stood 3/20 legacy, 0/20 hw; system 20/20 — smoothest yet: 55 % pinned, 3.6 rev/s (D048)",
     "recover6_d052": "D052 obs v2: 0/20 hw handoff; system 11/20 = no-righter 11/20 — NEGATIVE (B34)",
+    "recover7_d063_curriculum": "B34 side->back curriculum, 12 M on 87215110e9c4: 3/20 hw (side only), system 11/20 "
+                                "= no-righter, 0 handoff exits — NEGATIVE",
 }
 
 

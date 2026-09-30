@@ -401,9 +401,9 @@ def write_report(P, results):
               f"({r['loaded_nodes']} nodes). Build direction (part frame): {tuple(r['build_dir'])}.", "",
               "| case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |",
               "|---|---|---|---|---|---|---|"]
-        for c in r["cases"]:
-            L.append(f"| {c['case']} | {tuple(c['F_N'])} | {tuple(c['M_Nmm'])} | {c['vm_p999']} | "
-                     f"{c['sn_p999']} | {c['sf']} | {c['defl_mm']} |")
+        for c in r["cases"]:          # fixed decimals (B115): a bare float printed 2.10 as "2.1"
+            L.append(f"| {c['case']} | {tuple(c['F_N'])} | {tuple(c['M_Nmm'])} | {c['vm_p999']:.2f} | "
+                     f"{c['sn_p999']:.2f} | {c['sf']:.2f} | {c['defl_mm']:.3f} |")
         L.append("")
     with open(os.path.join(OUT, "FEM_REPORT.md"), "w") as f:
         f.write("\n".join(L))

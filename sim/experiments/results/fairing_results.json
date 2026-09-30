@@ -3,10 +3,12 @@
   "amp": 30,
   "seed": 0,
   "watchdog": false,
-  "disp_x": 635,
-  "crossed": true,
-  "t_cross": 13.4,
-  "tilt_max": 7.5,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 331,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 7.6,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -15,10 +17,12 @@
   "amp": 30,
   "seed": 1,
   "watchdog": false,
-  "disp_x": 93,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 111,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.2,
+  "tilt_max": 1.9,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -27,10 +31,12 @@
   "amp": 30,
   "seed": 2,
   "watchdog": false,
-  "disp_x": 453,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 544,
   "crossed": true,
-  "t_cross": 15.4,
-  "tilt_max": 8.2,
+  "t_cross": 25.0,
+  "tilt_max": 6.7,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -39,10 +45,12 @@
   "amp": 30,
   "seed": 3,
   "watchdog": false,
-  "disp_x": 557,
-  "crossed": true,
-  "t_cross": 17.8,
-  "tilt_max": 8.5,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 293,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 7.2,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -51,43 +59,9 @@
   "amp": 35,
   "seed": 0,
   "watchdog": false,
-  "disp_x": 527,
-  "crossed": true,
-  "t_cross": 17.1,
-  "tilt_max": 10.1,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 35,
-  "seed": 1,
-  "watchdog": false,
-  "disp_x": 112,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 2.1,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 35,
-  "seed": 2,
-  "watchdog": false,
-  "disp_x": 275,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 6.4,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 35,
-  "seed": 3,
-  "watchdog": false,
-  "disp_x": 337,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 289,
   "crossed": false,
   "t_cross": null,
   "tilt_max": 8.6,
@@ -96,13 +70,57 @@
   "fairing": true
  },
  {
-  "amp": 40,
-  "seed": 0,
+  "amp": 35,
+  "seed": 1,
   "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 110,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 1.8,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 2,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 275,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.6,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 35,
+  "seed": 3,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
   "disp_x": 290,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 9.6,
+  "tilt_max": 7.9,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 0,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 172,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 8.5,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -111,10 +129,53 @@
   "amp": 40,
   "seed": 0,
   "watchdog": true,
-  "disp_x": 382,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 478,
   "crossed": true,
-  "t_cross": 21.1,
-  "tilt_max": 14.1,
+  "t_cross": 29.4,
+  "tilt_max": 10.2,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    13.5,
+    "STUCK -> higher+clear"
+   ],
+   [
+    26.5,
+    "recovered -> nominal"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 1,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 109,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 1.9,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 40,
+  "seed": 1,
+  "watchdog": true,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 283,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 11.4,
   "fell": false,
   "stuck_events": [
    [
@@ -126,48 +187,19 @@
     "STUCK -> higher+clear"
    ],
    [
-    23.0,
+    13.5,
     "STUCK -> retreat"
-   ]
-  ],
-  "fairing": true
- },
- {
-  "amp": 40,
-  "seed": 1,
-  "watchdog": false,
-  "disp_x": 110,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 1.8,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 40,
-  "seed": 1,
-  "watchdog": true,
-  "disp_x": 377,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 8.8,
-  "fell": false,
-  "stuck_events": [
-   [
-    4.5,
-    "STUCK -> high-step"
    ],
    [
-    8.0,
-    "STUCK -> higher+clear"
+    18.01,
+    "STUCK -> retreat"
    ],
    [
-    20.0,
+    28.51,
     "recovered -> nominal"
    ],
    [
-    22.5,
+    31.51,
     "STUCK -> high-step"
    ]
   ],
@@ -177,10 +209,12 @@
   "amp": 40,
   "seed": 2,
   "watchdog": false,
-  "disp_x": 277,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 301,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.8,
+  "tilt_max": 3.4,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -189,196 +223,44 @@
   "amp": 40,
   "seed": 2,
   "watchdog": true,
-  "disp_x": 297,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 373,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 11.7,
+  "tilt_max": 8.5,
   "fell": false,
   "stuck_events": [
    [
-    12.5,
+    7.0,
     "STUCK -> high-step"
    ],
    [
-    16.0,
-    "STUCK -> higher+clear"
-   ],
-   [
-    23.51,
-    "STUCK -> retreat"
-   ]
-  ],
-  "fairing": true
- },
- {
-  "amp": 40,
-  "seed": 3,
-  "watchdog": false,
-  "disp_x": 239,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 6.8,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 40,
-  "seed": 3,
-  "watchdog": true,
-  "disp_x": 245,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 13.1,
-  "fell": false,
-  "stuck_events": [
-   [
-    8.5,
-    "STUCK -> high-step"
-   ],
-   [
-    13.0,
-    "STUCK -> higher+clear"
-   ],
-   [
-    17.0,
-    "STUCK -> retreat"
-   ],
-   [
-    21.51,
-    "STUCK -> retreat"
-   ]
-  ],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 0,
-  "watchdog": false,
-  "disp_x": 147,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 4.2,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 0,
-  "watchdog": true,
-  "disp_x": 408,
-  "crossed": true,
-  "t_cross": 24.5,
-  "tilt_max": 12.0,
-  "fell": false,
-  "stuck_events": [
-   [
-    6.5,
-    "STUCK -> high-step"
-   ],
-   [
-    12.0,
-    "STUCK -> higher+clear"
-   ],
-   [
-    24.0,
+    14.5,
     "recovered -> nominal"
-   ]
-  ],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 1,
-  "watchdog": false,
-  "disp_x": 102,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 1.8,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 1,
-  "watchdog": true,
-  "disp_x": 37,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 12.3,
-  "fell": false,
-  "stuck_events": [
-   [
-    4.5,
-    "STUCK -> high-step"
-   ],
-   [
-    8.0,
-    "STUCK -> higher+clear"
-   ],
-   [
-    13.0,
-    "STUCK -> retreat"
-   ],
-   [
-    17.01,
-    "STUCK -> retreat"
-   ],
-   [
-    21.01,
-    "STUCK -> retreat"
-   ]
-  ],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 2,
-  "watchdog": false,
-  "disp_x": 278,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 2.8,
-  "fell": false,
-  "stuck_events": [],
-  "fairing": true
- },
- {
-  "amp": 45,
-  "seed": 2,
-  "watchdog": true,
-  "disp_x": 256,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 11.2,
-  "fell": false,
-  "stuck_events": [
-   [
-    6.5,
-    "STUCK -> high-step"
-   ],
-   [
-    14.0,
-    "STUCK -> higher+clear"
    ],
    [
     17.5,
-    "STUCK -> retreat"
+    "STUCK -> high-step"
    ],
    [
     21.01,
+    "STUCK -> higher+clear"
+   ],
+   [
+    31.51,
     "STUCK -> retreat"
    ]
   ],
   "fairing": true
  },
  {
-  "amp": 45,
+  "amp": 40,
   "seed": 3,
   "watchdog": false,
-  "disp_x": 246,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 266,
   "crossed": false,
   "t_cross": null,
   "tilt_max": 4.5,
@@ -387,21 +269,129 @@
   "fairing": true
  },
  {
-  "amp": 45,
+  "amp": 40,
   "seed": 3,
   "watchdog": true,
-  "disp_x": 226,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 292,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 11.7,
+  "tilt_max": 13.3,
   "fell": false,
   "stuck_events": [
    [
-    8.5,
+    9.0,
     "STUCK -> high-step"
    ],
    [
-    12.0,
+    12.5,
+    "STUCK -> higher+clear"
+   ],
+   [
+    20.5,
+    "STUCK -> retreat"
+   ],
+   [
+    25.51,
+    "STUCK -> retreat"
+   ],
+   [
+    29.01,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 0,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 164,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 7.4,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 0,
+  "watchdog": true,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 182,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 11.8,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    10.0,
+    "STUCK -> higher+clear"
+   ],
+   [
+    17.0,
+    "STUCK -> retreat"
+   ],
+   [
+    20.51,
+    "STUCK -> retreat"
+   ],
+   [
+    25.01,
+    "STUCK -> retreat"
+   ],
+   [
+    28.51,
+    "STUCK -> retreat"
+   ],
+   [
+    32.01,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 1,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 108,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 1.9,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 1,
+  "watchdog": true,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 48,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 5.4,
+  "fell": false,
+  "stuck_events": [
+   [
+    6.5,
+    "STUCK -> high-step"
+   ],
+   [
+    10.0,
     "STUCK -> higher+clear"
    ],
    [
@@ -414,6 +404,104 @@
    ],
    [
     24.01,
+    "STUCK -> retreat"
+   ],
+   [
+    27.51,
+    "STUCK -> retreat"
+   ],
+   [
+    31.51,
+    "STUCK -> retreat"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 2,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 117,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 2.3,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 2,
+  "watchdog": true,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 393,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 10.7,
+  "fell": false,
+  "stuck_events": [
+   [
+    7.0,
+    "STUCK -> high-step"
+   ],
+   [
+    14.5,
+    "recovered -> nominal"
+   ],
+   [
+    18.5,
+    "STUCK -> high-step"
+   ],
+   [
+    27.51,
+    "STUCK -> higher+clear"
+   ]
+  ],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 3,
+  "watchdog": false,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 264,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 3.1,
+  "fell": false,
+  "stuck_events": [],
+  "fairing": true
+ },
+ {
+  "amp": 45,
+  "seed": 3,
+  "watchdog": true,
+  "v_ask_mm_s": 34.2,
+  "t_walk_s": 32.9,
+  "disp_x": 343,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 12.7,
+  "fell": false,
+  "stuck_events": [
+   [
+    9.0,
+    "STUCK -> high-step"
+   ],
+   [
+    12.5,
+    "STUCK -> higher+clear"
+   ],
+   [
+    19.0,
+    "STUCK -> retreat"
+   ],
+   [
+    23.01,
     "STUCK -> retreat"
    ]
   ],

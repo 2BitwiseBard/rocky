@@ -562,7 +562,8 @@ def checkpoint_contract(ck, env_hint=None):
     trained in. D052 checkpoints carry env_config (the env's own config());
     older ones only carry CLI args, and are reconstructed as the legacy
     contract: obs v1, ideal servo, no action filter, 5 rad/s (recover).
-    Adds 'legacy' and 'flags' (['legacy obs', 'exceeds servo', 'unbudgeted cmd'])."""
+    Adds 'legacy' and 'flags' (['legacy obs', 'exceeds servo', 'unbudgeted cmd',
+    'unslewed cmd'])."""
     cfg = ck.get("env_config")
     args = dict(ck.get("args") or {})
     if cfg:
@@ -586,6 +587,8 @@ def checkpoint_contract(ck, env_hint=None):
         flags.append("exceeds servo")
     if c["env"] == "gait" and not c.get("cmd_budget"):
         flags.append("unbudgeted cmd")          # V2: trained on commands outside the gait's envelope
+    if c["env"] == "gait" and not c.get("cmd_slew"):
+        flags.append("unslewed cmd")            # B34: trained without D063's CommandSlew; the cockpit slews
     c["flags"] = flags
     return c
 

@@ -20,7 +20,9 @@ Output: sim/experiments/out/pebble_stuck_retry_40mm_voiced.mp4
 
 The default rubble seed is 1: on the budgeted retry ladder (D060) seed 0 no
 longer crosses 40 mm (run_stuck.py: the watchdog crosses 2/4 seeds there),
-while seed 1 crosses at ~21 s — the video needs a crossing to narrate.
+while seed 1 does: at 32.5 s since D063 (34.2 mm/s, the walk run_stuck's
+T_WALK, B111) — the video needs a crossing to narrate. The walk limit only
+bounds the search for a crossing; the clip runs OUTRO_S past it.
 """
 import os
 import subprocess
@@ -32,18 +34,16 @@ import mujoco
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 from pebble_gait import WaveGait                                     # noqa: E402
 from pebble_watchdog import ProgressWatchdog, RetryPolicy            # noqa: E402
-from scenes import build_model, init_robot, walk_ask                 # noqa: E402
+from scenes import build_model, init_robot                           # noqa: E402
 from chordspeak_events import Narrator                               # noqa: E402
 from chordspeak2 import write_wav                                # noqa: E402
+from run_stuck import V_X, T_STAND, T_WALK, GOAL_X                   # noqa: E402
 
 AMP = 40
-V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
-#                                 T_WALK_MAX was sized at 45: on the D063 gait seed 1 does not cross within
-#                                 it (nor at a raw 45: 394 mm); run_stuck at 33 s (25 x 45 / 34.2) crosses it
-#                                 at 31.5 s. No crossing to narrate until the owner re-times it (run_stuck.py)
-T_STAND = 1.0
-T_WALK_MAX = 25.0
-GOAL_X = 0.40
+# the walk is run_stuck's: scenes.walk_ask (34.2 mm/s since D063) for the time the 45 mm/s
+# ask needed to command the same distance (B111: 32.9 s; a fixed 25 s ended before seed 1 crossed)
+T_WALK_MAX = T_WALK
+OUTRO_S = 4.0            # s the clip runs on past the crossing (found_it, then amaze), even past T_WALK_MAX
 FPS = 30
 
 
@@ -67,7 +67,7 @@ def main(seed=1):
     n_events_seen = 0
     said_walk = False
     stage_seen = 0
-    for k in range(int((T_STAND + T_WALK_MAX) / DT)):
+    for k in range(int((T_STAND + T_WALK_MAX + OUTRO_S) / DT)):
         t = k * DT
         if t > t_end:
             break
@@ -110,7 +110,7 @@ def main(seed=1):
             t_cross = t
             nar.event(t, "crossing")
             nar.event(t + 1.6, "goal")
-            t_end = min(t + 4.0, T_STAND + T_WALK_MAX)
+            t_end = t + OUTRO_S
         if k % spf == 0:
             cam.lookat[:] = data.xpos[torso]
             renderer.update_scene(data, cam)

@@ -60,6 +60,20 @@ budget now trims more) and 31 exceeded the hard servo speed or a joint limit
 cannot run, and deployed on a different command distribution. Checkpoints
 without `cmd_budget` in their env_config trained on raw commands (flag
 'unbudgeted cmd'); eval_ppo replays them that way.
+
+D063 / B34 — cmd_slew=True (the default for new runs): the budgeted
+command reaches the gait through pebble_gait.CommandSlew (25 mm/s^2 on the
+fastest foot, then a 0.2 s lag), as it does in the supervisor, the
+playground, the harness sim and gait_node. An episode starts standing, so
+the command eases in (standing -> 34.2 mm/s takes 2.36 s, at most 3.38 deg
+of joint target per 20 ms tick) instead of landing in one tick (20.04 deg
+at the default 45 mm/s ask budgeted to 34.2; D063's 28.4 deg was an
+unbudgeted 45 mm/s; servo nominal, seed 0, measured 2026-09-30). self.cmd is
+what the gait runs this tick (the slewed command): the obs carries it (the
+cockpit feeds a walker cmd_eff, which is the same slewed command) and the
+velocity reward tracks it; self.cmd_target is the budgeted target.
+Checkpoints without `cmd_slew` in their env_config trained on an unslewed
+command (flag 'unslewed cmd'); eval_ppo replays them that way.
 """
 from __future__ import annotations
 import os
@@ -78,7 +92,7 @@ import mujoco
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "gait"))
 sys.path.insert(0, HERE)
-from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS       # noqa: E402
+from pebble_gait import WaveGait, CommandSlew, leg_ik, body_to_leg, N_LEGS   # noqa: E402
 import rocky_model as rm                                            # noqa: E402
 import rl_common as rc                                              # noqa: E402
 from shove import Shove                                             # noqa: E402
@@ -99,13 +113,15 @@ class PebbleEnv(gym.Env if gym else object):
                  cmd_sample=False, render_mode=None, seed=None, servo="random",
                  ema_alpha=rc.EMA_ALPHA, obs_version=rc.OBS_VERSIONS["gait"],
                  obs_noise=None, ep_seconds=EP_SECONDS, gait_params=None, cmd_budget=True,
-                 thermal=True, thermal_heat0=(0.0, 0.0), **_):
+                 cmd_slew=True, thermal=True, thermal_heat0=(0.0, 0.0), **_):
         """push_prob: probability of ONE rim shove per episode (D052; it was a
         per-step tap probability). servo: off | nominal | random. ema_alpha 1.0
         = no filter. gait_params: WaveGait kwargs (default params `gait:`; a
         checkpoint replays the gait it trained on — rl_common.LEGACY_GAIT for
         pre-D052 ones). obs_version 1 + servo 'off' + ema 1.0 + LEGACY_GAIT =
-        the pre-D052 env. thermal: the ThermalProxy derate + penalty (heat is
+        the pre-D052 env. cmd_slew: the command reaches the gait through
+        CommandSlew from standing (D063, B34); False = the pre-B34 pass-through.
+        thermal: the ThermalProxy derate + penalty (heat is
         tracked either way); thermal_heat0: (lo, hi) per-joint starting heat,
         fraction of the budget, drawn each episode."""
         self.model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
@@ -115,7 +131,9 @@ class PebbleEnv(gym.Env if gym else object):
         self.gait = WaveGait(**self.gait_params)
         self.cmd_asked = np.array(cmd, dtype=np.float64)   # mm/s, mm/s, rad/s — what was asked
         self.cmd_budget = bool(cmd_budget)
-        self.cmd = self._fit(self.cmd_asked)              # what the gait and the obs get
+        self.cmd_target = self._fit(self.cmd_asked)       # the budgeted target
+        self.slew = CommandSlew(self.gait) if cmd_slew else None
+        self.cmd = self._start_cmd()                      # what the gait runs and the obs get
         self.randomize = randomize
         self.obs_noise = randomize if obs_noise is None else bool(obs_noise)
         self.push_prob = float(push_prob)
@@ -168,6 +186,9 @@ class PebbleEnv(gym.Env if gym else object):
                     push_prob=self.push_prob, shove=dict(peak_n=SHOVE_PEAK_N, dur_s=SHOVE_DUR_S,
                                                          t0_s=(1.0, self.ep_seconds - 1.5), at="shell rim"),
                     cmd_sample=bool(self.cmd_sample), cmd_budget=self.cmd_budget,
+                    cmd_slew=self.slew is not None,
+                    cmd_slew_params=(dict(accel_mm_s2=self.slew.accel, lag_s=self.slew.lag, start="standing")
+                                     if self.slew is not None else None),
                     gait=dict(self.gait_params),
                     thermal=dict(self.thermal.config(), heat0=self.thermal_heat0),
                     h_stance_m=self.h_stance, reward_rev=rc.REWARD_REV,
@@ -181,6 +202,13 @@ class PebbleEnv(gym.Env if gym else object):
         """The command the gait runs: WaveGait.budget(cmd) when cmd_budget (V2)."""
         cmd = np.asarray(cmd, dtype=np.float64)
         return np.array(self.gait.budget(*cmd), dtype=np.float64) if self.cmd_budget else cmd.copy()
+
+    def _start_cmd(self):
+        """The command at the start of an episode: zero with the slew (the robot
+        starts standing and the command eases in), the target without it."""
+        if self.slew is None:
+            return self.cmd_target.copy()
+        return np.array(self.slew.stop(), dtype=np.float64)
 
     def _obs(self):
         cmd_n = self.cmd / np.array([60.0, 60.0, 0.6])
@@ -207,7 +235,8 @@ class PebbleEnv(gym.Env if gym else object):
                 self.cmd_asked = np.array([self.rng.uniform(15.0, 60.0),
                                            self.rng.uniform(-25.0, 25.0),
                                            self.rng.uniform(-0.35, 0.35)])
-        self.cmd = self._fit(self.cmd_asked)
+        self.cmd_target = self._fit(self.cmd_asked)
+        self.cmd = self._start_cmd()
         self.shove = None
         if self.push_prob > 0 and self.rng.random() < self.push_prob:
             peak = self.rng.uniform(*SHOVE_PEAK_N)
@@ -235,6 +264,8 @@ class PebbleEnv(gym.Env if gym else object):
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
         self._a_f = self.ema_alpha * action + (1.0 - self.ema_alpha) * self._a_f
+        if self.slew is not None:                        # D063/B34: as the supervisor runs it
+            self.cmd = np.array(self.slew.step(self.cmd_target, CTRL_DT), dtype=np.float64)
         q_gait, _, _ = self.gait.joint_targets(self._t, *self.cmd)
         target = q_gait.flatten() + ACT_SCALE * self._a_f
         d = self.data

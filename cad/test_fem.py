@@ -113,6 +113,27 @@ def test_stance_matches_the_gait_model():
     assert math.sin(st["q_tibia"]) == pytest.approx(uz)
 
 
+def test_report_prints_fixed_decimals(tmp_path, monkeypatch):
+    """B115: the per-case rows print SF and stresses to 2 dp and deflection to
+    3 dp; a bare float printed 2.10 as "2.1" (so the yaw base's R+ and R-
+    von Mises, the same 2.10446 on the same grips, read like different rows)."""
+    import yaml
+    with open(os.path.join(HERE, "params.yaml")) as f:
+        P = yaml.safe_load(f)
+    import fem_check as fc
+    monkeypatch.setattr(fc, "OUT", str(tmp_path))
+    case = dict(case="R+", F_N=[16.42, 0.0, 0.0], M_Nmm=[0.0, -2365.1, 0.0], vm_p999=2.1,
+                sn_p999=2.08, util_p999=0.476, util_peak=0.39, peak_at=[-14.0, 5.5, 0.0],
+                defl_mm=0.15, sf=2.1, governs="layers")
+    res = dict(part="demo", verdict="PASS", sf=2.1, governing="R+", nodes=10, elements=20,
+               held_nodes=5, loaded_nodes=5, build_dir=[0.0, 0.0, 1.0], held="h", loaded="l",
+               cases=[case])
+    fc.write_report(P, [res])
+    txt = (tmp_path / "FEM_REPORT.md").read_text()
+    assert "| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.10 | 2.08 | 2.10 | 0.150 |" in txt
+    assert "| demo | **PASS** | 2.10 | R+ | layers | 0.39 at (-14.0, 5.5, 0.0) | 0.150 | 20 el |" in txt
+
+
 @pytest.mark.skipif(not (ft.tool_cmd("gmsh", "ROCKY_GMSH") and ft.tool_cmd("ccx", "ROCKY_CCX")),
                     reason="no gmsh / CalculiX")
 def test_cantilever_matches_beam_theory():

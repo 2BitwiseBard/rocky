@@ -9,6 +9,100 @@ indexes them.*
 
 ---
 
+## 2026-09-30 · Session 9n — the D063 follow-ups, a curriculum retrain (negative), two options measured (B111–B116, B34, B103)
+
+**Ask:** the owner could not find the mic, and sentences typed on the phone never reached
+the robot. Fixed first (`da74878`): the chat row and 🎤 follow the operator to the Drive
+tab, and a console line the parser does not know goes to the brain as chat. Then "what
+else can we do right now", with nothing from the owner's list done yet: the D063
+follow-ups that need no owner decision and no hardware (B111–B115), the B34 retrain, and
+two measured options for the owner (B103, B116). Five tracks, each reviewed by a second
+agent that re-measured its claims, then one pass over the whole tree. `cad/params.yaml`
+untouched: fingerprint `87215110e9c4`.
+
+**B111, the experiments' time limits:** `run_stuck.T_WALK` is the 1125 mm commanded
+distance at the envelope ask (34.2 mm/s for 32.9 s; `run_fairing` and `run_stuck_voiced`
+follow). Rubble 30 / 35 / 40 / 45 mm, bare → watchdog: 2/4 → 4/4, 2/4 → 4/4, 1/4 → 2/4,
+1/4 → 1/4, 0 falls, tilt ≤ 12.6°; 10 of the 17 crossings came after the old 25 s. The
+shin fairing crosses 1/4, 0/4, 0/4, 0/4 (B1 stays NEGATIVE); at 45 mm the watchdog no
+longer helps (B54). The lidar lap asks `scenes.V_X` through the budget on its 0.55 m ring
+(26.6 mm/s + 0.048 rad/s for 66.1 s, 528 scans, was 310); `sim/lidar_scans.npz` is
+re-recorded, and SLAM-lite on it gives ATE 59.2 → 9.2 mm, map IoU 0.187 → 0.692 (the
+2026-07-31 lap at a raw 45 mm/s: 55.6 → 8.2 mm, 0.255 → 0.716).
+
+**B112, the cliff safe-stop verdict:** since D063 a zero command stands still, so the old
+test (fewer contact breaks than the bare halt) could only read 0 against 0. `judge()` now
+checks the stop itself: it fires, no fall, five feet down short of the edge, BRACE →
+NORMAL, no foot lifts after the halt, < 1 mm/s over the last second. The void retreat
+reaches the gait unslewed, as in the harness goto. **PASS**: margin 228.8 mm, the leading
+foot 46.2 mm short of the edge, max tilt 0.48°, BRACE → NORMAL in 0.65 s. The bare halt
+passes the same checks (213.5 mm); `--retreat-cycles 0` FAILS (a foot 11.5 mm over, 7
+breaks), so the verdict can fail.
+
+**B113, `ArmedGait`'s envelope:** its 44.6 mm/s was `WaveGait`'s lift ceiling at the
+un-leaned foothold. At the leaned footholds 44.6 fails SPEED_LOADED (3.78 rad/s),
+SPEED_FREE (4.11) and LIMIT_YAW (42.7°). `vf_limit` now judges every leg at its leaned
+foothold with the stride in any direction: coxa 33.2 / tangential 41.9 / lift 37.3 →
+**33.2 mm/s, 0.174 rad/s**; 98 commands pass every speed, limit and KINK check (peak 3.08
+rad/s). `WaveGait` is unchanged (34.2 / 0.185). Found, not fixed: the checker's MARGIN
+fails `ArmedGait` while a leg beside the arm swings (−67.6 mm walking, 44 % of the cycle),
+and `WaveGait`'s coxa closed form covers a tangential stride only (it does not bind).
+
+**B114, the in-process goto's cap:** `sim_backend.goto_cap_for(gait)` derives it the
+cockpit's way: 55 s on the params gait (was a fixed 20 s), 57 s on `ArmedGait`. It counts
+walking time, and a timeout ends in a safe-stop. A 1.5 m goto on the flat floor now
+arrives (x 1.473 m); with a 20 s cap it stops at 0.622 m.
+
+**B115:** `fem_check` prints SF and stresses to 2 dp and deflection to 3. 5/5 parts pass
+with the same SF (2.93 / 2.47 R− / 2.18 / 3.92 / 7.81); `fem_results.json` and the
+pictures are byte-identical.
+
+**B34, the side → back curriculum: NEGATIVE.** `CommandSlew` is now in the gait RL env
+(`cmd_slew`, on for new runs: a start moves a joint 3.38° a tick, 20.04° unslewed; older
+walkers are flagged `unslewed cmd`). `--curriculum side-back` redraws a landing past 110°
+with a probability that ramps 0 → 1 over 15–75 % of the run (0 → 46 % of landings, 120
+seeds). `recover7_d063_curriculum`, 12 M steps on CPU in a transient unit (10:46 → 12:28,
+1.96 k steps/s): hw **3/20** (side 3/7, back 0/6, tumble 0/7), the first handoffs on the
+D052 contract; `--randomize` 4/20; **`--supervisor` 11/20, the same as no righter, with 0
+handoff exits** (`recover1`: 20/20). Its ctrl rate is 1.9 rev/s against
+`recover5_v3_warm`'s 4.5, but in the shove audit it lands on its back and never stands
+(0/5). All 15 log σ sat at the −0.5 cap from 6 M steps on. It misses the bar on the handoff
+exit, and the back, the curriculum's target, is still 0/6; `recover1` stays shipped. Next:
+v3 at 10 M, `thermal_heat0` warm starts, and why the side handoffs never become a
+supervisor handoff (not diagnosed).
+
+**For the owner, measured, not applied:**
+- **B103, T 2.2:** +16 % speed (34.2 → 39.8 mm/s), and every kinematic check passes, but no
+  safety number improves. Cliff falls after a fired void guard go 1 → 5 of 724 approaches
+  (all falls 17 → 22), the lowest walking shove 25 → 20 N, gait tracking p95 to 17.5°
+  (fail 20). Recommended: keep T 2.0.
+- **B116, goto's cap after a detour** (`sim/experiments/run_goto_detour_cap.py`, 342 runs):
+  a detour costs 11.0–32.0 s up to 1.5 m, so at 55 s none of 84 detour gotos of 1.5 m
+  arrives. Recommended: 87 s once a goto has detoured (the reach grown by both detours),
+  ended at the cap even mid-detour so the answer stays ≤ 88.5 s. At 87 s, 80 of the 84
+  arrive; the other 4 end `blocked` or `stuck` by themselves.
+
+**Corrections to 9m:** "none after a fire" at the lip band holds only on its whole-degree
+grid. Offset by 0.5°, 15 mm/s at 15.5° fires the void guard 0.62 s into the hold and still
+tips, to 22° (B33 c). The walking shove's "30 N in all six directions" is one gait phase;
+over 5 phases the minimum is 25 N = 0.93 BW (B104).
+
+**The loop:** fingerprint `87215110e9c4`; MJCF and URDF regenerate byte-identical and
+`docs/TOOLS.md` is current. ruff clean. Fast ladder 1097 passed (sim 797, harness 115,
+gait 97, driver 88), 2 strict xfails, 7 skipped, 9.3 min. CI's full `sim/tests` 801 passed
+(4 of them slow), 5 xfailed, 7 skipped; harness slow 2 passed. `cad-check` 28/28,
+`cad/test_fem.py` 10, `run_sim` 189 mm / 41.8°, URDF parity OK. New tests:
+`sim/tests/test_experiment_limits.py` (13), the `ArmedGait` envelope, the sim goto cap
+(fast + slow), the FEM row format, the slew and the curriculum in the RL envs.
+
+**Next:** the owner decides B103 and B116 (both measured, neither applied) and the body
+layout's §8. Still open: `GO_BACK_TIMEOUT_S` (300 s for 4 legs) is under 4 × today's
+worst goto answer of 87.5 s (B116); `request_stop`'s docstring still says a zero command
+marches in place; `ArmedGait`'s MARGIN (B113); the lip band (B33 c); B34's next rungs;
+B54 at 45 mm.
+
+---
+
 ## 2026-09-28 · Session 9m — the fork slides on, the panels close, the motion stops snapping (D063)
 
 **Ask:** "fix the fork ... do everything you can on yours": the CAD faults of 9l that one

@@ -26,4 +26,6 @@ Known caveats of this record:
   (`stuck_results.json`): the fairing script's copy of the field builder
   skipped one random draw per box. Fixed in the script; the rerun decides.
 - `fig_lidar_map.png` is `sim/sim_lidar.py`'s occupancy demo; the lap's
-  scans are the fixture `sim/lidar_scans.npz`, still in `sim/`.
+  scans were the fixture `sim/lidar_scans.npz` (the 2026-07-31 lap at a raw
+  45 mm/s), which B111 re-recorded inside the envelope on 2026-09-30: that
+  lap is in git history only, and `slam_results.json` here was measured on it.

@@ -1,90 +1,195 @@
 {
  "hardstop": {
   "mode": "hardstop",
+  "retreat_cycles": 1.6,
   "fell": false,
-  "body_overhang_mm": -170.7,
+  "body_overhang_mm": -159.8,
   "voids": [
    [
-    4.14,
+    6.18,
     2
    ],
    [
-    4.28,
+    6.32,
     2
    ],
    [
-    4.32,
+    6.32,
     4
    ],
    [
-    4.4,
+    6.44,
     2
    ],
    [
-    4.44,
+    6.44,
     4
    ],
    [
-    4.52,
-    2
+    6.56,
+    4
    ],
    [
-    4.56,
+    6.7,
     4
+   ],
+   [
+    6.82,
+    4
+   ],
+   [
+    6.94,
+    4
+   ],
+   [
+    7.06,
+    4
+   ],
+   [
+    7.2,
+    4
+   ],
+   [
+    7.38,
+    1
+   ],
+   [
+    7.46,
+    4
+   ],
+   [
+    7.52,
+    1
    ]
   ],
-  "stop_margin_mm": 252.3,
-  "post_halt": {
-   "contact_breaks": 20,
-   "mean_speed_mms": 8.4,
-   "max_tilt_deg": 0.77
+  "halt_s": 9.38,
+  "stop_margin_mm": 213.5,
+  "end": {
+   "feet_in_contact": 5,
+   "foot_margin_mm": 34.5
   },
-  "supervisor_states": null
+  "post_halt": {
+   "contact_breaks": 0,
+   "mean_speed_mms": 0.7,
+   "still_speed_mms": 0.0,
+   "max_tilt_deg": 0.41
+  },
+  "supervisor_states": null,
+  "transitions": null
  },
  "safestop": {
   "mode": "safestop",
+  "retreat_cycles": 1.6,
   "fell": false,
-  "body_overhang_mm": -170.8,
+  "body_overhang_mm": -166.9,
   "voids": [
    [
-    4.16,
+    6.32,
     2
    ],
    [
-    4.28,
+    6.44,
     2
    ],
    [
-    4.32,
+    6.48,
     4
    ],
    [
-    4.4,
+    6.56,
     2
    ],
    [
-    4.44,
-    4
-   ],
-   [
-    4.52,
-    2
-   ],
-   [
-    4.56,
+    6.6,
     4
    ]
   ],
-  "stop_margin_mm": 250.3,
+  "halt_s": 9.52,
+  "stop_margin_mm": 228.8,
+  "end": {
+   "feet_in_contact": 5,
+   "foot_margin_mm": 46.2
+  },
   "post_halt": {
    "contact_breaks": 0,
-   "mean_speed_mms": 12.1,
-   "max_tilt_deg": 0.59
+   "mean_speed_mms": 11.9,
+   "still_speed_mms": 0.0,
+   "max_tilt_deg": 0.48
   },
   "supervisor_states": [
    "BRACE",
-   "NORMAL",
-   "RECOVER"
+   "RECOVER",
+   "NORMAL"
+  ],
+  "transitions": [
+   [
+    0.0,
+    "NORMAL"
+   ],
+   [
+    9.52,
+    "BRACE"
+   ],
+   [
+    9.82,
+    "RECOVER"
+   ],
+   [
+    10.17,
+    "NORMAL"
+   ]
   ]
- }
+ },
+ "verdicts": {
+  "hardstop": {
+   "detector": {
+    "ok": true,
+    "measured": "14 VOID events"
+   },
+   "upright": {
+    "ok": true,
+    "measured": "upright"
+   },
+   "on_the_deck": {
+    "ok": true,
+    "measured": "5/5 feet down, leading foot 34.5 mm short of the edge"
+   },
+   "planted": {
+    "ok": true,
+    "measured": "0 contact breaks after the halt"
+   },
+   "still": {
+    "ok": true,
+    "measured": "0.0 mm/s over the last 1 s"
+   }
+  },
+  "safestop": {
+   "detector": {
+    "ok": true,
+    "measured": "5 VOID events"
+   },
+   "upright": {
+    "ok": true,
+    "measured": "upright"
+   },
+   "on_the_deck": {
+    "ok": true,
+    "measured": "5/5 feet down, leading foot 46.2 mm short of the edge"
+   },
+   "planted": {
+    "ok": true,
+    "measured": "0 contact breaks after the halt"
+   },
+   "still": {
+    "ok": true,
+    "measured": "0.0 mm/s over the last 1 s"
+   },
+   "delivered": {
+    "ok": true,
+    "measured": "BRACE \u2192 RECOVER \u2192 NORMAL"
+   }
+  }
+ },
+ "safestop_pass": true,
+ "still_mm_s": 1.0
 }

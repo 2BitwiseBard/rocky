@@ -37,6 +37,12 @@ Notes
   loop assumes SAME_STEP (rl_common.make_vec_env pins it) — under
   NEXT_STEP every episode boundary fed PPO one transition whose action was
   ignored and whose reward was 0.
+* B34: --curriculum side-back (recover env): back landings start as side
+  landings and roll to the back as the run goes (rocky_recover_env module
+  doc); the trainer sets the progress (global step / --total-steps) before
+  every rollout and logs the reach. --curriculum-ramp LO,HI: the fractions
+  of the run between which reach goes 0 -> 1 (default 0.15,0.75). Resuming
+  with a larger --total-steps rescales the progress. Evaluation never uses it.
 * Checkpoints are atomic (tmp+rename); Ctrl-C saves before exiting.
 * KL early stop (--target-kl) keeps the residual policy from tearing up
   the gait prior in one bad update.
@@ -142,9 +148,20 @@ class Agent(nn.Module):
 
 def env_kwargs(args, cmd):
     """The env constructor kwargs a run's args imply (both envs take **_)."""
-    return dict(cmd=cmd, randomize=not args.no_randomize, push_prob=args.push_prob,
-                cmd_sample=args.cmd_sample, reward=args.reward, rate_limit_rad_s=args.rate_limit,
-                servo=args.servo, ema_alpha=args.ema_alpha)
+    kw = dict(cmd=cmd, randomize=not args.no_randomize, push_prob=args.push_prob,
+              cmd_sample=args.cmd_sample, reward=args.reward, rate_limit_rad_s=args.rate_limit,
+              servo=args.servo, ema_alpha=args.ema_alpha)
+    if getattr(args, "curriculum", "none") != "none":
+        kw.update(curriculum=args.curriculum, curriculum_ramp=parse_ramp(args.curriculum_ramp))
+    return kw
+
+
+def parse_ramp(text):
+    """'LO,HI' -> (lo, hi), fractions of the run with 0 <= lo <= hi <= 1."""
+    lo, hi = (float(x) for x in str(text).split(","))
+    if not 0.0 <= lo <= hi <= 1.0:
+        raise SystemExit(f"--curriculum-ramp {text}: need 0 <= LO <= HI <= 1")
+    return lo, hi
 
 
 def make_env(seed, env_name="gait", **kw):
@@ -198,6 +215,12 @@ def parse_args(argv=None):
                         "'free' speed; the servo model slews on its own after it). Recorded in the "
                         "checkpoint; the righter replays it. The legacy v1/v2 runs used 5.0 "
                         "(> the 4.7 no-load), the D048 v3 runs 3.0")
+    p.add_argument("--curriculum", type=str, default="none", choices=["none", "side-back"],
+                   help="recover env only (B34): side-back = back landings start as side landings "
+                        "and roll to the back as the run goes; evaluation never uses it")
+    p.add_argument("--curriculum-ramp", type=str, default="0.15,0.75",
+                   help="LO,HI: fractions of --total-steps between which the curriculum's reach "
+                        "goes 0 -> 1 (side landings only before LO, the full fall mix after HI)")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--torch-threads", type=int, default=0,
@@ -215,6 +238,8 @@ def main(argv=None):
     if args.env == "walk":
         args.env = "gait"
     cmd = tuple(float(x) for x in args.cmd.split(","))
+    if args.curriculum != "none" and args.env != "recover":
+        raise SystemExit(f"--curriculum {args.curriculum} is a recover-env curriculum (B34)")
     device = torch.device(
         args.device if args.device != "auto"
         else ("cuda" if torch.cuda.is_available() else "cpu"))
@@ -299,6 +324,8 @@ def main(argv=None):
     done_buf = torch.zeros((n_rollout, args.num_envs))
     val_buf = torch.zeros((n_rollout, args.num_envs))
 
+    if args.curriculum != "none":                      # the first episodes too (a resume starts mid-ramp)
+        envs.call("set_curriculum", global_step / args.total_steps)
     next_obs_np, _ = envs.reset(seed=[args.seed + update0 * 1000 + i
                                       for i in range(args.num_envs)])
     next_done = torch.zeros(args.num_envs)
@@ -322,12 +349,16 @@ def main(argv=None):
           f"{n_updates} updates to {args.total_steps:,} steps | "
           f"DR={'off' if args.no_randomize else 'on'} push={args.push_prob} | servo {args.servo} "
           f"ema {args.ema_alpha} | obs v{env_config['obs_version']} ({obs_dim}) | "
-          f"{env_config['fingerprint_note']}")
+          + (f"curriculum {args.curriculum} ramp {args.curriculum_ramp} | " if args.curriculum != "none" else "")
+          + f"{env_config['fingerprint_note']}")
 
     for update in range(update0 + 1, n_updates + 1):
         if not args.no_anneal_lr:
             frac = 1.0 - (update - 1) / n_updates
             opt.param_groups[0]["lr"] = frac * args.lr
+        reach = None
+        if args.curriculum != "none":                  # B34: takes effect at each env's next reset
+            reach = float(envs.call("set_curriculum", global_step / args.total_steps)[0])
 
         for step in range(n_rollout):
             global_step += args.num_envs
@@ -430,11 +461,14 @@ def main(argv=None):
                    pg=round(pg_l, 4), v=round(v_l, 4), ent=round(ent_l, 3),
                    kl=round(kl_last, 4), kl_stop=kl_stop,
                    lr=round(opt.param_groups[0]["lr"], 6), sps=sps)
+        if reach is not None:
+            rec["reach"] = round(reach, 4)
         with open(log_path, "a") as f:
             f.write(json.dumps(rec) + "\n")
         print(f"upd {update:4d}/{n_updates} step {global_step:>9,} "
               f"ret {rec['ep_return']} len {rec['ep_len']} "
-              f"kl {rec['kl']:.4f}{'*' if kl_stop else ' '} sps {sps}",
+              f"kl {rec['kl']:.4f}{'*' if kl_stop else ' '} sps {sps}"
+              + (f" reach {reach:.2f}" if reach is not None else ""),
               flush=True)
 
         if update % args.save_every == 0 or update == n_updates \

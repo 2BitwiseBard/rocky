@@ -211,11 +211,12 @@ class WaveGait:
         x = min(1.0, max(0.0, float(vf_max) / self.LIFT_FULL_MM_S))
         return x * x * (3.0 - 2.0 * x)
 
-    def _swing_speeds(self, u, speed, n=160, lift=None):
+    def _swing_speeds(self, u, speed, n=160, lift=None, pn=None):
         """(max joint speed while the foot is near the ground, max while airborne),
         rad/s, for ONE leg's swing with ground velocity speed*u (LEG frame).
-        lift: mm, default the gait's own at this speed (hstep x lift_scale)."""
-        pn = np.array([self.R0 - R_BODY, 0.0, -self.h])
+        lift: mm, default the gait's own at this speed (hstep x lift_scale).
+        pn: the LEG-frame foothold, default the nominal one on the leg's axis."""
+        pn = np.array([self.R0 - R_BODY, 0.0, -self.h]) if pn is None else np.asarray(pn, float)
         vf = speed * np.array([u[0], u[1], 0.0])
         T_st, T_sw = self.duty * self.T, (1.0 - self.duty) * self.T
         s = np.linspace(0.0, 1.0, n)
@@ -233,35 +234,48 @@ class WaveGait:
         vfree = float(V[~both].max()) if (~both).any() else 0.0
         return vl, vfree
 
+    def _lift_feet(self):
+        """[(LEG-frame foothold, stride directions in deg)] the lift ceiling is
+        simulated at: every WaveGait foot stands on its leg's axis at
+        R0 - R_BODY, and the leg is mirror-symmetric about that axis, so
+        0..180 deg covers every stride. ArmedGait's leaned feet override it."""
+        return [(np.array([self.R0 - R_BODY, 0.0, -self.h]), np.arange(0, 181, 15))]
+
     def _lift_limit(self):
         """Largest |v_f| (mm/s) whose swing keeps near-ground joints under the
-        loaded limit and airborne ones under the free limit, worst of 13 stride
-        directions (0..180 deg; the leg is mirror-symmetric). Bisection, cached
-        per gait parameter set (~0.1 s the first time). The full lift is
-        tested alone first: lift_scale fades it out near standing, which must
-        not hide a step height the servo cannot lift at any speed."""
-        key = (self.h, self.R0, self.T, self.duty, self.hstep, self.LIFT_FULL_MM_S)
+        loaded limit and airborne ones under the free limit, worst of the
+        stride directions at every foothold of _lift_feet (13 at one for
+        WaveGait). Bisection, cached per gait parameter set (~0.1 s the first
+        time). The full lift is tested alone first: lift_scale fades it out
+        near standing, which must not hide a step height the servo cannot lift
+        at any speed."""
+        feet = self._lift_feet()
+        key = (self.h, self.R0, self.T, self.duty, self.hstep, self.LIFT_FULL_MM_S,
+               tuple(tuple(np.round(f, 6)) for f, _a in feet))
         if key not in self._LIFT_CACHE:
             lo_l = self.LIFT_SAFETY * _rm.servo_speed("loaded")
             lo_f = self.LIFT_SAFETY * _rm.servo_speed("free")
 
-            def ok(u, v, lift=None):
-                vl, vf = self._swing_speeds(u, v, lift=lift)
+            def ok(pn, u, v, lift=None):
+                vl, vf = self._swing_speeds(u, v, lift=lift, pn=pn)
                 return vl <= lo_l and vf <= lo_f
-            best = np.inf
-            for ang in np.deg2rad(np.arange(0, 181, 15)):
-                u = (np.cos(ang), np.sin(ang))
-                if not ok(u, 0.0, lift=self.hstep):
-                    best = 0.0                   # the lift alone breaks the budget: fix h / T
-                    break
-                a, b = 0.0, 150.0
-                if ok(u, b):
-                    continue
-                for _ in range(12):
-                    m = 0.5 * (a + b)
-                    a, b = (m, b) if ok(u, m) else (a, m)
-                best = min(best, a)
-            self._LIFT_CACHE[key] = float(best)
+
+            def limit():
+                best = np.inf
+                for pn, angs in feet:
+                    for ang in np.deg2rad(angs):
+                        u = (np.cos(ang), np.sin(ang))
+                        if not ok(pn, u, 0.0, lift=self.hstep):
+                            return 0.0           # the lift alone breaks the budget: fix h / T
+                        a, b = 0.0, 150.0
+                        if ok(pn, u, b):
+                            continue
+                        for _ in range(12):
+                            m = 0.5 * (a + b)
+                            a, b = (m, b) if ok(pn, u, m) else (a, m)
+                        best = min(best, a)
+                return best
+            self._LIFT_CACHE[key] = float(limit())
         return self._LIFT_CACHE[key]
 
     def budget(self, vx, vy, wz):
@@ -453,7 +467,24 @@ class ArmedGait(WaveGait):
 
     4 active legs -> duty 0.78 (always >=3 feet down): Rocky walking while
     holding something up. Arm legs get arm_pose() targets from the caller.
+
+    B113 (2026-09-30): the speed envelope is judged at the feet this gait
+    stands on. It inherited WaveGait's ceilings, which are worked out at the
+    un-leaned foothold on each leg's axis (75 mm from the coxa); the lean
+    brings the two legs opposite the arm 12.9 mm closer (62.8 mm) and 8.6 deg
+    off-axis. Its budget read 44.6 mm/s (the lift ceiling at duty 0.78 on
+    that axis foothold) and at 44.6 the checker failed SPEED_LOADED (yaw
+    3.78 rad/s inside the 15 mm band: the lift ceiling), SPEED_FREE (4.11:
+    the tangential one) and LIMIT_YAW (the coxa reached 42.7 deg). KINK was
+    never skipped (0.003 rad/s: the same soft swing). vf_limit is now each
+    ceiling at every active leg's leaned foothold, the stride in any
+    direction: coxa 33.2, tangential 41.9, lift 37.3 -> 33.2 mm/s
+    (0.174 rad/s in place), and _vf_max / foot_targets use those footholds
+    too (a turn moves a leaned foot at wz x its own position; it used to
+    take the un-leaned one, 3.9 mm/s of stance slide at the old envelope).
     """
+    _LIFT_CACHE = {}          # its own: the key carries the leaned footholds
+
     def __init__(self, arm_legs=(0,), body_shift_mm=16.0, **kw):
         super().__init__(**kw)
         self.arm_legs = tuple(arm_legs)
@@ -469,6 +500,64 @@ class ArmedGait(WaveGait):
         away /= (np.linalg.norm(away) + 1e-9)
         self.body_shift = away * body_shift_mm
 
+    @property
+    def p_foot(self):
+        """Where the active feet stand (BODY frame): p_nom with the lean. Read
+        from p_nom every time, as foot_targets always did, so a caller that
+        moves p_nom (the watchdog's body height) moves these feet too."""
+        return self.p_nom - self.body_shift
+
+    # ---------------------------------------------------- B113 speed envelope
+    def _feet_leg(self):
+        """The active legs' footholds in their LEG frames, the lean included,
+        one per mirror pair: the leg is symmetric about its x axis, so (x, y)
+        and (x, -y) share every ceiling."""
+        out = {}
+        for i in self.active:
+            f = body_to_leg(i, self.p_foot[i])
+            out.setdefault((round(float(f[0]), 6), round(abs(float(f[1])), 6)), f)
+        return list(out.values())
+
+    def _vf_max(self, vx, vy, wz):
+        """max over the ACTIVE legs of |v + wz x p_foot_i| (mm/s): the ground
+        speed under the fastest foot that is on the ground."""
+        v = np.array([vx, vy, 0.0])
+        vf = v[None, :] + np.cross(np.array([0.0, 0.0, wz]), self.p_foot[self.active])
+        return float(np.linalg.norm(vf[:, :2], axis=1).max())
+
+    def _lift_feet(self):
+        """Every leaned foothold, 24 stride directions (0..345 deg): off the
+        leg's axis the mirror symmetry no longer halves them."""
+        return [(f, np.arange(0, 360, 15)) for f in self._feet_leg()]
+
+    def vf_limit(self):
+        """(coxa, tangential, lift) mm/s, each the worst over the active legs'
+        leaned footholds f = (x, y) (LEG frame); budget() uses the min.
+        coxa:        the stride may point anywhere, so the half-stride
+                     |v_f| duty T / 2 must fit between f and the nearer edge
+                     of the +-COXA_SWEEP_DEG wedge: x sin(33) - |y| cos(33).
+                     (WaveGait's r_leg tan(33) is the tangential stride only;
+                     a diagonal one at its 60.9 would reach 40.9 deg. It does
+                     not bind there: 34.2.)
+        tangential:  WaveGait's, at |f| from the coxa axis instead of r_leg:
+                     the swing crosses f at 1.625x its mean speed.
+        lift:        WaveGait's swing simulation (_lift_limit) at every f.
+        Measured (arm leg 0, lean 16 mm): 33.2 / 41.9 / 37.3."""
+        c = np.deg2rad(self.COXA_SWEEP_DEG)
+        feet = self._feet_leg()
+        half = min(float(f[0] * np.sin(c) - abs(f[1]) * np.cos(c)) for f in feet)
+        coxa = 2.0 * max(half, 0.0) / (self.duty * self.T)
+        r = min(float(np.hypot(f[0], f[1])) for f in feet)
+        tang = (self.SPEED_SAFETY * _rm.servo_speed("free") * (1.0 - self.duty) * r
+                / (swing_xy_peak(self.duty) * self.duty))
+        return float(coxa), float(tang), self._lift_limit()
+
+    def max_command(self):
+        """WaveGait's, but in place the fastest foot is the leaned one farthest
+        from the body centre (190.5 mm, not R0)."""
+        vf = min(self.vf_limit())
+        return dict(v=vf, wz=vf / self._vf_max(0.0, 0.0, 1.0), vf=vf, vx=vf, vy=vf)
+
     def foot_targets(self, t, vx, vy, wz):
         v = np.array([vx, vy, 0.0])
         lift = self.hstep * self.lift_scale(self._vf_max(vx, vy, wz))
@@ -476,10 +565,9 @@ class ArmedGait(WaveGait):
         stance = np.zeros(N_LEGS, dtype=bool)
         for i in self.active:
             ph = (t / self.T + self._phase[i]) % 1.0
-            pn = self.p_nom[i]
+            pn = self.p_foot[i]                          # the body leans toward the stance side
             vf = v + np.cross(np.array([0, 0, wz]), pn)
             out[i], stance[i] = self._leg_target(ph, pn, vf, lift)   # the same soft swing (D063)
-            out[i] = out[i] - self.body_shift        # body leans toward stance side
         return out, stance
 
     def joint_targets(self, t, vx, vy, wz):

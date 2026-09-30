@@ -328,7 +328,7 @@ def test_gait_env_trains_on_budgeted_commands():
     asked_out = 0
     for s in range(12):
         env.reset(seed=s)
-        c = env.cmd
+        c = env.cmd_target                                          # B34: env.cmd is the slewed command
         assert np.allclose(c, env.gait.budget(*c), atol=1e-9)      # already inside: budget is a no-op
         asked_out += not np.allclose(env.cmd_asked, c)
         rep = pf.check_gait(env.gait, tuple(c))
@@ -336,10 +336,111 @@ def test_gait_env_trains_on_budgeted_commands():
     assert asked_out > 0                                            # the draw itself still spans past it
     raw = PebbleEnv(cmd=(60.0, 0.0, 0.5), cmd_budget=False, servo="off")
     raw.reset(seed=0)
-    assert tuple(raw.cmd) == (60.0, 0.0, 0.5)                       # legacy replay: what it trained on
+    assert tuple(raw.cmd_target) == (60.0, 0.0, 0.5)                # legacy replay: what it trained on
     old = rc.checkpoint_contract({"env_config": dict(raw.config(), cmd_budget=None), "args": {}})
     assert "unbudgeted cmd" in old["flags"]
     assert "unbudgeted cmd" not in rc.checkpoint_contract({"env_config": env.config(), "args": {}})["flags"]
+
+
+# ------------------------------------------------------------------ B34: the gait env slews (D063)
+def test_gait_env_slews_the_command_from_standing():
+    """D063 put CommandSlew between every velocity and the gait except in the RL
+    envs; B34 wires it in: an episode starts standing, the command eases in at
+    25 mm/s^2 + a 0.2 s lag, and the obs carries the command the gait runs (the
+    cockpit feeds a walker cmd_eff, which is that slewed command)."""
+    from pebble_gait import CommandSlew
+    import rocky_env
+    env = PebbleEnv(servo="off", seed=0)
+    cfg = env.config()
+    assert cfg["cmd_slew"] is True and cfg["cmd_slew_params"]["accel_mm_s2"] == 25.0
+    obs, _ = env.reset(seed=0)
+    k = cfg["obs_names"].index("vx/60")
+    assert np.allclose(env.cmd, 0.0) and env.cmd_target[0] > 30.0            # standing; the budgeted target
+    assert obs[k] == 0.0
+    ref = CommandSlew(env.gait)                                             # the supervisor's object, same inputs
+    q_prev, worst, t_reach = env._q0, 0.0, None
+    for n in range(1, 200):
+        obs, *_ = env.step(np.zeros(15))
+        want = np.array(ref.step(env.cmd_target, rocky_env.CTRL_DT))
+        np.testing.assert_allclose(env.cmd, want, atol=1e-12)
+        assert obs[k] == pytest.approx(env.cmd[0] / 60.0, abs=1e-6)
+        q, _, _ = env.gait.joint_targets(env._t - rocky_env.CTRL_DT, *env.cmd)
+        worst = max(worst, float(np.degrees(np.abs(q.flatten() - q_prev).max())))
+        q_prev = q.flatten()
+        if t_reach is None and np.allclose(env.cmd, env.cmd_target, atol=1e-12):
+            t_reach = n * rocky_env.CTRL_DT
+    assert t_reach == pytest.approx(2.36, abs=0.03)                          # standing -> 34.2 mm/s (D063)
+    assert worst < 3.5                                                      # D063: 3.38 deg/tick (was 20+ here)
+    raw = PebbleEnv(servo="off", cmd_slew=False)
+    raw.reset(seed=0)
+    assert np.allclose(raw.cmd, raw.cmd_target) and raw.config()["cmd_slew"] is False
+    assert "unslewed cmd" in rc.checkpoint_contract({"env_config": raw.config(), "args": {}})["flags"]
+    assert "unslewed cmd" not in rc.checkpoint_contract({"env_config": cfg, "args": {}})["flags"]
+    assert "unslewed cmd" in rc.checkpoint_contract({"args": {"env": "walk"}, "obs_dim": 41})["flags"]
+
+
+# ------------------------------------------------------------------ B34: side -> back curriculum
+def test_curriculum_reach_ramp():
+    from rocky_recover_env import curriculum_reach, CURRICULUM_RAMP
+    lo, hi = CURRICULUM_RAMP
+    assert curriculum_reach(0.0) == 0.0 == curriculum_reach(lo)
+    assert curriculum_reach((lo + hi) / 2) == pytest.approx(0.5)
+    assert curriculum_reach(hi) == 1.0 == curriculum_reach(1.0)
+    assert curriculum_reach(0.5, (0.5, 0.5)) == 1.0 and curriculum_reach(0.49, (0.5, 0.5)) == 0.0
+
+
+def test_curriculum_side_back_keeps_back_landings_with_probability_reach():
+    from rocky_recover_env import SIDE_MAX_DEG
+    plain = RecoverEnv(servo="nominal")
+    cur = RecoverEnv(servo="nominal", curriculum="side-back")
+    assert plain.set_curriculum(0.0) == 1.0 and plain.config()["curriculum"] is None
+    assert cur.reach == 0.0 and cur.config()["curriculum"]["name"] == "side-back"
+    back = 0
+    for s in range(30):                                           # reach 0: never lands on its back
+        plain.reset(seed=s)
+        back += plain.last_land_tilt_deg > SIDE_MAX_DEG
+        cur.reset(seed=s)
+        assert cur.last_land_tilt_deg <= SIDE_MAX_DEG
+        assert np.degrees(cur._state()[2]) == pytest.approx(cur.last_land_tilt_deg)
+    assert back >= 8                                              # ...while the plain env often does
+    cur.set_curriculum(0.45)                                      # reach 0.5 with the default ramp
+    assert cur.reach == pytest.approx(0.5)
+    kept = 0
+    for s in range(30):
+        cur.reset(seed=s)
+        kept += cur.last_land_tilt_deg > SIDE_MAX_DEG
+    assert 0 < kept < back
+    # at the end of the ramp the episode IS the default env's episode, draw for draw
+    assert cur.set_curriculum(1.0) == 1.0
+    for s in range(6):
+        o1, _ = plain.reset(seed=s)
+        o2, _ = cur.reset(seed=s)
+        np.testing.assert_array_equal(o1, o2)
+        assert plain.last_mode == cur.last_mode and cur.last_drops == 1
+    with pytest.raises(AssertionError):
+        RecoverEnv(curriculum="back-side")
+
+
+def test_trainer_curriculum_flag_end_to_end(tmp_path):
+    """--curriculum side-back reaches every env through envs.call and is logged."""
+    pytest.importorskip("torch")
+    import json
+    import train_ppo
+    with pytest.raises(SystemExit):
+        train_ppo.main(["--env", "gait", "--curriculum", "side-back", "--run-dir", str(tmp_path / "g")])
+    with pytest.raises(SystemExit):
+        train_ppo.parse_ramp("0.8,0.2")
+    run = tmp_path / "r"
+    train_ppo.main(["--env", "recover", "--reward", "v2", "--curriculum", "side-back",
+                    "--curriculum-ramp", "0.25,0.75", "--sync", "--num-envs", "2", "--rollout", "16",
+                    "--minibatches", "2", "--total-steps", "128", "--device", "cpu", "--servo", "nominal",
+                    "--run-dir", str(run)])
+    log = [json.loads(line) for line in open(run / "train_log.jsonl")]
+    assert [r["reach"] for r in log] == [0.0, 0.0, 0.5, 1.0]       # progress 0, 1/4, 1/2, 3/4 of 128 steps
+    torch = pytest.importorskip("torch")
+    ck = torch.load(run / "latest.pt", map_location="cpu", weights_only=False)
+    assert ck["env_config"]["curriculum"]["ramp"] == (0.25, 0.75)
+    assert rc.checkpoint_contract(ck)["flags"] == []
 
 
 # ------------------------------------------------------------------ D052 amendment: thermal proxy

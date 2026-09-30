@@ -7,7 +7,9 @@ ski (r ~17 tapering up), deflecting obstacles under/around instead of
 hooking them.
 
 Sim model: add a second, larger capsule along the lower 55% of each tibia
-(+8 g each, honest mass). Sweep rubble 30..45 mm x 4 seeds:
+(+8 g each, honest mass). Every trial is run_stuck.run_trial with its limits:
+the walk asks scenes.walk_ask (the envelope) for run_stuck.T_WALK (the same
+commanded distance as 25 s at 45 mm/s, B111). Sweep rubble 30..45 mm x 4 seeds:
   A: bare shin (run_stuck's result, stuck_results.json: re-run run_stuck first,
      else the pre-D052 record is used)
   B: fairing, no watchdog
@@ -55,6 +57,7 @@ def build_model_faired(amp_mm, seed):
 def main():
     # monkey-patch run_stuck's model builder to inject the fairing
     run_stuck.build_model = build_model_faired
+    print(f"walk: {run_stuck.V_X:.1f} mm/s for {run_stuck.T_WALK:.1f} s (run_stuck's limits)")
     results = []
     for amp in (30, 35, 40, 45):
         for seed in (0, 1, 2, 3):

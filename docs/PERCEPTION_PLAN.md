@@ -17,7 +17,7 @@ are upper bounds for the real robot, which has no sensor wired yet (B35).
 |---|---|---|---|---|---|---|
 | **L0 proprioception** | 100 Hz IMU, 50 Hz bus | Pi | servo position / load / temperature over the bus, the SEA foot microswitches (D010), BNO085 IMU on SPI | joint state, contact flags, body attitude, the `perception/legged_odom.py` pose | legged-odometry EKF (D026): drift 4.49 / 5.02 / 8.06 % of distance on flat / turny / 20 mm rubble; the StillnessGate (zero yaw rate while standing) ends a patrol at 1.63° of yaw instead of 14.37°, drift 3.51 % | nothing yet: IMU driver and foot switches are B35 |
 | **L1 local bubble** | 10–20 Hz | Pi | the cliff detector (software: a planted foot whose switch stays open), the contact-seeking foot probe, whiskers on an I6 shoe; later a sonar skirt and downward ToF | void events, "something within 40 cm at bearing θ", stuck | cliff detector (D034): `run_cliff` ends 252.3 mm short of the edge at x = 350 mm (the torso's closest approach was 170.7 mm short, then the retreat), no fall; the foot probe (D050) and the always-on void guard + touchdown gate (D052), except a lip band of 7 in 310 approach angles (D052a); goto `stuck` after 3 s without 2 cm of progress | nothing; sonar (X-09) and ToF (X-02) are optional and unbought |
-| **L2 geometric map** | 1–10 Hz | Pi (SLAM) + server | a 360° 2D lidar (LDRobot D500, phase C), the L0 odometry prior, a Wi-Fi RSSI prior | occupancy map, global pose, a place signature | `sim/sim_lidar.py` + the frozen LaserScan contract (D024: 360 rays at 8 Hz over 0.12–6 m); ICP SLAM-lite (D027): ATE 55.6 → 8.2 mm, map IoU 0.255 → 0.716, end yaw 0.06°; goto `blocked` detours; lidar place signatures (D057, off by default); the RSSI logger's k-NN demo (a ~1.8 m room-level prior) | lidar in phase C: mount B12, params block B46 |
+| **L2 geometric map** | 1–10 Hz | Pi (SLAM) + server | a 360° 2D lidar (LDRobot D500, phase C), the L0 odometry prior, a Wi-Fi RSSI prior | occupancy map, global pose, a place signature | `sim/sim_lidar.py` + the frozen LaserScan contract (D024: 360 rays at 8 Hz over 0.12–6 m); ICP SLAM-lite (D027; the lap re-recorded inside the envelope 2026-09-30, B111): ATE 59.2 → 9.2 mm, map IoU 0.187 → 0.692, end yaw 0.13°; goto `blocked` detours; lidar place signatures (D057, off by default); the RSSI logger's k-NN demo (a ~1.8 m room-level prior) | lidar in phase C: mount B12, params block B46 |
 | **L3 semantics + memory** | 0.2–1 Hz | server (vision model / LLM) | a fixed wide camera behind a gill; a mic | labelled objects with bearing and distance, the scene memory, places, narration | `look` (D049); `find_object` turns a vision model's box into bearing and distance through the eye's pose (D054: 0.7°, 3 cm); scene memory + a situation line per turn (D054); place recognition from lidar + look descriptions (D057: 21/21 verdicts, changes 3/6, [PLACES.md](PLACES.md)) | no camera yet (B16); the sim eye is not yet the real lens (B45) |
 
 ## Reflex arbitration
@@ -41,13 +41,14 @@ retreat, and each stage is derived from the gait budget (D060): the
 shortest cycle time whose speed envelope is at least 20 mm/s, every command
 through `budget()`. Today (D063's soft-landing swing) that is 24 mm /
 T 2.0 s / 34.2 mm/s, then 34.8 mm / T 2.5 s / 21.4 mm/s, then 42 mm with
-the body 10 mm higher / T 3.5 s / 28.1 mm/s. On the D060 ladder (45.5,
-40.6 and 30.4 mm/s at T 2.0 / 3.0 / 4.0 s) and rubble
-(`sim/experiments/run_stuck.py`, 2026-09-26; not re-run since) it lifted
-crossings from 2/4 to 4/4 at 30 mm, 0/4 to 4/4 at 35 mm, 0/4 to 2/4 at
-40 mm and 1/4 to 2/4 at 45 mm, with no falls (B54
-redesigns it against the terrain). It is on no live path yet: the cockpit's
-goto uses its own no-progress rule.
+the body 10 mm higher / T 3.5 s / 28.1 mm/s. On that ladder and the D063
+model (`sim/experiments/run_stuck.py`, re-run 2026-09-30 for B111: 34.2 mm/s
+for 32.9 s, the distance 25 s at 45 mm/s commanded) it lifted crossings of
+4 rubble fields from 2/4 to 4/4 at 30 mm, 2/4 to 4/4 at 35 mm and 1/4 to
+2/4 at 40 mm, and left 45 mm at 1/4, with no falls. These replace the D060
+ladder's 2026-09-26 numbers (45 mm/s for 25 s: 2 → 4, 0 → 4, 0 → 2,
+1 → 2 of 4). B54 redesigns it against the terrain. It is on no live path
+yet: the cockpit's goto uses its own no-progress rule.
 
 ## The brain split: robot = reflexes, server = cortex
 

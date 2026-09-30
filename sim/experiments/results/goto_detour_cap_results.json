@@ -1,0 +1,5772 @@
+{
+ "question": "B116: the cap for a plain goto that has entered a detour",
+ "envelope": {
+  "goto_speed_m_s": 0.0342,
+  "ease_in_s": 2.36,
+  "goto_cap_s": 55.0,
+  "goto_detour_s": 15.5,
+  "goto_detour_m": 0.45,
+  "goto_detours": 2,
+  "reach_m": 1.5
+ },
+ "formula": {
+  "expr": "goto_cap_s(speed, ease_in, GOTO_REACH_M + GOTO_DETOURS * GOTO_DETOUR_M)",
+  "value_s": 87.0,
+  "one_detour": {
+   "expr": "goto_cap_s(speed, ease_in, GOTO_REACH_M + GOTO_DETOUR_M)",
+   "value_s": 71.0
+  }
+ },
+ "caps": [
+  55.0,
+  71.0,
+  75.0,
+  87.0
+ ],
+ "clear_t_arrive_s": {
+  "1.0": 30.86,
+  "1.2": 36.94,
+  "1.5": 46.06,
+  "2.0": 61.34
+ },
+ "table": [
+  {
+   "L_m": 1.0,
+   "n": 16,
+   "entered_detour": 16,
+   "uncapped": {
+    "arrived": 16
+   },
+   "t_arrive_s": {
+    "min": 44.548,
+    "median": 49.914,
+    "max": 55.862
+   },
+   "clear_t_arrive_s": 30.86,
+   "detour_cost_s": {
+    "min": 13.7,
+    "median": 19.1,
+    "max": 25.0
+   },
+   "min_detour_cap_s": 55.9,
+   "arrived": {
+    "55.0": 15,
+    "71.0": 16,
+    "75.0": 16,
+    "87.0": 16
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     5,
+     5
+    ]
+   }
+  },
+  {
+   "L_m": 1.2,
+   "n": 84,
+   "entered_detour": 84,
+   "uncapped": {
+    "arrived": 78,
+    "blocked": 5,
+    "stuck": 1
+   },
+   "t_arrive_s": {
+    "min": 50.158,
+    "median": 55.146,
+    "max": 68.89
+   },
+   "clear_t_arrive_s": 36.94,
+   "detour_cost_s": {
+    "min": 13.2,
+    "median": 18.2,
+    "max": 32.0
+   },
+   "min_detour_cap_s": 68.9,
+   "arrived": {
+    "55.0": 38,
+    "71.0": 78,
+    "75.0": 78,
+    "87.0": 78
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     3,
+     45
+    ]
+   }
+  },
+  {
+   "L_m": 1.5,
+   "n": 84,
+   "entered_detour": 84,
+   "uncapped": {
+    "arrived": 80,
+    "blocked": 4
+   },
+   "t_arrive_s": {
+    "min": 57.06,
+    "median": 63.944,
+    "max": 74.992
+   },
+   "clear_t_arrive_s": 46.06,
+   "detour_cost_s": {
+    "min": 11.0,
+    "median": 17.9,
+    "max": 28.9
+   },
+   "min_detour_cap_s": 75.0,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 77,
+    "75.0": 80,
+    "87.0": 80
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     9,
+     50
+    ],
+    "71.0": [
+     5,
+     16
+    ]
+   }
+  },
+  {
+   "L_m": 2.0,
+   "n": 16,
+   "entered_detour": 16,
+   "uncapped": {
+    "arrived": 15,
+    "blocked": 1
+   },
+   "t_arrive_s": {
+    "min": 67.494,
+    "median": 77.48,
+    "max": 85.688
+   },
+   "clear_t_arrive_s": 61.34,
+   "detour_cost_s": {
+    "min": 6.2,
+    "median": 16.1,
+    "max": 24.3
+   },
+   "min_detour_cap_s": 85.7,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 1,
+    "75.0": 4,
+    "87.0": 15
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     43,
+     90
+    ],
+    "71.0": [
+     4,
+     44
+    ],
+    "75.0": [
+     5,
+     35
+    ]
+   }
+  }
+ ],
+ "close_table": [
+  {
+   "L_m": 1.2,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 6,
+    "blocked": 1,
+    "stuck": 1
+   },
+   "t_arrive_s": {
+    "min": 56.798,
+    "median": 61.87,
+    "max": 68.89
+   },
+   "clear_t_arrive_s": 36.94,
+   "detour_cost_s": {
+    "min": 19.9,
+    "median": 24.9,
+    "max": 32.0
+   },
+   "min_detour_cap_s": 68.9,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 6,
+    "75.0": 6,
+    "87.0": 6
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     8,
+     45
+    ]
+   },
+   "behind_m": 0.4
+  },
+  {
+   "L_m": 1.2,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 5,
+    "blocked": 3
+   },
+   "t_arrive_s": {
+    "min": 53.778,
+    "median": 58.3,
+    "max": 61.566
+   },
+   "clear_t_arrive_s": 36.94,
+   "detour_cost_s": {
+    "min": 16.8,
+    "median": 21.4,
+    "max": 24.6
+   },
+   "min_detour_cap_s": 61.6,
+   "arrived": {
+    "55.0": 1,
+    "71.0": 5,
+    "75.0": 5,
+    "87.0": 5
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     3,
+     19
+    ]
+   },
+   "behind_m": 0.45
+  },
+  {
+   "L_m": 1.2,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 7,
+    "blocked": 1
+   },
+   "t_arrive_s": {
+    "min": 50.346,
+    "median": 53.986,
+    "max": 62.854
+   },
+   "clear_t_arrive_s": 36.94,
+   "detour_cost_s": {
+    "min": 13.4,
+    "median": 17.0,
+    "max": 25.9
+   },
+   "min_detour_cap_s": 62.9,
+   "arrived": {
+    "55.0": 5,
+    "71.0": 7,
+    "75.0": 7,
+    "87.0": 7
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     7,
+     28
+    ]
+   },
+   "behind_m": 0.5
+  },
+  {
+   "L_m": 1.2,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 8
+   },
+   "t_arrive_s": {
+    "min": 51.884,
+    "median": 55.436,
+    "max": 55.99
+   },
+   "clear_t_arrive_s": 36.94,
+   "detour_cost_s": {
+    "min": 14.9,
+    "median": 18.5,
+    "max": 19.1
+   },
+   "min_detour_cap_s": 56.0,
+   "arrived": {
+    "55.0": 2,
+    "71.0": 8,
+    "75.0": 8,
+    "87.0": 8
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     3,
+     6
+    ]
+   },
+   "behind_m": 0.55
+  },
+  {
+   "L_m": 1.5,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 4,
+    "blocked": 4
+   },
+   "t_arrive_s": {
+    "min": 66.486,
+    "median": 70.578,
+    "max": 74.992
+   },
+   "clear_t_arrive_s": 46.06,
+   "detour_cost_s": {
+    "min": 20.4,
+    "median": 24.5,
+    "max": 28.9
+   },
+   "min_detour_cap_s": 75.0,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 3,
+    "75.0": 4,
+    "87.0": 4
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     26,
+     50
+    ],
+    "71.0": [
+     16,
+     16
+    ]
+   },
+   "behind_m": 0.4
+  },
+  {
+   "L_m": 1.5,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 8
+   },
+   "t_arrive_s": {
+    "min": 65.142,
+    "median": 67.95,
+    "max": 72.002
+   },
+   "clear_t_arrive_s": 46.06,
+   "detour_cost_s": {
+    "min": 19.1,
+    "median": 21.9,
+    "max": 25.9
+   },
+   "min_detour_cap_s": 72.1,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 7,
+    "75.0": 8,
+    "87.0": 8
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     31,
+     43
+    ],
+    "71.0": [
+     6,
+     6
+    ]
+   },
+   "behind_m": 0.45
+  },
+  {
+   "L_m": 1.5,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 8
+   },
+   "t_arrive_s": {
+    "min": 59.868,
+    "median": 68.078,
+    "max": 71.892
+   },
+   "clear_t_arrive_s": 46.06,
+   "detour_cost_s": {
+    "min": 13.8,
+    "median": 22.0,
+    "max": 25.8
+   },
+   "min_detour_cap_s": 71.9,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 7,
+    "75.0": 8,
+    "87.0": 8
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     19,
+     43
+    ],
+    "71.0": [
+     5,
+     5
+    ]
+   },
+   "behind_m": 0.5
+  },
+  {
+   "L_m": 1.5,
+   "n": 8,
+   "entered_detour": 8,
+   "uncapped": {
+    "arrived": 8
+   },
+   "t_arrive_s": {
+    "min": 60.528,
+    "median": 66.16,
+    "max": 68.326
+   },
+   "clear_t_arrive_s": 46.06,
+   "detour_cost_s": {
+    "min": 14.5,
+    "median": 20.1,
+    "max": 22.3
+   },
+   "min_detour_cap_s": 68.4,
+   "arrived": {
+    "55.0": 0,
+    "71.0": 8,
+    "75.0": 8,
+    "87.0": 8
+   },
+   "timeout_to_go_cm": {
+    "55.0": [
+     21,
+     39
+    ]
+   },
+   "behind_m": 0.55
+  }
+ ],
+ "summary": {
+  "latest_arrival_to_reach_s": 74.992,
+  "slack_s": {
+   "55.0": -19.99,
+   "71.0": -3.99,
+   "75.0": 0.01,
+   "87.0": 12.01
+  },
+  "detour_cost_s": {
+   "n": 189,
+   "min": 6.2,
+   "median": 17.9,
+   "max": 32.0
+  },
+  "longest_detour_interval_s": 31.0,
+  "worst_answer_s": {
+   "55.0": 87.5,
+   "71.0": 103.5,
+   "75.0": 107.5,
+   "87.0": 119.5
+  }
+ },
+ "clear": {
+  "L1.0_b0_clear": {
+   "uncapped": [
+    "arrived",
+    30.868
+   ],
+   "at_plain_cap": [
+    "arrived",
+    30.868,
+    null
+   ]
+  },
+  "L1.0_b36_clear": {
+   "uncapped": [
+    "arrived",
+    30.844
+   ],
+   "at_plain_cap": [
+    "arrived",
+    30.844,
+    null
+   ]
+  },
+  "L1.2_b0_clear": {
+   "uncapped": [
+    "arrived",
+    36.956
+   ],
+   "at_plain_cap": [
+    "arrived",
+    36.956,
+    null
+   ]
+  },
+  "L1.2_b36_clear": {
+   "uncapped": [
+    "arrived",
+    36.924
+   ],
+   "at_plain_cap": [
+    "arrived",
+    36.924,
+    null
+   ]
+  },
+  "L1.5_b0_clear": {
+   "uncapped": [
+    "arrived",
+    46.078
+   ],
+   "at_plain_cap": [
+    "arrived",
+    46.078,
+    null
+   ]
+  },
+  "L1.5_b36_clear": {
+   "uncapped": [
+    "arrived",
+    46.034
+   ],
+   "at_plain_cap": [
+    "arrived",
+    46.034,
+    null
+   ]
+  },
+  "L2.0_b0_clear": {
+   "uncapped": [
+    "arrived",
+    61.36
+   ],
+   "at_plain_cap": [
+    "timeout",
+    55.0,
+    0.2336
+   ]
+  },
+  "L2.0_b36_clear": {
+   "uncapped": [
+    "arrived",
+    61.314
+   ],
+   "at_plain_cap": [
+    "timeout",
+    55.0,
+    0.2319
+   ]
+  }
+ },
+ "blocked": {
+  "lowbox_beside_wall": [
+   "stuck",
+   18.512
+  ],
+  "lowbox_ahead": [
+   "stuck",
+   10.616
+  ],
+  "long_wall": [
+   "blocked",
+   24.172
+  ],
+  "cul_de_sac": [
+   "blocked",
+   17.352
+  ],
+  "wall_then_lowbox": [
+   "stuck",
+   37.124
+  ],
+  "closed_pen": [
+   "blocked",
+   7.308
+  ]
+ },
+ "verify": {
+  "plain": 55.0,
+  "detour": 71.0,
+  "n": 128,
+  "mismatches": [],
+  "timeouts": 17
+ },
+ "runs": [
+  {
+   "name": "L1.0_b0_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 50.572,
+   "end_dist_m": 0.0209,
+   "walked_m": 0.9831,
+   "detours": [
+    [
+     3.342,
+     19.464
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b0_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 51.632,
+   "end_dist_m": 0.0214,
+   "walked_m": 0.9822,
+   "detours": [
+    [
+     3.218,
+     20.084
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b0_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 50.954,
+   "end_dist_m": 0.023,
+   "walked_m": 0.9812,
+   "detours": [
+    [
+     2.226,
+     18.346
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b0_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 50.564,
+   "end_dist_m": 0.0211,
+   "walked_m": 0.9826,
+   "detours": [
+    [
+     1.11,
+     17.478
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b0_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 45.396,
+   "end_dist_m": 0.0283,
+   "walked_m": 0.9849,
+   "detours": [
+    [
+     0.118,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b0_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 50.28,
+   "end_dist_m": 0.0281,
+   "walked_m": 0.9844,
+   "detours": [
+    [
+     0.118,
+     16.858
+    ],
+    [
+     24.918,
+     34.466
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b0_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 44.736,
+   "end_dist_m": 0.0125,
+   "walked_m": 0.9886,
+   "detours": [
+    [
+     0.118,
+     29.754
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b0_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 44.548,
+   "end_dist_m": 0.0216,
+   "walked_m": 0.9836,
+   "detours": [
+    [
+     0.118,
+     29.01
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b36_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 47.574,
+   "end_dist_m": 0.0239,
+   "walked_m": 0.9837,
+   "detours": [
+    [
+     2.474,
+     17.974
+    ],
+    [
+     18.222,
+     32.482
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b36_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 55.862,
+   "end_dist_m": 0.0187,
+   "walked_m": 0.9838,
+   "detours": [
+    [
+     2.846,
+     19.216
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b36_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 46.766,
+   "end_dist_m": 0.0256,
+   "walked_m": 0.9753,
+   "detours": [
+    [
+     1.854,
+     17.354
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b36_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 48.342,
+   "end_dist_m": 0.0227,
+   "walked_m": 0.9831,
+   "detours": [
+    [
+     1.234,
+     32.234
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b36_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 45.51,
+   "end_dist_m": 0.0222,
+   "walked_m": 0.9811,
+   "detours": [
+    [
+     0.118,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b36_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 50.88,
+   "end_dist_m": 0.0212,
+   "walked_m": 0.9907,
+   "detours": [
+    [
+     0.118,
+     15.99
+    ],
+    [
+     22.19,
+     34.714
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.0_b36_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 45.664,
+   "end_dist_m": 0.0212,
+   "walked_m": 0.9843,
+   "detours": [
+    [
+     0.118,
+     30.002
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.0_b36_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 49.914,
+   "end_dist_m": 0.0267,
+   "walked_m": 0.9837,
+   "detours": [
+    [
+     0.118,
+     15.742
+    ],
+    [
+     22.438,
+     32.482
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b0_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 54.192,
+   "end_dist_m": 0.0284,
+   "walked_m": 1.1753,
+   "detours": [
+    [
+     3.218,
+     19.34
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b0_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.456,
+   "end_dist_m": 0.0193,
+   "walked_m": 1.1838,
+   "detours": [
+    [
+     2.474,
+     19.09
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b0_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 56.98,
+   "end_dist_m": 0.019,
+   "walked_m": 1.1873,
+   "detours": [
+    [
+     8.302,
+     24.548
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b0_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.706,
+   "end_dist_m": 0.027,
+   "walked_m": 1.1754,
+   "detours": [
+    [
+     7.558,
+     23.06
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b0_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 54.656,
+   "end_dist_m": 0.0192,
+   "walked_m": 1.1828,
+   "detours": [
+    [
+     0.118,
+     15.742
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b0_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.078,
+   "end_dist_m": 0.0182,
+   "walked_m": 1.1849,
+   "detours": [
+    [
+     1.234,
+     31.614
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b0_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 59.274,
+   "end_dist_m": 0.0237,
+   "walked_m": 1.1817,
+   "detours": [
+    [
+     5.326,
+     20.828
+    ],
+    [
+     20.95,
+     36.45
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b0_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 56.21,
+   "end_dist_m": 0.0232,
+   "walked_m": 1.1841,
+   "detours": [
+    [
+     4.582,
+     21.572
+    ],
+    [
+     30.002,
+     38.682
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b36_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 52.286,
+   "end_dist_m": 0.0163,
+   "walked_m": 1.1843,
+   "detours": [
+    [
+     2.598,
+     18.098
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b36_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.386,
+   "end_dist_m": 0.0227,
+   "walked_m": 1.1803,
+   "detours": [
+    [
+     2.97,
+     19.34
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b36_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 57.396,
+   "end_dist_m": 0.0225,
+   "walked_m": 1.1821,
+   "detours": [
+    [
+     8.55,
+     24.796
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b36_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 54.504,
+   "end_dist_m": 0.0182,
+   "walked_m": 1.1834,
+   "detours": [
+    [
+     8.302,
+     23.804
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b36_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 56.572,
+   "end_dist_m": 0.0252,
+   "walked_m": 1.1785,
+   "detours": [
+    [
+     0.986,
+     17.602
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b36_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 56.502,
+   "end_dist_m": 0.0234,
+   "walked_m": 1.1801,
+   "detours": [
+    [
+     0.118,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b36_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 58.342,
+   "end_dist_m": 0.0228,
+   "walked_m": 1.1854,
+   "detours": [
+    [
+     5.202,
+     20.704
+    ],
+    [
+     20.826,
+     36.326
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.2_b36_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 57.204,
+   "end_dist_m": 0.0218,
+   "walked_m": 1.1816,
+   "detours": [
+    [
+     5.078,
+     20.58
+    ],
+    [
+     20.702,
+     36.202
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b0_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 59.638,
+   "end_dist_m": 0.0255,
+   "walked_m": 1.4759,
+   "detours": [
+    [
+     3.59,
+     19.09
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b0_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 67.01,
+   "end_dist_m": 0.0217,
+   "walked_m": 1.4783,
+   "detours": [
+    [
+     3.342,
+     18.842
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b0_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 66.374,
+   "end_dist_m": 0.0258,
+   "walked_m": 1.4753,
+   "detours": [
+    [
+     17.106,
+     33.724
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b0_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 68.956,
+   "end_dist_m": 0.0221,
+   "walked_m": 1.4789,
+   "detours": [
+    [
+     17.85,
+     33.352
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b0_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 62.18,
+   "end_dist_m": 0.0257,
+   "walked_m": 1.4753,
+   "detours": [
+    [
+     0.118,
+     15.742
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b0_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 62.718,
+   "end_dist_m": 0.0133,
+   "walked_m": 1.489,
+   "detours": [
+    [
+     0.118,
+     17.23
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b0_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 65.248,
+   "end_dist_m": 0.0233,
+   "walked_m": 1.4834,
+   "detours": [
+    [
+     14.626,
+     30.872
+    ],
+    [
+     38.558,
+     47.858
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b0_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 63.38,
+   "end_dist_m": 0.0216,
+   "walked_m": 1.4825,
+   "detours": [
+    [
+     14.378,
+     29.88
+    ],
+    [
+     30.002,
+     45.502
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b36_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 61.34,
+   "end_dist_m": 0.0235,
+   "walked_m": 1.477,
+   "detours": [
+    [
+     3.094,
+     18.594
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b36_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 61.214,
+   "end_dist_m": 0.0214,
+   "walked_m": 1.4795,
+   "detours": [
+    [
+     2.846,
+     18.346
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b36_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 64.228,
+   "end_dist_m": 0.0222,
+   "walked_m": 1.4894,
+   "detours": [
+    [
+     17.23,
+     32.732
+    ],
+    [
+     32.854,
+     47.982
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b36_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 63.22,
+   "end_dist_m": 0.0224,
+   "walked_m": 1.4801,
+   "detours": [
+    [
+     16.238,
+     31.988
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b36_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 62.53,
+   "end_dist_m": 0.0208,
+   "walked_m": 1.4809,
+   "detours": [
+    [
+     0.118,
+     17.106
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b36_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 60.77,
+   "end_dist_m": 0.0264,
+   "walked_m": 1.4738,
+   "detours": [
+    [
+     0.118,
+     26.53
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L1.5_b36_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 60.804,
+   "end_dist_m": 0.0199,
+   "walked_m": 1.4848,
+   "detours": [
+    [
+     13.386,
+     28.888
+    ],
+    [
+     29.01,
+     44.51
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L1.5_b36_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 64.742,
+   "end_dist_m": 0.016,
+   "walked_m": 1.4894,
+   "detours": [
+    [
+     13.882,
+     30.376
+    ],
+    [
+     40.046,
+     47.362
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b0_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 81.788,
+   "end_dist_m": 0.0206,
+   "walked_m": 1.9794,
+   "detours": [
+    [
+     2.846,
+     18.346
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b0_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 74.212,
+   "end_dist_m": 0.0255,
+   "walked_m": 1.9753,
+   "detours": [
+    [
+     3.094,
+     18.594
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b0_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 79.202,
+   "end_dist_m": 0.0246,
+   "walked_m": 1.9793,
+   "detours": [
+    [
+     31.862,
+     47.61
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b0_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 78.978,
+   "end_dist_m": 0.0255,
+   "walked_m": 1.976,
+   "detours": [
+    [
+     32.482,
+     47.982
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b0_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 75.79,
+   "end_dist_m": 0.0273,
+   "walked_m": 1.9732,
+   "detours": [
+    [
+     0.118,
+     25.414
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b0_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 71.42,
+   "end_dist_m": 0.0191,
+   "walked_m": 1.9814,
+   "detours": [
+    [
+     0.986,
+     23.306
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b0_box_late_s0",
+   "stopped": "blocked",
+   "outcome_t": 51.08,
+   "end_dist_m": 0.8864,
+   "walked_m": 1.3086,
+   "detours": [
+    [
+     29.878,
+     45.998
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b0_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 85.688,
+   "end_dist_m": 0.0243,
+   "walked_m": 1.9821,
+   "detours": [
+    [
+     29.506,
+     60.506
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b36_wall_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 67.494,
+   "end_dist_m": 0.0206,
+   "walked_m": 1.981,
+   "detours": [
+    [
+     2.97,
+     18.47
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b36_wall_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 81.57,
+   "end_dist_m": 0.0169,
+   "walked_m": 1.9835,
+   "detours": [
+    [
+     3.094,
+     18.594
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b36_wall_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 77.48,
+   "end_dist_m": 0.0196,
+   "walked_m": 1.9868,
+   "detours": [
+    [
+     32.482,
+     48.478
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b36_wall_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 79.21,
+   "end_dist_m": 0.0189,
+   "walked_m": 1.9841,
+   "detours": [
+    [
+     32.73,
+     63.73
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b36_box_near_s0",
+   "stopped": "arrived",
+   "outcome_t": 73.342,
+   "end_dist_m": 0.0273,
+   "walked_m": 1.9737,
+   "detours": [
+    [
+     0.118,
+     26.53
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b36_box_near_s1",
+   "stopped": "arrived",
+   "outcome_t": 75.692,
+   "end_dist_m": 0.0259,
+   "walked_m": 1.9756,
+   "detours": [
+    [
+     0.118,
+     29.01
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 1
+  },
+  {
+   "name": "L2.0_b36_box_late_s0",
+   "stopped": "arrived",
+   "outcome_t": 82.952,
+   "end_dist_m": 0.0249,
+   "walked_m": 1.981,
+   "detours": [
+    [
+     29.258,
+     60.258
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 0
+  },
+  {
+   "name": "L2.0_b36_box_late_s1",
+   "stopped": "arrived",
+   "outcome_t": 75.688,
+   "end_dist_m": 0.0212,
+   "walked_m": 1.9848,
+   "detours": [
+    [
+     29.01,
+     60.01
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "detour",
+   "L": 2.0,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 1
+  },
+  {
+   "name": "L1.2_b0_wall_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 56.378,
+   "end_dist_m": 0.0216,
+   "walked_m": 1.1795,
+   "detours": [
+    [
+     4.21,
+     20.704
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_wall_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.296,
+   "end_dist_m": 0.0262,
+   "walked_m": 1.1759,
+   "detours": [
+    [
+     2.598,
+     18.842
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_wall_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 53.532,
+   "end_dist_m": 0.0278,
+   "walked_m": 1.1791,
+   "detours": [
+    [
+     2.846,
+     19.96
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_wall_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 53.7,
+   "end_dist_m": 0.022,
+   "walked_m": 1.1827,
+   "detours": [
+    [
+     7.806,
+     24.424
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_wall_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.586,
+   "end_dist_m": 0.0243,
+   "walked_m": 1.1784,
+   "detours": [
+    [
+     8.054,
+     23.556
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_wall_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 55.392,
+   "end_dist_m": 0.0221,
+   "walked_m": 1.1798,
+   "detours": [
+    [
+     8.674,
+     24.176
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_wall_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 54.676,
+   "end_dist_m": 0.0219,
+   "walked_m": 1.1817,
+   "detours": [
+    [
+     7.682,
+     23.184
+    ],
+    [
+     23.306,
+     37.442
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_wall_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.578,
+   "end_dist_m": 0.022,
+   "walked_m": 1.1817,
+   "detours": [
+    [
+     7.558,
+     24.424
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_wall_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 52.634,
+   "end_dist_m": 0.0212,
+   "walked_m": 1.1822,
+   "detours": [
+    [
+     8.178,
+     23.68
+    ],
+    [
+     24.298,
+     34.59
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_box_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 53.028,
+   "end_dist_m": 0.0188,
+   "walked_m": 1.1842,
+   "detours": [
+    [
+     0.118,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_box_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 61.018,
+   "end_dist_m": 0.0224,
+   "walked_m": 1.1776,
+   "detours": [
+    [
+     0.118,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_box_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 54.532,
+   "end_dist_m": 0.0202,
+   "walked_m": 1.1835,
+   "detours": [
+    [
+     0.614,
+     17.23
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_box_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 56.016,
+   "end_dist_m": 0.0226,
+   "walked_m": 1.1836,
+   "detours": [
+    [
+     4.83,
+     21.324
+    ],
+    [
+     30.002,
+     38.558
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_box_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 50.588,
+   "end_dist_m": 0.0237,
+   "walked_m": 1.1825,
+   "detours": [
+    [
+     3.838,
+     19.34
+    ],
+    [
+     19.462,
+     34.218
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_box_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 56.468,
+   "end_dist_m": 0.0199,
+   "walked_m": 1.1829,
+   "detours": [
+    [
+     4.83,
+     21.2
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_box_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 51.288,
+   "end_dist_m": 0.0271,
+   "walked_m": 1.182,
+   "detours": [
+    [
+     4.086,
+     19.588
+    ],
+    [
+     19.71,
+     35.212
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b0_box_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 56.574,
+   "end_dist_m": 0.0222,
+   "walked_m": 1.1868,
+   "detours": [
+    [
+     5.202,
+     21.2
+    ],
+    [
+     26.53,
+     38.31
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b0_box_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 50.158,
+   "end_dist_m": 0.0244,
+   "walked_m": 1.1822,
+   "detours": [
+    [
+     4.706,
+     20.208
+    ],
+    [
+     20.33,
+     33.598
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_wall_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 53.124,
+   "end_dist_m": 0.0153,
+   "walked_m": 1.1857,
+   "detours": [
+    [
+     4.086,
+     19.588
+    ],
+    [
+     20.206,
+     32.482
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_wall_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.47,
+   "end_dist_m": 0.0219,
+   "walked_m": 1.1849,
+   "detours": [
+    [
+     2.474,
+     19.34
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_wall_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 55.41,
+   "end_dist_m": 0.0217,
+   "walked_m": 1.1785,
+   "detours": [
+    [
+     3.838,
+     19.34
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_wall_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 58.898,
+   "end_dist_m": 0.0314,
+   "walked_m": 1.1707,
+   "detours": [
+    [
+     6.938,
+     22.44
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_wall_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 56.8,
+   "end_dist_m": 0.0188,
+   "walked_m": 1.1849,
+   "detours": [
+    [
+     7.186,
+     24.3
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_wall_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 55.63,
+   "end_dist_m": 0.0249,
+   "walked_m": 1.176,
+   "detours": [
+    [
+     8.55,
+     24.052
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_wall_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 58.174,
+   "end_dist_m": 0.0268,
+   "walked_m": 1.1747,
+   "detours": [
+    [
+     8.054,
+     23.556
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_wall_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 52.814,
+   "end_dist_m": 0.0208,
+   "walked_m": 1.1839,
+   "detours": [
+    [
+     7.806,
+     23.556
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_wall_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 54.89,
+   "end_dist_m": 0.0225,
+   "walked_m": 1.1811,
+   "detours": [
+    [
+     7.31,
+     22.812
+    ],
+    [
+     22.934,
+     38.434
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_box_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 53.846,
+   "end_dist_m": 0.0193,
+   "walked_m": 1.1836,
+   "detours": [
+    [
+     1.234,
+     32.236
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_box_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.536,
+   "end_dist_m": 0.0205,
+   "walked_m": 1.1828,
+   "detours": [
+    [
+     0.118,
+     15.99
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_box_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 53.492,
+   "end_dist_m": 0.0186,
+   "walked_m": 1.1876,
+   "detours": [
+    [
+     0.118,
+     30.994
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_box_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 55.894,
+   "end_dist_m": 0.0184,
+   "walked_m": 1.1873,
+   "detours": [
+    [
+     4.954,
+     20.952
+    ],
+    [
+     28.514,
+     37.814
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_box_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 56.42,
+   "end_dist_m": 0.0251,
+   "walked_m": 1.1794,
+   "detours": [
+    [
+     4.706,
+     21.696
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_box_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 56.642,
+   "end_dist_m": 0.0181,
+   "walked_m": 1.1868,
+   "detours": [
+    [
+     5.698,
+     22.936
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b36_box_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 53.516,
+   "end_dist_m": 0.0194,
+   "walked_m": 1.1854,
+   "detours": [
+    [
+     3.838,
+     19.34
+    ],
+    [
+     19.462,
+     34.964
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.2_b36_box_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 53.786,
+   "end_dist_m": 0.0211,
+   "walked_m": 1.1847,
+   "detours": [
+    [
+     5.202,
+     22.316
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.2_b36_box_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 52.076,
+   "end_dist_m": 0.0258,
+   "walked_m": 1.1805,
+   "detours": [
+    [
+     5.202,
+     20.704
+    ],
+    [
+     20.826,
+     36.326
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_wall_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 60.404,
+   "end_dist_m": 0.0243,
+   "walked_m": 1.4767,
+   "detours": [
+    [
+     3.342,
+     18.842
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_wall_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 59.618,
+   "end_dist_m": 0.0239,
+   "walked_m": 1.4775,
+   "detours": [
+    [
+     3.218,
+     18.718
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_wall_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 59.112,
+   "end_dist_m": 0.0143,
+   "walked_m": 1.4858,
+   "detours": [
+    [
+     3.59,
+     19.09
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_wall_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 64.028,
+   "end_dist_m": 0.0224,
+   "walked_m": 1.4815,
+   "detours": [
+    [
+     12.518,
+     28.02
+    ],
+    [
+     28.142,
+     43.394
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_wall_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 67.718,
+   "end_dist_m": 0.0173,
+   "walked_m": 1.4834,
+   "detours": [
+    [
+     11.774,
+     27.276
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_wall_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 63.288,
+   "end_dist_m": 0.0228,
+   "walked_m": 1.4798,
+   "detours": [
+    [
+     13.014,
+     30.128
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_wall_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 63.944,
+   "end_dist_m": 0.0201,
+   "walked_m": 1.4808,
+   "detours": [
+    [
+     18.222,
+     33.724
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_wall_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 63.066,
+   "end_dist_m": 0.0208,
+   "walked_m": 1.482,
+   "detours": [
+    [
+     17.726,
+     34.84
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_wall_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 66.066,
+   "end_dist_m": 0.0263,
+   "walked_m": 1.4788,
+   "detours": [
+    [
+     16.858,
+     32.98
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_box_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 62.332,
+   "end_dist_m": 0.0126,
+   "walked_m": 1.4891,
+   "detours": [
+    [
+     0.118,
+     30.002
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_box_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 62.266,
+   "end_dist_m": 0.0234,
+   "walked_m": 1.4787,
+   "detours": [
+    [
+     0.118,
+     15.742
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_box_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 57.06,
+   "end_dist_m": 0.0205,
+   "walked_m": 1.4816,
+   "detours": [
+    [
+     0.118,
+     24.67
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_box_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 63.11,
+   "end_dist_m": 0.0227,
+   "walked_m": 1.478,
+   "detours": [
+    [
+     9.542,
+     25.044
+    ],
+    [
+     25.166,
+     40.666
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_box_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 58.402,
+   "end_dist_m": 0.0252,
+   "walked_m": 1.478,
+   "detours": [
+    [
+     9.418,
+     24.92
+    ],
+    [
+     25.042,
+     37.69
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_box_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 64.716,
+   "end_dist_m": 0.0173,
+   "walked_m": 1.4856,
+   "detours": [
+    [
+     10.41,
+     26.904
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b0_box_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 69.402,
+   "end_dist_m": 0.0248,
+   "walked_m": 1.4793,
+   "detours": [
+    [
+     13.634,
+     29.136
+    ],
+    [
+     29.258,
+     44.758
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b0_box_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 59.708,
+   "end_dist_m": 0.0215,
+   "walked_m": 1.4838,
+   "detours": [
+    [
+     13.758,
+     29.26
+    ],
+    [
+     29.382,
+     44.138
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b0_box_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 60.178,
+   "end_dist_m": 0.0257,
+   "walked_m": 1.483,
+   "detours": [
+    [
+     14.998,
+     30.5
+    ],
+    [
+     30.622,
+     45.502
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_wall_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 62.188,
+   "end_dist_m": 0.0233,
+   "walked_m": 1.4777,
+   "detours": [
+    [
+     3.218,
+     19.216
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_wall_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 66.644,
+   "end_dist_m": 0.0218,
+   "walked_m": 1.4791,
+   "detours": [
+    [
+     2.846,
+     18.346
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_wall_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 62.1,
+   "end_dist_m": 0.025,
+   "walked_m": 1.4778,
+   "detours": [
+    [
+     3.466,
+     19.588
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_wall_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 67.654,
+   "end_dist_m": 0.0197,
+   "walked_m": 1.4817,
+   "detours": [
+    [
+     13.634,
+     29.136
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_wall_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 62.776,
+   "end_dist_m": 0.0211,
+   "walked_m": 1.4833,
+   "detours": [
+    [
+     11.774,
+     28.764
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_wall_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 62.652,
+   "end_dist_m": 0.02,
+   "walked_m": 1.4844,
+   "detours": [
+    [
+     12.27,
+     29.012
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_wall_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 62.004,
+   "end_dist_m": 0.0248,
+   "walked_m": 1.4779,
+   "detours": [
+    [
+     17.602,
+     33.104
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_wall_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 65.312,
+   "end_dist_m": 0.0225,
+   "walked_m": 1.4792,
+   "detours": [
+    [
+     17.726,
+     33.228
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_wall_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 65.68,
+   "end_dist_m": 0.0251,
+   "walked_m": 1.4766,
+   "detours": [
+    [
+     17.974,
+     33.476
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_box_near_s2",
+   "stopped": "arrived",
+   "outcome_t": 62.224,
+   "end_dist_m": 0.0248,
+   "walked_m": 1.4763,
+   "detours": [
+    [
+     0.118,
+     15.742
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_box_near_s3",
+   "stopped": "arrived",
+   "outcome_t": 57.142,
+   "end_dist_m": 0.0218,
+   "walked_m": 1.4783,
+   "detours": [
+    [
+     1.11,
+     24.67
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_box_near_s4",
+   "stopped": "arrived",
+   "outcome_t": 57.45,
+   "end_dist_m": 0.0168,
+   "walked_m": 1.4842,
+   "detours": [
+    [
+     0.118,
+     25.414
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "near",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_box_mid_s2",
+   "stopped": "arrived",
+   "outcome_t": 58.688,
+   "end_dist_m": 0.0136,
+   "walked_m": 1.4902,
+   "detours": [
+    [
+     9.418,
+     24.92
+    ],
+    [
+     25.042,
+     38.062
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_box_mid_s3",
+   "stopped": "arrived",
+   "outcome_t": 62.646,
+   "end_dist_m": 0.0241,
+   "walked_m": 1.4788,
+   "detours": [
+    [
+     8.674,
+     24.176
+    ],
+    [
+     24.298,
+     39.798
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_box_mid_s4",
+   "stopped": "arrived",
+   "outcome_t": 63.984,
+   "end_dist_m": 0.0257,
+   "walked_m": 1.4807,
+   "detours": [
+    [
+     9.418,
+     25.416
+    ],
+    [
+     34.962,
+     41.286
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "mid",
+   "seed": 4
+  },
+  {
+   "name": "L1.5_b36_box_late_s2",
+   "stopped": "arrived",
+   "outcome_t": 66.162,
+   "end_dist_m": 0.0237,
+   "walked_m": 1.4813,
+   "detours": [
+    [
+     13.882,
+     29.384
+    ],
+    [
+     29.506,
+     45.006
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 2
+  },
+  {
+   "name": "L1.5_b36_box_late_s3",
+   "stopped": "arrived",
+   "outcome_t": 62.854,
+   "end_dist_m": 0.0229,
+   "walked_m": 1.4807,
+   "detours": [
+    [
+     13.634,
+     29.136
+    ],
+    [
+     29.258,
+     44.758
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 3
+  },
+  {
+   "name": "L1.5_b36_box_late_s4",
+   "stopped": "arrived",
+   "outcome_t": 63.62,
+   "end_dist_m": 0.0212,
+   "walked_m": 1.4829,
+   "detours": [
+    [
+     13.758,
+     30.376
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "tail",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "late",
+   "seed": 4
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.4_s0",
+   "stopped": "blocked",
+   "outcome_t": 33.472,
+   "end_dist_m": 0.6684,
+   "walked_m": 0.8528,
+   "detours": [
+    [
+     14.998,
+     31.12
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 56.798,
+   "end_dist_m": 0.0239,
+   "walked_m": 1.1828,
+   "detours": [
+    [
+     13.386,
+     28.888
+    ],
+    [
+     29.01,
+     44.51
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.45_s0",
+   "stopped": "blocked",
+   "outcome_t": 33.1,
+   "end_dist_m": 0.6862,
+   "walked_m": 0.8097,
+   "detours": [
+    [
+     12.642,
+     29.136
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.778,
+   "end_dist_m": 0.0221,
+   "walked_m": 1.1837,
+   "detours": [
+    [
+     12.766,
+     28.764
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 62.854,
+   "end_dist_m": 0.0261,
+   "walked_m": 1.1775,
+   "detours": [
+    [
+     10.286,
+     26.532
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 56.472,
+   "end_dist_m": 0.0259,
+   "walked_m": 1.1782,
+   "detours": [
+    [
+     11.03,
+     26.532
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 55.436,
+   "end_dist_m": 0.0217,
+   "walked_m": 1.1806,
+   "detours": [
+    [
+     9.294,
+     24.796
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b0_wall_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 54.098,
+   "end_dist_m": 0.0252,
+   "walked_m": 1.1796,
+   "detours": [
+    [
+     9.294,
+     25.664
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b0_box_behind0.4_s0",
+   "stopped": "arrived",
+   "outcome_t": 61.87,
+   "end_dist_m": 0.0206,
+   "walked_m": 1.1929,
+   "detours": [
+    [
+     11.526,
+     28.392
+    ],
+    [
+     33.97,
+     49.47
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b0_box_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 62.996,
+   "end_dist_m": 0.0205,
+   "walked_m": 1.1857,
+   "detours": [
+    [
+     10.162,
+     25.664
+    ],
+    [
+     25.786,
+     41.286
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b0_box_behind0.45_s0",
+   "stopped": "blocked",
+   "outcome_t": 29.504,
+   "end_dist_m": 0.7939,
+   "walked_m": 0.7032,
+   "detours": [
+    [
+     9.418,
+     25.416
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b0_box_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 61.566,
+   "end_dist_m": 0.0267,
+   "walked_m": 1.1867,
+   "detours": [
+    [
+     9.914,
+     25.416
+    ],
+    [
+     25.538,
+     41.038
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b0_box_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 51.63,
+   "end_dist_m": 0.0221,
+   "walked_m": 1.1852,
+   "detours": [
+    [
+     7.434,
+     22.936
+    ],
+    [
+     23.058,
+     38.558
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b0_box_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 51.358,
+   "end_dist_m": 0.0272,
+   "walked_m": 1.1845,
+   "detours": [
+    [
+     7.806,
+     23.308
+    ],
+    [
+     23.43,
+     38.93
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b0_box_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 55.146,
+   "end_dist_m": 0.0222,
+   "walked_m": 1.1801,
+   "detours": [
+    [
+     6.07,
+     21.572
+    ],
+    [
+     21.694,
+     37.194
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b0_box_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 55.808,
+   "end_dist_m": 0.024,
+   "walked_m": 1.184,
+   "detours": [
+    [
+     6.566,
+     22.688
+    ],
+    [
+     31.118,
+     40.17
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.4_s0",
+   "stopped": "arrived",
+   "outcome_t": 57.392,
+   "end_dist_m": 0.028,
+   "walked_m": 1.1722,
+   "detours": [
+    [
+     14.13,
+     29.632
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.4_s1",
+   "stopped": "stuck",
+   "outcome_t": 32.994,
+   "end_dist_m": 0.4603,
+   "walked_m": 0.8115,
+   "detours": [
+    [
+     14.254,
+     29.756
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 58.476,
+   "end_dist_m": 0.0235,
+   "walked_m": 1.1836,
+   "detours": [
+    [
+     12.27,
+     28.516
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 55.12,
+   "end_dist_m": 0.0156,
+   "walked_m": 1.1886,
+   "detours": [
+    [
+     13.262,
+     28.764
+    ],
+    [
+     28.886,
+     44.386
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 54.618,
+   "end_dist_m": 0.0249,
+   "walked_m": 1.1823,
+   "detours": [
+    [
+     11.65,
+     27.152
+    ],
+    [
+     27.274,
+     41.906
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 53.986,
+   "end_dist_m": 0.0312,
+   "walked_m": 1.1767,
+   "detours": [
+    [
+     11.65,
+     28.516
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 55.446,
+   "end_dist_m": 0.0272,
+   "walked_m": 1.1743,
+   "detours": [
+    [
+     9.914,
+     25.416
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b36_wall_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 55.152,
+   "end_dist_m": 0.02,
+   "walked_m": 1.1813,
+   "detours": [
+    [
+     10.038,
+     25.54
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b36_box_behind0.4_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.89,
+   "end_dist_m": 0.0199,
+   "walked_m": 1.2018,
+   "detours": [
+    [
+     11.65,
+     27.152
+    ],
+    [
+     27.274,
+     54.43
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b36_box_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 59.998,
+   "end_dist_m": 0.0249,
+   "walked_m": 1.1868,
+   "detours": [
+    [
+     10.534,
+     26.036
+    ],
+    [
+     26.158,
+     41.658
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.2_b36_box_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 58.3,
+   "end_dist_m": 0.022,
+   "walked_m": 1.1961,
+   "detours": [
+    [
+     10.038,
+     27.4
+    ],
+    [
+     34.342,
+     49.098
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b36_box_behind0.45_s1",
+   "stopped": "blocked",
+   "outcome_t": 31.364,
+   "end_dist_m": 0.7383,
+   "walked_m": 0.7313,
+   "detours": [
+    [
+     9.79,
+     25.912
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.2_b36_box_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 50.346,
+   "end_dist_m": 0.0261,
+   "walked_m": 1.1852,
+   "detours": [
+    [
+     6.814,
+     22.316
+    ],
+    [
+     22.438,
+     37.814
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b36_box_behind0.5_s1",
+   "stopped": "blocked",
+   "outcome_t": 27.892,
+   "end_dist_m": 0.8521,
+   "walked_m": 0.6571,
+   "detours": [
+    [
+     7.682,
+     23.68
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.2_b36_box_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 55.99,
+   "end_dist_m": 0.0258,
+   "walked_m": 1.1855,
+   "detours": [
+    [
+     6.566,
+     23.06
+    ],
+    [
+     31.738,
+     40.542
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.2_b36_box_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 51.884,
+   "end_dist_m": 0.0295,
+   "walked_m": 1.1785,
+   "detours": [
+    [
+     7.062,
+     22.564
+    ],
+    [
+     22.686,
+     38.186
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.2,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.4_s0",
+   "stopped": "blocked",
+   "outcome_t": 43.888,
+   "end_dist_m": 0.6388,
+   "walked_m": 1.1451,
+   "detours": [
+    [
+     23.678,
+     40.666
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 70.578,
+   "end_dist_m": 0.027,
+   "walked_m": 1.4771,
+   "detours": [
+    [
+     23.554,
+     43.394
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.528,
+   "end_dist_m": 0.0197,
+   "walked_m": 1.4859,
+   "detours": [
+    [
+     21.818,
+     52.818
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 65.142,
+   "end_dist_m": 0.0161,
+   "walked_m": 1.4857,
+   "detours": [
+    [
+     22.066,
+     37.566
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.078,
+   "end_dist_m": 0.0208,
+   "walked_m": 1.4796,
+   "detours": [
+    [
+     19.214,
+     34.716
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 63.624,
+   "end_dist_m": 0.0253,
+   "walked_m": 1.4795,
+   "detours": [
+    [
+     20.578,
+     50.462
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 66.542,
+   "end_dist_m": 0.0186,
+   "walked_m": 1.4843,
+   "detours": [
+    [
+     18.346,
+     34.964
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b0_wall_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 66.348,
+   "end_dist_m": 0.0229,
+   "walked_m": 1.4799,
+   "detours": [
+    [
+     18.098,
+     34.592
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b0_box_behind0.4_s0",
+   "stopped": "blocked",
+   "outcome_t": 42.152,
+   "end_dist_m": 0.6841,
+   "walked_m": 1.0503,
+   "detours": [
+    [
+     20.95,
+     37.194
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b0_box_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 66.486,
+   "end_dist_m": 0.0265,
+   "walked_m": 1.4874,
+   "detours": [
+    [
+     19.958,
+     35.46
+    ],
+    [
+     35.582,
+     51.082
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b0_box_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 72.002,
+   "end_dist_m": 0.0153,
+   "walked_m": 1.4913,
+   "detours": [
+    [
+     17.85,
+     33.352
+    ],
+    [
+     33.474,
+     48.974
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b0_box_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 65.92,
+   "end_dist_m": 0.0242,
+   "walked_m": 1.4821,
+   "detours": [
+    [
+     17.85,
+     34.344
+    ],
+    [
+     42.402,
+     53.314
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b0_box_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.98,
+   "end_dist_m": 0.0214,
+   "walked_m": 1.4849,
+   "detours": [
+    [
+     16.486,
+     31.988
+    ],
+    [
+     32.11,
+     47.61
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b0_box_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 71.892,
+   "end_dist_m": 0.0164,
+   "walked_m": 1.4878,
+   "detours": [
+    [
+     16.982,
+     32.484
+    ],
+    [
+     32.606,
+     48.106
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b0_box_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 60.528,
+   "end_dist_m": 0.0196,
+   "walked_m": 1.4863,
+   "detours": [
+    [
+     15.494,
+     30.996
+    ],
+    [
+     31.118,
+     46.618
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b0_box_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 66.16,
+   "end_dist_m": 0.024,
+   "walked_m": 1.4874,
+   "detours": [
+    [
+     16.362,
+     32.36
+    ],
+    [
+     37.566,
+     50.586
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 0.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.4_s0",
+   "stopped": "blocked",
+   "outcome_t": 41.284,
+   "end_dist_m": 0.7168,
+   "walked_m": 1.0711,
+   "detours": [
+    [
+     22.81,
+     39.054
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.4_s1",
+   "stopped": "arrived",
+   "outcome_t": 68.784,
+   "end_dist_m": 0.0151,
+   "walked_m": 1.492,
+   "detours": [
+    [
+     22.314,
+     38.93
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 67.872,
+   "end_dist_m": 0.0278,
+   "walked_m": 1.4762,
+   "detours": [
+    [
+     21.322,
+     37.566
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 65.784,
+   "end_dist_m": 0.0259,
+   "walked_m": 1.4775,
+   "detours": [
+    [
+     22.066,
+     37.566
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 62.97,
+   "end_dist_m": 0.023,
+   "walked_m": 1.4825,
+   "detours": [
+    [
+     20.454,
+     36.45
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 64.64,
+   "end_dist_m": 0.0222,
+   "walked_m": 1.4791,
+   "detours": [
+    [
+     19.958,
+     35.46
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 65.332,
+   "end_dist_m": 0.0238,
+   "walked_m": 1.478,
+   "detours": [
+    [
+     18.842,
+     34.344
+    ]
+   ],
+   "n_detour_logs": 1,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b36_wall_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 62.472,
+   "end_dist_m": 0.0219,
+   "walked_m": 1.479,
+   "detours": [
+    [
+     19.338,
+     35.584
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "wall",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b36_box_behind0.4_s0",
+   "stopped": "arrived",
+   "outcome_t": 74.992,
+   "end_dist_m": 0.0221,
+   "walked_m": 1.4897,
+   "detours": [
+    [
+     19.214,
+     34.716
+    ],
+    [
+     34.838,
+     59.142
+    ]
+   ],
+   "n_detour_logs": 3,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 0,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b36_box_behind0.4_s1",
+   "stopped": "blocked",
+   "outcome_t": 40.912,
+   "end_dist_m": 0.7177,
+   "walked_m": 1.0246,
+   "detours": [
+    [
+     20.95,
+     36.822
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.4",
+   "seed": 1,
+   "behind": 0.4
+  },
+  {
+   "name": "L1.5_b36_box_behind0.45_s0",
+   "stopped": "arrived",
+   "outcome_t": 70.442,
+   "end_dist_m": 0.0196,
+   "walked_m": 1.4864,
+   "detours": [
+    [
+     17.974,
+     33.476
+    ],
+    [
+     33.598,
+     49.098
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 0,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b36_box_behind0.45_s1",
+   "stopped": "arrived",
+   "outcome_t": 67.95,
+   "end_dist_m": 0.022,
+   "walked_m": 1.4905,
+   "detours": [
+    [
+     17.974,
+     33.476
+    ],
+    [
+     33.598,
+     49.098
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.45",
+   "seed": 1,
+   "behind": 0.45
+  },
+  {
+   "name": "L1.5_b36_box_behind0.5_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.574,
+   "end_dist_m": 0.0234,
+   "walked_m": 1.4832,
+   "detours": [
+    [
+     16.982,
+     32.484
+    ],
+    [
+     32.606,
+     48.106
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 0,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b36_box_behind0.5_s1",
+   "stopped": "arrived",
+   "outcome_t": 59.868,
+   "end_dist_m": 0.0265,
+   "walked_m": 1.4803,
+   "detours": [
+    [
+     16.486,
+     31.988
+    ],
+    [
+     32.11,
+     47.61
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.5",
+   "seed": 1,
+   "behind": 0.5
+  },
+  {
+   "name": "L1.5_b36_box_behind0.55_s0",
+   "stopped": "arrived",
+   "outcome_t": 68.326,
+   "end_dist_m": 0.0186,
+   "walked_m": 1.4864,
+   "detours": [
+    [
+     15.618,
+     31.12
+    ],
+    [
+     31.242,
+     46.742
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 0,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.5_b36_box_behind0.55_s1",
+   "stopped": "arrived",
+   "outcome_t": 61.02,
+   "end_dist_m": 0.0226,
+   "walked_m": 1.4832,
+   "detours": [
+    [
+     15.494,
+     30.996
+    ],
+    [
+     31.118,
+     46.618
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "close",
+   "L": 1.5,
+   "bearing": 36.0,
+   "kind": "box",
+   "where": "behind0.55",
+   "seed": 1,
+   "behind": 0.55
+  },
+  {
+   "name": "L1.0_b0_clear",
+   "stopped": "arrived",
+   "outcome_t": 30.868,
+   "end_dist_m": 0.0218,
+   "walked_m": 0.9785,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.0,
+   "bearing": 0.0
+  },
+  {
+   "name": "L1.0_b36_clear",
+   "stopped": "arrived",
+   "outcome_t": 30.844,
+   "end_dist_m": 0.0193,
+   "walked_m": 0.9808,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.0,
+   "bearing": 36.0
+  },
+  {
+   "name": "L1.2_b0_clear",
+   "stopped": "arrived",
+   "outcome_t": 36.956,
+   "end_dist_m": 0.0236,
+   "walked_m": 1.1765,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.2,
+   "bearing": 0.0
+  },
+  {
+   "name": "L1.2_b36_clear",
+   "stopped": "arrived",
+   "outcome_t": 36.924,
+   "end_dist_m": 0.0219,
+   "walked_m": 1.1781,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.2,
+   "bearing": 36.0
+  },
+  {
+   "name": "L1.5_b0_clear",
+   "stopped": "arrived",
+   "outcome_t": 46.078,
+   "end_dist_m": 0.0245,
+   "walked_m": 1.4755,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "L1.5_b36_clear",
+   "stopped": "arrived",
+   "outcome_t": 46.034,
+   "end_dist_m": 0.0242,
+   "walked_m": 1.4759,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 1.5,
+   "bearing": 36.0
+  },
+  {
+   "name": "L2.0_b0_clear",
+   "stopped": "arrived",
+   "outcome_t": 61.36,
+   "end_dist_m": 0.0267,
+   "walked_m": 1.9733,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 2.0,
+   "bearing": 0.0
+  },
+  {
+   "name": "L2.0_b36_clear",
+   "stopped": "arrived",
+   "outcome_t": 61.314,
+   "end_dist_m": 0.0254,
+   "walked_m": 1.9747,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "plain",
+   "L": 2.0,
+   "bearing": 36.0
+  },
+  {
+   "name": "lowbox_beside_wall",
+   "stopped": "stuck",
+   "outcome_t": 18.512,
+   "end_dist_m": 1.2691,
+   "walked_m": 0.267,
+   "detours": [
+    [
+     8.054,
+     20.012
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "lowbox_ahead",
+   "stopped": "stuck",
+   "outcome_t": 10.616,
+   "end_dist_m": 1.3122,
+   "walked_m": 0.1881,
+   "detours": [],
+   "n_detour_logs": 0,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "long_wall",
+   "stopped": "blocked",
+   "outcome_t": 24.172,
+   "end_dist_m": 1.2395,
+   "walked_m": 0.5777,
+   "detours": [
+    [
+     8.054,
+     24.052
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "cul_de_sac",
+   "stopped": "blocked",
+   "outcome_t": 17.352,
+   "end_dist_m": 1.0233,
+   "walked_m": 0.4823,
+   "detours": [
+    [
+     14.254,
+     18.852
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "wall_then_lowbox",
+   "stopped": "stuck",
+   "outcome_t": 37.124,
+   "end_dist_m": 0.9214,
+   "walked_m": 0.7245,
+   "detours": [
+    [
+     5.078,
+     20.952
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  },
+  {
+   "name": "closed_pen",
+   "stopped": "blocked",
+   "outcome_t": 7.308,
+   "end_dist_m": 1.3729,
+   "walked_m": 0.1528,
+   "detours": [
+    [
+     3.59,
+     8.806
+    ]
+   ],
+   "n_detour_logs": 2,
+   "falls": 0,
+   "cap": 1000000000.0,
+   "cap_detour": 1000000000.0,
+   "batch": "blocked",
+   "L": 1.5,
+   "bearing": 0.0
+  }
+ ],
+ "wall_s": 1740
+}

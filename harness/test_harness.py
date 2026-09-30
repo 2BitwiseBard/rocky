@@ -673,6 +673,37 @@ async def test_sim_goto_into_void_stops_on_real_physics():
         assert st["mode"] == "safe_stop"
 
 
+@pytest.mark.asyncio
+async def test_sim_goto_cap_is_the_one_its_text_quotes(server):
+    """B114: the in-process goto's cap is derived from the gait's envelope the way
+    the cockpit's is (harness.capabilities.goto_cap_s), so it is the cap the goto
+    text quotes: 55 s on the params gait (it was a fixed 20 s). A slower gait gets
+    a longer cap, not the same constant."""
+    import harness.capabilities as C
+    from harness.sim_backend import goto_cap_for
+    from pebble_gait import WaveGait, ArmedGait            # on the path: sim_backend put gait/ there
+    cap = goto_cap_for(WaveGait())
+    assert cap == C.default_envelope()["goto_timeout_s"] == C.GOTO_CAP_S == 55.0
+    async with client_session(server._mcp_server) as cs:
+        docs = {t.name: t.description for t in (await cs.list_tools()).tools}
+    assert f"{cap:g} s cap" in docs["goto"]
+    assert goto_cap_for(ArmedGait()) > cap                  # B113: 33.2 mm/s -> 57 s
+
+
+@pytest.mark.slow
+@pytest.mark.asyncio
+async def test_sim_goto_times_out_at_its_cap_and_safe_stops():
+    """B114: a goto still walking at the cap ends "timeout" through the supervisor's
+    stop (it used to end the loop mid-stride), measured on walking time."""
+    from harness.sim_backend import SimBackend
+    be = SimBackend(world="flat")
+    be.goto_cap_s = 1.0                                      # 1 s of walking, then the stop
+    r = await be.goto(2.0, 0.0)
+    assert r["stopped"] == "timeout" and r["ok"] is False, r
+    assert 0.0 < r["pose"]["x"] < 0.1, r                    # it walked, and not for 20 s
+    assert be.mode == "safe_stop"
+
+
 def test_canon_lists_match_their_sources():
     """backend.py mirrors the chord words and gesture names by hand (it stays import-light);
     this pins the copy to the sources it mirrors."""

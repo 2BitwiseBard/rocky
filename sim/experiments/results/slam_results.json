@@ -1,21 +1,21 @@
 {
- "n_scans": 310,
+ "n_scans": 528,
  "n_keyframes": 17,
- "icp_fit_rmse_median_mm": 2.78,
+ "icp_fit_rmse_median_mm": 2.8,
  "odom": {
-  "ate_rmse_mm": 55.6,
-  "end_err_mm": 75.4,
-  "max_err_mm": 75.8,
-  "yaw_end_deg": 4.77,
-  "yaw_max_deg": 4.77
+  "ate_rmse_mm": 59.2,
+  "end_err_mm": 96.2,
+  "max_err_mm": 96.2,
+  "yaw_end_deg": 8.61,
+  "yaw_max_deg": 8.61
  },
  "slam": {
-  "ate_rmse_mm": 8.2,
-  "end_err_mm": 9.5,
-  "max_err_mm": 11.2,
-  "yaw_end_deg": 0.06,
-  "yaw_max_deg": 0.46
+  "ate_rmse_mm": 9.2,
+  "end_err_mm": 10.5,
+  "max_err_mm": 13.0,
+  "yaw_end_deg": 0.13,
+  "yaw_max_deg": 0.55
  },
- "map_iou_odom_vs_gt": 0.255,
- "map_iou_slam_vs_gt": 0.716
+ "map_iou_odom_vs_gt": 0.187,
+ "map_iou_slam_vs_gt": 0.692
 }

@@ -6,7 +6,8 @@ with the ProgressWatchdog + RetryPolicy in the loop and measures crossing
 success + time vs the no-watchdog baseline on identical fields.
 
 Sim odometry = torso ground truth (hardware will use the legged-odom EKF —
-same watchdog interface).
+same watchdog interface). The walk asks scenes.walk_ask (the envelope) for the
+time the 45 mm/s ask needed to command the same distance (T_WALK, B111).
 
 Usage: MUJOCO_GL=egl .venv/bin/python sim/experiments/run_stuck.py [--video AMP SEED]
 """
@@ -19,16 +20,16 @@ import numpy as np
 import exp_paths as X                   # sys.path (sim/, gait/, perception/, audio/) + where results / clips go
 from pebble_gait import WaveGait       # noqa: E402
 from pebble_watchdog import ProgressWatchdog, RetryPolicy           # noqa: E402
-from scenes import build_model, init_robot, walk_ask                # noqa: E402
+from scenes import build_model, init_robot, walk_ask, V_X as V_ASK  # noqa: E402
 
 AMPS_MM = [30, 35, 40, 45]
 SEEDS = [0, 1, 2, 3]
 V_X = walk_ask(WaveGait())[0]   # mm/s: scenes.V_X fitted into the envelope (D063: 45 asks 34.2)
-#                                 T_WALK was sized at 45 and did not move: at 34.2 it cuts crossings. Measured
-#                                 with the watchdog, 35 / 40 / 45 mm: 1/4, 0/4, 0/4 at 25 s; 4/4, 2/4, 1/4 at
-#                                 33 s (25 x 45 / 34.2, the same commanded distance) — the owner's call
 T_STAND = 1.0
-T_WALK = 25.0            # retries slow the gait: give recoveries time to pay
+# The walk is sized as a commanded distance: 25 s at the 45 mm/s ask (1125 mm; retries
+# slow the gait, so recoveries get time to pay). The time follows the envelope (B111):
+# 25 x 45 / 34.2 = 32.9 s today. A fixed 25 s at 34.2 mm/s cut crossings at 350-390 mm.
+T_WALK = 25.0 * V_ASK / V_X
 GOAL_X = 0.40            # m: through the worst of the field
 
 
@@ -77,6 +78,7 @@ def run_trial(amp_mm, seed, watchdog_on, record=None):
     fell = tilt_max > 30 or h_min < 0.055
     crossed = t_cross is not None and not fell
     return dict(amp=amp_mm, seed=seed, watchdog=watchdog_on,
+                v_ask_mm_s=round(V_X, 1), t_walk_s=round(T_WALK, 1),
                 disp_x=round(float(disp[0])), crossed=bool(crossed),
                 t_cross=None if t_cross is None else round(t_cross, 1),
                 tilt_max=round(float(tilt_max), 1), fell=bool(fell),
@@ -109,6 +111,8 @@ def main():
         i = sys.argv.index("--video")
         render_video(int(sys.argv[i + 1]), int(sys.argv[i + 2]))
         return
+    print(f"walk: {V_X:.1f} mm/s for {T_WALK:.1f} s ({V_X * T_WALK:.0f} mm commanded), "
+          f"goal x > {GOAL_X * 1000:.0f} mm")
     results = []
     for amp in AMPS_MM:
         for seed in SEEDS:

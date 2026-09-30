@@ -59,6 +59,25 @@ the servos adopt the pose they landed in (target = the encoder reading —
 what the righter does on the robot when it takes over). Per-episode DR
 (rl_common.DomainRandomizer) and servo draw (rl_common.servo_params).
 
+B34 curriculum (curriculum="side-back", training only): no checkpoint has
+righted the robot from its BACK (the planted stall ramp does), while from a
+side landing the policy gets the tilt down. So a drop that LANDS more than
+SIDE_MAX_DEG (110 deg) from upright is kept only with probability `reach`
+and otherwise drawn again (mode, pose and joints; the episode's DR and servo
+draws are kept), up to MAX_DROPS times. reach ramps 0 -> 1 between the two
+fractions of the run in curriculum_ramp (default 0.15 and 0.75); the trainer
+sets the run's progress each update (set_curriculum). The test is on the
+LANDED tilt because a drop's orientation does not decide it: over 120 seeds
+a side drop (90 +- 14 deg) landed past 120 deg 29 % of the time and a back
+drop 95 % (servo nominal, measured 2026-09-30). Landings are bimodal (with
+servo random + DR, 9 % of 120 landed between 110 and 150 deg and 37 % past
+150), so a moving tilt cap would let the back landings in all at once; the
+keep probability phases them in: past 110 deg at reach 0 / 0.25 / 0.5 /
+0.75 / 1 were 0 / 23 / 33 / 40 / 46 % of 120 landings, 2.06 drops per reset
+at reach 0. At reach 1 nothing is drawn or redrawn and the rng draws are
+the default env's, so the episode is the default env's episode for that
+seed. curriculum=None (every evaluation) is reach 1.
+
 Honesty: the sim's torso is two stacked cylinders — flat-ish top and
 bottom. The real Pebble has a domed rock shell and a belly with skids and
 a battery door; the exact rolling behaviour WILL differ. What transfers
@@ -105,6 +124,22 @@ HANDOFF_HOLD_S = 0.5
 HANDOFF_FEET = 3
 REWARD_WEIGHTS = dict(upright=1.0, height=0.5, stand_v1=3.0, stand=2.0, feet=0.2, success=10.0,
                       act=0.01, dact=0.2, v3_pinned=0.1, thermal=rc.THERMAL_PENALTY)
+FALL_MODES = ("back", "side", "tumble")
+FALL_MIX = (0.4, 0.4, 0.2)
+CURRICULA = ("side-back",)                      # B34
+CURRICULUM_RAMP = (0.15, 0.75)                  # reach 0 -> 1 between these fractions of the run
+SIDE_MAX_DEG = 110.0                            # side-back: a landing past this is "on its back"
+MAX_DROPS = 20                                  # drops before a curriculum reset keeps what it got
+
+
+def curriculum_reach(progress, ramp=CURRICULUM_RAMP):
+    """side-back: the probability that a landing past SIDE_MAX_DEG is kept, at
+    `progress` (0..1) of the run: 0 before ramp[0], 1 after ramp[1], linear
+    between."""
+    lo, hi = float(ramp[0]), float(ramp[1])
+    if hi <= lo:
+        return 1.0 if progress >= lo else 0.0
+    return float(np.clip((float(progress) - lo) / (hi - lo), 0.0, 1.0))
 
 
 def kinematic_height_m(hip_knee_q, feet_contacts=None):
@@ -158,12 +193,20 @@ class RecoverEnv(gym.Env if gym else object):
     def __init__(self, randomize=False, seed=None, render_mode=None, reward="v1",
                  rate_limit_rad_s=SERVO_SAFE_RAD_S, servo="random", ema_alpha=rc.EMA_ALPHA,
                  obs_version=rc.OBS_VERSIONS["recover"], obs_noise=None,
-                 ep_seconds=EP_SECONDS, thermal=True, thermal_heat0=(0.0, 0.0), **_):
+                 ep_seconds=EP_SECONDS, thermal=True, thermal_heat0=(0.0, 0.0),
+                 curriculum=None, curriculum_ramp=CURRICULUM_RAMP, **_):
         """servo: off | nominal | random (see rl_common.servo_params).
         obs_noise: None = follow `randomize`. ema_alpha 1.0 = no filter.
         obs_version 1 + ema_alpha 1.0 + servo 'off' + rate 5.0 = the pre-D052 env.
-        thermal / thermal_heat0: rl_common.ThermalProxy, as in rocky_env.PebbleEnv."""
+        thermal / thermal_heat0: rl_common.ThermalProxy, as in rocky_env.PebbleEnv.
+        curriculum: None or 'side-back' (B34, module doc); it starts at progress
+        0 and the trainer moves it with set_curriculum()."""
         assert reward in REWARDS, reward
+        assert curriculum in (None,) + CURRICULA, curriculum
+        self.curriculum = curriculum
+        self.curriculum_ramp = (float(curriculum_ramp[0]), float(curriculum_ramp[1]))
+        self.curriculum_progress = 0.0 if curriculum else 1.0
+        self.reach = self._reach()
         self.reward_version = reward
         self.rate_limit_rad_s = float(rate_limit_rad_s)
         self.rate_limit = self.rate_limit_rad_s * CTRL_DT      # rad per control step
@@ -206,6 +249,8 @@ class RecoverEnv(gym.Env if gym else object):
         self._t = 0.0
         self._hold = 0.0
         self.last_mode = ""
+        self.last_land_tilt_deg = None                           # the landed tilt of this episode's drop
+        self.last_drops = 0                                     # drops it took (> 1 only under the curriculum)
         self.last_delta = np.zeros(15)
 
     # ------------------------------------------------------------------ contract
@@ -227,7 +272,36 @@ class RecoverEnv(gym.Env if gym else object):
                     handoff=dict(tilt_deg=HANDOFF_TILT_DEG, feet=HANDOFF_FEET, kin_h_m=HANDOFF_H,
                                  hold_s=HANDOFF_HOLD_S, fn="rocky_recover_env.handoff_ok"),
                     thermal=dict(self.thermal.config(), heat0=self.thermal_heat0),
+                    fall_mix=dict(zip(FALL_MODES, FALL_MIX)),
+                    curriculum=(dict(name=self.curriculum, ramp=self.curriculum_ramp, of="the run's --total-steps",
+                                     side_max_deg=SIDE_MAX_DEG, keep_past_side="with probability reach",
+                                     max_drops=MAX_DROPS,
+                                     eval="reach 1 (curriculum off)")
+                                if self.curriculum else None),
                     **self._note)
+
+    # ------------------------------------------------------------------ curriculum
+    def _reach(self):
+        if not self.curriculum:
+            return 1.0
+        return curriculum_reach(self.curriculum_progress, self.curriculum_ramp)
+
+    def _keep_landing(self, tilt_deg):
+        """side-back: a landing within SIDE_MAX_DEG is always kept, one past it
+        with probability reach. At reach 1 (and with no curriculum) it draws
+        nothing, so the default env's rng stream is untouched."""
+        if self.reach >= 1.0 or tilt_deg <= SIDE_MAX_DEG:
+            return True
+        return bool(self.rng.random() < self.reach)
+
+    def set_curriculum(self, progress):
+        """The run's progress (0..1, the trainer's global step / --total-steps);
+        takes effect at the next reset. Returns the reach. A no-op without a
+        curriculum."""
+        if self.curriculum:
+            self.curriculum_progress = float(np.clip(progress, 0.0, 1.0))
+            self.reach = self._reach()
+        return self.reach
 
     # ------------------------------------------------------------------ state
     def true_feet(self):
@@ -278,29 +352,14 @@ class RecoverEnv(gym.Env if gym else object):
         self.thermal.reset(self.model, self.rng.uniform(lo, hi, 15) if hi > 0 else lo)
         self._derate = self.thermal.derate()
         rc.refresh_constants(self.model, self.data)
-        mujoco.mj_resetData(self.model, self.data)
         rc.apply_servo_params(self.servo, self.servo_draw)
         self._q_offset = self.dr_draw["q_offset"].copy()
-        # random fallen pose: back / side / tumble
-        mode = self.rng.choice(["back", "side", "tumble"], p=[0.4, 0.4, 0.2])
-        self.last_mode = str(mode)
-        if mode == "back":
-            ax, ang = [1, 0, 0], np.pi + self.rng.uniform(-0.3, 0.3)
-        elif mode == "side":
-            az = self.rng.uniform(0, 2 * np.pi)
-            ax, ang = [np.cos(az), np.sin(az), 0], np.pi / 2 + self.rng.uniform(-0.25, 0.25)
-        else:
-            ax = self.rng.normal(size=3)
-            ang = self.rng.uniform(0.5, np.pi)
-        q0 = self.rng.uniform(Q_LO, Q_HI)
-        self.data.qpos[0:3] = [0, 0, 0.16]
-        self.data.qpos[3:7] = _quat_from_axis_angle(ax, ang)
-        self.data.qpos[self._jadr] = q0
-        self.data.ctrl[:15] = q0 + self._q_offset
-        self.data.ctrl[15:20] = 0.0
-        mujoco.mj_forward(self.model, self.data)
-        for _ in range(int(0.5 / self.model.opt.timestep)):      # land
-            mujoco.mj_step(self.model, self.data)
+        for drop in range(1, MAX_DROPS + 1):
+            q0 = self._drop()
+            self.last_land_tilt_deg = float(np.degrees(self._state()[2]))
+            if self._keep_landing(self.last_land_tilt_deg):
+                break
+        self.last_drops = drop
         self.obs_builder.reset(rng=self.rng, noise=self.obs_noise, q_offset=self._q_offset)
         if self.obs_version == 1:
             # the pre-D052 reset exactly: the servos keep the drop pose target
@@ -320,6 +379,31 @@ class RecoverEnv(gym.Env if gym else object):
         self._t = 0.0
         self._hold = 0.0
         return self._obs(), {}
+
+    def _drop(self):
+        """One random fallen pose (back / side / tumble), dropped from 0.16 m and
+        landed for 0.5 s; returns the joint targets it fell with."""
+        mujoco.mj_resetData(self.model, self.data)
+        mode = self.rng.choice(list(FALL_MODES), p=list(FALL_MIX))
+        self.last_mode = str(mode)
+        if mode == "back":
+            ax, ang = [1, 0, 0], np.pi + self.rng.uniform(-0.3, 0.3)
+        elif mode == "side":
+            az = self.rng.uniform(0, 2 * np.pi)
+            ax, ang = [np.cos(az), np.sin(az), 0], np.pi / 2 + self.rng.uniform(-0.25, 0.25)
+        else:
+            ax = self.rng.normal(size=3)
+            ang = self.rng.uniform(0.5, np.pi)
+        q0 = self.rng.uniform(Q_LO, Q_HI)
+        self.data.qpos[0:3] = [0, 0, 0.16]
+        self.data.qpos[3:7] = _quat_from_axis_angle(ax, ang)
+        self.data.qpos[self._jadr] = q0
+        self.data.ctrl[:15] = q0 + self._q_offset
+        self.data.ctrl[15:20] = 0.0
+        mujoco.mj_forward(self.model, self.data)
+        for _ in range(int(0.5 / self.model.opt.timestep)):      # land
+            mujoco.mj_step(self.model, self.data)
+        return q0
 
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float64), -1, 1)

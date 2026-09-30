@@ -93,6 +93,39 @@ def test_armed_gait_uses_the_soft_swing():
     assert np.isfinite(r.kink_max) and r.kink_max < 0.05
 
 
+_SPEED_CODES = {"NAN", "LIMIT_YAW", "LIMIT_HIP", "LIMIT_KNEE", "SPEED_LOADED", "SPEED_FREE", "SPEED_HARD",
+                "JUMP", "KINK"}
+
+
+def test_armed_gait_envelope_is_judged_at_its_leaned_feet():
+    """B113: ArmedGait's ceilings are worked out at the feet it stands on. The
+    16 mm lean puts the two legs opposite the arm 62.8 mm from their coxa and
+    8.6 deg off its axis; the inherited ceilings used the un-leaned 75 mm
+    on-axis foothold and read 44.6 mm/s, where the checker fails the lift band,
+    the free swing and the yaw limit. At the envelope now every heading, a turn
+    and an arc pass them. MARGIN is not a speed matter and is left out here:
+    the CoM leaves the 3-foot triangle whenever a leg beside the arm swings
+    (B113's row)."""
+    ag = ArmedGait(arm_legs=(0,))
+    coxa, tang, lift = ag.vf_limit()
+    mc = ag.max_command()
+    assert mc["v"] == min(coxa, tang, lift) == pytest.approx(33.2, abs=0.05)      # coxa binds
+    assert tang == pytest.approx(41.9, abs=0.05) and lift == pytest.approx(37.3, abs=0.05)
+    assert mc["wz"] == pytest.approx(mc["v"] / 190.55, abs=1e-4)                 # the farthest leaned foot
+    moved = ArmedGait(arm_legs=(0,))
+    moved.p_nom = moved.p_nom + np.array([0.0, 0.0, -5.0])                       # the watchdog moves p_nom
+    assert np.allclose(moved.p_foot, moved.p_nom - moved.body_shift)             # the feet follow it
+    cmds = [ag.budget(100 * np.cos(a), 100 * np.sin(a), 0.0) for a in np.deg2rad(np.arange(0, 360, 45))]
+    cmds += [ag.budget(0.0, 0.0, 1.0), ag.budget(0.0, 0.0, -1.0), ag.budget(100.0, 50.0, 0.3)]
+    for cmd in cmds:
+        r = pf.check_gait(ag, cmd)
+        assert not set(r.fails) & _SPEED_CODES, "\n".join(r.lines)
+        assert r.kink_max < 0.05, (cmd, r.kink_max)
+    a60 = np.deg2rad(60.0)
+    old = pf.check_gait(ag, (44.6 * np.cos(a60), 44.6 * np.sin(a60), 0.0))     # the old envelope, at 60 deg
+    assert {"SPEED_LOADED", "SPEED_FREE", "LIMIT_YAW"} <= set(old.fails), "\n".join(old.lines)
+
+
 # ------------------------------------------------------------------ lift fade-in
 def test_zero_command_is_the_planted_stance(g):
     planted = pf.planted_q(g)

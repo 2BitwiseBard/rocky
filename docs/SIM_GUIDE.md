@@ -435,7 +435,10 @@ cliff world → cliff at x = 0.19. Measured 2026-09-29 (D063, the same way):
 or box at x = 0.6, the sidestep now clears it (~31 mm/s sideways) when the
 target is 0.6 m or more behind it (0.35 m behind: blocked), but the detour
 costs ~20 s, so a 1.2 or 1.5 m goto around it runs out of time on the way
-(1.14–1.16 m / 1.27 m walked). `go_back_to` re-aims such a leg (COCKPIT_GUIDE
+(1.14–1.16 m / 1.27 m walked). Measured over 200 such gotos (B116,
+2026-09-30): a detour costs 11.0–32.0 s up to 1.5 m, and at the 55 s cap 15
+of 16 detour gotos of 1.0 m, 38 of 84 of 1.2 m and 0 of 84 of 1.5 m arrive;
+B116 proposes 87 s once a goto has detoured (not applied). `go_back_to` re-aims such a leg (COCKPIT_GUIDE
 "Memory and awareness"): a ball 2.0 m away behind that wall or box → back at
 it in 72.5 s / 71.9 s, two legs (53.2 s with nothing in the way).
 
@@ -585,7 +588,8 @@ rules and every cut); this is what the code does.
 The one-off experiments live in `sim/experiments/`, each asking one question
 and printing a verdict: [sim/experiments/README.md](../sim/experiments/README.md)
 has the table (what each measures, the decision it backs, how to run it, the
-current result from the 2026-09-26 rerun and the pre-D052 record). Run them
+current result from the 2026-09-26 rerun, five rows re-run on 2026-09-30 for
+B111 / B112, and the pre-D052 record). Run them
 from the repo root:
 
 ```bash
@@ -607,7 +611,7 @@ The tools that stay in `sim/` because live code, CI or the docs use them:
 | `audit_righter.py CKPT ...` | a righter's jitter and handoffs (RL_GUIDE) | minutes |
 | `rl_dashboard.py [--table]` | the checkpoint table; the training curves → `sim/out/rl_curves.png` | seconds |
 | `vision_bench.py`, `brain_bench.py`, `place_bench.py` | the eye, the brains, place recognition, each on its own cockpit (:8791, :8792, :8795) → `sim/out/*.json` | minutes |
-| `sim_lidar.py` | writes the `sim/lidar_scans.npz` fixture and the `sim/laserscan_spec.json` contract | seconds |
+| `sim_lidar.py [--out DIR]` | records the lidar lap (inside the envelope since B111) into the `sim/lidar_scans.npz` fixture and writes the `sim/laserscan_spec.json` contract; `--out DIR` for a scratch run | ~15 s |
 
 The tracked records in `sim/out/` (`shove_envelope.json`, `torque_audit.json`,
 `audit_gestures.json`, `rl_curves.png`, `vision_bench.json`, `brain_bench.json`, `place_bench.json`)
@@ -700,9 +704,12 @@ Which body answers the tools, `ROCKY_BACKEND`:
 | `mock` | the millisecond contract, no physics; the default when unset |
 
 **The in-process `SimBackend` is not the D052 loop.** It has no servo model,
-no `WaveGait.budget`, no probe and no always-on void guard (those live in the
-Playground, which the cockpit runs); its goto runs the reflex supervisor and
-its own D034 cliff detector, with the NaN guard, the 4.7 rad/s clamp and a
+no probe and no always-on void guard (those live in the Playground, which the
+cockpit runs); its goto fits the command into `WaveGait.budget`, eases it with
+the supervisor's command slew (D063) and caps at the cockpit's derived time
+(`goto_cap_for`: 55 s of walking on the params gait, ending in a safe-stop;
+B114, it was a fixed 20 s), and runs the reflex supervisor and its own D034
+cliff detector, with the NaN guard, the 4.7 rad/s clamp and a
 3.0 rad/s ramp back after a stop or gesture, and uses the 1.5 N contact switch
 of `sim/scenes.py`. For D052-true behaviour, drive the cockpit (`auto` picks it
 when it is up); rebuilding the backend on the Playground loop is B60. With the
@@ -812,7 +819,9 @@ The model (B33, D052a):
   1.64 s after the slew's 2.36 s ease-in; the script refuses an unsettled
   command) 30 N in every direction (min and mean 1.12 BW, 7.6 N·s; at 35 N
   the 180 / 240 / 300° shoves tip past 60° and come back upright, which the
-  criterion counts as falls). D062, walking a steady 45: 35 / 25 / 20 / 35 /
+  criterion counts as falls). That is one gait phase: over 5 phases × 6
+  directions (2026-09-30, B103) the walking minimum is 25 N (0.93 BW), mean
+  30.2 N. D062, walking a steady 45: 35 / 25 / 20 / 35 /
   30 / 30 N (min 20 N, 0.76 BW). On a 1 N grid (D062, `1f953c89f979`, not
   re-run) the standing floor is 30 N (1.13 BW, 7.6 N·s) at
   0° and 180° (29 N on `7d376178fe27`: the heavier femurs help a little), 31 N

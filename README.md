@@ -26,8 +26,8 @@ claim from "it works on hardware".
 | **CAD** | print-clean, rebuilt around a **measured STEP of the real ST3215** (D047); the leg harness has a channel through the coxa and the star-board bracket sits on real deck holes (D059); a FreeCAD/CalculiX stress check loads the leg parts with what the servos can push, and all five pass at SF ≥ 2 (D061; the femur a closed box since D062). D063 fixed the part faults the assembly guide found: the coxa fork now slides onto its servo, with side cheeks for the inward push (SF 2.47), a bayonet shell latch, a real dovetail at the I6 shoe, and the Pi / IMU tray on the boards' real holes; four joint coupons gate the next print run | `cad/run_all_checks.py` **28/28**, [docs/PRINT_PLAN.md](docs/PRINT_PLAN.md) |
 | **Physical build** | nothing assembled, nothing ordered; the first prints (pre-D047) did not fit and are retired. The assembly guide walks the build step by step from the CAD; its geometry check found B80–B96, D063 fixed nine, and the body layout (B51, B84–B86, B92, B93) is a proposal for the owner ([docs/BODY_LAYOUT_PROPOSAL.md](docs/BODY_LAYOUT_PROPOSAL.md)). The bench kit (one leg: 4 × ST3215, bus adapter, adjustable supply, fasteners) is ~$282 at 2026-09-28 prices, the core robot ~$1,231 | [docs/ASSEMBLY_GUIDE.md](docs/ASSEMBLY_GUIDE.md), [bom/BOM.csv](bom/BOM.csv), [bom/README.md](bom/README.md), `media/2026-09-22_first_prints.jpg` |
 | **Sim + control** | the sim stops flattering the servo (D052/D052a): a peak-torque clip plus a thermal budget, every motion through one feasibility checker and the gait envelope (34.2 mm/s, 0.185 rad/s). Smoother since D063: the swing foot lifts off and lands at zero vertical speed, and a new command eases in (a stop never waits). Wave gait: 189 of ~198 mm in 6 s, 0.41° max tilt. An always-on void guard stops walks at an edge, except a lip band (8 of 364 approaches) | [docs/SIM_GUIDE.md](docs/SIM_GUIDE.md) |
-| **RL / self-righting** | a **hybrid**: RL rights the body, an analytic ramp stands it. No policy earns a hardware handoff on the D052 contract (`recover1` 0/20 `handoff_ok`; the obs-v2 retrain `recover6_d052` negative, B34); the system (supervisor + righter + 3 s stall ramp) stands 20/20 vs 11/20 with no righter. The walkers predate D052 and are zeroed | [docs/RL_GUIDE.md](docs/RL_GUIDE.md) |
-| **Tests** | 1,078 fast tests pass + 2 strict xfail (the void guard's lip band) in ~9.5 min, with 7 skipped on the reference setup (the brain-install checks, which need local model files); URDF ≡ MJCF ≡ analytic FK; CI also runs `ruff check .`, the slow tests and `run_sim`, and fails if the regenerated MJCF / URDF or `docs/TOOLS.md` differ from the committed ones | `.github/workflows/ci.yml`, `./rocky.sh test` |
+| **RL / self-righting** | a **hybrid**: RL rights the body, an analytic ramp stands it. No policy earns a hardware handoff in the system on the D052 contract (`recover1` 0/20 `handoff_ok`; the obs-v2 retrains negative, B34: `recover6_d052` 0/20, the side → back curriculum `recover7_d063_curriculum` 3/20 from side landings but 0 handoffs under the supervisor); the system (supervisor + righter + 3 s stall ramp) stands 20/20 vs 11/20 with no righter. The walkers predate D052 and are zeroed | [docs/RL_GUIDE.md](docs/RL_GUIDE.md) |
+| **Tests** | 1,097 fast tests pass + 2 strict xfail (the void guard's lip band) in ~9.5 min, with 7 skipped on the reference setup (the brain-install checks, which need local model files); URDF ≡ MJCF ≡ analytic FK; CI also runs `ruff check .`, the slow tests and `run_sim`, and fails if the regenerated MJCF / URDF or `docs/TOOLS.md` differ from the committed ones | `.github/workflows/ci.yml`, `./rocky.sh test` |
 | **Harness** | one tool registry (`harness/capabilities.py`, 23 tools, D056) generates every surface: the MCP server's live list (8 tools on the mock or in-process sim, 15 over a running cockpit, 19 with place recognition), the local brains' schema and the tools page; any OpenAI-compatible model server or Claude drives it | `harness/`, [docs/TOOLS.md](docs/TOOLS.md) |
 | **Cockpit** | one running sim in the browser (D049–D057): cameras, map, switchable brains behind a stop gate (installed and benched, D055), ~1 s speech, `look` / `find_object` and a scene memory (D054), world editor, recordings, RL panel, gesture studio; the phone over HTTPS. Place recognition (D057, off by default): 21/21 verdicts, changes 3/6 | [docs/COCKPIT_GUIDE.md](docs/COCKPIT_GUIDE.md), [docs/BRAINS.md](docs/BRAINS.md), [docs/PLACES.md](docs/PLACES.md) |
 | **Hardware bridge** | `rocky_driver` + the cockpit's bridge, made safe before any servo touched it (D052): standstill-only mirror, a soft first move (parked goal, 40 % torque, 200 c/s), then a per-servo goal speed every tick (D063), whole-leg fault cuts, EEPROM angle limits. **Mock-verified only: no real servo has been on the bus** | `sim/hw_bridge.py`, [bench/BENCH_RUNBOOK.md](bench/BENCH_RUNBOOK.md), B32 |
@@ -155,10 +155,10 @@ These are the ones that have actually cost something when broken.
 - **Checks green before anything ships.** `cad/run_all_checks.py` 28/28 and
   the fast test suites; CI runs them on every push.
 - **Sim honesty.** A negative result is a result and gets written down.
-  Six recovery retrains (`recover2` → `recover6_d052`) failed to beat the
-  policy they were meant to replace, and every one is recorded rather than
-  buried. Shoves are quoted in N·s and bodyweights, and the demo shove is a
-  shove, not a strike (D048).
+  Seven recovery retrains (`recover2` → `recover7_d063_curriculum`) failed to
+  beat the policy they were meant to replace, and every one is recorded
+  rather than buried. Shoves are quoted in N·s and bodyweights, and the demo
+  shove is a shove, not a strike (D048).
 - **The SCS0009 hand servo never sees 12 V.** It has its own 6 V rail (D016).
 
 ## Where the record lives
@@ -167,7 +167,7 @@ These are the ones that have actually cost something when broken.
 - [docs/decisions.md](docs/decisions.md) — numbered decisions D001–D063 (with
   the amendments D052a and D055a), cited everywhere.
 - [docs/DESIGN_BACKLOG.md](docs/DESIGN_BACKLOG.md) — ideas and follow-ups with
-  verdicts (B1–B115).
+  verdicts (B1–B116).
 - Reviews: [docs/REVIEW_2026-09-22.md](docs/REVIEW_2026-09-22.md) (mechanical,
   electronics, repo), BUILD_LOG sessions 9f (2026-09-24, sim honesty, D052) and
   9i (2026-09-26, the whole-repo audit).

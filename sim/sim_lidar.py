@@ -14,12 +14,20 @@ experiments/run_odom_v2 config), so the archive carries the REAL odometry
 the SLAM front-end will be seeded with, not just ground truth.
 experiments/run_slam_lite.py consumes it.
 
+The lap (B111): the r = 0.55 m centre ring, asked as scenes.V_X forward with
+the turn rate that bends it onto the ring, fitted into the gait's envelope by
+WaveGait.budget (uniform, so the ring keeps its radius: 26.6 mm/s + 0.048
+rad/s since D063), for the time that ask needs to cover the arc the 45 mm/s
+lap covered in 39 s. Before B111 it asked a raw 45 mm/s + 0.082 rad/s, above
+the envelope since D052.
+
 Outputs (main(), the lap):
   sim/lidar_scans.npz        scans + ground-truth poses + EKF odometry poses (a fixture)
   sim/laserscan_spec.json    the exact sensor_msgs/LaserScan field contract
   sim/experiments/results/fig_lidar_map.png   occupancy demo built from the scans
 
-Usage: MUJOCO_GL=egl .venv/bin/python sim/sim_lidar.py
+Usage: MUJOCO_GL=egl .venv/bin/python sim/sim_lidar.py [--out DIR]
+       (--out DIR writes all three to DIR: a scratch run that leaves the fixture alone)
 """
 import json
 import os
@@ -36,7 +44,7 @@ import rocky_model as rm   # noqa: E402  (D052 spawn height)
 from legged_odom import LeggedOdomEKF, quat_to_R, StillnessGate      # noqa: E402
 from scenes import (fk_body, IMU_HZ, GYRO_NOISE, ACC_NOISE,          # noqa: E402
                     QVEL_NOISE, GYRO_BIAS, ACC_BIAS, ENC_NOISE,
-                    CONTACT_FORCE_N)
+                    CONTACT_FORCE_N, V_X)
 
 N_RAYS = 360
 RATE_HZ = 8.0
@@ -44,7 +52,8 @@ RANGE_MAX = 6.0
 RANGE_MIN = 0.12
 PUCK_DZ = 0.060
 T_SETTLE = 2.5           # boot-stand: one StillnessGate calibration window
-T_TOTAL = 41.5
+LAP_R_M = 0.55           # the centre ring the lap walks (start pose and turn rate)
+T_LAP_AT_ASK = 39.0      # s: how long the lap walked at the 45 mm/s ask (its arc, B111)
 
 # Obstacles hug the corners so the center ring is WALKABLE: the leg span
 # sweeps a 0.6 m disc, and the session-4 lap circle ran straight through
@@ -102,10 +111,23 @@ def foot_contacts(model, data):
     return out
 
 
-def main():
+def lap_command(gait):
+    """(vx mm/s, wz rad/s, walk time s) of the lap: scenes.V_X on the LAP_R_M
+    ring, fitted into the envelope (WaveGait.budget scales uniformly, so the
+    ring keeps its radius), walked for the time that covers the arc the
+    45 mm/s ask covered in T_LAP_AT_ASK."""
+    vx, _vy, wz = gait.budget(V_X, 0.0, V_X / (1000.0 * LAP_R_M))
+    return vx, wz, T_LAP_AT_ASK * V_X / vx
+
+
+def main(out_dir=HERE):
     rng_noise = np.random.default_rng(11)
     model = build_room()
     gait = WaveGait()
+    lap_vx, lap_wz, t_lap = lap_command(gait)
+    t_total = T_SETTLE + t_lap
+    print(f"lap: {lap_vx:.1f} mm/s + {lap_wz:.4f} rad/s (r {lap_vx / lap_wz / 1000:.3f} m) "
+          f"for {t_lap:.1f} s")
     data = mujoco.MjData(model)
     q0 = np.array([leg_ik(body_to_leg(i, gait.p_nom[i]))
                    for i in range(N_LEGS)]).flatten()
@@ -114,7 +136,7 @@ def main():
     vadr = [model.joint(f"{n}{i}").dofadr[0]
             for i in range(5) for n in ("yaw", "hip", "knee")]
     # start ON the clear center ring (r = 0.55 m, CCW), heading tangent
-    data.qpos[0:3] = [-0.55, 0.0, rm.spawn_z_m(gait.h)]    # D052: was h + 14 mm
+    data.qpos[0:3] = [-LAP_R_M, 0.0, rm.spawn_z_m(gait.h)]    # D052: was h + 14 mm
     data.qpos[3:7] = [np.cos(-np.pi / 4), 0, 0, np.sin(-np.pi / 4)]  # yaw -90
     data.qpos[jadr] = q0
     data.ctrl[:15] = q0
@@ -131,16 +153,16 @@ def main():
     p_prev, v_prev = None, np.zeros(3)
 
     scans, poses, poses_odom = [], [], []
-    for k in range(int(T_TOTAL / DT)):
+    for k in range(int(t_total / DT)):
         t = k * DT
         moving = t >= T_SETTLE
         if not moving:
             data.ctrl[:15] = q0
         else:
             tw = t - T_SETTLE
-            # lap: forward + slow turn = the r=0.55 m center ring
-            vx, wz = 45.0 * min(tw / 0.6, 1), 0.082
-            q, _, _ = gait.joint_targets(tw, vx, 0.0, wz)
+            # lap: forward + slow turn = the r=0.55 m center ring, in the envelope
+            ramp = min(tw / 0.6, 1)
+            q, _, _ = gait.joint_targets(tw, lap_vx * ramp, 0.0, lap_wz * ramp)
             data.ctrl[:15] = q.flatten()
         mujoco.mj_step(model, data)
 
@@ -186,7 +208,8 @@ def main():
     print(f"{len(scans)} scans x {N_RAYS} rays, hit rate {hit_rate*100:.0f}%")
     print(f"EKF at lap end: {end_err*1000:.0f} mm, {yaw_err:.2f} deg off truth")
 
-    np.savez_compressed(os.path.join(HERE, "lidar_scans.npz"),
+    os.makedirs(out_dir, exist_ok=True)
+    np.savez_compressed(os.path.join(out_dir, "lidar_scans.npz"),
                         scans=scans, poses=poses, poses_odom=poses_odom,
                         angles=np.linspace(-np.pi, np.pi, N_RAYS, endpoint=False))
     spec = {
@@ -207,7 +230,7 @@ def main():
             "spec's 360x8 Hz is deliberately conservative",
         ],
     }
-    with open(os.path.join(HERE, "laserscan_spec.json"), "w") as f:
+    with open(os.path.join(out_dir, "laserscan_spec.json"), "w") as f:
         json.dump(spec, f, indent=1)
 
     # occupancy demo from ground-truth poses (data-quality proof, not SLAM)
@@ -238,11 +261,12 @@ def main():
                  f"ground-truth poses)")
     ax.legend()
     fig.tight_layout()
-    figs = os.path.join(HERE, "experiments", "results")
+    figs = (os.path.join(HERE, "experiments", "results") if out_dir == HERE
+            else out_dir)
     os.makedirs(figs, exist_ok=True)
     fig.savefig(os.path.join(figs, "fig_lidar_map.png"), dpi=120)
     print("wrote lidar_scans.npz + laserscan_spec.json + fig_lidar_map.png")
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else HERE)

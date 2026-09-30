@@ -140,7 +140,10 @@ mock servo, not a real ST3215.
   the fastest foot, then a 0.2 s lag) runs in `gait/pebble_reflex.py`'s
   normal and recover states. A start moves a joint at most 3.4° per tick
   (the gait's own speed), standing → 34.2 mm/s takes 2.36 s, and a stop
-  still lands in the same tick. The RL envs stay unslewed until a retrain.
+  still lands in the same tick. The gait RL env slews too since B34
+  (`rocky_env.PebbleEnv(cmd_slew=True)`, the default for new runs: an
+  episode starts standing, 3.38° per tick at most instead of 20.0°); no
+  walker has been trained on it yet. The recover env has no velocity command.
 - **The servo rushed each 20 ms step:** after entry the bridge ran
   ACC 0 and goal speed 0 (= servo maximum), with no interpolation between
   ticks (~4° steps at 3.6 rad/s). *Done (D063, fix 3):* every tick writes
