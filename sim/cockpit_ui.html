@@ -150,6 +150,9 @@
   #mem-obs { font: 11px/1.45 ui-monospace, monospace; color:var(--muted); overflow-wrap:anywhere; }
   #mem-obs b { color:var(--ink); font-weight:600; }
   #sit-ticker { display:none; }
+  #drive-talk #talkbar { margin:8px 0 2px; }
+  #drive-reply { margin:4px 0 8px; padding:6px 10px; border-left:3px solid var(--accent); background:var(--bg); border-radius:4px; overflow-wrap:anywhere; max-height:6.6em; overflow:auto; }
+  #drive-reply:empty { display:none; }
 
   /* ================================================================ phone */
   @media (max-width: 900px) {
@@ -247,7 +250,7 @@
     <div id="console">
       <div id="log" title="the console log (on a phone: tap to expand)"></div>
       <div id="cmdrow">
-        <input id="cmd" placeholder="console: walk 45 · stop · gesture wave · check · gait list · clear · show · help" style="flex:1">
+        <input id="cmd" placeholder="console: walk 45 · stop · gesture wave · check · help — a sentence goes to the brain" style="flex:1">
         <button id="send" class="primary">run</button>
       </div>
     </div>
@@ -274,6 +277,7 @@
         <div id="status-line">—</div>
         <button id="status-clear" class="danger" style="display:none" title="release the void guard / the latched safe-stop (the console's clear)">clear the guard</button>
         <div id="sit-ticker" role="button" tabindex="0" title="the robot's situation (awareness): tap for the Memory panel"><b>◉</b><span id="sit-text">no situation yet</span><span id="sit-age"></span></div>
+        <div id="drive-talk"><div class="small" id="drive-reply" title="the brain's last answer — the whole conversation is in the Talk tab"></div></div>
         <div class="note-warn" id="teleop-held" style="display:none"></div>
         <div class="grid3 dpad">
           <button data-k="Q" class="mv" title="turn left (Q)">↺ Q</button><button data-k="up" class="mv" title="forward (W / ↑)">▲</button><button data-k="E" class="mv" title="turn right (E)">↻ E</button>
@@ -320,8 +324,8 @@
         <div class="note-warn" id="brain-pair"></div>
         <div class="note-bad" id="brain-err"></div>
         <div id="chat"></div>
-        <div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1; min-width:160px"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk, or tap to start / tap to stop">🎤</button><label class="small tick" for="handsfree" title="listen continuously: speak, pause, and it goes — the voice gate below decides what may move the robot"><input id="handsfree" type="checkbox"> hands-free</label><button id="chat-clear" title="forget the conversation">clear</button></div>
-        <div class="note-warn" id="voice-note"></div>
+        <div id="talkbar"><div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1; min-width:160px"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk, or tap to start / tap to stop">🎤</button><label class="small tick" for="handsfree" title="listen continuously: speak, pause, and it goes — the voice gate below decides what may move the robot"><input id="handsfree" type="checkbox"> hands-free</label><button id="chat-clear" title="forget the conversation">clear</button></div>
+        <div class="note-warn" id="voice-note"></div></div>
         <div class="small" id="claude-note"></div>
       </div></details>
       <details id="p-wake" open><summary><span>Wake word</span><a href="#" class="qhelp" data-guide="the-wake-word" title="guide: the wake word">?</a></summary><div class="body">
@@ -529,7 +533,7 @@ function syncStreams(force) {
 function setTab(tab, opts) {
   if (!TABS.includes(tab)) return;
   opts = opts || {};
-  UI.tab = tab; document.body.dataset.tab = tab; lsSet('rocky.tab', tab);
+  UI.tab = tab; document.body.dataset.tab = tab; lsSet('rocky.tab', tab); placeTalkbar();
   if (tab !== 'robot' && typeof guideFrom !== 'undefined' && guideFrom) { guideFrom = null; guideBack(); }
   document.querySelectorAll('.tabbtn[data-tab]').forEach(b => { b.classList.toggle('on', b.dataset.tab === tab); b.setAttribute('aria-pressed', b.dataset.tab === tab); });
   if (!opts.noScroll) {
@@ -540,10 +544,20 @@ function setTab(tab, opts) {
   syncStreams();
   if (opts.publish !== false) publishUI({tab});
 }
+// the chat row (text box, send, 🎤, hands-free) lives where the operator is: on the Drive tab
+// (the one a phone opens on) it sits above the pad with the brain's last answer under it; on
+// Talk (and in the pinned desktop accordion) under the conversation. One set of controls,
+// moved with its handlers — never a second mic.
+function placeTalkbar() {
+  const tb = $('#talkbar');
+  if (UI.tab === 'drive' && !(UI.pinned && !isPhone())) { if (tb.parentElement !== $('#drive-talk')) $('#drive-talk').insertBefore(tb, $('#drive-reply')); }
+  else if (tb.previousElementSibling !== $('#chat')) $('#chat').after(tb);
+}
 function setPinned(on) {
   UI.pinned = !!on; lsSet('rocky.pinned', UI.pinned ? '1' : '0');
   document.body.classList.toggle('pinned', UI.pinned); $('#pin').classList.toggle('on', UI.pinned);
   $('#pin').textContent = UI.pinned ? 'pinned' : 'pin';
+  placeTalkbar();
 }
 function setRemote(on) {
   UI.remote = !!on; lsSet('rocky.remote', UI.remote ? '1' : '0');
@@ -567,7 +581,7 @@ document.querySelectorAll('.tabbtn[data-tab]').forEach(b => b.onclick = () => se
 $('#pin').onclick = () => setPinned(!UI.pinned);
 $('#remote').onchange = () => setRemote($('#remote').checked);
 $('#eye-toggle').onclick = () => setEye(!UI.eye);
-MQ.addEventListener ? MQ.addEventListener('change', () => syncStreams()) : MQ.addListener(() => syncStreams());
+MQ.addEventListener ? MQ.addEventListener('change', () => { syncStreams(); placeTalkbar(); }) : MQ.addListener(() => { syncStreams(); placeTalkbar(); });
 document.querySelectorAll('#side details[id]').forEach(d => d.addEventListener('toggle', () => {
   if (!d.open) return;
   UI.panel = d.id;
@@ -941,7 +955,16 @@ let lastSaid = 0, svInit = false, gaitInit = false;
 function playWord(w) { try { const a = new Audio('/audio/' + w + '.wav'); a.play().catch(() => {}); } catch (e) {} }
 
 // ---- console + teleop
-$('#send').onclick = () => { const l = $('#cmd').value.trim(); if (!l) return; post('/api/cmd', {line: l}); $('#cmd').value = ''; };
+$('#send').onclick = async () => {
+  const l = $('#cmd').value.trim(); if (!l) return; $('#cmd').value = '';
+  const r = await post('/api/cmd', {line: l});
+  // not a console command ("go forward and wave" typed into the console box): the brain gets it,
+  // exactly as the chat box would send it (typed, the brain's own guards apply)
+  if (r && typeof r.reply === 'string' && /^unknown (command|word)\b/.test(r.reply)) {
+    addLog('↪ not a console command: sent to the brain (its answer shows above the pad and in Talk)');
+    sendChat(l, 'typed', false);
+  }
+};
 $('#cmd').addEventListener('keydown', e => { if (e.key === 'Enter') $('#send').click(); });
 function teleop(k) {
   if (LOCO_HELD && k !== ' ' && k !== 'G') { addLog('[teleop] ' + LOCO_HELD); return; }
@@ -1018,7 +1041,9 @@ $('#model').onchange = () => setRole({brain: $('#model').value});
 $('#vmodel').onchange = () => setRole({vision: $('#vmodel').value});
 $('#mmodel').onchange = () => setRole({multimodal: $('#mmodel').value});
 $('#stt-set').onclick = () => setRole({stt: $('#stt').value.trim()});
-function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight; return d; }
+function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight;
+  if (cls === 'u') $('#drive-reply').textContent = text + '  …'; else if (cls === 'b' || cls === 'n') $('#drive-reply').textContent = text;   // the Drive tab's last-answer line
+  return d; }
 async function sendChat(t, source, trusted) {
   addChat('u', (source === 'voice' ? '🎤 you: ' : 'you: ') + t); const wait = addChat('t', '…');
   $('#voice-note').textContent = ''; pendingVoice = null;
@@ -1046,7 +1071,7 @@ $('#chat-send').onclick = () => {
   else sendChat(t, 'typed', false);
 };
 $('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
-$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; };
+$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; $('#drive-reply').textContent = ''; };
 $('#look').onclick = async () => { const w = addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); w.remove(); addChat('b', r.ok ? `eye (${r.model}${r.fallback ? ', fallback' : ''}): ${r.description}` : 'look failed: ' + r.error); };
 // voice: hold to talk, or tap to start / tap to stop (phones lose a long press to the
 // callout, a scroll or a synthetic mouse event — pointer capture + toggle mode survive that).

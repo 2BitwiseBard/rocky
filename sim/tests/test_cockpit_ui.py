@@ -181,6 +181,29 @@ def test_tabs_stop_wake_remote(parsed):
         assert need in ids, need
 
 
+def test_talkbar_follows_the_operator(parsed, page, script):
+    """The chat row (box, send, 🎤, hands-free) is one set of controls in one
+    wrapper: it starts in the Talk tab under the conversation and placeTalkbar()
+    moves it into the Drive tab's slot (a phone opens on Drive, and the owner
+    once looked there for the mic and typed sentences into the console). The
+    Drive slot mirrors the last answer; a console line that is not a command
+    goes to the brain."""
+    body = page.split("<script>")[0]
+    talk = body.split('id="g-talk"')[1].split('id="g-make"')[0]
+    drive = body.split('id="g-drive"')[1].split('id="g-talk"')[0]
+    bar = talk.split('id="talkbar"')[1].split('id="claude-note"')[0]
+    for need in ('id="chat-in"', 'id="chat-send"', 'id="mic"', 'id="handsfree"', 'id="voice-note"'):
+        assert need in bar, need
+    assert 'id="drive-talk"' in drive and 'id="drive-reply"' in drive
+    assert sum(1 for tag, a in parsed.tags if a.get("id") == "mic") == 1, "one mic, moved - never two"
+    place = script.split("function placeTalkbar()")[1].split("\n}")[0]
+    assert "#drive-talk" in place and "#chat" in place
+    assert "placeTalkbar()" in script.split("function setTab(")[1].split("\n}")[0]
+    send = script.split("$('#send').onclick")[1].split("\n};")[0]
+    assert "unknown (command|word)" in send and "sendChat(l, 'typed', false)" in send
+    assert "$('#drive-reply').textContent" in script.split("function addChat(")[1].split("return d; }")[0]
+
+
 def test_memory_panel_ticker_and_map_menu(parsed, page, script):
     """Memory & awareness: the panel sits in the World group with its guide
     link, the situation ticker in the Drive group (a phone-only 44 px tap
