@@ -44,8 +44,9 @@ def load_masses():
     with open(os.path.join(HERE, "mass_budget.json")) as f:
         mb = json.load(f)
     m = {k: v / 1000.0 for k, v in mb.items() if not k.startswith("_")}
-    m["robot"] = m["torso"] + N_LEGS * (m["coxa"] + m["femur"] +
-                                        m["tibia"] + m.get("hand", 0.0))
+    # the tibia budget already INCLUDES the hand (mass_audit; build_mjcf splits
+    # it without adding mass), so the robot is the MJCF's: torso + 5 legs (B106)
+    m["robot"] = m["torso"] + N_LEGS * (m["coxa"] + m["femur"] + m["tibia"])
     return m
 
 
@@ -79,12 +80,15 @@ def cantilever_torques(m, extended=True, payload_kg=0.0):
         r_f, r_t, r_e = L2 / 2, L2 + L3 / 2, L2 + L3          # mm from hip
     else:
         r_f, r_t, r_e = L2 / 2 * 0.9, L2 * 0.9 + L3 * 0.25, L2 * 0.9 + L3 * 0.5
-    tau_hip = G * (m["femur"] * r_f +
-                   (m["tibia"] + m.get("hand", 0)) * r_t +
-                   payload_kg * r_e) / 1000.0
+    # the tibia budget includes the hand: the shin (tibia - hand) at mid-shin,
+    # the hand at the tip, where it hangs with the payload (B106)
+    m_hand = m.get("hand", 0.0)
+    m_shin = m["tibia"] - m_hand
+    tau_hip = G * (m["femur"] * r_f + m_shin * r_t +
+                   (m_hand + payload_kg) * r_e) / 1000.0
     r_tk = (L3 / 2 if extended else L3 * 0.25)
-    tau_knee = G * ((m["tibia"] + m.get("hand", 0)) * r_tk +
-                    payload_kg * (L3 if extended else L3 * 0.5)) / 1000.0
+    r_ek = (L3 if extended else L3 * 0.5)
+    tau_knee = G * (m_shin * r_tk + (m_hand + payload_kg) * r_ek) / 1000.0
     return tau_hip, tau_knee
 
 
@@ -98,7 +102,7 @@ def main():
     W = m["robot"] * G
     p_nom = g.p_nom[0]
     print(f"robot {m['robot']*1000:.0f} g (torso {m['torso']*1000:.0f}, "
-          f"leg {1000*(m['coxa']+m['femur']+m['tibia']+m.get('hand',0)):.0f} x5)"
+          f"leg {1000*(m['coxa']+m['femur']+m['tibia']):.0f} x5)"
           f"  |  W = {W:.2f} N")
     cases = []
 

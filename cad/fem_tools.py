@@ -156,10 +156,19 @@ def write_ccx(path, nodes, tets, fix, load, ref, steps, E, nu):
 
 
 def run_ccx(ccx, inp, log, threads=4):
-    """Solve deck `inp` (path WITH .inp); results land beside it (.frd/.dat)."""
+    """Solve deck `inp` (path WITH .inp); results land beside it (.frd/.dat).
+
+    The equation solver runs on ONE thread (B110, 2026-09-30): the Flatpak's ccx
+    factors with SPOOLES, and multi-threaded SPOOLES now and then returns a wrong
+    solution for one load step (a regen pass wrote one, the femur's R+, into
+    FEM_REPORT.md). The femur deck solved 6 times, 3 at once, with 4 solver threads:
+    2 runs had a corrupt step (V: von Mises off by up to 74 MPa at a node, its p99.9
+    over all nodes 17.0 against 4.05; R+: 0.85); with 1 solver thread all 6 were
+    identical to the good runs. Assembly and stress recovery keep `threads` (OMP):
+    they gave identical results either way."""
     job = os.path.abspath(inp)[:-4]
     env = dict(os.environ, OMP_NUM_THREADS=str(threads),
-               CCX_NPROC_EQUATION_SOLVER=str(threads))
+               CCX_NPROC_EQUATION_SOLVER="1")
     with open(log, "w") as f:
         r = subprocess.run(ccx + ["-i", job], cwd=os.path.dirname(job), env=env,
                            stdout=f, stderr=subprocess.STDOUT)

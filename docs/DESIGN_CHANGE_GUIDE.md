@@ -42,8 +42,7 @@ ids (`bus.leg_ids`, `bus.hand_ids`).
 
 # 3. regenerate, in this order (a future `rocky.sh regen` will do this, B36 step 9)
 ./rocky.sh cad-check                                   # the 28 CAD checks; rewrites cad/out/*.stl
-./rocky.sh cad-check --derived                         # + preview, print estimate, print pack, viewer, drawings, assembly pictures (34/34)
-./rocky.sh cad-check --fem                             # + the leg stress check (D061; needs gmsh + CalculiX)
+./rocky.sh cad-check --derived --fem                   # + the leg stress check (D061; needs gmsh + CalculiX), then preview, print estimate, drawings, print pack, viewer, assembly pictures (35/35): one pass, the pack gets the new FEM verdicts and sheets (B110)
 .venv/bin/python sim/mass_audit.py                     # STL volumes + mass_hw -> sim/mass_budget.json
 MUJOCO_GL=egl .venv/bin/python sim/build_mjcf.py       # -> sim/pebble.xml
 .venv/bin/python ros2/rocky_description/generate_urdf.py   # -> urdf/pebble.urdf(.xacro)
@@ -122,9 +121,9 @@ then `--supervisor`) before you trust it. Refusing on a topology change
 Example: the STS3250, which D015 sanctioned. It uses the same case and the
 same protocol as the ST3215, gives 4.90 N·m at 12 V (`sim/torque_audit.py`),
 and weighs 74.5 g (`params.yaml` `servo_st3215.mass_g` comment). The BOM
-buys none (D058): the worst load, the self-righting knee push, is 1.50 N·m,
-50.9 % of ST3215 stall (HOT by one point) and 30.5 % of STS3250
-(`sim/torque_audit.py`, 2026-09-28, D063).
+buys none (D058): the worst load, the self-righting knee push, is 1.40 N·m,
+47.5 % of ST3215 stall (WARM) and 28.5 % of STS3250
+(`sim/torque_audit.py` on the D063 masses, 2026-09-30, B106).
 
 1. **Add an `actuators.<key>` block** next to `st3215` with every key
    `rocky_model.actuator()` reads:

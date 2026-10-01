@@ -585,6 +585,7 @@ def test_capabilities_endpoint_shape_and_a_stable_version(cockpit_client):
     assert env["turn_rad_s"] == pytest.approx(mc["wz"], abs=1e-3)
     assert env["step_height_mm"] == pytest.approx(sim.gait.hstep, abs=0.05)
     assert (env["goto_reach_m"], env["goto_timeout_s"]) == (C.GOTO_REACH_M, cockpit.GOTO_CAP_S)
+    assert env["goto_detour_timeout_s"] == cockpit.GOTO_DETOUR_CAP_S == 87.0          # B116
     assert a["robot"]["legs"] == 5 and a["robot"]["joint_names"] == ["yaw", "hip", "knee"]
     assert sim.capabilities() == a                             # the method the route serves (a copy)
     assert cb.registry_problems(sim.brains) == []              # the real cockpit routes every tool
@@ -867,6 +868,80 @@ def test_a_goto_detour_into_what_the_lidar_cannot_see_ends_stuck_inside_it():
         t_detour = min(t for t, m in logs if "detour 1/" in m)
         t_stuck = min(t for t, m in logs if "goto stuck" in m)
         assert t_stuck - t_detour < cockpit.GOTO_DETOUR_S, logs    # measured 6.0 s of 15.5
+    finally:
+        sim.alive = False
+
+
+def _goto_states(sim):
+    """Every goto state the sim thread runs, kept after the goto has answered (its outcome and
+    time, its sticky `detoured`, and the detour it had when it ended)."""
+    seen = []
+    pre = sim._goto_pre
+
+    def wrapped(gs):
+        if not seen or seen[-1] is not gs:
+            seen.append(gs)
+        return pre(gs)
+    sim._goto_pre = wrapped
+    return seen
+
+
+B116_WALL = {"kind": "wall", "pos": [0.45, 0.0], "len_m": 0.25, "yaw_deg": 90}   # above the lidar plane
+
+
+@pytest.mark.slow
+def test_a_goto_that_detoured_ends_at_the_detour_cap_and_a_plain_one_at_55_s():
+    """B116: a goto that has entered a detour times out at cockpit.GOTO_DETOUR_CAP_S (87 s: at the
+    55 s cap no 1.5 m goto around an obstacle arrived, 0 of 84), one that never detoured at
+    GOTO_CAP_S (55 s). Here a 2.0 m goto on the flat floor (it needs ~61 s) ends at 55 s, and a
+    2.9 m goto that sidestepped a 0.25 m wall at x = 0.45 ends at 87 s, long after its detour
+    ended: the detour cap is sticky."""
+    import cockpit
+    assert (cockpit.GOTO_CAP_S, cockpit.GOTO_DETOUR_CAP_S) == (55.0, 87.0)
+    for objects, (tx, cap, detoured) in (([], (2.0, cockpit.GOTO_CAP_S, False)),
+                                         ([B116_WALL], (2.9, cockpit.GOTO_DETOUR_CAP_S, True))):
+        sim = _make_sim()
+        if objects:
+            sim.set_world({"base": "flat", "objects": objects}, "b116")
+            sim.do("righter off")
+        sim.speed = 8.0
+        seen = _goto_states(sim)
+        c = _start(sim)
+        try:
+            r = c.post("/api/tool/goto", json={"x": tx, "y": 0.0}).json()
+            gs = seen[-1]
+            assert r["stopped"] == "timeout" and gs["outcome"][0] == "timeout", (r, gs["outcome"])
+            assert cap < gs["outcome"][1] <= cap + 0.05, gs["outcome"]
+            assert gs["detoured"] is detoured
+            assert r["pose"]["x"] > 1.5, r                   # walking (past the wall), not blocked
+            if detoured:
+                assert gs["detour"] is None                  # its detour had ended: the cap is sticky
+        finally:
+            sim.alive = False
+
+
+@pytest.mark.slow
+def test_the_detour_cap_ends_a_goto_even_mid_detour(monkeypatch):
+    """B116: before, a detour still running at the cap ran out its own GOTO_DETOUR_S first, so a goto
+    could answer 55 + 31.0 + 1.5 = 87.5 s after the call (past the 72 s per leg go_back_to was sized
+    for). Now the cap ends it mid-detour: answers by the cap + 1.5 s. Shrunk caps keep it short: a
+    1.0 m goto meets the wall at ~3.3 s, past the 5 s plain cap on the detour cap, and ends at 9 s
+    with its detour (up to 15.5 s) still running."""
+    import cockpit
+    monkeypatch.setattr(cockpit, "GOTO_CAP_S", 5.0)
+    monkeypatch.setattr(cockpit, "GOTO_DETOUR_CAP_S", 9.0)
+    sim = _make_sim()
+    sim.set_world({"base": "flat", "objects": [B116_WALL]}, "b116")
+    sim.do("righter off")
+    sim.speed = 8.0
+    seen = _goto_states(sim)
+    c = _start(sim)
+    try:
+        r = c.post("/api/tool/goto", json={"x": 1.0, "y": 0.0}).json()
+        gs = seen[-1]
+        assert r["stopped"] == "timeout" and gs["detoured"], (r, gs["outcome"])
+        assert 9.0 < gs["outcome"][1] <= 9.05, gs["outcome"]
+        assert gs["detour"] is not None and gs["detour"]["until"] - gs["t0"] > 9.05   # still running
     finally:
         sim.alive = False
 

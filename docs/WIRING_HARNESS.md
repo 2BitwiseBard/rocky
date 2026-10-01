@@ -126,7 +126,11 @@ the leg's length.
   the belly dock (the I5 nose points +X), with zip anchors at (44, −14) and
   (60, −14).
 - **6 V UBEC:** on the tray floor next to the buck; its 6 V rides the
-  bulkhead trunk to J0.
+  bulkhead trunk to J0. Measured 2026-09-30 (B108): with the Pi on its
+  11 mm standoffs neither the UBEC nor the buck has a place on the tray
+  floor (the UBEC with its tie 0.8 mm under the Pi's keep-out, the IMU's
+  rule is 1.0; the buck with its tie 1.0 mm into it); on 13 mm standoffs
+  both fit. Where they go is the owner's call, with B51.
 - **Loom ring lane, r ≈ 62:** outboard of the electronics grid and clear of
   the strap slots (r ≤ 47); inboard of the leg-port cable cutouts (r 81) and
   of the shell feet (r 73–82, at the webs only). **Not on the deck top

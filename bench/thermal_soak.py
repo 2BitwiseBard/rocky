@@ -8,9 +8,9 @@ load / current / voltage at 1 Hz until steady-state or the 65 C cut.
 
 Bench setup (see BENCH_RUNBOOK.md §7): servo on the jig, lever + known mass
 giving a load from sim/out/torque_audit.json (D044, CAD masses). Run once at
-walking load (~0.35 N·m, ~12 % of stall), once at 3-leg-stance load
-(~0.45 N·m, ~15 %), once (carefully, supervised) at the self-righting knee
-push (~1.46 N·m, ~50 %, D044's one warm case); the whole point is to SEE
+walking load (~0.33 N·m, ~11 % of stall), once at 3-leg-stance load
+(~0.43 N·m, ~15 %), once (carefully, supervised) at the self-righting knee
+push (~1.40 N·m, ~48 %, D044's one warm case); the whole point is to SEE
 where the cut comes.
 
 Outputs: CSV + PNG plot + a summary (time-to-60 C, time-to-cut, projected

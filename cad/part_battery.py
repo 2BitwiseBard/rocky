@@ -18,7 +18,7 @@ plane. Pack dims from params (VERIFY on purchase — bay is parametric).
 """
 from build123d import *
 from common import params, export
-from iface import IF, latch_insert_housing, latch_insert_rotor
+from iface import IF, latch_insert_housing, latch_insert_rotor, latch_pocket
 
 P = params()
 PR = P["print"]
@@ -97,17 +97,27 @@ def dock_block():
     return frame + carrier
 
 
+DOOR_W, DOOR_H, DOOR_T = 120, 70, 3.0
+
+
+def door_latch_tfs():
+    """The door's two latch frames (z 0 on its inner, lip face, +z into the door; the
+    door's +x taken as the strike's until the bay has one, B84)."""
+    return [Pos(sx, 0, DOOR_T) * Rot(180, 0, 0) for sx in (-DOOR_W / 2 + 14, DOOR_W / 2 - 14)]
+
+
 def belly_door():
     """Door blank exercising panel standard I3: lip seat + 2 latches + 2 magnets."""
-    W, H, T = 120, 70, 3.0
+    W, H, T = DOOR_W, DOOR_H, DOOR_T
     door = Pos(0, 0, T / 2) * Box(W, H, T)
     # perimeter seating lip (takes all loads)
     lip = Pos(0, 0, T + 1.2) * Box(W - 6, H - 6, 2.4)
     lip -= Pos(0, 0, T + 1.2) * Box(W - 12, H - 12, 4)
     door += lip
-    # latch insert pockets (through)
-    for sx in (-W / 2 + 14, W / 2 - 14):
-        door -= Pos(sx, 0, T / 2) * Cylinder(PL["housing_pocket_d"] / 2, T + 4)
+    # latch insert pockets (through), the housing flush with the inner (lip) face: the D
+    # of the keyway index (B107), the door's +x taken as the strike's (none yet, B84)
+    for tf in door_latch_tfs():
+        door -= tf * latch_pocket(-2.0, T + 2.0)
     # magnet pockets from inside
     for sy in (-H / 2 + 10, H / 2 - 10):
         door -= Pos(0, sy, T + 0.1 - (PL["magnet_t"] + 0.2) / 2) * \
@@ -148,5 +158,12 @@ if __name__ == "__main__":
         bad.append("latch rotor jams")
     print(f"latch rotor x housing (open pose): {v:.2f} mm^3 "
           f"({'TURNS' if v < 2 else 'JAMS'})")
+    # B107: each door pocket holds a housing on its keyway index, one way
+    from part_panel import latch_seat
+    seats = [latch_seat(parts["belly_door"], tf) for tf in door_latch_tfs()]
+    if max(m["seated"] for m in seats) > 0.01 or min(m["turned"] for m in seats) < 1.0:
+        bad.append("door latch pockets do not index the housing")
+    print(f"door latch pockets: housing on its index {max(m['seated'] for m in seats):.2f} mm^3, "
+          f"turned +-10 deg or a half turn >= {min(m['turned'] for m in seats):.1f} (INDEXED)")
     print(f"part_battery checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
     raise SystemExit(1 if bad else 0)

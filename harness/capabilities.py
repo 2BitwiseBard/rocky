@@ -85,6 +85,9 @@ GOTO_SPEED_M_S = 0.0342   # min(V_GOTO, the envelope): WaveGait().max_command() 
 GOTO_EASE_IN_S = 2.36     # gait_ease_in_s: pebble_gait.CommandSlew, standing -> 34.2 mm/s
 GOTO_CAP_S = 55.0         # sim/cockpit.py GOTO_CAP_S = goto_cap_s: 1.5 m x 1.2 / 0.0342 m/s = 52.6 s,
 #                           + the 2.36 s ease-in = 54.99 -> 55 s (D062: 40 s at 45 mm/s, no slew)
+GOTO_DETOURS = 2          # sim/cockpit.py GOTO_DETOURS: a 45 deg veer, then a sidestep; a third block
+#                           ends the goto 'blocked' (the goto text says "2 detours")
+GOTO_DETOUR_M = 0.45      # sim/cockpit.py GOTO_DETOUR_M: the most one detour walks off course
 FIND_MAX_STEPS = 6        # sim/cockpit_brains.FIND_MAX_STEPS
 FIND_MAX_STEPS_CAP = 16   # sim/cockpit_brains.FIND_MAX_STEPS_CAP
 SPAWN_NAME = "start"      # sim/scene_memory.SPAWN_NAME
@@ -100,6 +103,17 @@ def goto_cap_s(speed_m_s: float, ease_in_s: float = GOTO_EASE_IN_S, reach_m: flo
     return float(round(reach_m * GOTO_CAP_MARGIN / s + max(0.0, e)))
 
 
+def goto_detour_cap_s(speed_m_s: float, ease_in_s: float = GOTO_EASE_IN_S) -> float:
+    """B116: goto's cap once it has entered a detour: goto_cap_s with the reach grown by the most
+    the detours walk off course before a third block ends the goto 'blocked' (GOTO_DETOURS x
+    GOTO_DETOUR_M): (1.5 + 2 x 0.45 m) x 1.2 / 0.0342 m/s + 2.36 s = 86.6 -> 87 s at D063's
+    envelope. The cockpit ends a goto at it even mid-detour, so it answers by this + 1.5 s."""
+    return goto_cap_s(speed_m_s, ease_in_s, GOTO_REACH_M + GOTO_DETOURS * GOTO_DETOUR_M)
+
+
+GOTO_DETOUR_CAP_S = goto_detour_cap_s(GOTO_SPEED_M_S, GOTO_EASE_IN_S)   # B116: from the D063 numbers above
+
+
 def gait_ease_in_s(gait, v_mm_s: float, dt: float = 0.01) -> float:
     """How long the command slew (pebble_gait.CommandSlew, D063) takes a standing robot to a
     straight walk at v_mm_s, stepped at dt: 2.36 s to the 34.2 mm/s envelope. 0 for no speed."""
@@ -113,9 +127,10 @@ def gait_ease_in_s(gait, v_mm_s: float, dt: float = 0.01) -> float:
 
 
 # ------------------------------------------------------------------ the texts, verbatim
-def goto_doc(reach_m: float = GOTO_REACH_M, speed_m_s: float = GOTO_SPEED_M_S, cap_s: float = GOTO_CAP_S) -> str:
+def goto_doc(reach_m: float = GOTO_REACH_M, speed_m_s: float = GOTO_SPEED_M_S, cap_s: float = GOTO_CAP_S,
+             detour_cap_s: float = GOTO_DETOUR_CAP_S) -> str:
     """local_brain.GOTO_DOC (the defaults are the params gait's: GOTO_REACH_M, GOTO_SPEED_M_S,
-    GOTO_CAP_S); the registry fills them from the envelope."""
+    GOTO_CAP_S, GOTO_DETOUR_CAP_S); the registry fills them from the envelope."""
     return ("Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) "
             "facing +x; +y is its left) — a point the operator gives as coordinates or "
             "a remembered position; for a move relative to the robot ('forward 30 cm') "
@@ -129,7 +144,8 @@ def goto_doc(reach_m: float = GOTO_REACH_M, speed_m_s: float = GOTO_SPEED_M_S, c
             "something the lidar cannot see, lower than the puck, is in the way "
             "— look, then pick a different target; never re-send the same "
             "one) | timeout "
-            f"(too far: ~{speed_m_s:.3f} m/s, {cap_s:g} s cap, keep targets within ~{reach_m:g} m) | user "
+            f"(too far: ~{speed_m_s:.3f} m/s, {cap_s:g} s cap — a detour may extend it to "
+            f"~{detour_cap_s:g} s — keep targets within ~{reach_m:g} m) | user "
             "(stop was called) | preempted (a newer goto took over) | FELL. "
             "A veto is a NORMAL result: report it.")
 
@@ -290,7 +306,8 @@ def _env_num(env: dict, key: str, default: float) -> float:
 def _goto_doc(caps: dict) -> str:
     env = caps["envelope"]
     return goto_doc(env["goto_reach_m"], _env_num(env, "goto_speed_m_s", GOTO_SPEED_M_S),
-                    _env_num(env, "goto_timeout_s", GOTO_CAP_S))
+                    _env_num(env, "goto_timeout_s", GOTO_CAP_S),
+                    _env_num(env, "goto_detour_timeout_s", GOTO_DETOUR_CAP_S))
 
 
 def _move_doc(caps: dict) -> str:
@@ -601,8 +618,12 @@ ENVELOPE_FIELDS = {
     "goto_reach_m": "m, the reach the goto text advises ('keep targets within ~N m'); advice, "
                   "not a refusal (goto refuses only past cockpit_brains.GOTO_MAX_M)",
     "move_max_m": "m, the longest relative move: move refuses beyond it (local_brain.validate_move)",
-    "goto_timeout_s": f"s, a goto still walking after this ends as stopped=timeout (goto_cap_s: "
-                      f"{GOTO_CAP_MARGIN:g}x the reach at goto_speed_m_s, plus the command slew's ease-in)",
+    "goto_timeout_s": f"s, a goto that never detoured and is still walking after this ends as stopped=timeout "
+                      f"(goto_cap_s: {GOTO_CAP_MARGIN:g}x the reach at goto_speed_m_s, plus the command slew's "
+                      f"ease-in)",
+    "goto_detour_timeout_s": f"s, the cap instead once a goto has entered a detour, which ends it even "
+                             f"mid-detour (goto_detour_cap_s: goto_cap_s with the reach grown by "
+                             f"{GOTO_DETOURS} x {GOTO_DETOUR_M:g} m, the most the detours walk off course)",
     "goto_speed_m_s": "m/s, the speed goto walks at (what it asks, fitted into the walking envelope)",
     "speed_m_s": "m/s, the top walking speed at any heading (WaveGait.budget)",
     "turn_rad_s": "rad/s, the top turn rate on the spot",
@@ -612,6 +633,7 @@ ENVELOPE_FIELDS = {
 FALLBACK_ENVELOPE = {
     "source": "fallback: the D063 numbers (gait/pebble_gait not importable)",
     "goto_reach_m": GOTO_REACH_M, "move_max_m": MOVE_MAX_M, "goto_timeout_s": GOTO_CAP_S,
+    "goto_detour_timeout_s": GOTO_DETOUR_CAP_S,
     "goto_speed_m_s": GOTO_SPEED_M_S, "speed_m_s": 0.0342, "turn_rad_s": 0.185, "step_height_mm": 24.0,
 }
 FALLBACK_ROBOT = {
@@ -638,10 +660,12 @@ def _envelope_cached() -> str:
         mc = g.max_command()
         v = float(mc["v"])                                       # mm/s, any heading
         gv = min(GOTO_SPEED_MM_S, v)                             # what goto walks at
+        ease = gait_ease_in_s(g, gv)
         env = {
             "source": "gait/pebble_gait.WaveGait().max_command() on cad/params.yaml",
             "goto_reach_m": GOTO_REACH_M, "move_max_m": MOVE_MAX_M,
-            "goto_timeout_s": goto_cap_s(gv / 1000.0, gait_ease_in_s(g, gv)),   # D063: derived (was 40)
+            "goto_timeout_s": goto_cap_s(gv / 1000.0, ease),                 # D063: derived (was 40)
+            "goto_detour_timeout_s": goto_detour_cap_s(gv / 1000.0, ease),   # B116: once it has detoured
             "goto_speed_m_s": round(gv / 1000.0, 4),
             "speed_m_s": round(v / 1000.0, 4),
             "turn_rad_s": round(float(mc["wz"]), 3),
@@ -664,8 +688,9 @@ def default_ease_in_s() -> float:
 
 
 def default_envelope() -> dict:
-    """{source, goto_reach_m, move_max_m, goto_timeout_s, goto_speed_m_s, speed_m_s, turn_rad_s,
-    step_height_mm} from WaveGait's budget on params.yaml, else FALLBACK_ENVELOPE. Cached.
+    """{source, goto_reach_m, move_max_m, goto_timeout_s, goto_detour_timeout_s, goto_speed_m_s,
+    speed_m_s, turn_rad_s, step_height_mm} from WaveGait's budget on params.yaml, else
+    FALLBACK_ENVELOPE. Cached.
     step_height_mm is the swing LIFT height (gait.step_height), not the stride; ENVELOPE_FIELDS
     says what each field means."""
     return json.loads(_envelope_cached())

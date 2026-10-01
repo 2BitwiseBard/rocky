@@ -112,7 +112,8 @@ from cockpit_brains import floor_to_pixel                                      #
 V_GOTO = 45.0                # asked; WaveGait.budget fits it into the envelope (WaveGait().max_command();
 #                              docs/TOOLS.md prints it as goto_speed_m_s: 0.0342 since D063)
 _GOTO_ENV = tool_registry.default_envelope()          # the params gait's envelope (the registry's)
-GOTO_CAP_S = _GOTO_ENV["goto_timeout_s"]              # a goto that has not ended by then ends as "timeout".
+GOTO_CAP_S = _GOTO_ENV["goto_timeout_s"]              # a goto that has not ended by then ends as "timeout"
+#                              (one that never detoured; GOTO_DETOUR_CAP_S once it has, B116).
 #                              D063: derived, the number the goto text quotes (harness.capabilities.goto_cap_s:
 #                              1.5 m x 1.2 / 0.0342 m/s + the 2.36 s ease-in = 55 s; D062's 40 s at 45 mm/s
 #                              walked only 1.275 m of a 1.5 m goto at 34.2 mm/s)
@@ -137,6 +138,13 @@ GOTO_DETOUR_S = round(GOTO_DETOUR_M / _GOTO_ENV["goto_speed_m_s"] + tool_registr
 #                              at 13.3); 0.35 m behind needs 18 s, 0.3 m not even that (no planner) ...
 GOTO_RESUME_S = 0.8          # ... or until the corridor toward the target has been clear this long
 GOTO_DETOUR_RESET_M = 0.15   # this much new progress after a detour earns the detours back
+GOTO_DETOUR_CAP_S = _GOTO_ENV["goto_detour_timeout_s"]   # B116: the cap instead of GOTO_CAP_S once a goto
+#                              has entered a detour (sticky), and it ends the goto even mid-detour (a detour
+#                              running at GOTO_CAP_S used to run out first: answers up to 87.5 s). The envelope's
+#                              harness.capabilities.goto_detour_cap_s: the reach grown by GOTO_DETOURS x
+#                              GOTO_DETOUR_M, (1.5 + 0.9 m) x 1.2 / 0.0342 m/s + 2.36 s = 87 s. Measured over
+#                              200 detour gotos (sim/experiments/run_goto_detour_cap.py): the latest arrival up
+#                              to the 1.5 m reach came at 75.0 s (55 s landed 0 of 84 at 1.5 m; 87 s, 80)
 TEACH_HZ = 20.0              # the studio's pose-stream recorder
 TEACH_MAX_S = 60.0           # ... stops itself after this long (1200 samples)
 HEARTBEAT_STALE_S = 2.0      # the UI calls the sim thread dead after this long without a loop
@@ -950,7 +958,8 @@ class CockpitSim(Playground):
                 raise ValueError(f"non-finite envelope v={v} wz={wz} hstep={hstep}")
             env.update(source="the cockpit's live gait: sim.gait.max_command() (WaveGait budget, "
                               "cad/params.yaml)",
-                       goto_timeout_s=GOTO_CAP_S, goto_speed_m_s=round(min(V_GOTO, v) / 1000.0, 4),
+                       goto_timeout_s=GOTO_CAP_S, goto_detour_timeout_s=GOTO_DETOUR_CAP_S,
+                       goto_speed_m_s=round(min(V_GOTO, v) / 1000.0, 4),
                        speed_m_s=round(v / 1000.0, 4), turn_rad_s=round(wz, 3), step_height_mm=round(hstep, 1))
         except Exception:                                       # noqa: BLE001 — keep the registry's numbers
             pass
@@ -1404,6 +1413,7 @@ class CockpitSim(Playground):
         p = self.data.xpos[self.torso]                       # where it began: its progress is away from here
         gs["detour"] = dict(offset=side * mag, until=self.t + GOTO_DETOUR_S, x0=float(p[0]), y0=float(p[1]),
                             away=0.0)
+        gs["detoured"] = True                                # B116: sticky, its cap is GOTO_DETOUR_CAP_S now
         gs["best_t"] = tw                                    # a fresh no-progress window for the detour
         gs["best_at_detour"] = gs["best"]
         self.log(f"goto: obstacle {rng_m:.2f} m at {bear:.0f} deg — detour {gs['tries']}/{GOTO_DETOURS}: "
@@ -1445,8 +1455,10 @@ class CockpitSim(Playground):
                 gs["outcome"] = ("stuck", tw)          # D050: blocked, not a void
                 self.sup.request_stop()
                 self.log(f"goto stuck {dist*100:.0f} cm short (no progress for {GOTO_STUCK_S:.0f} s)")
-            elif tw > GOTO_CAP_S and det is None:      # a detour runs out its own limit first, as before
-                #                                        (so a goto can answer up to GOTO_DETOUR_S late)
+            elif tw > (GOTO_DETOUR_CAP_S if gs.get("detoured") else GOTO_CAP_S):
+                # B116: 87 s once the goto has entered a detour, 55 s if it never did; the cap ends it
+                # even mid-detour (a detour running at the cap used to run out its own 15.5 s first, so
+                # a goto answered up to 55 + 31.0 + 1.5 = 87.5 s; now by the cap + 1.5 s)
                 gs["outcome"] = ("timeout", tw)
                 self.sup.request_stop()
         if self._stop_req and gs["outcome"] is None:
@@ -1509,7 +1521,7 @@ class CockpitSim(Playground):
         if self.goto_state is not None:
             self._resolve(self.goto_state, {"ok": False, "stopped": "preempted", "pose": self.pose()})
         self.goto_state = dict(tx=float(tx), ty=float(ty), t0=self.t, outcome=None, fut=fut, loop=loop,
-                               best=float("inf"), best_t=0.0, detour=None, tries=0,
+                               best=float("inf"), best_t=0.0, detour=None, tries=0, detoured=False,
                                best_at_detour=float("inf"), void=None, block=None, side=None)
         self.mode = "walking"
         self.events.append(("goto", (round(float(tx), 3), round(float(ty), 3))))

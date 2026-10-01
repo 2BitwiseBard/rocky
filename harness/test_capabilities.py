@@ -50,36 +50,43 @@ REP_LEXICON = ['greeting', 'yes', 'no', 'acknowledge', 'found_it', 'thinking', '
 GOLDEN = {
     # build_tools(REP_GESTURES, REP_LEXICON, look=True, extra=cockpit_brains.EXTRA_TOOLS)
     # D063: the compose_gesture example re-timed and goto's timeout clause (~0.034 m/s, 55 s cap);
-    # was 469a6144f730... at D056, bc5de4faced2... with the compose change alone
-    "openai_rep": "fe8ec983be35c2e35c044ff80a5878b0a13a7247036c38a722aca6ea39ece2a4",
-    # local_brain.TOOLS = build_tools(GESTURES, CHORD_WORDS); D063: goto's clause (was 7efe2065850c...)
-    "openai_local_brain_TOOLS": "ca30fea22e45767733d76a313c69bfd1eb0fcf721d3d20d32911e76d2dd88076",
-    # cockpit_brains.TOOLS = build_tools(look=True, extra=EXTRA_TOOLS); D063 as above (was f932d346fe16...,
-    # then 0df60970f429...)
-    "openai_cockpit_brains_TOOLS": "b3257e6558b22f329a7db204ab26f5ef5403e1120a2a6fc95a06c91b28e0967f",
+    # B116: + the detour cap (~87 s) in that clause. Was 469a6144f730... at D056, bc5de4faced2... with
+    # the compose change alone, fe8ec983be35... at D063
+    "openai_rep": "db239aed3dd178828da3f578a2796f17a3ade5036ffcf43fa99b9025ee0ddf1e",
+    # local_brain.TOOLS = build_tools(GESTURES, CHORD_WORDS); D063, B116: goto's clause (was
+    # 7efe2065850c..., then ca30fea22e45...)
+    "openai_local_brain_TOOLS": "3cdedb3bcb9164b31a5798f604b578c07fe1e54059947c3041e217b40b300e74",
+    # cockpit_brains.TOOLS = build_tools(look=True, extra=EXTRA_TOOLS); D063, B116 as above (was
+    # f932d346fe16..., then 0df60970f429..., b3257e6558b2...)
+    "openai_cockpit_brains_TOOLS": "5b0913fd43bbcd723d1ee765198b62b3af6e96511d6b6f6ee1b1b695fe2460d9",
     # build_server(<every capability, live lists REP_*>).list_tools(): {name, description,
-    # inputSchema, annotations} rows sorted by name; D063: goto's clause (was 3753dc32f7c8...)
-    "mcp_rep": "b952da712b1784a3669451422462d00872c8cefa3de125c00dd2678869e1d45d",
-    # build_server(MockBackend()).list_tools(), same rows; D063: goto's clause (was eec37bf89567...)
-    "mcp_mock": "30a5f727c33eca78c62717fc885e646094f1fb8544eada418408dff2b54dff33",
+    # inputSchema, annotations} rows sorted by name; D063, B116: goto's clause (was 3753dc32f7c8...,
+    # then b952da712b17...)
+    "mcp_rep": "071a7fa860c69aae08daa70d2f8c6621cd780d7fd6a10b413854946d7d3a3b44",
+    # build_server(MockBackend()).list_tools(), same rows; D063, B116: goto's clause (was
+    # eec37bf89567..., then 30a5f727c33e...)
+    "mcp_mock": "8173b0a042f459a0cd072dfff67cfc43196abab9fbc427e7ba345d8dc25add47",
 }
 # D057: the tools added after the D056 snapshots (registry order), and the sha256 of the full lists
 ADDED_D057 = ("where_am_i", "name_place", "places", "forget_place")
 GOLDEN_D057 = {       # has_places=True (recognition on); regenerated 2026-09-25 for name_place's `rename`
     # D063: the compose_gesture example re-timed and goto's timeout clause (were 0f9b0f0daaa9... /
-    # 82039933acaa..., then a06880931cdd... / 6baed84766c7... with the compose change alone)
-    "openai_rep": "c00ebabaa336ab6b92246fc0896c94e080fe09a158c588c9200539dea51885c9",
-    "openai_cockpit_brains_TOOLS": "7bb1a198105fb5515a66fcdccc23f6880b3194592a70707880963944bdfa14f3",
+    # 82039933acaa..., then a06880931cdd... / 6baed84766c7... with the compose change alone);
+    # B116: + the detour cap in goto's clause (were c00ebabaa336... / 7bb1a198105f...)
+    "openai_rep": "daf4b01e092964b5216a3de86b8d01ebd29e9a07d37caf8af23ea1a76f50bb31",
+    "openai_cockpit_brains_TOOLS": "09ba1a1f74881f69214b1b0824311c25a6550562bb674c37bdf04ca4cbc6eb90",
     # F3: to_mcp_specs(rep_caps(has_places=True)) = build_server over a cockpit reporting `places`,
     # {name, description, inputSchema, annotations} rows sorted by name (the D056 rows + the four);
-    # D063: goto's clause (was bb4b0fd415d5...)
-    "mcp_rep": "4bfdcee5191c2cc5fca4dd06299ad06abdd050b6710339bd636e905ecc96fc18",
+    # D063, B116: goto's clause (was bb4b0fd415d5..., then 4bfdcee5191c...)
+    "mcp_rep": "d6b4e6f1d87a5cd3ee867ad5285034e18b6c6b234ff5c0e30fbe94f99bbacdd3",
 }
 # the no-cockpit snapshot's version at D056 (docs/TOOLS.md then): with has_places off the
 # snapshot is still exactly that one (the D057 tools add nothing unless recognition is on) —
 # except the robot block's params revision, which D059 moved on (_version_at_d056)
-D056_FALLBACK_VERSION = "39b67053b588"   # D063: the envelope (34.2 mm/s, goto cap 55 s) + the compose
-#                                          example + goto's clause (was 99615678f55b, then 912e8613c551)
+D056_FALLBACK_VERSION = "abdf9c28edb2"   # D063: the envelope (34.2 mm/s, goto cap 55 s) + the compose
+#                                          example + goto's clause (was 99615678f55b, then 912e8613c551);
+#                                          B116: + goto_detour_timeout_s (87 s) and goto's clause quoting
+#                                          it (was 39b67053b588)
 D056_PARAMS_REV = "0.1/D052"
 
 
@@ -104,17 +111,20 @@ def _sha(obj):
 # D063 changed two tool texts on purpose: compose_gesture's example, re-timed to 1 s per move (the
 # minimum-jerk ease made its 0.8 s arm moves 4.13 rad/s, over the 4.0 free limit), and goto's
 # timeout clause, which quotes the envelope (34.2 mm/s since D063) and the cap derived from it
-# (goto_cap_s: 55 s; 40 s walked only 1.275 m of a 1.5 m goto). The snapshot files keep the D056
-# texts; _as_of_d063 puts today's in their place, so every other text and schema is still checked
-# against them byte for byte.
+# (goto_cap_s: 55 s; 40 s walked only 1.275 m of a 1.5 m goto); B116 then added the detour cap to
+# that clause (87 s once a goto has detoured: at 55 s no 1.5 m goto around an obstacle arrived).
+# The snapshot files keep the D056 texts; _as_of_d063 puts today's in their place, so every other
+# text and schema is still checked against them byte for byte.
 D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
 D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
-D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+# D063's was "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+B116_GOTO_TOO_FAR = ("(too far: ~0.034 m/s, 55 s cap — a detour may extend it to ~87 s — keep targets "
+                     "within ~1.5 m)")
 
 
 def _goto_as_of_d063(description):
     assert D056_GOTO_TOO_FAR in description, "the snapshot's goto text is not D056's"
-    return description.replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+    return description.replace(D056_GOTO_TOO_FAR, B116_GOTO_TOO_FAR)
 
 
 def _as_of_d063(tools):
@@ -391,8 +401,10 @@ def test_constants_and_texts_equal_their_sources():
     assert C.SPAWN_NAME == scene_memory.SPAWN_NAME
     # D063: the cockpit's GOTO_CAP_S is derived (the envelope's goto_timeout_s): test_cockpit_api
     # checks the value, test_goto_cap_is_derived_from_the_envelope the derivation
-    ck = _module_constants("sim/cockpit.py", {"V_GOTO"})
+    ck = _module_constants("sim/cockpit.py", {"V_GOTO", "GOTO_DETOURS", "GOTO_DETOUR_M"})
     assert C.GOTO_SPEED_MM_S == ck["V_GOTO"]
+    # B116: the detour cap is sized on the cockpit's detours (how many, how far each walks off course)
+    assert (C.GOTO_DETOURS, C.GOTO_DETOUR_M) == (ck["GOTO_DETOURS"], ck["GOTO_DETOUR_M"])
 
 
 def test_goto_cap_is_derived_from_the_envelope():
@@ -409,10 +421,31 @@ def test_goto_cap_is_derived_from_the_envelope():
     assert C.goto_cap_s(0.045, 0.0) == 40.0                                  # D062: 1.8 m at 45 mm/s, no slew
     assert C.goto_cap_s(0.0) == C.goto_cap_s(float("nan")) == C.GOTO_CAP_S   # no walking envelope
     # the goto text quotes the envelope it is built with; the mock walks at the envelope
-    assert "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)" in C.GOTO_DOC
-    faster = C.build(envelope=dict(env, goto_speed_m_s=0.0398, goto_timeout_s=48.0))    # B103's T 2.2
+    assert B116_GOTO_TOO_FAR in C.GOTO_DOC
+    faster = C.build(envelope=dict(env, goto_speed_m_s=0.0398, goto_timeout_s=48.0,     # B103's T 2.2
+                                   goto_detour_timeout_s=75.0))
     goto = next(t for t in faster["tools"] if t["name"] == "goto")
-    assert "(too far: ~0.040 m/s, 48 s cap, keep targets within ~1.5 m)" in goto["description"]
+    assert ("(too far: ~0.040 m/s, 48 s cap — a detour may extend it to ~75 s — keep targets within "
+            "~1.5 m)") in goto["description"]
+
+
+def test_goto_detour_cap_is_derived_from_the_envelope():
+    """B116: a goto that detours costs 11.0-32.0 s more up to the 1.5 m reach, and at the 55 s cap
+    no 1.5 m goto around an obstacle arrived (0 of 84). Once a goto has entered a detour its cap is
+    goto_cap_s with the reach grown by the most the detours walk off course: (1.5 + 2 x 0.45 m) x 1.2
+    / 0.0342 m/s + 2.36 s = 86.6 -> 87 s (the latest such arrival measured: 75.0 s). It follows the
+    envelope as the plain cap does, and the fallback carries it too."""
+    env = C.default_envelope()
+    v = env["goto_speed_m_s"]
+    reach = C.GOTO_REACH_M + C.GOTO_DETOURS * C.GOTO_DETOUR_M
+    assert env["goto_detour_timeout_s"] == C.goto_detour_cap_s(v, C.GOTO_EASE_IN_S) \
+        == C.goto_cap_s(v, C.GOTO_EASE_IN_S, reach) == C.GOTO_DETOUR_CAP_S == 87.0
+    assert C.FALLBACK_ENVELOPE["goto_detour_timeout_s"] == C.GOTO_DETOUR_CAP_S
+    assert reach * C.GOTO_CAP_MARGIN / v + C.GOTO_EASE_IN_S == pytest.approx(86.57, abs=0.01)
+    assert env["goto_detour_timeout_s"] > env["goto_timeout_s"]
+    # it follows the envelope: D062's 45 mm/s with no slew gave 64 s; no envelope keeps the plain cap
+    assert C.goto_detour_cap_s(0.045, 0.0) == 64.0
+    assert C.goto_detour_cap_s(0.0) == C.GOTO_CAP_S
     from harness.backend import SPEED
     assert SPEED == env["goto_speed_m_s"]
 
@@ -467,6 +500,7 @@ def test_snapshot_shape_envelope_and_robot():
     assert _version_at_d056(off) == D056_FALLBACK_VERSION
     env = caps["envelope"]
     assert env["goto_reach_m"] == 1.5 and env["goto_timeout_s"] == 55.0     # D063: goto_cap_s (was 40)
+    assert env["goto_detour_timeout_s"] == 87.0                             # B116: goto_detour_cap_s
     assert env["source"].startswith("gait/"), env                   # the gait is importable here
     # D063: the soft-landing swing costs envelope (was 0.0455 / 0.246 at D052)
     assert env["speed_m_s"] == pytest.approx(0.0342, abs=5e-4)

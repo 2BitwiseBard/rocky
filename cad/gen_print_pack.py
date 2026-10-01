@@ -102,7 +102,9 @@ PARTS = {
                       "I3 latch cartridge, the outer (B87, a bayonet since D063): Ø14 x 6, a Ø6.6 "
                       "bore with two keyways. Drop latch_rotor in through the keyways and turn it "
                       "off them: it is captive. Then push the cartridge into the panel's Ø14.3 "
-                      "pocket from the seating side and glue it flush with the seating face."),
+                      "pocket from the seating side and glue it flush with the seating face. Its "
+                      "flat is the keyway index (B107): it fits the pocket's flat one way, keyways "
+                      "135° from the entry line, outside the latch's travel."),
     "latch_rotor": ("PLA", "as exported", "none", PLA_DEFAULT,
                     "I3, for latch_housing: a Ø6 shaft, a Ø10 head, two lugs and a 2.0 x 1.5 "
                     "screwdriver slot across its bottom end, square to the lugs. On frame_coupon "
@@ -194,7 +196,8 @@ PARTS = {
                       "A bench carrier for the electronics: Pi 5 standoffs on 58 x 49, 11 tall "
                       "(B89; M2.5 x 6 or x 8), the IMU on four imu_grommets on its own pattern "
                       "(B90; M2.5 x 10 + nut). As drawn, tray + rails fit nowhere between the "
-                      "legs (B51)."),
+                      "legs (B51), and the bus adapter, buck and UBEC have no place under the Pi "
+                      "(B108): keep them beside the tray."),
     "tray_rail": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
                   "The avionics tray's rails. Waits for B51: as drawn, tray + rails fit nowhere "
                   "between the legs. Do not print it for the robot yet."),
@@ -467,7 +470,8 @@ def cover(meta, est, fem):
                            "otherwise (B75). 'femur' is femur_link + femur_plate_b as one "
                            "part. Details: out/fem/FEM_REPORT.md.", SMALL))
     else:
-        s.append(Paragraph("No FEM results on disk: run rocky.sh cad-check --fem.", SMALL))
+        s.append(Paragraph("No FEM results on disk: run rocky.sh cad-check --derived --fem "
+                           "(B110: one pass puts them in this pack).", SMALL))
     return s
 
 
@@ -632,8 +636,11 @@ def part_sheet(part, qty, g, mins, b, audit, fem_by_part, drawings, has_drawing,
         d = drawings.get(part, {})
         holes = ", ".join(f"Ø{h['dia_mm']} x{h['count']} ({h['axis']})" for h in d.get("holes", []))
         ext = " x ".join(f"{e:g}" for e in d.get("extents_mm", []))
+        chan = ", ".join(f"Ø{c['dia_mm']} x {c['depth_mm']} deep x{c['count']} ({c['axis']})"
+                         for c in d.get("channels", []))
         rows.append(["drawing", f"TechDraw sheet on the next page (scale {d.get('scale', '?')}; "
-                     f"extents {ext} mm; holes: {holes or 'none'})"])
+                     f"extents {ext} mm; holes: {holes or 'none'}"
+                     + (f"; open channels: {chan}" if chan else "") + ")"])
     elif b["key"] == LEG_BATCH:
         rows.append(["drawing", "no drawing: run rocky.sh cad-drawings"])
     flow = [Mark("part:" + part, pages), head, Spacer(1, 2),

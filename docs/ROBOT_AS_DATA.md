@@ -412,7 +412,10 @@ only beyond 3 m, `cockpit_brains.GOTO_MAX_M`). Both are still the constant
 `goto_speed_m_s` and `goto_timeout_s`, and since D063 the cap is derived:
 `goto_cap_s` sizes it to walk that reach 1.2 times over at goto's speed,
 plus the command slew's 2.36 s ease-in (55 s at 0.0342 m/s; the old 40 s
-literal walked only 1.275 m of a 1.5 m goto after D063). The other numbers
+literal walked only 1.275 m of a 1.5 m goto after D063). Since B116 it also
+quotes `goto_detour_timeout_s`, the cap once a goto has entered a detour:
+`goto_detour_cap_s`, the same derivation with the reach grown by the two
+detours' 0.45 m each (87 s). The other numbers
 in the descriptions (compose_gesture's joint ranges, find_object's
 0.1-0.4 m steps) are literals in the registry. A params
 change that moves the envelope or the topology changes the snapshot and

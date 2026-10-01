@@ -6,7 +6,7 @@ Every tool a brain can call, from one registry (`harness/capabilities.py` `REGIS
 
 This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`harness/backend.py`) and every capability on. A running cockpit's lists also carry its saved keyframe gestures and custom chord words.
 
-- snapshot version: `925466ca53cf` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
+- snapshot version: `daaec292b194` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
 - capabilities: cockpit, eye, memory, places
 
 ## Summary
@@ -47,7 +47,8 @@ This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`h
 |---|---|---|
 | `goto_reach_m` | 1.5 | m, the reach the goto text advises ('keep targets within ~N m'); advice, not a refusal (goto refuses only past cockpit_brains.GOTO_MAX_M) |
 | `move_max_m` | 1.5 | m, the longest relative move: move refuses beyond it (local_brain.validate_move) |
-| `goto_timeout_s` | 55.0 | s, a goto still walking after this ends as stopped=timeout (goto_cap_s: 1.2x the reach at goto_speed_m_s, plus the command slew's ease-in) |
+| `goto_timeout_s` | 55.0 | s, a goto that never detoured and is still walking after this ends as stopped=timeout (goto_cap_s: 1.2x the reach at goto_speed_m_s, plus the command slew's ease-in) |
+| `goto_detour_timeout_s` | 87.0 | s, the cap instead once a goto has entered a detour, which ends it even mid-detour (goto_detour_cap_s: goto_cap_s with the reach grown by 2 x 0.45 m, the most the detours walk off course) |
 | `goto_speed_m_s` | 0.0342 | m/s, the speed goto walks at (what it asks, fitted into the walking envelope) |
 | `speed_m_s` | 0.0342 | m/s, the top walking speed at any heading (WaveGait.budget) |
 | `turn_rad_s` | 0.185 | rad/s, the top turn rate on the spot |
@@ -153,11 +154,11 @@ Description (MCP):
 
 Description (local brains):
 
-> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it.
+> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap — a detour may extend it to ~87 s — keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it.
 
 Description (MCP):
 
-> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it. One motion intent at a time; calling goto again preempts.
+> Walk to (x, y) in METERS, map frame (the robot starts at (0, 0) facing +x; +y is its left) — a point the operator gives as coordinates or a remembered position; for a move relative to the robot ('forward 30 cm') use move instead. Blocks until it ends and returns stopped= arrived | cliff (the void reflex vetoed it: do NOT retry toward it) | blocked (EITHER the lidar saw an obstacle in the way and 2 detours — a 45 deg veer, then a sidestep — did not get past it: the result's obstacle has range_m and bearing_deg, body frame, 0 = ahead, + = left; pick a target that avoids that side — OR a guard refused to start: read detail) | stuck (no progress for 3 s: something the lidar cannot see, lower than the puck, is in the way — look, then pick a different target; never re-send the same one) | timeout (too far: ~0.034 m/s, 55 s cap — a detour may extend it to ~87 s — keep targets within ~1.5 m) | user (stop was called) | preempted (a newer goto took over) | FELL. A veto is a NORMAL result: report it. One motion intent at a time; calling goto again preempts.
 
 ### `stop`
 

@@ -8,8 +8,13 @@ Env: TD_STEP (input), TD_OUT (output path without extension: writes .pdf +
 Sheet: ISO A4 landscape frame + title block, first-angle Front / Top / Right
 views + an isometric, overall extents dimensioned on the Front and Right
 views, and a hole table read from the solid (concave cylindrical faces
-that close a full circle, grouped by diameter and axis; a slot end is half a
-circle and is not a hole, a round boss is convex and is not one either).
+that close a full circle, grouped by diameter and axis; a round boss is
+convex and is not one). Beside it, when the part has any, a table of open
+channels (B105): a concave cylinder that is exactly half a circle is either
+a slot end or a pocket open to an edge, and the two cannot be told apart by
+the arc. A slot end has a partner facing it (the slot's other end: same Ø,
+parallel axis, offset toward its open side and open back toward it); a
+channel has none, and is listed with its Ø and depth along its axis.
 
 FreeCAD 1.1 traps, all hit while building this: the page exporters exist
 only in TechDrawGui (so the GUI must be up; `offscreen` segfaults, `minimal`
@@ -34,6 +39,73 @@ sys.stdout = sys.stderr
 
 TPL = "/app/share/Mod/TechDraw/Templates/ISO/A4_Landscape_TD.svg"
 SCALES = (5, 2, 1.5, 1, 0.75, 0.5, 0.25, 0.2, 0.1)
+
+
+def features(shape):
+    """(holes, channels) read from the SOLID, not the views. holes: {(Ø, axis): count};
+    channels: {(Ø, depth, axis): count}.
+
+    A cylindrical face whose normal points at its own axis is concave (a boss's points
+    away); concave faces sharing an axis + diameter are one group. A group that closes
+    the circle is a hole. A group that is exactly half a circle is a slot end when a
+    partner faces it (same Ø, parallel axis, its axis offset toward this one's open
+    side, and its own open side back toward this one) and an open channel when none
+    does (B105: the coxa fork's Ø6.4 / Ø7 / Ø20.3 pockets, open to its mouth, are the
+    same 180 deg as the ends of its Ø3.4 / Ø5.8 slots). Other partial arcs (fillets)
+    are neither."""
+    import Part
+    groups = {}
+    for f in shape.Faces:
+        srf = f.Surface
+        if not isinstance(srf, Part.Cylinder):
+            continue
+        u0, u1, v0, v1 = f.ParameterRange
+        p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
+        n = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+        a = srf.Axis.normalize()
+        radial = (p - srf.Center) - a * (p - srf.Center).dot(a)
+        if n.dot(radial) >= 0:
+            continue                                    # convex: a boss or an outer round
+        a = a if (a.x, a.y, a.z) > (0, 0, 0) else -a  # one sign per axis direction
+        c = srf.Center - a * srf.Center.dot(a)          # the axis's point nearest the origin
+        key = (round(a.x, 3), round(a.y, 3), round(a.z, 3),
+               round(c.x, 1), round(c.y, 1), round(c.z, 1), round(2 * srf.Radius, 2))
+        g = groups.setdefault(key, {"ang": 0.0, "mid": App.Vector(), "lo": 1e9, "hi": -1e9,
+                                    "a": a, "c": c})
+        g["ang"] += abs(u1 - u0)
+        for k in range(16):                             # the arc's mean radial direction
+            q = f.valueAt(u0 + (u1 - u0) * (k + 0.5) / 16, (v0 + v1) / 2)
+            r = (q - c) - a * (q - c).dot(a)
+            g["mid"] += r.normalize() * (abs(u1 - u0) / 16)
+        for v in (v0, v1):                              # its extent along the axis
+            t = (f.valueAt((u0 + u1) / 2, v) - c).dot(a)
+            g["lo"], g["hi"] = min(g["lo"], t), max(g["hi"], t)
+    holes, halves = {}, []
+    for key, g in groups.items():
+        ax = "XYZ"[max(range(3), key=lambda k: abs(key[k]))]
+        if g["ang"] >= 2 * math.pi - 1e-3:
+            holes[(key[6], ax)] = holes.get((key[6], ax), 0) + 1
+        elif abs(g["ang"] - math.pi) < 1e-3:
+            halves.append((key, g, ax))
+    channels = {}
+    for key, g, ax in halves:
+        side = -g["mid"].normalize()                    # the open side
+        partnered = False
+        for key2, g2, _ in halves:
+            if key2 is key or key2[:3] != key[:3] or abs(key2[6] - key[6]) > 0.011:
+                continue
+            d = g2["c"] - g["c"]
+            d = d - g["a"] * d.dot(g["a"])
+            if d.Length < 1e-3:
+                continue
+            d.normalize()
+            if d.dot(side) > 0.99 and d.dot(g2["mid"].normalize()) > 0.99:
+                partnered = True
+                break
+        if not partnered:
+            k = (key[6], round(g["hi"] - g["lo"], 2), ax)
+            channels[k] = channels.get(k, 0) + 1
+    return holes, channels
 
 
 def main():
@@ -105,31 +177,7 @@ def main():
         d.X, d.Y = (0, off) if direction == 0 else (off, 0)
         dims.append(d)
 
-    # holes from the SOLID, not the views: a cylindrical face whose normal points at its own
-    # axis is a hole (a boss's points away); faces sharing an axis + diameter are one hole,
-    # and only a hole whose faces close the circle counts (a slot end is half of one)
-    groups = {}
-    for f in shape.Faces:
-        srf = f.Surface
-        if not isinstance(srf, Part.Cylinder):
-            continue
-        u0, u1, v0, v1 = f.ParameterRange
-        p = f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
-        n = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
-        a = srf.Axis.normalize()
-        radial = (p - srf.Center) - a * (p - srf.Center).dot(a)
-        if n.dot(radial) >= 0:
-            continue                                    # convex: a boss or an outer round
-        a = a if (a.x, a.y, a.z) > (0, 0, 0) else -a  # one sign per axis direction
-        c = srf.Center - a * srf.Center.dot(a)          # the axis's point nearest the origin
-        key = (round(a.x, 3), round(a.y, 3), round(a.z, 3),
-               round(c.x, 1), round(c.y, 1), round(c.z, 1), round(2 * srf.Radius, 2))
-        groups[key] = groups.get(key, 0.0) + abs(u1 - u0)
-    holes = {}
-    for key, ang in groups.items():
-        if ang >= 2 * math.pi - 1e-3:
-            ax = "XYZ"[max(range(3), key=lambda k: abs(key[k]))]
-            holes[(key[6], ax)] = holes.get((key[6], ax), 0) + 1
+    holes, channels = features(shape)
     lines = ["HOLES (from the solid)"]
     table = []
     for (dia, ax), n in sorted(holes.items()):
@@ -141,7 +189,18 @@ def main():
     page.addView(note)
     note.Text = lines
     note.TextSize = 3.5
-    note.X, note.Y = 60, 40
+    note.X, note.Y = 50, 40
+    chan = []
+    if channels:                                        # B105: half circles open to an edge
+        lines = ["OPEN CHANNELS"]
+        for (dia, depth, ax), n in sorted(channels.items()):
+            lines.append(f"  \u00d8{dia:g} x {depth:g} deep  x{n}   along {ax}")
+            chan.append({"dia_mm": dia, "depth_mm": depth, "count": n, "axis": ax})
+        cnote = doc.addObject("TechDraw::DrawViewAnnotation", "Channels")
+        page.addView(cnote)
+        cnote.Text = lines
+        cnote.TextSize = 3.5
+        cnote.X, cnote.Y = 108, 40          # clear of the holes and the title block
 
     te = tpl.EditableTexts
     fields = {"FC-Title": os.environ.get("TD_TITLE", "part"),
@@ -157,7 +216,7 @@ def main():
     doc.recompute()
     summary = {"scale": s, "bbox_mm": [round(W, 2), round(D, 2), round(H, 2)],
                "extents_mm": [round(d.getRawValue(), 2) for d in dims], "holes": table,
-               "template_fields": sorted(te)}
+               "channels": chan, "template_fields": sorted(te)}
     page.ViewObject.show()
     doc.recompute()
     for _ in range(20):

@@ -47,7 +47,7 @@ bed-fit report.
 import numpy as np
 from build123d import *
 from common import params, export
-from iface import IF, dovetail_male, SHELL_LATCH_AZ, SHELL_LATCH_R
+from iface import IF, dovetail_male, latch_pocket, SHELL_LATCH_AZ, SHELL_LATCH_R
 
 P = params()
 PR = P["print"]
@@ -290,8 +290,8 @@ def _mother():
     # deck-side washer recesses (Ø8-10) would breach the pentagon edge at
     # the az±34 positions (boundary ~81 there) — deck v0.4 taught the
     # shell where the deck actually ends.
-    body -= Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, (DECK_TOP + 0.0) / 2) * \
-        Cylinder(PL["housing_pocket_d"] / 2, 6)
+    body -= Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, DECK_TOP) * \
+        latch_pocket(-1.0, 5.0)                       # the D of the keyway index (B107)
     body -= Rot(0, 0, -25.5) * Pos(76.0, 0, DECK_TOP +
                                    (PL["magnet_t"] + 0.2) / 2 - 0.01) * \
         Cylinder((PL["magnet_d"] + 0.25) / 2, PL["magnet_t"] + 0.2)
@@ -473,16 +473,20 @@ def latch_pad_checks(sector):
     """B87: the latch cartridge in the sector's pad, the housing's bottom flush with
     the foot's (on the deck top): housing and rotor clear of the sector at OPEN, half
     way and LOCKED. The lugs hang below the foot into the deck's strike (part_deck
-    checks that side) and the rotor is worked from under the deck."""
-    from iface import latch_insert_housing, latch_insert_rotor, LATCH_ENTRY_DEG
+    checks that side) and the rotor is worked from under the deck. B107: the pad's D
+    pocket holds the housing on its keyway index, keyways outside the latch's travel."""
+    from iface import latch_insert_rotor, LATCH_ENTRY_DEG
+    from part_panel import latch_index, index_verdict, index_report
     tf = Rot(0, 0, SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, DECK_TOP)
-    v_h = _vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + 45) * latch_insert_housing()) & sector)
     rotor = latch_insert_rotor()
     v_r = max(_vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + phi) * rotor) & sector) for phi in (0, 45, 90))
-    ok = v_h < 0.01 and v_r < 0.01
-    print(f"  I3 latch cartridge in the pad: housing x sector {v_h:.2f}, rotor x sector "
+    m = latch_index(sector, tf)
+    ok = m["seated"] < 0.01 and v_r < 0.01
+    print(f"  I3 latch cartridge in the pad: housing x sector {m['seated']:.2f}, rotor x sector "
           f"(open / 45 / locked) {v_r:.2f} mm^3 ({'CLEAR' if ok else '*** CLASH ***'})")
-    return ok
+    bad = index_verdict(m)
+    print(f"  I3 keyway index in the pad: {index_report(m)} ({'INDEXED' if not bad else '*** ' + '; '.join(bad) + ' ***'})")
+    return ok and not bad
 
 
 if __name__ == "__main__":

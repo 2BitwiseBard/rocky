@@ -1,11 +1,11 @@
 {
  "masses_g": {
-  "torso": 1439.7,
+  "torso": 1439.8,
   "coxa": 83.9,
   "femur": 42.7,
   "tibia": 131.0,
   "hand": 38.6,
-  "robot": 2920.7
+  "robot": 2727.8
  },
  "stall_nm": {
   "ST3215": 2.94,
@@ -17,8 +17,8 @@
    "note": "nominal stance, W/5 per foot",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.172,
-    "knee": 0.279
+    "hip": 0.161,
+    "knee": 0.261
    },
    "margin_pct": {
     "yaw": {
@@ -26,12 +26,12 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 5.9,
-     "STS3250": 3.5
+     "ST3215": 5.5,
+     "STS3250": 3.3
     },
     "knee": {
-     "ST3215": 9.5,
-     "STS3250": 5.7
+     "ST3215": 8.9,
+     "STS3250": 5.3
     }
    }
   },
@@ -40,8 +40,8 @@
    "note": "wave-gait stance share, W/4",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.215,
-    "knee": 0.349
+    "hip": 0.201,
+    "knee": 0.326
    },
    "margin_pct": {
     "yaw": {
@@ -49,12 +49,12 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 7.3,
-     "STS3250": 4.4
+     "ST3215": 6.8,
+     "STS3250": 4.1
     },
     "knee": {
-     "ST3215": 11.9,
-     "STS3250": 7.1
+     "ST3215": 11.1,
+     "STS3250": 6.7
     }
    }
   },
@@ -63,8 +63,8 @@
    "note": "two legs raised, W/3 per planted foot",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.287,
-    "knee": 0.466
+    "hip": 0.268,
+    "knee": 0.435
    },
    "margin_pct": {
     "yaw": {
@@ -72,12 +72,12 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 9.8,
-     "STS3250": 5.9
+     "ST3215": 9.1,
+     "STS3250": 5.5
     },
     "knee": {
-     "ST3215": 15.9,
-     "STS3250": 9.5
+     "ST3215": 14.8,
+     "STS3250": 8.9
     }
    }
   },
@@ -86,7 +86,7 @@
    "note": "airborne leg, femur+tibia horizontal",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.29,
+    "hip": 0.254,
     "knee": 0.112
    },
    "margin_pct": {
@@ -95,8 +95,8 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 9.9,
-     "STS3250": 5.9
+     "ST3215": 8.6,
+     "STS3250": 5.2
     },
     "knee": {
      "ST3215": 3.8,
@@ -109,7 +109,7 @@
    "note": "untucked + 100 g in hand",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.516,
+    "hip": 0.48,
     "knee": 0.245
    },
    "margin_pct": {
@@ -118,8 +118,8 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 17.6,
-     "STS3250": 10.5
+     "ST3215": 16.3,
+     "STS3250": 9.8
     },
     "knee": {
      "ST3215": 8.3,
@@ -132,8 +132,8 @@
    "note": "crouched geometry, W/2 through one leg",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.233,
-    "knee": 1.496
+    "hip": 0.217,
+    "knee": 1.397
    },
    "margin_pct": {
     "yaw": {
@@ -141,31 +141,31 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 7.9,
-     "STS3250": 4.8
+     "ST3215": 7.4,
+     "STS3250": 4.4
     },
     "knee": {
-     "ST3215": 50.9,
-     "STS3250": 30.5
+     "ST3215": 47.5,
+     "STS3250": 28.5
     }
    }
   }
  ],
  "worst": {
   "hip": {
-   "tau_nm": 0.516,
+   "tau_nm": 0.48,
    "case": "carry_100g",
-   "st3215_pct": 17.6,
-   "st3250_pct": 10.5,
+   "st3215_pct": 16.3,
+   "st3250_pct": 9.8,
    "st3215": "OK",
    "st3250": "OK"
   },
   "knee": {
-   "tau_nm": 1.496,
+   "tau_nm": 1.397,
    "case": "selfright_push",
-   "st3215_pct": 50.9,
-   "st3250_pct": 30.5,
-   "st3215": "HOT",
+   "st3215_pct": 47.5,
+   "st3250_pct": 28.5,
+   "st3215": "WARM",
    "st3250": "OK"
   }
  },

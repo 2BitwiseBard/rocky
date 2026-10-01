@@ -26,8 +26,9 @@ import numpy as np
 from build123d import *
 from common import params, export
 from iface import (IF, latch_insert_housing, latch_insert_rotor, latch_strike, latch_lug,
-                   LATCH_ENTRY_DEG, LATCH_LAND, LATCH_GAP, LATCH_REACH, LATCH_SLOT,
-                   LATCH_SHAFT_D, dovetail_male, dovetail_female_shoe, set_knob_tf)
+                   latch_housing_tf, latch_pocket, latch_d_profile,
+                   LATCH_ENTRY_DEG, LATCH_LAND, LATCH_GAP, LATCH_REACH, LATCH_SLOT, LATCH_FLAT_R,
+                   LATCH_KEYWAY_DEG, LATCH_SHAFT_D, dovetail_male, dovetail_female_shoe, set_knob_tf)
 
 P = params()
 PR = P["print"]
@@ -65,8 +66,9 @@ def shell_sector_demo():
     for sx in (-MAG_X, MAG_X):
         p += Pos(sx, DEMO_LATCH_Y, -MAG_BOSS / 2) * Cylinder(MAG_D / 2 + 2.0, MAG_BOSS)
         p -= Pos(sx, DEMO_LATCH_Y, T - MAG_T / 2 + 0.01) * Cylinder(MAG_D / 2, MAG_T)
-    # one latch insert pocket (the housing's bottom flush with the inner face)
-    p -= Pos(0, DEMO_LATCH_Y, T / 2) * Cylinder(PL["housing_pocket_d"] / 2, T + 4)
+    # one latch insert pocket (the housing's bottom flush with the inner face), the D of
+    # the keyway index (B107) turned to the coupon's strike
+    p -= demo_latch_tf() * latch_pocket(-2.0, T + 2.0)
     # two I6 male dovetail segments on the OUTER face (z=0 side), running x
     for sx in (-W / 4, W / 4):
         p += Pos(sx, H / 4, 0) * Rot(0, 180, 0) * Rot(0, 0, 90) * dovetail_male(undercut=True)
@@ -95,6 +97,13 @@ def frame_coupon():
 def demo_on_coupon():
     """shell_sector_demo flipped onto frame_coupon: its latch on the strike."""
     return Pos(0, DEMO_LATCH_Y, COUPON_T + DEMO_T) * Rot(180, 0, 0)
+
+
+def demo_latch_tf():
+    """The latch frame in the demo's own coordinates (z 0 on its inner face, +z into the
+    plate, +x the strike's +x once flipped onto the coupon): demo_on_coupon() times this
+    is the coupon's latch frame, Pos(0, 0, COUPON_T)."""
+    return Pos(0, DEMO_LATCH_Y, DEMO_T) * Rot(180, 0, 0)
 
 
 def dovetail_male_coupon():
@@ -219,8 +228,8 @@ def latch_engagement(frame, tf):
     def blade(phi, dz=0.0):          # a flat screwdriver, 0.9 x 5, its tip 0.1 off the slot floor
         z_tip = -LATCH_REACH + LATCH_SLOT[1] - 0.1 + dz
         return tf * Rot(0, 0, LATCH_ENTRY_DEG + phi) * Pos(0, 0, z_tip - 15) * Box(0.9, 5.0, 30)
-    m = {"housing": _vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + 45) * housing) & frame)}
-    m["drop"] = max(_vol((rot(0, dz) + tf * Pos(0, 0, dz) * housing) & frame)
+    m = {"housing": _vol((tf * latch_housing_tf() * housing) & frame)}
+    m["drop"] = max(_vol((rot(0, dz) + tf * Pos(0, 0, dz) * latch_housing_tf() * housing) & frame)
                     for dz in np.arange(0.0, 8.01, 0.5))
     m["turn"] = [(phi, _vol(rot(phi) & frame)) for phi in range(0, 91, 5)]
     m["contact_deg"] = next((phi for phi, v in m["turn"] if v > 0.01), None)
@@ -272,8 +281,65 @@ def cartridge_assembly():
                 for dz in np.arange(0.0, t + LATCH_REACH + 1.01, 0.5))
     seated = max(_vol((Rot(0, 0, a) * rotor) & housing) for a in (0, 45, 90))
     captive = _vol((Pos(0, 0, LATCH_LAND + LATCH_GAP + 1.0) * Rot(0, 0, 90) * rotor) & housing)
-    skin = Pos(0, 0, t / 2) * (Cylinder(PL["housing_d"] / 2, t) - Cylinder(PL["housing_d"] / 2 - 0.05, t))
+    r = PL["housing_d"] / 2                     # its D outline (B107), 0.05 thick
+    skin = latch_d_profile(r, LATCH_FLAT_R, 0.0, t) - latch_d_profile(r - 0.05, LATCH_FLAT_R - 0.05, -1.0, t + 1.0)
     return sweep, seated, captive, _vol(skin & housing) / skin.volume
+
+
+def latch_seat(panel, tf, turn=10.0):
+    """B107: the housing in a panel's D pocket (tf = the latch frame in the panel's
+    coordinates). seated: on its index; turned: the least of +-turn deg and a half turn
+    (180 deg about its axis); play: the largest turn (0.5 deg steps) it takes without
+    meeting the panel. Upside down it seats as on its index: the housing is symmetric
+    top to bottom, keyways and flat included, so that is the same part in the same place."""
+    housing = latch_insert_housing()
+
+    def at(d):
+        return _vol((tf * Rot(0, 0, LATCH_ENTRY_DEG + LATCH_KEYWAY_DEG + d) * housing) & panel)
+    m = {"seated": at(0.0), "turned": min(at(d) for d in (turn, -turn, 180.0))}
+    m["play"] = max([d for d in np.arange(0.5, turn, 0.5) if max(at(d), at(-d)) < 0.01] or [0.0])
+    return m
+
+
+def latch_index(panel, tf, turn=10.0):
+    """B107, the keyway index, every number measured. tf places the latch frame in the
+    panel's coordinates. The housing seats on its index and not turned off it (+-turn
+    deg or a half turn); with the housing on its index the rotor lifted 1 mm into it is
+    captive at every angle a strike lets it turn (-8..98 deg from the entry line, 1 deg
+    steps) and drops through only near LATCH_KEYWAY_DEG; returns how far past LOCKED
+    (90) and back past OPEN (0) the first angle it passes lies."""
+    housing, rotor = latch_insert_housing(), latch_insert_rotor()
+    hx = latch_housing_tf() * housing
+    m = latch_seat(panel, tf, turn)
+    lift = LATCH_LAND + LATCH_GAP + 1.0              # the lug tops 1 mm up into the housing
+
+    def held(phi):
+        return _vol((Pos(0, 0, lift) * Rot(0, 0, LATCH_ENTRY_DEG + phi) * rotor) & hx)
+    m["captive_min"] = min(held(phi) for phi in range(-8, 99))
+    m["keyway_sweep"] = max(_vol((Pos(0, 0, dz) * Rot(0, 0, LATCH_ENTRY_DEG + LATCH_KEYWAY_DEG) * rotor) & hx)
+                            for dz in np.arange(0.0, PL["housing_t"] + LATCH_REACH + 1.01, 0.5))
+    free = [phi for phi in range(99, 172) if held(phi) < 0.01]
+    m["margin_lock"] = (min(free) - 90) if free else None
+    free = [phi for phi in range(-80, -7) if held(phi) < 0.01]
+    m["margin_open"] = (0 - max(free)) if free else None
+    return m
+
+
+def index_verdict(m):
+    bad = []
+    if m["seated"] > 0.01 or m["turned"] < 1.0:
+        bad.append("I3 housing not held to its keyway index")
+    if m["captive_min"] < 1.0 or m["keyway_sweep"] > 0.01 or not m["margin_lock"] or not m["margin_open"]:
+        bad.append("I3 keyways inside the latch's travel (or the rotor cannot pass them)")
+    return bad
+
+
+def index_report(m):
+    return (f"housing on its index {m['seated']:.2f} mm^3 (play +-{m['play']:.1f} deg), turned "
+            f"+-10 deg or a half turn >= {m['turned']:.1f}; rotor lifted 1 mm, -8..98 deg: >= {m['captive_min']:.1f} mm^3 "
+            f"(captive); at the keyways ({LATCH_KEYWAY_DEG:.0f} deg) it drops through "
+            f"({m['keyway_sweep']:.2f}); the first angle it passes is {m['margin_lock']} deg past "
+            f"LOCKED, {m['margin_open']} back past OPEN")
 
 
 if __name__ == "__main__":
@@ -322,7 +388,7 @@ if __name__ == "__main__":
     lip_free = max(_vol((Pos(0, dy, 0) * demo) & frame) for dy in (-(FIT - 0.05), FIT - 0.05))
     lip_loc = min(_vol((Pos(0, dy, 0) * demo) & frame) for dy in (-(FIT + 0.3), FIT + 0.3))
     ctf = Pos(0, 0, COUPON_T)
-    cart = ctf * latch_insert_housing() + ctf * Rot(0, 0, LATCH_ENTRY_DEG) * latch_insert_rotor()
+    cart = ctf * latch_housing_tf() * latch_insert_housing() + ctf * Rot(0, 0, LATCH_ENTRY_DEG) * latch_insert_rotor()
     v_cart = _vol(cart & demo)
     mag = Cylinder(PL["magnet_d"] / 2, PL["magnet_t"])       # bottomed (the cuts sit 0.01 proud)
     mags = []
@@ -345,6 +411,11 @@ if __name__ == "__main__":
     m = latch_engagement(frame, ctf)
     bad += latch_verdict(m)
     print(f"I3 latch on the frame coupon's strike: {latch_report(m)}")
+    # I3 keyway index (B107): the demo's D pocket holds the housing one way, keyways
+    # outside the travel (part_shell runs the same on the sectors)
+    mi = latch_index(parts["shell_sector_demo"], demo_latch_tf())
+    bad += index_verdict(mi)
+    print(f"I3 keyway index in the demo: {index_report(mi)}")
     # I1 thumbscrew (B82): an M3 x 16 in the knob must bite the insert and stay in the deck
     eng, out, v_in, proud, v_key, v_parts = thumbscrew_reach()
     if eng < 5.0 or out > 0.0:

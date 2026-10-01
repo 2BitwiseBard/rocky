@@ -48,6 +48,9 @@ import time
 
 import httpx
 
+from harness.capabilities import GOTO_DETOUR_CAP_S
+
+
 def default_url(env=None):
     """The cockpit this process drives: ROCKY_COCKPIT_URL, else 127.0.0.1 on ROCKY_COCKPIT_PORT
     (what sim/cockpit.py binds and `rocky.sh tailnet` proxies), else :8765. An empty value
@@ -64,10 +67,15 @@ COCKPIT_CAPABILITIES = frozenset({"cockpit", "eye", "memory"})    # harness.capa
 PLACES = "places"          # F3: + this flag only while the cockpit reports its place recognition on
 FIND_TIMEOUT_S = 400.0     # find_object: up to 16 looks, each maybe a goto (<= 0.4 m: ~16 s at D063's 34.2 mm/s,
 #                            with the ease-in and the 1.5 s the goto answers after it ends) or a turn
-GO_BACK_TIMEOUT_S = 300.0  # go_back_to: up to 4 goto legs (cockpit_brains.GO_BACK_MAX_LEGS) of <= 55 s (D063: the
-#                            envelope's goto_timeout_s, was 40), + up to 15.5 s when a detour is running at the cap
-#                            (cockpit.GOTO_DETOUR_S: it runs out first; measured 66-68 s answers) + 1.5 s each =
-#                            288 s, and slack (was 200 = 4 x (40 + 8 + 1.5) + 2)
+GOTO_ANSWER_S = 1.5        # a goto answers this long after it ends (sim/cockpit.py _goto_post)
+TOOL_TIMEOUT_S = 120.0     # every other call, a goto and a move among them: a goto answers by its cap + 1.5 s,
+#                            at most GOTO_DETOUR_CAP_S + 1.5 = 88.5 s (B116: the detour cap ends it even
+#                            mid-detour; before, a detour running at the 55 s cap answered up to 87.5 s)
+GO_BACK_MAX_LEGS = 4       # sim/cockpit_brains.GO_BACK_MAX_LEGS (test_cockpit_brains pins this copy)
+GO_BACK_TIMEOUT_S = GO_BACK_MAX_LEGS * (GOTO_DETOUR_CAP_S + GOTO_ANSWER_S) + 12.0
+#                            go_back_to: up to 4 goto legs, each answering by 87 + 1.5 s (B116: a leg that
+#                            detoured gets the detour cap like any goto) = 354 s, + 12 s for the pose reads
+#                            between legs and slack = 366 s (was 300 = 4 x (55 + 15.5 + 1.5) + 12 at D063)
 
 
 def cockpit_alive(url=DEFAULT_URL, timeout=2.0):
@@ -97,7 +105,7 @@ def reported_flags(snap) -> set:
 class CockpitBackend:
     def __init__(self, url=DEFAULT_URL):
         self.url = url.rstrip("/")
-        self.client = httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=5.0))
+        self.client = httpx.AsyncClient(timeout=httpx.Timeout(TOOL_TIMEOUT_S, connect=5.0))
         self.last_capabilities = None     # the last snapshot GET /api/capabilities answered (D056)
         self._said_mismatch = False       # the "no /api/capabilities" warning, logged once
 

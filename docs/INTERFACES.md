@@ -120,6 +120,19 @@ being removed hundreds of times, and never carry structure.
   two lugs at its bottom end, which reaches 5.8 mm below the seating face.
   The rotor drops through two keyways in the housing and, turned off them,
   is captive. The wear part is the ~1 g insert, not the panel.
+- **Keyway index (B107):** the housing is a D, flat 6.0 mm from its axis
+  at 90° to the keyways, and every pocket is the same D 0.15 mm bigger
+  (`iface.latch_pocket`), so the housing goes in one way (±2.5° of play),
+  its keyways 135° from the entry line. The rotor works 0–90° between the
+  strike's stops, so no angle it is worked at, or comes off at (OPEN),
+  lines its lugs up with the keyways: they pass only at 132–138°, 42° past
+  LOCKED and 42° back past OPEN (`part_panel.latch_index`, run on the demo
+  and on the shell sector's pad: one part, printed five times). Either face
+  up is the same: the housing is symmetric top to bottom. As D063 left it
+  (round, glued 45° off the entry line), the lugs passed at 42–48°,
+  mid-turn. The index is a place, not a stop: off the robot nothing holds
+  the rotor's 3.8 mm of axial play, and turned 45° back past OPEN it still
+  drops out of its housing.
 - **Strike (frame side, `iface.latch_strike`):** a Ø6.6 bore and two entry
   slots through a 3.2 mm land, at 45° to the frame's +x (radial on the
   deck), and an underside recess shaped to the lugs' quarter-turn path. Its
@@ -131,9 +144,9 @@ being removed hundreds of times, and never carry structure.
   frame's underside, square to the lugs. From below, a flat screwdriver
   (blade ≤ 5 mm), a quarter turn clockwise to lock: it starts to bite at
   ~40° and stops at 90°. Not a coin: one reaches only ~0.5 mm of the slot
-  before it meets the frame. Nothing indexes the housing's keyways (B107):
-  a rotor turned to them drops out of a panel that is off the robot. The
-  tray tongue and the belly door have no strike yet (B51, B84).
+  before it meets the frame. The tray tongue and the belly door have no
+  strike yet (B51, B84); their pockets take their own +x as the strike's
+  for the index, and their strikes must be drawn to match.
 - **Magnets:** Ø6 × 3 glue-in pockets (N35+) wherever a soft-close seat is
   wanted. Polarity convention: every magnet, panel side and frame side, has
   its NORTH face pointing away from the robot (the way the panel lifts
@@ -161,7 +174,9 @@ captive lanyard so field panels don't drop.
 
 Everything electronic on the robot sits on ONE slide-out tray
 (`part_avionics`): the Pi 5 with its cooler, the Bus Servo Adapter (A),
-the 5 V buck for the Pi, the 6 V UBEC and the BNO085 IMU.
+the 5 V buck for the Pi, the 6 V UBEC and the BNO085 IMU. That is
+the intent: as drawn, the adapter, the buck and the UBEC have no place
+under the Pi (measured 2026-09-30, B108 below; the owner's call).
 The ESP32 Servo Driver is a bench tool and does not ride on the tray
 (`bom/BOM.csv` A-03).
 
@@ -186,7 +201,16 @@ The ESP32 Servo Driver is a bench tool and does not ride on the tray
   (the grommet bore does not thread); the tail ends 0.9 mm above the deck,
   and the IMU's top 1.2 mm below the Pi's underside keep-out. It talks over
   SPI ([WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify)).
-  The bus adapter, buck and UBEC have no envelope yet (B108).
+  The bus adapter, buck and UBEC are envelopes in `part_avionics` (B108,
+  from their datasheets and Waveshare's STEP of the adapter: 42 × 33 with
+  parts 11.0 mm over its board and pins 2.0 under it; 17.8 × 20.3 × 8.8;
+  43 × 17 × 7), and none has a place on this tray: under the Pi's 2 mm
+  keep-out there is 9.0 mm, the adapter on its pad stands 6.1 mm into it,
+  the buck with its tie 1.0 mm, and the UBEC with its tie is 0.8 under it
+  (the IMU's rule is 1.0). Measured options, the owner's call with B51:
+  the Pi on 13 mm standoffs fits the buck and the UBEC; on 18.5 mm, with
+  the IMU moved to (18, 1), all four fit. Each raises the Pi stack 2.0 or
+  7.5 mm under the carapace.
 - **Deck position:** the tray's place on the deck, (0, −38) in the body
   frame, is still an assumption (`part_avionics.TRAY_XY`), and there the
   tray and its rails run into the coxa bases at stations 2 and 3. As drawn,
@@ -274,7 +298,7 @@ All are in `cad/params.yaml → interfaces:` (the I1 cable cutout is in
 |---|---|
 | I1 leg port | dowel Ø4 × 8 @ (−28, ±19); thumbscrew M3 × 16 hex head @ (−41, ±17); inboard hook lip 24 wide through a 4.2 deck slot @ x = −48; cable cutout 11 × 11 @ x = −29; XT30 + JST-XH 5-pin |
 | I2 tool socket | lug Ø2.5 × 2.2 @ 9 from the face; entry 6; twist 90°; detent 0.6; JST-SH 3-pin |
-| I3 panel latch | insert housing Ø14 × 6 (pocket 14.3), bayonet rotor, cam rise 0.8 with a 0.2 bite, 90° throw, frame ≥ 6 thick; magnet Ø6 × 3 |
+| I3 panel latch | insert housing Ø14 × 6, a D (flat at 6.0, keyways 135° from the entry line; pocket Ø14.3, flat at 6.15), bayonet rotor, cam rise 0.8 with a 0.2 bite, 90° throw, frame ≥ 6 thick; magnet Ø6 × 3 |
 | I4 avionics tray | plate 84 × 70 × 3; rail 3 × 3; bulkhead 70 × 26 face |
 | I5 battery sled | bay 175 × 50 × 30 for a soft-case pack ≤ 138 × 44 × 25 (VERIFY vs the purchased pack); XT60E-M 16.2 × 8.6 × 16.0; XT60 float ±0.8 |
 | I6 dovetail | 12 / 8 / depth 4 (on the ring: 8 at the root, 12 outboard, D063); segment 24 spec, 16 on the shell as built; M3 set-knob on a 45° spot face |

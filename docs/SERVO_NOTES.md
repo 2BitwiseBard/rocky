@@ -30,10 +30,10 @@ backlash.
 
 | case (12 V) | yaw | hip | knee | source |
 |---|---|---|---|---|
-| stand on 5 legs (static) | 0 | 5.9 % | 9.5 % | `sim/out/torque_audit.json` |
-| 3-leg stance (static) | 0 | 9.8 % | 15.9 % | same |
+| stand on 5 legs (static) | 0 | 5.5 % | 8.9 % | `sim/out/torque_audit.json` |
+| 3-leg stance (static) | 0 | 9.1 % | 14.8 % | same |
 | walk 34.2 mm/s, physics RMS (D063; at 45.5: 3.8 / 6.8 / 11.8 %) | 3.1 % | 6.5 % | 11.5 % | `sim/out/audit_gestures.json` |
-| self-right push (W/2 through one leg) | 0 | 7.9 % | **50.9 %** | `torque_audit.json` |
+| self-right push (W/2 through one leg) | 0 | 7.4 % | **47.5 %** | `torque_audit.json` |
 | the hottest gesture (`manip_adjacent`), RMS | 4.9 % | 39.7 % | 19.4 % | `audit_gestures.json` |
 
 (Percent of the 2.94 N·m stall. Yaw reads 0 in the static audit because it
@@ -52,8 +52,8 @@ applies vertical foot forces only.)
     and the 3.0 rad/s loaded speed budget is derived from it. At the
     datasheet's rated torque it would be about 1.6 rad/s (computed).
   - Every audit number is at 12 V. A 3S pack runs 12.6 V down to the 9.9 V
-    floor; if stall scales with voltage, the knee push is ~55 % of stall at
-    11.1 V and ~62 % at 9.9 V (computed). Only the RL environments
+    floor; if stall scales with voltage, the knee push is ~51 % of stall at
+    11.1 V and ~58 % at 9.9 V (computed). Only the RL environments
     randomise voltage.
   - The firmware's own overload rule is 80 % load for 2 s → output drops
     to 20 % (memory table V3.7, addr 34–36), not the sim's 85 % for 180 s.

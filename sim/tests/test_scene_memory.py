@@ -383,8 +383,9 @@ class SlowLegSim(MemSim):
 
 
 def test_go_back_to_re_aims_a_leg_that_ran_out_of_time():
-    """D063: a detour costs ~20 s of goto's 55 s cap, so a 1.2 m leg can time out on the way. One
-    that ended closer is re-aimed (the next leg); one that got nowhere is reported like a veto."""
+    """D063: a detour costs ~20 s of goto's 55 s cap, so a 1.2 m leg could time out on the way (B116:
+    a leg that detoured now gets the 87 s detour cap, but one can still run out of time). One that
+    ended closer is re-aimed (the next leg); one that got nowhere is reported like a veto."""
     ball = {"kind": "find", "text": "ball", "objects": [
         {"name": "ball", "x": 2.0, "y": 0.0, "confidence": 0.9, "size_m": 0.1}]}
     sim = SlowLegSim(0.8)

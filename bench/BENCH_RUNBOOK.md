@@ -257,16 +257,16 @@ Any session longer than a smoke test runs with the monitor in the loop
 ## 7. Thermal soak: the #1 hardware risk, measured
 
 Put the femur servo in the bench jig, with a lever and mass per §8's table
-(3-leg stance load ≈ 0.47 N·m). Note the room temperature.
+(3-leg stance load ≈ 0.43 N·m). Note the room temperature.
 
 ```bash
 python3 thermal_soak.py --port /dev/ttyACM0 --ids 2 --minutes 20 \
-        --note "stance load 0.47Nm, 22C room"
+        --note "stance load 0.43Nm, 22C room"
 ```
-- [ ] Walking-load soak (~0.35 N·m): expect a comfortable steady state.
-- [ ] Stance-load soak (~0.47 N·m): the number that matters. Time-to-60 °C
+- [ ] Walking-load soak (~0.33 N·m): expect a comfortable steady state.
+- [ ] Stance-load soak (~0.43 N·m): the number that matters. Time-to-60 °C
   is the robot's standing-still budget before the sleep pose must trigger.
-- [ ] (Optional, supervised) self-righting load (~1.50 N·m): D044's one
+- [ ] (Optional, supervised) self-righting load (~1.40 N·m): D044's one
   warm case, which the righter asks for seconds, not minutes; watching it
   climb is the point. Abort early; there is no need to reach 65 °C.
 
@@ -281,20 +281,21 @@ loads are the worst joint of each case in `sim/out/torque_audit.json`
 
 | test | load | mass @ 100 mm arm | predicted % stall |
 |---|---|---|---|
-| walking (`walk_4leg`, knee) | 0.35 N·m | ~355 g | ~12 % |
-| 3-leg stance (`stance_3leg`, knee) | 0.47 N·m | ~475 g | ~16 % |
-| untucked carry of 100 g (`carry_100g`, hip) | 0.52 N·m | ~525 g | ~18 % |
-| self-righting push (`selfright_push`, knee; optional, supervised) | 1.50 N·m | ~1525 g | ~51 %, HOT (50.9 %, D063) |
+| walking (`walk_4leg`, knee) | 0.33 N·m | ~330 g | ~11 % |
+| 3-leg stance (`stance_3leg`, knee) | 0.43 N·m | ~445 g | ~15 % |
+| untucked carry of 100 g (`carry_100g`, hip) | 0.48 N·m | ~490 g | ~16 % |
+| self-righting push (`selfright_push`, knee; optional, supervised) | 1.40 N·m | ~1425 g | ~48 %, WARM (47.5 %, B106) |
 
-D063's robot is 2727.7 g (+33.1 g, 27.6 of it the fork's side cheeks);
-the audit weighs 2920.7 g because it counts the hands twice (B106), so these loads
-are slightly high: on the safe side.
+D063's robot is 2727.7 g (+33.1 g, 27.6 of it the fork's side cheeks), and
+the audit weighs that robot since B106 (2026-09-30; 2727.8 g with B107's
+0.1 g of latch-pocket fill): before, it counted the five hands twice, so
+every stance load above read 7 % high.
 
 The pre-D039 table (D015: 700 g walking, 1000 g stance) over-tests these
 about twice; a 1000 g step is still a fair margin check, logged as one.
 
 ```bash
-python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 475 --arm-mm 100
+python3 torque_step.py --port /dev/ttyACM0 --id 2 --mass-g 445 --arm-mm 100
 ```
 - [ ] measured/predicted within 0.8–1.3 means the audit's margins are real.
   Outside that, investigate: lever geometry, supply sag under load, the
@@ -327,7 +328,7 @@ the robot stands on a stream** (B98;
 [SERVO_NOTES](../docs/SERVO_NOTES.md#fluid-motion-what-limits-it)).
 
 Setup as §8: the hip (id 2) in the jig with the lever and the 3-leg stance
-mass (~475 g at 100 mm), loop key in, under a minute of torque in all.
+mass (~445 g at 100 mm), loop key in, under a minute of torque in all.
 
 ```python
 # python3 - <<'EOF'   (from bench/)

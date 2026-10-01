@@ -553,14 +553,16 @@ _REP_GESTURES = ["wave", "sit", "turn_in_place", "sidestep", "look_around", "bow
 _REP_LEXICON = ["greeting", "yes", "no", "acknowledge", "found_it", "thinking", "error"]
 _BUILD_TOOLS_BEFORE = {
     # D063: goto's timeout clause (~0.034 m/s, 55 s cap) is in every list (were 7efe2065850c... /
-    # 0df60970f429... / bc5de4faced2... / 884b0cd12818... / b9dc26d6eb98... / 2e3bd9f25112...)
-    "local_brain.TOOLS": "ca30fea22e45767733d76a313c69bfd1eb0fcf721d3d20d32911e76d2dd88076",
+    # 0df60970f429... / bc5de4faced2... / 884b0cd12818... / b9dc26d6eb98... / 2e3bd9f25112...);
+    # B116: + the detour cap (~87 s) in that clause (were ca30fea22e45... / b3257e6558b2... /
+    # fe8ec983be35... / 061c89608de4... / a0710c0a9b6d... / 383d69fa6815...)
+    "local_brain.TOOLS": "3cdedb3bcb9164b31a5798f604b578c07fe1e54059947c3041e217b40b300e74",
     # D063: and the compose_gesture example re-timed (were f932d346fe16... / 469a6144f730... / 0f6585445b0e...)
-    "cockpit_brains.TOOLS": "b3257e6558b22f329a7db204ab26f5ef5403e1120a2a6fc95a06c91b28e0967f",
-    "rep look extra": "fe8ec983be35c2e35c044ff80a5878b0a13a7247036c38a722aca6ea39ece2a4",
-    "rep no-look extra": "061c89608de418c0eb174fd2e408723c3714bc380b5b1f2eb169e7c0c39bf70f",
-    "rep look": "a0710c0a9b6dc384660b540a2a6b01beebfe786fc00b9ae963c283cce71acead",
-    "rep signed sidestep": "383d69fa6815914dc436cee0b6d7529c82c5e7635c68d3d41eb3ef311fb511cc",
+    "cockpit_brains.TOOLS": "5b0913fd43bbcd723d1ee765198b62b3af6e96511d6b6f6ee1b1b695fe2460d9",
+    "rep look extra": "db239aed3dd178828da3f578a2796f17a3ade5036ffcf43fa99b9025ee0ddf1e",
+    "rep no-look extra": "c8250a8c8883364d5522031293ccc4412048e1dbc1cdb2bd14085d58d16f7537",
+    "rep look": "7c81153ffbd2f8e01bca1cff298f80b07086f11d75dcc04834086a859ad17df4",
+    "rep signed sidestep": "dffc21bcf60463e0e5a0bdfba8c2186b9d06e5f6532f99ad5cd1237f79bf4bba",
 }
 # the snapshot file's key for each (harness/fixtures/d056/, vendored)
 _SNAPSHOT_KEYS = {
@@ -581,11 +583,13 @@ def _canon_sha(obj):
 
 
 # D063 changed two tool texts on purpose (compose_gesture's example, re-timed to 1 s per move, and
-# goto's timeout clause: the 34.2 mm/s envelope and the 55 s cap derived from it); the snapshot
-# files keep the D056 texts, _as_of_d063 puts today's in their place
+# goto's timeout clause: the 34.2 mm/s envelope and the 55 s cap derived from it), and B116 added the
+# detour cap to that clause (87 s once a goto has detoured); the snapshot files keep the D056 texts,
+# _as_of_d063 puts today's in their place
 D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
 D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
-D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+B116_GOTO_TOO_FAR = ("(too far: ~0.034 m/s, 55 s cap — a detour may extend it to ~87 s — keep targets "
+                     "within ~1.5 m)")      # D063's: "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
 
 
 def _as_of_d063(tools):
@@ -598,7 +602,7 @@ def _as_of_d063(tools):
             f["description"] = C.COMPOSE_DOC
         if f["name"] == "goto":
             assert D056_GOTO_TOO_FAR in f["description"], "the snapshot's goto text is not D056's"
-            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, B116_GOTO_TOO_FAR)
     return out
 
 
@@ -688,6 +692,10 @@ async def test_sim_goto_cap_is_the_one_its_text_quotes(server):
         docs = {t.name: t.description for t in (await cs.list_tools()).tools}
     assert f"{cap:g} s cap" in docs["goto"]
     assert goto_cap_for(ArmedGait()) > cap                  # B113: 33.2 mm/s -> 57 s
+    # B116: this goto has no lidar detours, so it keeps the plain cap; the cockpit's detour cap
+    # (87 s, quoted in the same text) never applies here
+    assert cap < C.GOTO_DETOUR_CAP_S == C.default_envelope()["goto_detour_timeout_s"] == 87.0
+    assert "~87 s" in docs["goto"]
 
 
 @pytest.mark.slow

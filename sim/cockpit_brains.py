@@ -311,9 +311,10 @@ FIND_ESTIMATE_PROMPT = (
 # (sim/scene_memory.py; the cockpit owns one SceneMemory per world — sim.memory)
 GO_BACK_STANDOFF_M = FIND_NEAR_M + EYE_FWD_M   # 0.35 m torso-to-near-edge: where find_object stops
 GO_BACK_LEG_M = 1.2         # one goto leg: ~37 s clear at D063's 34.2 mm/s of goto's 55 s cap (was ~1.8 m at
-#                             45 mm/s in 40 s). A detour costs ~20 s (the sidestep), so a leg can run out of time
+#                             45 mm/s in 40 s). A detour costs 11-32 s (B116), so a leg could run out of time;
+#                             since B116 a leg that detoured gets the goto's 87 s detour cap like any goto
 GO_BACK_MIN_PROGRESS_M = 0.10   # ... and a leg that timed out this much closer is re-aimed, not a veto (D063)
-GO_BACK_MAX_LEGS = 4
+GO_BACK_MAX_LEGS = 4        # harness/cockpit_backend.py keeps a copy: its GO_BACK_TIMEOUT_S covers this many legs
 GO_BACK_DEFAULT_SIZE_M = 0.10
 MEMORY_NOTE = ("Each operator message may start with 'Situation: ...' — the robot's own awareness "
                "(pose, guards, what the lidar sees nearby, remembered objects, the last look; servo "
@@ -2110,10 +2111,11 @@ class Brains:
         """Walk back to a remembered object: gotos of at most GO_BACK_LEG_M
         toward it until within the standoff (find_object's stopping distance
         plus half its size; 0 for a place pinned with 'X is here'). Every leg
-        is an ordinary goto (tool_goto: every guard); any veto ends it. A leg
-        that ran out of time (D063: a detour around an obstacle costs ~20 s of
-        goto's 55 s cap) but ended GO_BACK_MIN_PROGRESS_M closer is no veto:
-        the next leg re-aims from there (GO_BACK_MAX_LEGS still bounds it)."""
+        is an ordinary goto (tool_goto: every guard, and its caps: 55 s, 87 s
+        once it has detoured, B116); any veto ends it. A leg that ran out of
+        time (D063: a detour around an obstacle cost ~20 s of goto's 55 s cap)
+        but ended GO_BACK_MIN_PROGRESS_M closer is no veto: the next leg
+        re-aims from there (GO_BACK_MAX_LEGS still bounds it)."""
         mem = self.memory
         if mem is None:
             return self._no_memory()

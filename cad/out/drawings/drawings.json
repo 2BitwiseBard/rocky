@@ -12,6 +12,7 @@
    19.9
   ],
   "holes": [],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -23,7 +24,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "c87d5aa9e8bdb0f8"
+  "step_sha": "c87d5aa9e8bdb0f8",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "coxa_fork": {
   "scale": 0.5,
@@ -44,6 +46,26 @@
     "axis": "Y"
    }
   ],
+  "channels": [
+   {
+    "dia_mm": 6.4,
+    "depth_mm": 1.3,
+    "count": 1,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 7.0,
+    "depth_mm": 0.6,
+    "count": 1,
+    "axis": "Z"
+   },
+   {
+    "dia_mm": 20.3,
+    "depth_mm": 1.8,
+    "count": 1,
+    "axis": "Z"
+   }
+  ],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -55,7 +77,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "ea54cd2920b19ca1"
+  "step_sha": "ea54cd2920b19ca1",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "coxa_yaw_base": {
   "scale": 0.75,
@@ -96,6 +119,7 @@
     "axis": "Z"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -107,7 +131,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "fae5980b24660b05"
+  "step_sha": "fae5980b24660b05",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "femur_link": {
   "scale": 0.75,
@@ -133,6 +158,7 @@
     "axis": "Y"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -144,7 +170,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "3cba4218d0bf39a5"
+  "step_sha": "3cba4218d0bf39a5",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "femur_plate_b": {
   "scale": 1,
@@ -170,6 +197,7 @@
     "axis": "Y"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -181,7 +209,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "dc5aa15fb740c73e"
+  "step_sha": "dc5aa15fb740c73e",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "horn_coupler": {
   "scale": 2,
@@ -207,6 +236,7 @@
     "axis": "Z"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -218,7 +248,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "59c377c221c8cd5f"
+  "step_sha": "59c377c221c8cd5f",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "servo_blank": {
   "scale": 1,
@@ -249,6 +280,7 @@
     "axis": "Z"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -260,7 +292,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "5e41a5925bcf8349"
+  "step_sha": "5e41a5925bcf8349",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "tibia_knee_carrier": {
   "scale": 0.75,
@@ -286,6 +319,7 @@
     "axis": "X"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -297,7 +331,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "00f3cbe04b2ae631"
+  "step_sha": "00f3cbe04b2ae631",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "tibia_sea_outer": {
   "scale": 1.5,
@@ -323,6 +358,7 @@
     "axis": "Z"
    }
   ],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -334,7 +370,8 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "c3cd86f02a4be1de"
+  "step_sha": "c3cd86f02a4be1de",
+  "sheet_rev": "3a4d0718e42cf763"
  },
  "tibia_sea_slider": {
   "scale": 2,
@@ -349,6 +386,7 @@
    16.6
   ],
   "holes": [],
+  "channels": [],
   "template_fields": [
    "Designed_by_Name",
    "Drawing_number",
@@ -360,6 +398,7 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "29f0e1fdf0c1d2cc"
+  "step_sha": "29f0e1fdf0c1d2cc",
+  "sheet_rev": "3a4d0718e42cf763"
  }
 }

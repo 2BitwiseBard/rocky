@@ -283,11 +283,13 @@ EXTRA_BEFORE = ("compose_gesture", "check_gesture", "save_gesture", "find_object
 EXTRA_BEFORE_SHA = "5af48acd8c83b5d63bb2acc0302cf4c22d7db2817ead3eb8405194e3fd7d0421"
 GATED_BEFORE = frozenset({"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn", "move"})
 # the D056 compose_gesture text and goto's timeout clause (the texts D063 changed: the compose example
-# re-timed; the 34.2 mm/s envelope and the 55 s cap derived from it): _as_of_d063 puts today's in
-# their place, so every other tool text and schema is still checked against the D056 snapshot byte for byte
+# re-timed; the 34.2 mm/s envelope and the 55 s cap derived from it; B116 added the 87 s detour cap to
+# the clause): _as_of_d063 puts today's in their place, so every other tool text and schema is still
+# checked against the D056 snapshot byte for byte
 D056_COMPOSE_RULE = "give each move >= 0.6 s. Example wave with leg 0: "
 D056_GOTO_TOO_FAR = "(too far: ~0.045 m/s, 40 s cap, keep targets within ~1.5 m)"
-D063_GOTO_TOO_FAR = "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
+B116_GOTO_TOO_FAR = ("(too far: ~0.034 m/s, 55 s cap — a detour may extend it to ~87 s — keep targets "
+                     "within ~1.5 m)")      # D063's: "(too far: ~0.034 m/s, 55 s cap, keep targets within ~1.5 m)"
 # the D056 snapshot, vendored with the harness tests (ROCKY_D056_SNAPSHOTS overrides the directory)
 REGISTRY_SNAPSHOTS = (os.environ.get("ROCKY_D056_SNAPSHOTS")
                       or os.path.join(ROOT, "harness", "fixtures", "d056"))
@@ -310,7 +312,7 @@ def _as_of_d063(tools):
             f["description"] = C.COMPOSE_DOC
         if f["name"] == "goto":
             assert D056_GOTO_TOO_FAR in f["description"], "the snapshot's goto text is not D056's"
-            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, D063_GOTO_TOO_FAR)
+            f["description"] = f["description"].replace(D056_GOTO_TOO_FAR, B116_GOTO_TOO_FAR)
     return out
 
 
@@ -351,21 +353,33 @@ def test_extra_tools_and_gated_equal_the_pre_registry_snapshot():
 
 def test_goto_texts_and_waits_follow_the_envelope():
     """D063: the envelope fell to 34.2 mm/s and goto's cap, derived from it, grew 40 -> 55 s. The
-    texts quote it, a clear go_back_to leg fits it, and the MCP proxy still waits long enough."""
+    texts quote it, a clear go_back_to leg fits it, and the MCP proxy still waits long enough.
+    B116: a goto that has entered a detour gets the 87 s detour cap, which ends it even mid-detour,
+    so the slowest answer is that cap + the 1.5 s the goto answers after it ends (88.5 s; before, a
+    detour still running at the 55 s cap ran out first: up to 55 + 31.0 + 1.5 = 87.5 s). Every wait
+    on the goto path is sized on that answer, with margin."""
     import harness.capabilities as C
     import harness.cockpit_backend as cbk
     import harness.local_brain as lb
-    cap = C.default_envelope()["goto_timeout_s"]
+    env = C.default_envelope()
+    cap, detour_cap = env["goto_timeout_s"], env["goto_detour_timeout_s"]
     assert "in its 55 s" in cb.goto_range_error(3.5, 0.0, {"x": 0.0, "y": 0.0})
     assert "~0.034 m/s in 55 s" in lb.validate_move(2.0, 0.0)[2] and "walks ~0.034 m/s" in lb.MOVE_RULE
     assert cb.GO_BACK_LEG_M / C.GOTO_SPEED_M_S + C.GOTO_EASE_IN_S < cap - 15.0     # ~37 s of 55
     import cockpit
-    assert cockpit.GOTO_CAP_S == cap
-    settle = 1.5                                   # a goto answers 1.5 s after it ends (cockpit _goto_post)
-    # a detour still running at the cap runs out its own limit first (measured: answers at 66-68 s)
-    longest = cap + cockpit.GOTO_DETOUR_S + settle
-    assert longest < cbk.CockpitBackend("http://127.0.0.1:9").client.timeout.read    # a goto, a move
-    assert cbk.GO_BACK_TIMEOUT_S >= cb.GO_BACK_MAX_LEGS * longest
+    assert (cockpit.GOTO_CAP_S, cockpit.GOTO_DETOUR_CAP_S) == (cap, detour_cap) == (55.0, 87.0)
+    assert cbk.GOTO_DETOUR_CAP_S == detour_cap                 # the proxy sizes its waits on the same cap
+    settle = cbk.GOTO_ANSWER_S
+    assert settle == 1.5                           # a goto answers 1.5 s after it ends (cockpit _goto_post)
+    longest = detour_cap + settle                  # 88.5 s: the cap ends a detoured goto even mid-detour
+    # a goto or a move over MCP: the proxy's per-call timeout, with half a minute to spare
+    proxy = cbk.CockpitBackend("http://127.0.0.1:9").client.timeout.read
+    assert proxy == cbk.TOOL_TIMEOUT_S == 120.0 and proxy - longest >= 30.0
+    # go_back_to: every leg is an ordinary goto (it may detour), so its timeout covers that many slowest
+    # answers; the proxy keeps a copy of the leg count
+    assert cbk.GO_BACK_MAX_LEGS == cb.GO_BACK_MAX_LEGS
+    assert cbk.GO_BACK_TIMEOUT_S >= cb.GO_BACK_MAX_LEGS * longest + 10.0             # 366 s >= 354 + 10
+    assert cbk.GO_BACK_TIMEOUT_S == 366.0                                             # was 300 at D063
 
 
 def test_turn_is_timed_to_the_envelope_turn_rate():

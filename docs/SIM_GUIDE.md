@@ -422,8 +422,12 @@ on for 16.6 s, to `blocked`; now `stuck` after 6.0 s));
 `timeout` (55 s since D063: the 1.5 m reach
 1.2 times over at 34.2 mm/s plus the 2.36 s ease-in,
 `harness.capabilities.goto_cap_s`, the number the goto text quotes; 40 s
-before; a detour still running at the cap finishes first, so a goto can
-answer up to ~72 s: measured 66-68 s). A target farther than 3 m is an
+before. B116, 2026-09-30: once a goto has entered a detour its cap is 87 s,
+`cockpit.GOTO_DETOUR_CAP_S` = `goto_detour_cap_s`, the same derivation with
+the reach grown by both detours' 0.45 m, and it stays 87 s after the detour
+ends; the cap ends a goto even mid-detour, so a goto answers by its cap +
+1.5 s, 88.5 s at most (before, a detour still running at the 55 s cap
+finished first: up to 87.5 s)). A target farther than 3 m is an
 argument error. Measured 2026-09-24
 (flat floor, from the origin, servo realism on): 0.45 m away → arrived in
 12.2 s; a 0.8 m wall at x = 0.6 → blocked at 0.27 m after both detours
@@ -437,10 +441,21 @@ target is 0.6 m or more behind it (0.35 m behind: blocked), but the detour
 costs ~20 s, so a 1.2 or 1.5 m goto around it runs out of time on the way
 (1.14–1.16 m / 1.27 m walked). Measured over 200 such gotos (B116,
 2026-09-30): a detour costs 11.0–32.0 s up to 1.5 m, and at the 55 s cap 15
-of 16 detour gotos of 1.0 m, 38 of 84 of 1.2 m and 0 of 84 of 1.5 m arrive;
-B116 proposes 87 s once a goto has detoured (not applied). `go_back_to` re-aims such a leg (COCKPIT_GUIDE
+of 16 detour gotos of 1.0 m, 38 of 84 of 1.2 m and 0 of 84 of 1.5 m arrived.
+On the 87 s detour cap (shipped the same day; `--verify` re-ran all 214
+scenarios on it, 214/214 as derived) 16 / 78 / 80 arrive, every other one
+ends `blocked` or `stuck` by itself, the latest arrival up to 1.5 m comes at
+75.0 s, and 2.0 m arrives 15 of 16 times (the latest at 85.7 s); a 2.9 m goto
+that sidestepped a wall at 0.45 m times out at 87.0 s, 68 s after its detour
+ended. `go_back_to` re-aims a leg that still runs out of time (COCKPIT_GUIDE
 "Memory and awareness"): a ball 2.0 m away behind that wall or box → back at
-it in 72.5 s / 71.9 s, two legs (53.2 s with nothing in the way).
+it in 72.6 s / 72.1 s, two legs, the first arriving on the detour cap at
+56.5 s / 56.1 s (before B116 it timed out at 55 s and was re-aimed: 72.5 s /
+71.9 s); 53.2 s with nothing in the way. Where the call lands in the gait
+cycle moves the first leg by a few seconds: three runs behind the wall
+(review, the same day) arrived at 56.5 / 56.6 / 53.0 s and were back at the
+ball in 72.6 / 72.7 / 69.0 s; with that leg held to 55 s it timed out twice
+(72.5 s, re-aimed) and arrived once (53.0 s).
 
 **Move (D055).** `move(forward_m, left_m=0)` is a relative move in the
 robot's frame, in metres. It reads the pose when the call starts and runs an
@@ -708,7 +723,8 @@ no probe and no always-on void guard (those live in the Playground, which the
 cockpit runs); its goto fits the command into `WaveGait.budget`, eases it with
 the supervisor's command slew (D063) and caps at the cockpit's derived time
 (`goto_cap_for`: 55 s of walking on the params gait, ending in a safe-stop;
-B114, it was a fixed 20 s), and runs the reflex supervisor and its own D034
+B114, it was a fixed 20 s; it has no lidar detours, so never the cockpit's
+87 s detour cap, B116), and runs the reflex supervisor and its own D034
 cliff detector, with the NaN guard, the 4.7 rad/s clamp and a
 3.0 rad/s ramp back after a stop or gesture, and uses the 1.5 N contact switch
 of `sim/scenes.py`. For D052-true behaviour, drive the cockpit (`auto` picks it

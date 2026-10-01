@@ -205,7 +205,9 @@ Each coupon is a boolean clip of its production part
    1. **Latch cartridge (I3):** the rotor into `latch_housing`, lugs through
       the two keyways, then a quarter turn off them: it is captive. Push the
       cartridge into `shell_sector_demo`'s pocket from the lip side, head
-      first, housing bottom flush with that face; A-14 CA.
+      first, the housing's flat to the pocket's flat (it goes in only that
+      way: the keyway index, B107), housing bottom flush with that face;
+      A-14 CA.
    2. **The panel pair:** `shell_sector_demo` + `frame_coupon` mate since
       D063. Magnets per [7.1](#71-magnets) (the coupon's show N, the demo's
       S). Rotor at OPEN, its lugs over the coupon's entry slots (the slot
@@ -918,12 +920,22 @@ the tray at (0, 0) with lugs instead of wings). Build the electronics on an
    The IMU's top stays 1.2 mm below a 2 mm keep-out under the board, with
    the USB end either way; the board overhangs ~10 mm at that end. Caliper
    the Ø6.8 standoff tops against the Pi's pads round its holes (B108).
-4. Adapter on its pad by the bulkhead: 2 × M3 into the thread-forming holes,
-   20 mm apart. The pad is under the Pi's south edge, 9 mm below its
-   keep-out; no board envelope checks the adapter, the buck or the UBEC
-   (B108): caliper.
-5. Buck (B-10) and UBEC (B-11) have no modelled mount: zip-tie them to the
-   tray's slots (3.6 mm ties).
+4. **The bus adapter, the buck and the UBEC do not fit under the Pi as
+   drawn (B108).** `part_avionics` checks them as envelopes from their
+   datasheets: under the Pi's keep-out there is 9.0 mm of floor. The
+   adapter (A-02: 42 × 33, its DC jack 11 mm over the board, pins 2 mm
+   under it) on its pad by the bulkhead stands 6.1 mm into the keep-out
+   and has no flat place anywhere on the tray, and the pad's two M3 holes
+   (20 mm apart) are not its holes (four Ø2.5 on 37 × 28); the buck (B-10, 8.8 mm)
+   under a tie stands 1.0 mm into it; the UBEC (B-11, 7 mm) under a tie
+   is 0.8 mm below it, short of the 1 mm the IMU keeps. Where the docs
+   put them, the UBEC also meets a Pi standoff. Measured fixes, the
+   owner's call with the tray's layout (B51): Pi standoffs 13 mm put the
+   buck and the UBEC on the x −30 slot column; 18.5 mm with the IMU moved
+   to (18, 1) fits all four. On the bench carrier, keep the boards beside
+   the tray until then.
+5. Buck (B-10) and UBEC (B-11) have no mount but a zip tie (3.6 mm ties
+   through the tray's slots).
 6. Rear bulkhead (70 × 26): XT30 in, XH-5 trunk, 2 × JST-SH, Qwiic, USB-C,
    every cutout VERIFY. The XT30 cutout (10.4 × 6.4) is for a panel XT30:
    check that an XT30U half seats before relying on it.
@@ -1264,11 +1276,12 @@ bite is VERIFY on `frame_coupon` first (B99,
    the two keyways, then a quarter turn off them: it is captive.
 2. Push each cartridge up into its sector's latch pad (az +27.5°) from the
    foot side, head first (the Ø10 head passes the Ø14.3 pocket), the housing's
-   bottom flush with the foot face; A-14 CA. Nothing indexes the housing in
-   its pocket (B107): glue it with the keyways halfway between OPEN and
-   LOCKED, 45° off the entry line (as `part_shell` checks it), and mark them
-   on the pad. Turned to its keyways, a rotor drops out of a sector that is
-   off the robot.
+   bottom flush with the foot face; A-14 CA. The housing's flat goes to the
+   pocket's flat, the only way it fits (±2.5°, the keyway index, B107): its
+   keyways then sit 135° from the entry line, outside the 0–90° the rotor
+   is worked over, so on the robot a screwdriver pushing up never meets
+   them. Off the robot, keep a sector's rotor between OPEN and LOCKED:
+   turned 45° back past OPEN it reaches its keyways and can drop out.
 3. Rotor at OPEN: its lugs in line with the strike's entry slots, which run
    at 45° to the radius (the slot across the rotor's end is square to the
    lugs).
@@ -1452,14 +1465,19 @@ Nothing of it is in the CAD yet.
   male XT60E-M (B-12 lists only male panel mounts); the pack's live side ends in
   exposed male pins at the sled nose. Its spare taps sit ahead of the fuse
   (B66).
-- **The tray's other boards** (B108): no envelope checks the bus adapter,
-  buck or UBEC, nor the Ø6.8 standoff tops against the Pi's pads; every
-  bulkhead cutout is VERIFY; the taller Pi stack against the carapace is
-  measured only in the proposal (5.5 mm margin in option A).
+- **The tray's other boards** (B108): the bus adapter, buck and UBEC have
+  no place under the Pi as drawn ([4.5](#45-the-avionics-tray-on-the-bench-i4) step 4);
+  either measured fix raises the Pi (13 mm standoffs for the buck and UBEC,
+  18.5 with the IMU moved for all four), and the Pi stack against the
+  carapace is measured only in the proposal (5.5 mm margin in option A with
+  11 mm standoffs; each mm of standoff takes a mm of it). The Ø6.8
+  standoff tops against the Pi's pads are uncalipered; every bulkhead
+  cutout is VERIFY.
 - **The I3 latch's other two users have no strike** (B51, B84): the rotor
   hangs 5.8 mm below the tray tongue and the belly door. The cam's 0.2 mm
   bite in PLA is a coupon (B99, [1.3](#13-batch-1-coupons-and-the-blank)
-  step 8), and the housing has no keyway index (B107).
+  step 8). Their pockets carry the keyway index (B107) with the part's own
+  +x as the strike's: their strikes must be drawn to match.
 - **Leg swap under the carapace:** knobs at r ≈ 69, arch from r 72. Does a leg
   come off with its sector on?
 - **Not parts yet:** the loop key's mount (B-08), camera bracket (B16), lidar
@@ -1499,13 +1517,12 @@ Nothing of it is in the CAD yet.
 ### 8.6 Wording left to fix
 
 The docs, BOM and CAD comments were corrected with this guide (2026-09-28).
-Three items remain: PRINT_PLAN gives `tibia_knee_carrier` as "cup floor DOWN"
+Two items remain: PRINT_PLAN gives `tibia_knee_carrier` as "cup floor DOWN"
 while `check_printability.py` audits it as exported, so check the pose before
-slicing; the dated [REVIEW_2026-09-22.md](REVIEW_2026-09-22.md) still
-reads the horn slots as BCD 14.0–15.6 (they cover 14.0–17.2); and the
-`coxa_fork` drawing (`cad/out/drawings/`) no longer dimensions the horn-head
-relief, the idler pocket or its head relief, which are channels open to the
-mouth since D063 (B105): caliper them against the model.
+slicing; and the dated [REVIEW_2026-09-22.md](REVIEW_2026-09-22.md) still
+reads the horn slots as BCD 14.0–15.6 (they cover 14.0–17.2). (The
+`coxa_fork` drawing lists its horn-head relief, idler pocket and idler-head
+relief again since 2026-09-30, as open channels: B105.)
 
 ### 8.7 Fixed in D063
 

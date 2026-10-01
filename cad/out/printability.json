@@ -691,7 +691,7 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 3849.7,
+  "overhang_area": 3854.6,
   "widest_overhang_step": 27.7,
   "widest_overhang_z": 58.5,
   "widest_cantilever": 27.7,
@@ -762,7 +762,7 @@
   "part": "latch_housing",
   "size": [
    14.0,
-   14.0,
+   13.0,
    6.0
   ],
   "bed_ok": true,
@@ -778,7 +778,7 @@
   "widest_cantilever_z": null,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 9.43,
+  "thin_soft_area": 9.44,
   "hard": [],
   "warn": [
    "walls < 1.6 mm: 9.4 mm\u00b2 in a layer"
@@ -1355,7 +1355,7 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 6458.7,
+  "overhang_area": 6463.7,
   "widest_overhang_step": 37.3,
   "widest_overhang_z": 4.1,
   "widest_cantilever": 37.3,

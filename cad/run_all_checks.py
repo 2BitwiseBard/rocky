@@ -11,9 +11,10 @@ sense" after any params.yaml or interface change.
     python3 run_all_checks.py part_shell part_deck   # subset
     python3 run_all_checks.py --derived  # + regenerate the derived outputs
     python3 run_all_checks.py --fem      # + the leg stress check (fem_check, D061)
+    python3 run_all_checks.py --jobs 6   # at most 6 modules at once (a shared machine)
 
 Parallel notes: modules are already independent subprocesses, so they run
-N-at-a-time (N = cpu count, min 2). Each module only writes its OWN exports
+N-at-a-time (N = cpu count, min 2, or --jobs N). Each module only writes its OWN exports
 — no shared files, no races. Results print in completion order; the summary
 is the same either way. ~150 s wall on a laptop (part_hand is the long pole).
 
@@ -24,17 +25,27 @@ leg_assembly writes the posed dry-fit exports the viewer shows; and
 check_interference sweeps the yaw stage with the real servo solids.
 
 --derived (after a clean tree) rebuilds the outputs nothing checks but
-people look at: pentapod_preview (full-robot meshes + render), print_estimate
-(cad/out/print_estimate.json), gen_print_pack (cad/out/PRINT_PREP_PACK.pdf +
-views_*.png), make_viewer (cad/pebble_viewer.html) and gen_drawings (the
-leg parts' TechDraw sheets in cad/out/drawings/; needs FreeCAD, SKIPPED
-without it). The first four write deterministic bytes and gen_drawings
-redraws only a part whose STEP changed, so an unchanged tree leaves git clean.
+people look at, in this order: pentapod_preview (full-robot meshes + render),
+print_estimate (cad/out/print_estimate.json), gen_drawings (the leg parts'
+TechDraw sheets in cad/out/drawings/; needs FreeCAD, SKIPPED without it),
+gen_print_pack (cad/out/PRINT_PREP_PACK.pdf + views_*.png), make_viewer
+(cad/pebble_viewer.html) and gen_assembly_views (cad/out/assembly/). All but
+gen_drawings write deterministic bytes, and gen_drawings redraws only a part
+whose STEP (or td_sheet.py, the drawer) changed, so an unchanged tree leaves
+git clean.
 
 --fem (after a clean tree) runs fem_check: linear-static FEA of the load-
 bearing leg parts under servo-limited loads (cad/out/fem/FEM_REPORT.md). It
 needs gmsh + CalculiX (the FreeCAD Flatpak carries both) and reports SKIPPED
 without them, so CI stays as it is.
+
+With both, one pass leaves a current print pack (B110): fem_check runs
+BEFORE the derived outputs, and gen_drawings before gen_print_pack, because
+the pack prints each leg part's FEM verdict (fem/fem_results.json) and merges
+its TechDraw sheet (drawings/). A failing FEM verdict does not stop the
+derived outputs: the pack is where a FAIL has to show. Until D063 the order
+was derived-then-FEM, and a leg-part change needed a second pass to reach the
+pack.
 
 Exit code = number of failing modules.
 """
@@ -73,7 +84,10 @@ def run_one(m):
 
 
 POST = ["check_printability"]     # runs AFTER every module has exported (D038)
-DERIVED = ["pentapod_preview", "print_estimate", "gen_print_pack", "make_viewer", "gen_drawings",
+# in order, each may read the ones before it: gen_drawings reads print_estimate.json (the
+# leg batch, the grams in the title block); gen_print_pack reads print_estimate.json, the
+# drawings and fem/fem_results.json (B110: so --fem runs before all of these)
+DERIVED = ["pentapod_preview", "print_estimate", "gen_drawings", "gen_print_pack", "make_viewer",
            "gen_assembly_views"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -81,6 +95,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def main():
     args = sys.argv[1:]
     serial = "--serial" in args
+    jobs = None
+    if "--jobs" in args:
+        k = args.index("--jobs")
+        jobs = max(1, int(args[k + 1]))
+        del args[k:k + 2]
     mods = [a for a in args if not a.startswith("--")] or MODULES
     t00 = time.time()
     results = []
@@ -95,7 +114,7 @@ def main():
         for m in mods:
             record(run_one(m))
     else:
-        workers = max(2, os.cpu_count() or 2)
+        workers = jobs or max(2, os.cpu_count() or 2)
         with ThreadPoolExecutor(max_workers=workers) as ex:
             for res in ex.map(run_one, mods):
                 record(res)
@@ -103,17 +122,18 @@ def main():
     if mods == MODULES and "--no-post" not in args:
         for m in POST:
             record(run_one(m))
-    if "--derived" in args:
-        if any(not ok for _, ok, *_ in results):
-            print("derived outputs NOT rebuilt: the checks failed")
-        else:
-            for m in DERIVED:                  # in order: each reads the one before
-                record(run_one(m))
-    if "--fem" in args:
-        if any(not ok for _, ok, *_ in results):
+    checks_ok = all(ok for _, ok, *_ in results)
+    if "--fem" in args:                        # B110: before the derived outputs, which print it
+        if not checks_ok:
             print("fem_check NOT run: the checks failed")
         else:
             record(run_one("fem_check"))
+    if "--derived" in args:
+        if not checks_ok:                      # a FEM FAIL still rebuilds: the pack shows it
+            print("derived outputs NOT rebuilt: the checks failed")
+        else:
+            for m in DERIVED:                  # in order: each reads the ones before
+                record(run_one(m))
     bad = [m for m, ok, *_ in results if not ok]
     print(f"\n{len(results) - len(bad)}/{len(results)} modules pass "
           f"({time.time()-t00:.0f} s total)"

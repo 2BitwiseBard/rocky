@@ -60,7 +60,8 @@ def goto_cap_for(gait) -> float:
     """goto's time cap (s) on this gait, derived the way the cockpit's is (B114):
     harness.capabilities.goto_cap_s at the speed goto walks (V_GOTO fitted into the
     gait's envelope) plus the command slew's ease-in — 55 s on the params gait (D063),
-    the number the goto text quotes. It was a fixed 20 s."""
+    the number the goto text quotes. It was a fixed 20 s. This goto has no lidar
+    detours, so the cockpit's detour cap (B116, 87 s) never applies: it keeps this one."""
     gv = min(V_GOTO, float(gait.max_command()["v"]))
     return goto_cap_s(gv / 1000.0, gait_ease_in_s(gait, gv))
 

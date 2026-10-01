@@ -9,6 +9,114 @@ indexes them.*
 
 ---
 
+## 2026-09-30 · Session 9o — goto gets its detour cap, the torque audit stops counting the hands twice, one CAD pass (B116, B106, B105, B107, B108, B110)
+
+**Ask:** the owner on 9n's two options: "yes, apply the 87 s goto cap and anything else".
+B103 (T 2.2) is not applied: its recommendation is to keep 2.0. Three tracks: B116 applied;
+the torque audit (B106); the CAD follow-ups that need no owner decision and no hardware
+(B105, B107, B108, B110). Each was reviewed by a second agent that re-measured its claims,
+then one pass over the whole tree. `cad/params.yaml` untouched: fingerprint `87215110e9c4`.
+
+**B116, goto's detour cap (applied):** once a goto has entered a detour (a sticky flag per
+goto) its cap is `goto_detour_cap_s`, `goto_cap_s` with the reach grown by both detours:
+(1.5 + 2 × 0.45 m) × 1.2 / 0.0342 m/s + 2.36 s = 86.6 → **87 s**. A goto that never detoured
+keeps 55 s. The cap now ends a goto even mid-detour, so a goto answers by 88.5 s; before, a
+detour running at the 55 s cap ran out first, up to 87.5 s. The envelope carries it
+(`goto_detour_timeout_s`), and goto's text says "55 s cap — a detour may extend it to ~87 s
+—" (`docs/TOOLS.md` regenerated; the golden hashes moved on purpose). `go_back_to`'s legs
+are ordinary gotos and get it too, so the MCP proxy's `GO_BACK_TIMEOUT_S` is derived: 4 ×
+(87 + 1.5) + 12 = 366 s (was 300); its 120 s per call keeps 31.5 s over a goto's answer. The
+in-process sim's goto has no detours and keeps 55 s. **Verified** on the shipped rule
+(`run_goto_detour_cap.py --verify`, 214 scenarios, 40 min at 5 jobs): 214/214 ended as
+derived from the uncapped runs (within 0.05 s). 195 arrived: around an obstacle 16 / 78 / 80
+/ 15 of 16 / 84 / 84 / 16 at 1.0 / 1.2 / 1.5 / 2.0 m (at the old 55 s: 15 / 38 / 0 / 0). 13
+ended `blocked` and 4 `stuck` by themselves, and 2 timed out (the clear 2.0 m gotos, at 55.0
+s, 23 cm short). No detour goto reached 87 s (the latest answer 87.2 s), so the cap's own
+timeout is shown by two new tests and the review: a 2.9 m goto past a 0.25 m wall times out
+at 87.00 s, 58 cm short; with a second wall at x = 2.22 it ends at 87.00 s mid-detour and
+answers at 88.50 s. `go_back_to` to a ball 2.0 m out behind a wall / box: 72.6 / 72.1 s, the
+first leg arriving on the detour cap at 56.5 / 56.1 s (it was a 55 s timeout and a re-aim,
+72.5 / 71.9 s); clear, 53.2 s, unchanged. The gait phase at the call moves that first leg by
+~3.6 s (three runs behind the wall: 56.5 / 56.6 / 53.0 s).
+
+**B106, the torque audit counted the hands twice:** the tibia budget already holds the hand,
+so the audit weighed 2920.7 g against the MJCF's 2727.7 g and hung tibia + hand at mid-shin.
+Now it weighs the MJCF's robot, with the hand at the tip: every stance case × 0.934 (3-leg
+knee 0.466 → 0.435 N·m), carry hip 0.516 → 0.480, untucked hip 0.290 → 0.254 (the compiled
+MJCF's subtree moment: 0.2541), and the self-right knee 1.496 → **1.397 N·m = 47.5 %** of
+ST3215 stall, **HOT → WARM** (28.5 % of STS3250). Carried into SERVO_NOTES,
+DESIGN_CHANGE_GUIDE §1, the bench runbook (§7 soak loads; §8 masses at 100 mm 330 / 445 /
+490 / 1425 g), `thermal_soak.py` and D044's rerun trail. `sim/tests/test_torque_audit.py` (3
+tests) pins the robot and the airborne leg's moments to the compiled MJCF; all 3 fail on the
+old audit.
+
+**B110, one CAD pass:** with `--fem`, `run_all_checks.py` runs the stress check before every
+derived output and the drawings before the pack, so one `./rocky.sh cad-check --derived
+--fem` leaves the pack current; `--jobs N` caps the parallel modules. The passes found a
+determinism bug: multi-threaded SPOOLES in the Flatpak's CalculiX now and then returns a
+wrong load step (pass 1 wrote the femur's R+ as SF 10.42 for 11.90; 2 of 6 four-thread
+solves were corrupt, 6 of 6 one-thread solves identical). `fem_tools.run_ccx` solves on one
+thread: `fem_check` 53–64 → 66–72 s, every governing SF unchanged (2.93 / 2.47 / 2.18 / 3.92
+/ 7.81), the FEM files byte-identical to HEAD.
+
+**B105, open channels on the drawings:** `td_sheet.features()` tells a slot end (a half
+circle with a partner facing it) from an open channel. The fork's sheet lists Ø6.4 × 1.3, Ø7
+× 0.6 and Ø20.3 × 1.8 in an OPEN CHANNELS table (also in `drawings.json`, the drawings index
+and the pack); all 32 slot ends found their partners; the other nine sheets list none. Arcs
+that are neither a full nor a half circle (7, in the row) are still not called out.
+
+**B107, the latch's keyway index:** the housing is a D (a flat 6.0 mm from its axis) in a
+matching D pocket on the demo, the sectors, the belly door and the tray tongue, so it goes
+in one way, keyways 135° from the entry line. On its index 0.00 mm³ with ±2.5° of play;
+turned ±10° or a half turn ≥ 1.4 mm³; the rotor is captive from −8° to 98° and drops through
+only at 132–138°. Every D063 latch number unchanged. Not a stop: off the robot a rotor
+turned 45° back past OPEN still drops out; only a cap glued over the head would hold it (not
+drawn).
+
+**B108, the tray's other boards (PARTLY SHIPPED):** the bus adapter, the buck and the UBEC
+are envelopes in `part_avionics` (datasheets; the adapter from Waveshare's STEP), checked
+where the docs put them; the check reports and does not fail the run. With the Pi on its 11
+mm standoffs none has a place: the adapter's jack stands 6.1 mm into the Pi's keep-out (and
+its pad's two M3 holes match none of the adapter's), the buck with its tie 1.0 mm, the UBEC
+with its tie 0.8 mm under it (the rule is 1.0). Measured options: 13 mm standoffs fit the
+buck and the UBEC; 18.5 mm with the IMU moved to (18, 1) fits all four. Each eats the body
+layout's carapace margin over the Pi mm for mm (5.5 / 12.25 → at most 3.5 / 10.25, or −2.0 /
+4.75). The owner's call, with B51.
+
+**Found in the final pass:** B107's D fills add 0.10 g of torso print (the five sectors
+0.075, the door 0.018, the tray 0.009), which CI's design-pipeline step (mass_audit on the
+rebuilt STLs, then `git diff --exit-code` on `mass_budget.json` and the URDF) would have
+failed on. Regenerated: torso 1439.7 → 1439.8 g in `mass_budget.json`, 1.4397 → 1.4398 kg in
+the URDF, parity OK; the MJCF is byte-identical (it splits the torso into 1.0798 + 0.3599
+kg), so the fingerprint stays. `torque_audit.json` re-run: robot 2727.8 g, no torque moved.
+
+**Corrections to 9m and 9n:** 9m's "knee self-right 1.496 N·m = 50.9 % (HOT)" counted the
+hands twice: 1.397 N·m, 47.5 %, WARM (B106; the D063 row now says so). 9n's open item,
+`GO_BACK_TIMEOUT_S` under 4 × the worst goto answer, is closed by B116 (366 ≥ 4 × 88.5 +
+12).
+
+**The loop:** fingerprint `87215110e9c4`; MJCF and URDF regenerate byte-identical (after the
+mass regen above), `docs/TOOLS.md` is current, ruff clean, `bash -n rocky.sh` OK. Fast
+ladder 1101 passed (sim 800, harness 116, gait 97, driver 88), 2 strict xfails, 7 skipped,
+9.1 min. CI's full `sim/tests` 806 passed (6 of them slow), 5 xfailed, 7 skipped, 10.6 min;
+harness slow 2 passed; after the mass regen every suite was run again, same counts.
+`cad-check --derived` 34/34 twice (283 / 270 s): neither pass changed any of the 270 files
+under `cad/`. `cad/test_fem.py` 10, `run_sim` 189 mm / 41.8°, URDF parity OK. New tests:
+`test_torque_audit.py` (3), two B116 physics tests through `/api/tool/goto` (slow, ~2 min in
+CI), the detour cap's derivation and copies; the latch index and the board envelopes are CAD
+checks.
+
+**Next:** the owner decides B103 (recommended: keep T 2.0), B108 (where the boards go, with
+B51) and the body layout's §8. Still open: B107's head cap and the door / tongue strikes
+(B51, B84); B105's partial arcs; WIRING_HARNESS's "UBEC next to the buck" (B108, noted). The
+proxy's waits are wall-clock while goto's caps are sim time: 120 s per call covers a cockpit
+at ≥ 0.74× real time, `go_back_to`'s 366 s ≥ 0.97× in its 4-leg worst case (slow motion or a
+pause is not covered, as before). The in-process sim's goto text quotes the 87 s it never
+uses. `request_stop`'s docstring; `ArmedGait`'s MARGIN (B113); the lip band (B33 c); B34's
+next rungs; B54 at 45 mm.
+
+---
+
 ## 2026-09-30 · Session 9n — the D063 follow-ups, a curriculum retrain (negative), two options measured (B111–B116, B34, B103)
 
 **Ask:** the owner could not find the mic, and sentences typed on the phone never reached

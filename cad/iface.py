@@ -116,6 +116,18 @@ LATCH_ENTRY_DEG = 45.0            # the entry line (lugs at OPEN) from the frame
                                   # deck strike +x is radial, and 45 keeps the recess off the edge
 LATCH_RAMP_DEG = 50.0             # the ceiling ramps down over 0..50 deg, dwells to 90, stops
 LATCH_RECESS_R = 6.1              # the lug's corner (5.70) + FIT, rounded up
+# B107: the keyway index. The housing is a D (a flat LATCH_FLAT_R from its axis, square
+# to the keyways) and every panel's pocket is the same D, 0.15 bigger all round, so it
+# goes in one way: its keyways LATCH_KEYWAY_DEG from the entry line. On a strike the
+# rotor turns 0..90 between the recess's stops (latch_strike), so at 135 / 315 the
+# keyways sit outside that travel: the lugs pass them only at 132..138 deg, 42 past LOCKED
+# and 42 back past OPEN (part_panel.latch_index). No angle the latch is worked at, or comes
+# off at (OPEN), lines the lugs up with them. Before, the housing was round and glued at
+# any angle: keyways at OPEN would drop a rotor out of every panel lifted off. The index
+# is a place, not a stop: off the robot a rotor turned 45 deg back past OPEN still
+# reaches them (nothing holds its 3.8 mm of axial play without a strike under it).
+LATCH_KEYWAY_DEG = 135.0
+LATCH_FLAT_R = 6.0                # leaves 2.7 of wall to the Ø6.6 bore at the flat
 # the carapace latch station (D030): each sector's latch pad over the deck's strike.
 # Worked from under the deck, so nothing may hang under a strike: station 162's sits
 # at body (-73.5, -12.3), inside the 175 x 50 battery bay's footprint (B84), and the
@@ -130,17 +142,41 @@ def latch_lug(grow=0.0, z0=0.0, z1=LUG_H, x0=2.0):
         Box(LUG_R + grow - x0, LUG_W + 2 * grow, z1 - z0)
 
 
+def latch_d_profile(r, flat, z0, z1):
+    """The I3 index shape (B107): a cylinder of radius r cut flat at y = flat (housing
+    frame: keyways along x, the flat on +y), spanning z0..z1."""
+    return Pos(0, 0, (z0 + z1) / 2) * Cylinder(r, z1 - z0) & \
+        Pos(0, (flat - r - 1) / 2, (z0 + z1) / 2) * Box(2 * r + 2, flat + r + 1, z1 - z0 + 2)
+
+
 def latch_insert_housing():
     """The replaceable latch cartridge's OUTER: Ø14 x 6, glued into the panel's
     Ø14.3 pocket with its bottom flush with the seating face. A Ø6.6 bearing bore
-    and two keyways that pass the rotor's lugs at assembly only."""
+    and two keyways that pass the rotor's lugs at assembly only; the flat on its
+    side is the keyway index (B107): it fits the pocket's flat one way."""
     pl = IF["panel_latch"]
     t = pl["housing_t"]
-    h = Pos(0, 0, t / 2) * Cylinder(pl["housing_d"] / 2, t)
+    h = latch_d_profile(pl["housing_d"] / 2, LATCH_FLAT_R, 0.0, t)
     h -= Pos(0, 0, t / 2) * Cylinder(LATCH_SHAFT_D / 2 + FIT, t + 2)
     for s in (0, 180):          # keyways: 1.2 of wall left to the Ø14 skin
         h -= Rot(0, 0, s) * latch_lug(FIT, -1.0, t + 1.0)
     return h
+
+
+def latch_housing_tf():
+    """The housing in its pocket, in the latch frame (z 0 = the seating plane, +x the
+    strike's +x): its keyways on the index, LATCH_KEYWAY_DEG from the entry line."""
+    return Rot(0, 0, LATCH_ENTRY_DEG + LATCH_KEYWAY_DEG)
+
+
+def latch_pocket(z0, z1):
+    """Cutter for a panel's housing pocket (B107), in the latch frame, spanning z0..z1:
+    the Ø housing_pocket_d with the index flat, both FIT/2 off the housing's, turned as
+    latch_housing_tf. A panel with no strike yet (the belly door, the tray tongue) takes
+    its own +x as the strike's: draw the strike to match."""
+    pl = IF["panel_latch"]
+    gap = (pl["housing_pocket_d"] - pl["housing_d"]) / 2
+    return latch_housing_tf() * latch_d_profile(pl["housing_pocket_d"] / 2, LATCH_FLAT_R + gap, z0, z1)
 
 
 def latch_insert_rotor():

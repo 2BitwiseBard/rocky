@@ -3,8 +3,10 @@
 After D063 a goto walks at the 34.2 mm/s envelope and times out at `cockpit.GOTO_CAP_S`
 (55 s: `harness.capabilities.goto_cap_s`, the 1.5 m reach x 1.2 at the envelope + the 2.36 s
 ease-in). A goto whose straight line runs into an obstacle the lidar sees detours around it
-(`cockpit.GOTO_DETOUR_S`, 15.5 s at most per detour), and at 1.2-1.5 m it then runs out of time on
+(`cockpit.GOTO_DETOUR_S`, 15.5 s at most per detour), and at 1.2-1.5 m it then ran out of time on
 the way. This harness measures what a detour costs and what cap would let those gotos arrive.
+SHIPPED (2026-09-30): once a goto has entered a detour its cap is `cockpit.GOTO_DETOUR_CAP_S`
+(87 s, `harness.capabilities.goto_detour_cap_s`), and the cap ends it even mid-detour.
 
 Each goto runs in a fresh headless CockpitSim (the cockpit's own goto controller, righter off,
 awareness off, no GL, no HTTP), stepped in-process from standing, in its own process. Nothing
@@ -20,15 +22,18 @@ here touches a running cockpit.
   plain     the same distances with nothing in the way (they never enter a detour)
   blocked   gotos that cannot arrive: the stuck / blocked rules must end them, not the cap
 
-Every run is UNCAPPED; the cap only ever ends a goto (`_goto_pre`: `tw > GOTO_CAP_S and det is
-None`), it never steers, so one uncapped run gives the outcome under any rule. The rule
-measured: a plain cap P until the goto has entered a detour, then a detour cap D (a detour
-running at the cap still runs out its own limit first, as today). `--verify P D` re-runs the
-detour and close batches with that rule applied for real and checks them against the derivation.
+Every measuring run is UNCAPPED (both cockpit caps lifted); a cap only ever ends a goto
+(`_goto_pre`), it never steers, so one uncapped run gives the outcome under any cap. The rule, as
+shipped: a plain cap P until the goto has entered a detour (the cockpit's sticky `detoured`), then
+the detour cap D, and the cap ends the goto even mid-detour (before B116 a detour running at the
+cap ran out its own limit first). `--verify` re-runs every scenario on the cockpit's shipped rule,
+untouched (P = GOTO_CAP_S, D = GOTO_DETOUR_CAP_S), and checks each against the derivation;
+`--verify P D` sets the two caps instead.
 
-Usage (from the repo root; 214 runs, + 128 with --verify; see the record's wall_s for the time):
-    .venv/bin/python sim/experiments/run_goto_detour_cap.py [--jobs 6] [--quick] [--verify 55 71]
-Writes results/goto_detour_cap_results.json (the 2026-09-30 record: --verify 55 71).
+Usage (from the repo root; 214 runs, + 214 with --verify; see the record's wall_s for the time):
+    .venv/bin/python sim/experiments/run_goto_detour_cap.py [--jobs 6] [--quick] [--verify [P D]]
+Writes results/goto_detour_cap_results.json (the 2026-09-30 record: --verify, the shipped rule;
+the first record, --verify 55 71 on the pre-B116 rule, is in git history).
 """
 import argparse
 import json
@@ -48,15 +53,20 @@ REACHES = (1.0, 1.2, 1.5, 2.0)
 BEARINGS = (0.0, 36.0)
 KINDS = ("wall", "box")
 LIMIT_S = 150.0          # a harness limit: an uncapped goto that has not ended by then is reported
+ANSWER_S = 1.5           # a goto answers this long after it ends (cockpit._goto_post)
 
 
 # ------------------------------------------------------------------ one goto (a child process)
 def run_one(sc):
+    """One goto. sc["cap"] / sc["cap_detour"] replace the cockpit's GOTO_CAP_S / GOTO_DETOUR_CAP_S
+    (1e9 = uncapped); without them the cockpit's shipped caps and rule run untouched."""
     import numpy as np
     import cockpit
-    cap_plain = float(sc.get("cap", 1e9))
-    cap_detour = float(sc.get("cap_detour", cap_plain))
-    cockpit.GOTO_CAP_S = cap_plain
+    if "cap" in sc:
+        cockpit.GOTO_CAP_S = float(sc["cap"])
+    if "cap_detour" in sc:
+        cockpit.GOTO_DETOUR_CAP_S = float(sc["cap_detour"])
+    cap_plain, cap_detour = float(cockpit.GOTO_CAP_S), float(cockpit.GOTO_DETOUR_CAP_S)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         sim = cockpit.CockpitSim("flat")
@@ -72,14 +82,11 @@ def run_one(sc):
     sim.log = lambda m, *a, **k: (logs.append((round(sim.t, 3), m)), _log(m, *a, **k))
     for _ in range(int(round(1.0 / sim.DT))):             # stand 1 s: a goto starts from standing
         sim.step()
-    ticks, entered = [], [False]
+    ticks = []
     _pre = sim._goto_pre
 
     def pre(gs):                                          # at the cap check: is a detour running?
-        tw = sim.t - gs["t0"]
-        if gs.get("detour") is not None:
-            entered[0] = True
-        cockpit.GOTO_CAP_S = cap_detour if entered[0] else cap_plain
+        tw = sim.t - gs["t0"]                             # (the cockpit itself switches the cap, B116)
         p = sim.data.xpos[sim.torso]
         ticks.append((tw, gs.get("detour") is not None, float(np.hypot(gs["tx"] - p[0], gs["ty"] - p[1]))))
         return _pre(gs)
@@ -126,6 +133,7 @@ def run_one(sc):
                 end_dist_m=round(float(np.hypot(sc["tx"] - p1[0], sc["ty"] - p1[1])), 4),
                 walked_m=round(float(np.hypot(p1[0] - p0[0], p1[1] - p0[1])), 4),
                 detours=detours, n_detour_logs=sum(1 for _, m in logs if "— detour " in m),
+                detoured=bool(gs.get("detoured")),        # the cockpit's own sticky flag (B116)
                 falls=int(sim.sup.fall_count), cap=cap_plain, cap_detour=cap_detour,
                 logs=[m for m in logs if "goto" in m[1]], track=track)
 
@@ -197,13 +205,11 @@ def scenarios(quick=False):
 
 # ------------------------------------------------------------------ the rule, from an uncapped run
 def ends_at(r, plain, detour):
-    """(stopped, t, m to go) under the rule: cap `plain`, `detour` once a detour began before the
-    plain cap; the first cap check past the cap with no detour running ends it as a timeout."""
+    """(stopped, t, m to go) under the shipped rule (B116): cap `plain`, `detour` once a detour began
+    before the plain cap ended the goto, and the first cap check past the cap ends it as a timeout,
+    a detour running or not (before B116 a running detour ran out first)."""
     first = r["detours"][0][0] if r["detours"] else None
     t = detour if (first is not None and first <= plain) else plain
-    for a, b in r["detours"]:
-        if a <= t < b:
-            t = b
     t_end = r["outcome_t"] if r["outcome_t"] is not None else math.inf
     if t >= t_end:
         return r["stopped"], r["outcome_t"], None
@@ -277,27 +283,31 @@ def main():
     ap.add_argument("--one", help=argparse.SUPPRESS)
     ap.add_argument("--jobs", type=int, default=6, help="sim processes at a time (default 6)")
     ap.add_argument("--quick", action="store_true", help="seed 0 only, no tail or close batch")
-    ap.add_argument("--verify", nargs=2, type=float, metavar=("PLAIN", "DETOUR"),
-                    help="also run the detour and close batches with this rule applied and compare")
+    ap.add_argument("--verify", nargs="*", type=float, metavar="CAP",
+                    help="also re-run every scenario on the cockpit's shipped rule (no numbers), or with "
+                         "PLAIN DETOUR caps, and compare each with the derivation")
     a = ap.parse_args()
     if a.one:
         print(json.dumps(run_one(json.loads(a.one))))
         return 0
+    if a.verify is not None and len(a.verify) not in (0, 2):
+        ap.error("--verify takes no numbers (the shipped caps) or two: PLAIN DETOUR")
     import cockpit
     import harness.capabilities as C
     env = C.default_envelope()
     v, e = env["goto_speed_m_s"], C.default_ease_in_s()
-    plain_cap = float(cockpit.GOTO_CAP_S)
+    plain_cap, detour_cap = float(cockpit.GOTO_CAP_S), float(cockpit.GOTO_DETOUR_CAP_S)
     one = C.goto_cap_s(v, e, C.GOTO_REACH_M + cockpit.GOTO_DETOUR_M)                         # one detour
     formula = C.goto_cap_s(v, e, C.GOTO_REACH_M + cockpit.GOTO_DETOURS * cockpit.GOTO_DETOUR_M)   # both
-    caps = sorted({plain_cap, one, 75.0, formula})
+    caps = sorted({plain_cap, one, 75.0, formula, detour_cap})
     reach_all = C.GOTO_REACH_M + cockpit.GOTO_DETOURS * cockpit.GOTO_DETOUR_M
     print(f"envelope {v * 1000:.1f} mm/s, ease-in {e:.2f} s: plain cap {plain_cap:g} s,"
           f" detour {cockpit.GOTO_DETOUR_S} s; goto_cap_s(reach + GOTO_DETOUR_M) = {one:g} s,"
-          f" goto_cap_s(reach + GOTO_DETOURS x GOTO_DETOUR_M = {reach_all:g} m) = {formula:g} s")
+          f" goto_cap_s(reach + GOTO_DETOURS x GOTO_DETOUR_M = {reach_all:g} m) = {formula:g} s;"
+          f" shipped detour cap (cockpit.GOTO_DETOUR_CAP_S) {detour_cap:g} s")
     t0 = time.monotonic()
     scs = scenarios(a.quick)
-    runs = run_batch(scs, max(1, a.jobs))
+    runs = run_batch([dict(s, cap=1e9, cap_detour=1e9) for s in scs], max(1, a.jobs))   # uncapped
     clear = {}
     for r in runs:
         if r["batch"] == "plain" and r["stopped"] == "arrived":
@@ -334,7 +344,10 @@ def main():
                    detour_cost_s=dict(n=len(costs), min=round(costs[0], 1), median=round(costs[len(costs) // 2], 1),
                                       max=round(costs[-1], 1)),
                    longest_detour_interval_s=round(longest, 2),
-                   worst_answer_s={str(c): round(c + longest + 1.5, 1) for c in caps})
+                   # B116 shipped: the cap ends a goto even mid-detour, so it answers by the cap + 1.5 s
+                   # (before: + the longest detour interval still running at the cap)
+                   worst_answer_s={str(c): round(c + ANSWER_S, 1) for c in caps},
+                   worst_answer_pre_b116_s={str(c): round(c + longest + ANSWER_S, 1) for c in caps})
     print("\nsummary:", summary)
     clear_out = {r["name"]: dict(uncapped=(r["stopped"], r["outcome_t"]), at_plain_cap=ends_at(r, plain_cap, formula))
                  for r in runs if r["batch"] == "plain"}
@@ -342,22 +355,42 @@ def main():
     print("clear gotos (no detour, the rule never applies):", clear_out)
     print("gotos that cannot arrive (uncapped: what ends them):", blocked_out)
     verify = None
-    if a.verify:
-        p, d = a.verify
-        det = [dict(s, cap=p, cap_detour=d) for s in scs if s["batch"] in ("detour", "close")]
-        got = {r["name"]: r for r in run_batch(det, max(1, a.jobs))}
+    if a.verify is not None:
+        shipped = not a.verify
+        p, d = (plain_cap, detour_cap) if shipped else a.verify
+        extra = {} if shipped else dict(cap=p, cap_detour=d)       # shipped: the cockpit's caps, untouched
+        got = {r["name"]: r for r in run_batch([dict(s, **extra) for s in scs], max(1, a.jobs))}
         uncapped = {r["name"]: r for r in runs}
         bad = []
         for n, r in got.items():
             want = ends_at(uncapped[n], p, d)
-            if r["stopped"] != want[0] or abs((r["outcome_t"] or 0) - (want[1] or 0)) > 0.05:
-                bad.append((n, r["stopped"], r["outcome_t"], want[:2]))
-        verify = dict(plain=p, detour=d, n=len(got), mismatches=bad,
-                      timeouts=sum(1 for r in got.values() if r["stopped"] == "timeout"))
-        print(f"verify {p:g}/{d:g}: {len(got) - len(bad)}/{len(got)} runs end as derived "
-              f"({verify['timeouts']} of them timeouts)", bad or "")
+            if r["stopped"] != want[0] or abs((r["outcome_t"] or 0) - (want[1] or 0)) > 0.05 \
+                    or (r["cap"], r["cap_detour"]) != (p, d):
+                bad.append((n, r["stopped"], r["outcome_t"], want[:2], (r["cap"], r["cap_detour"])))
+        tos = [r for r in got.values() if r["stopped"] == "timeout"]
+        det_got = [r for r in got.values() if r["batch"] in DETOUR_BATCHES]
+        verify = dict(
+            rule="shipped (cockpit.GOTO_CAP_S / GOTO_DETOUR_CAP_S, untouched)" if shipped else "set by --verify",
+            plain=p, detour=d, n=len(got), mismatches=bad, timeouts=len(tos),
+            timeouts_detoured=sorted(round(r["outcome_t"], 2) for r in tos if r["detoured"]),
+            timeouts_plain=sorted(round(r["outcome_t"], 2) for r in tos if not r["detoured"]),
+            latest_answer_s=round(max(r["outcome_t"] for r in got.values() if r["outcome_t"] is not None)
+                                  + ANSWER_S, 2),
+            detoured_by_batch={b: f"{sum(1 for r in got.values() if r['batch'] == b and r['detoured'])}/"
+                                  f"{sum(1 for r in got.values() if r['batch'] == b)}"
+                               for b in DETOUR_BATCHES + ("plain", "blocked")},
+            arrived_by_distance={f"{L:g}": f"{sum(1 for r in det_got if r['L'] == L and r['stopped'] == 'arrived')}/"
+                                            f"{sum(1 for r in det_got if r['L'] == L)}" for L in REACHES},
+            outcomes={s: sum(1 for r in got.values() if r["stopped"] == s) for s in sorted({r["stopped"] for r in
+                                                                                             got.values()})})
+        print(f"verify {p:g}/{d:g} ({verify['rule']}): {len(got) - len(bad)}/{len(got)} runs end as derived "
+              f"({len(tos)} of them timeouts)", bad or "")
+        print("  detoured timeouts at", verify["timeouts_detoured"], "| plain timeouts at", verify["timeouts_plain"],
+              "| latest answer", verify["latest_answer_s"], "s | arrived (detour batches)",
+              verify["arrived_by_distance"], "| detoured", verify["detoured_by_batch"])
     out = dict(question="B116: the cap for a plain goto that has entered a detour",
-               envelope=dict(goto_speed_m_s=v, ease_in_s=e, goto_cap_s=plain_cap, goto_detour_s=cockpit.GOTO_DETOUR_S,
+               envelope=dict(goto_speed_m_s=v, ease_in_s=e, goto_cap_s=plain_cap, goto_detour_cap_s=detour_cap,
+                             goto_detour_s=cockpit.GOTO_DETOUR_S,
                              goto_detour_m=cockpit.GOTO_DETOUR_M, goto_detours=cockpit.GOTO_DETOURS,
                              reach_m=C.GOTO_REACH_M),
                formula=dict(expr="goto_cap_s(speed, ease_in, GOTO_REACH_M + GOTO_DETOURS * GOTO_DETOUR_M)",
