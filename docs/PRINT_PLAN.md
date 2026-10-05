@@ -72,7 +72,7 @@ everything is regenerated (D032: that is the canonical path).
 | A | Ø4 bores 4.15 / 4.20 / 4.30 / 4.40 / 4.50, pegs 3.90 / 3.95 / 4.00 | the first bore the 3.95 peg slides into | `print.clearance_fit` (4.30 = today's 0.30) |
 | B | M3 holes 2.5 / 2.6 / 2.7 / 2.8 / 2.9 | the first hole a screw threads cleanly | `print.screw_m3_tap` (2.8) |
 | C | heat-set pockets 4.4 / 4.6 / 4.8 | the pocket that holds an insert snugly | `print.heatset_m3_d` (4.6) |
-| D | slots 3.8 / 4.2 / 4.6 | does the port coupon's lip pass 4.2 | `interfaces.leg_port.hook_slot_w` (4.2) |
+| D | slots 3.8 / 4.2 / 4.6 | does the port coupon's lip pass 4.2. **Hold (B117, 2026-10-01): the lip's foot is 5.15 wide, none of the three slots can pass it; the row becomes 5.8 / 6.2 / 6.6 plus a seat-fit row once the I1 fix is signed** | `interfaces.leg_port.hook_slot_w` (4.2) |
 | E | Ø2 pin holes 2.00 / 2.10 / 2.20; Ø10 tube sockets 10.15 / 10.30 / 10.45 | snug pin (Ø2 filament works); the tube seats | hand hinge bore (`part_hand.py`, hard-coded 2.1); tube socket = 10 + `print.clearance_fit` |
 
 Row E's middle column (6.85 / 6.95 / 7.05 pockets) was the 683ZZ bearing
@@ -209,7 +209,7 @@ design counts, not a shopping list:
 | `body_deck` | 1 | 190 × 181, flat, brim on, dry filament. Print it after B27 (`deck_t` 4 vs 6 unified, at least 6: the latch strike asserts it), B28 (the fit ladder), B51 (tray, rails, bracket and power entry placed together) and the bay (B84), and after the port coupons dock cleanly: each of them changes holes in the deck. B51 and B84 are a proposal for the owner, [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md). Today's deck has grid holes only for the star-board bracket, and the five I3 latch strikes of D063 (B87): their underside recess is the cam, a small bridge on the bed side (134.7 mm² of new overhang in the audit, at most 2.5 mm wide at z 2.1, under the 3 mm warning step), so check its 0.8 mm ramp did not print as steps |
 | `coxa_yaw_base` | 4 more | one per station |
 | `thumb_knob_m3` | 8 more | 2 per `coxa_yaw_base`; the two interface-coupon knobs are the bench leg's. One A-19 M3 × 16 hex head in each (not in the estimate). Plus one per I6 shoe |
-| `port_coupon_deck` + `port_coupon_plate` | 1 each | the I1 hook-pivot dance, if not tried yet (not in the estimate) |
+| `port_coupon_deck` + `port_coupon_plate` | 1 each | the I1 hook-pivot dance, if not tried yet (not in the estimate). **Hold (B117 / B137, 2026-10-01): as drawn the dance is impossible and the plate coupon's patch (x −57) penetrates the deck coupon on any path; print the pair only after the I1 fix is signed and the coupons regenerated** |
 | `busboard_bracket` | 1 | the star board; print once the electronics exist ([WIRING_HARNESS.md](WIRING_HARNESS.md)) |
 | `avionics_tray` | 1 | a bench carrier for the electronics: since D063 its Pi standoffs are 58 × 49, 11 mm tall, and its IMU seats fit the BNO085 (B89, B90; 14.7 g, the recess ceilings under the seats add overhang). Its latch pocket is the D of the keyway index (B107). The bus adapter, buck and UBEC have no place under its Pi (B108: 9.0 mm of floor under the keep-out; the measured fixes raise the Pi), so keep them beside it. `tray_rail` × 2 waits for B51 (as drawn, tray + rails fit nowhere between the legs) |
 | `battery_sled`, `sled_rail` × 2, `dock_block` | — | wait for the bay (B84, B86): nothing carries the sled yet (the proposal: [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)) |

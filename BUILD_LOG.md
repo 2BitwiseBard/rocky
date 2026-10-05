@@ -9,6 +9,118 @@ indexes them.*
 
 ---
 
+## 2026-10-01 → 10-05 · Session 9p — the picks are not in, so the keel tub, the boards and the leg port get measured first (B117–B138)
+
+**Ask:** the 9o handoff prompt: build the body layout from the owner's picks if they were sent,
+otherwise say what is still open. The owner desk page's `desk/layout` still held only the three
+pre-filled recommendations (1 A, 2 8 mm, 12 south-hook) with no send time, so nothing was built.
+The owner added two standing rules mid-session: agents run on Opus 5.5 or Sonnet 5.5 by task, as
+many as needed; and (10-05) record the findings in the repo docs. Everything below is read-only
+measurement in scratch copies of the tree; `cad/params.yaml` and every part file are untouched,
+fingerprint `87215110e9c4`. The records are `docs/archive/prep-2026-10-01/` (two reports and the
+I1 judgement; the ~1,000 scripts and logs stay outside the repo and are listed for promotion in
+report 1 §6). Two rounds, 39 agents (19 + 20), every headline re-measured by a second agent; the
+second round was cut off once by a usage limit and resumed from its cache.
+
+**Why measure first:** reading `sim/build_mjcf.py` for the handoff showed the sim has no belly:
+the torso's lowest face is z +6 (124 mm over the ground at stance) while the proposal's tub bottom
+is z −55.4 (62.6). Every rubble, righting and shove number the proposal rests on was measured with
+no keel. So, while the picks were pending, the tub went into scratch copies of the MJCF (a massless
+box, a box with the proposal's torso mass and CoM, and the 5 mm layer), and decisions 13 and 14,
+which the page left half-measured, got their numbers.
+
+**The tub is safe (confirmed):** righting with `recover1` + the supervisor 197/200 with or without
+the tub, at 8 or 5 mm (20/20 and 11/20 reproduce on seeds 0–19); `run_stuck` byte-identical at
+30–45 mm (0 tub contacts in 192 trials, closest 14.3 mm; first touch at 62 mm rubble, the only
+tub-caused stalls at 64–70 mm are the square nose corners jamming sideways); the gait at the
+envelope over 24 headings, the turns, 300 slew ramps, the 12 gestures and the audit, the stance
+and cliff probes: 0 poses in the tub's reach set, 0 contacts (closest 69.8 mm). Only the righter's
+fall path reaches it: 6/200 drops massless (max 2.36 mm), **12/200 with the battery mass** (max
+3.06), legs 1–2, a pinch (the hip at full torque drives the knee-saturated leg under the settling
+keel, tub force to 46.9 N), with no outcome changed. The battery in the tub lowers the robot CoM
+26 mm and lifts the no-righter baseline 87 → 104/200 (sim torso 1467 g at (−2.5, −2.0, −1.2)).
+Settled ground clearance 62.15 (8 mm) / 65.15 (5 mm). Fingerprints with a belly: `777fdb4eda14`
+(8 mm, massless), `47435187271f` (with mass), `4f77d216a700` (5 mm); geom ids shift +2.
+
+**The I1 leg port cannot dock (B117, confirmed by three designers, three verifiers and a judge):**
+the hook's L is 5.15 wide at its foot against the 4.2 slot (4.6 fails too): no rigid-body path at
+any tilt from −30 to 90, even at zero clearance; the 8 mm dowel posts then block the pivot even at
+slot 5.2–7.0 (none at 0.10 clearance). The port coupons and fit-ladder row D cannot rehearse it:
+the plate coupon's patch reaches x −57 and penetrates the deck coupon on any path (B137). Three
+fixes were designed from different angles and each verified to dock and undock at ≥ 0.30:
+"minimal" (slot 5.2, short foot, 3 mm tapered posts; play ±0.9°), "seats" (two 30° cone posts at
+(−32, ±17.3), cone + V sockets, slot 6.2 grown outboard, a spine rib; nominal zero play), and
+"sequence" (flat slide, chevron hook, knob skirts; print risk high, plate SF 0.52). The judge
+recommends **seats** with the pad relief ending at x −46 (seat share of the screw preload
+8 → 30 %), docking at 7–10° with a radial approach, the leg's own carapace sector off (B125);
+it changes three frozen values (`dowel_xy`, `hook_slot_x`, `hook_slot_w`) and so waits for the
+owner (decision 15). **The stance load path in INTERFACES I1 is wrong** (B118): the foot lifts
+the plate's outboard end, the plate pivots on its most inboard deck contact, the hook carries
+nothing in stance (sim My +241.5 N·mm per leg), and the two thumbscrews with their inserts carry
+972 N per pair in the design case (3 legs × 3, μ 0.5; 568 with seats). Today's plate is at
+47.4 MPa at the screw line, SF 0.74 (B119; seats' rib: 15.0, SF 2.33). The orchestrator's own
+hand statics in the round-2 brief had the same wrong sign; the agents corrected it.
+
+**Decision 13, measured:** a uniform hip limit that clears the tub costs 11.8–13.7 % of the planar
+reach, 17–39 mm on a 20 mm stair and 1–3 mm of BRACE, and at bay_w 53 no value both clears the
+tub (−49.72 sim capsules / −47.91 proposal radii) and keeps the cliff void guard, whose ceiling
+is −47.91 at h 118 (`probe_out` needs 26.5 mm of measured depth; void 12/12 at ≤ −47.75, 0/12 at
+≥ −47.5 and the robot walks off the table; B129). A keep-out on the supervisor's targets that
+raises the knee leaves 1–6/200 contacts; a hip clamp ≥ −51.05 on legs 1–4 gives 0/200 with the
+outcome unchanged, 38–43 % of FALLEN ticks clipped, and applied only in FALLEN/RIGHTED it leaves
+BRACE and the probes alone (B130). Every reach number assumes a 135 mm foot; with the hand as
+`part_hand` builds it (B95) the legs pass 17.5–18.7 mm through the tub at −51.05 (B131). The
+supervisor and playground do not clamp to `joints.pos_deg` at all (B132).
+
+**Decision 14, measured:** with the real Pi 5 STEP the 3D gap to the carapace is 6.84 (USB end +x)
+/ 3.56 (−x) at 11 mm standoffs and 5.45 / 2.17 at 13; `part_avionics` checks only to the board top
+(B127). Pi on 18.5 mm fails the 3 mm rule; at 13 mm no USB-A port takes a plug reliably, at 11 mm
+and +x one does (right-angle ≤ 20 long; B128). The measured home for the bus adapter, buck and UBEC
+is face-down on option A's hub shelf with the Pi at 11 mm (all three at bay_w 50, 0 mm³, 0.80
+margin; the adapter alone also at 53), three new posts at (−50, 34), (50, 34), (26, 64), the
+adapter on the Pi's UART (H2, jumper A; RX/TX cross; GND off pin 9 or 14). Round 1's "pi13 +
+USB +x" recommendation did not survive round 2. Caveats: 1.00 mm to the stand's crown plate
+(ESTIMATE stand), hub service means the robot off the stand (B134), the 14 AWG feed has no route
+at bay_w 53 (B133), the Ø10 grommet passes no plug (B122), the J6 lines have no bulkhead connector
+(B123).
+
+**Also found:** each docked coxa base meets its carapace sector by 42.801 mm³ (cup back wall at
+r 71.5–72; `part_shell`'s proxy checks miss it; B124, confirmed by my own script); three under-deck
+turn points sit inside the tub's plan, not one (latches 162 and 306, the tray strike; B126); the
+mated XH-5 pair does not pass the 11 × 11 cutout (a 7 × 16 cross arm would; B120); leg-side XH-5
+pins 1–2 carry two or three wires (B121); the 5 × 7 loom lanes clear the corrected hook sweep by
+1.45–1.75 but a zip-tied loom needs 8 × 7 (B135); legs 2/3 reach their own drop keep-out (B136);
+`pebble_feasibility` hard-codes the torso mass and CoM (B138). Option B as drawn is out (the Pi
+enters the carapace by 492 mm³); it survives only with a side-entry hub straight on the deck and
+the 3 mm rule read vertically. The 5 mm layer keeps 1.26 mm to the hook sweep with the seats fix
+(8 mm: 4.26) and takes a bare loom only, so 8 mm stays.
+
+**Corrections to 9m's proposal:** 24 numbered corrections in BODY_LAYOUT_PROPOSAL's
+"Re-measured 2026-10-01/02" block (the hook sweep −13.8 → never reachable as drawn, −13.30 / −13.76
+with seats; the carapace margin 5.5 / 12.25 → 3.56 / 6.84 as a real 3D gap; the clear band
+−21.9 … −17.2; the census 114 / 97 / 97 / 114; the grommet; the 14 AWG run; the shelf hangers; B's
+ceiling). Round 1's own claims that round 2 refuted: "USB end +x is mandatory" (−x passes at 11 mm
+with the real parts), "the servo lags between clear targets" (a pinch), "no target keep-out can be
+contact-free" (a hip-first projection is, in one agent's runs), "no 5 × 4 packing exists" (marginal).
+
+**Not done:** nothing in `cad/`, `sim/` or `gait/` changed; no number in README, SIM_GUIDE or
+RL_GUIDE moved (they stay true for a robot without a belly). The owner's picks, decision 15's
+sign-off and the stance hold-down coupon gate the build. Open from 9o unchanged: B101, B102,
+B107's head cap, B105's partial arcs, `request_stop`'s docstring, `ArmedGait`'s MARGIN (B113),
+B33 c, B34's next rungs, B54 at 45 mm. One round-1 agent used `pkill -f` against the brief; the
+cockpit was checked alive afterwards.
+
+**The loop:** docs only, `ruff check .` clean, fingerprint unchanged; CI runs the full suites on
+the push.
+
+**Next:** the owner sends the picks (the page now carries decisions 14 and 15 with the measured
+options); then the build: the seats fix first (port coupon pair, seat-fit row, insert pull-out
+≥ 300 N, knob preload ≥ 285 N), `iface` keep-out helpers from `keepouts.py`, `part_bay`, the belly
+in `build_mjcf` from params with the torso mass and CoM, the righter's FALLEN/RIGHTED clamp, and
+every published number re-run on the new fingerprint.
+
+---
+
 ## 2026-09-30 · Session 9o — goto gets its detour cap, the torque audit stops counting the hands twice, one CAD pass (B116, B106, B105, B107, B108, B110)
 
 **Ask:** the owner on 9n's two options: "yes, apply the 87 s goto cap and anything else".

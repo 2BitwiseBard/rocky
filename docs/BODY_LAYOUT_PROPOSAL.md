@@ -9,9 +9,10 @@ skirt). No CAD file was changed; the measurement scripts and the sketches were
 scratch work and are not in the repo. Frames: body frame, z = leg z,
 deck −10..−4, coxa plate top 0, ground −118 at stance; +x east, leg 0 north.
 
-**How to decide.** Read the thirteen decisions in
-[section 8](#8-decisions-only-the-owner-can-make); each names the numbers it
-turns on. Decision 1 (where the hub lives) sets the rest: A is recommended
+**How to decide.** Read the fifteen decisions in
+[section 8](#8-decisions-only-the-owner-can-make) (13 from the proposal, 14
+from B108, 15 from the I1 docking fault found 2026-10-01); each names the
+numbers it turns on. The owner's phone page carries the same list. Decision 1 (where the hub lives) sets the rest: A is recommended
 (section 7), B no longer fits as drawn (section 4), C trades 30 g and a big
 print for an enclosed belly (section 5). Section 6 has the three side by side.
 Once the decisions are in, section 11 lists the checks the implementation must
@@ -46,6 +47,134 @@ review changed, each marked *(review)* where it sits:
   steeply down and knee folded back). It is new, and nothing checks it (sections 3 and 10).
 - **The robot CoM left out the five hands (193 g).** The margins move by
   +0.1 … +0.2 mm.
+
+**Re-measured 2026-10-01/02** (two read-only prep rounds, 39 agents, every
+headline claim re-measured by a second agent; BUILD_LOG 9p; the full records
+are [archive/prep-2026-10-01/](archive/prep-2026-10-01/): `PREP_REPORT_1.md`,
+`PREP_REPORT_2.md`, `I1_DOCK_OPTIONS.md`). Nothing below changes the
+recommendation (A, 8 mm layer); three things change what the build must do
+first, and the owner's page gained decisions 14 and 15 (section 8).
+
+- **The tub is safe in the sim.** With the tub as a box in the MJCF (the sim
+  had no belly: its torso bottom was 124 mm over the ground, the tub's is
+  62.15 settled), self-righting is unchanged over 200 falls (197 stand, with
+  or without the tub, 8 or 5 mm), rubble at 30–45 mm is unchanged (0 tub
+  contacts, closest 14.3; first touch at 62 mm rubble; the only tub-caused
+  stalls are the square nose corners jamming at 64–70 mm), and the gait,
+  gestures and floor probes never reach it. Only the righter's fall path does:
+  6/200 drops massless, **12/200 with the battery mass** (max 3.06), without
+  changing whether the robot stands. The battery in the tub also lowers the
+  CoM 26 mm and lifts the no-righter baseline 87 → 104/200.
+- **The I1 leg port cannot dock as drawn** (backlog B117): the hook L is
+  5.15 wide at the bottom against the 4.2 slot (4.6 fails too), and the 8 mm
+  dowel posts block the pivot even with a 5.2–7.0 slot. Three verified fixes
+  exist; the judge recommends cone "seats" (decision 15). So the hook sweep
+  used in fact 2 was never reachable; the figures that replace it are in the
+  corrections below. The stance load path was also wrong in INTERFACES I1:
+  the hook carries nothing in stance, the thumbscrews carry 972 N per pair
+  today (B118) and the plate is at SF 0.74 at the screw line (B119).
+- **Three under-deck turn points sit inside the tub's plan**, not one:
+  carapace latches 162 and 306 and the tray's own strike at (0, −43) (B126).
+- **Decision 13 is measured:** a uniform hip limit that clears the wider
+  tub (bay_w 53) switches off the cliff void guard (its ceiling is −47.91 at
+  h 118, B129); the measurements support modelling the belly and clamping the
+  righter's hip commands only in FALLEN/RIGHTED (0/200 contacts, outcome
+  unchanged; B130). Every reach number assumes a 135 mm foot (B131).
+- **Decision 14 is measured:** with the real Pi 5 parts, the Pi on 18.5 mm
+  fails the 3 mm rule, and on 13 mm no USB-A port takes a plug reliably
+  (B128). The measured home for the three boards is face-down on option A's
+  hub shelf with the Pi kept at 11 mm (all three at bay_w 50 with a 0.80
+  margin; the adapter alone also at 53), the bus adapter driven over UART.
+  The shelf then needs three new posts, the stand's cradle and crown plate
+  in the keep-outs, and hub service means the robot off the stand (B134).
+
+Corrections to this document, each "section: old → new":
+
+1. Intro, "Not checked by either run": one latch column → three (latch 162
+   at (−73.48, −12.30), latch 306 at (66.67, −33.24), the tray strike at
+   (0, −43)); each Ø5 driver column meets the tub for 734.3 mm³.
+2. Intro and section 3 margins, "A's carapace margin is 5.5 mm, not 10.5
+   (12.25 with the Pi's USB end +x)" → vertical 5.45 / 12.40 with a 16 mm
+   part stack; with the real Pi 5 STEP the 3D gap is −x 3.56 (3.41–3.72) /
+   +x 6.84 (6.63–7.05) at 11 mm standoffs, 2.17 / 5.45 at 13.
+3. Section 1 fact 2, "a hook foot reaches z −13.8 (−13.3 docked), at
+   r 57.5–68.4" → today's hook cannot dock at all. Its deck-clear sweep would
+   reach −14.80 (−15.05 with a 5.2 slot), r 56.95–69.31. With the seats fix:
+   −13.30 on the path, −13.76 at any reachable pose, r 56.94–66.79.
+4. Section 1 fact 2, "372 mm³ … 23.6 mm³" → not recoverable; ≥ 48 for every
+   50–55-wide deck-roof bay, pack alone 48 with a deck-clear sweep. The
+   rejection holds.
+5. Section 1 fact 3, "y −23 … −16 (y −26 … −14 with 3 mm)" → y −21.9 … −17.2
+   at bay_w 53 (−26.2 … −13.1 for the 3 mm reading); y −20 stands.
+6. Section 1 fact 1: the 697 mm³ used an 11 × 5.5 loom; the real per-leg loom
+   is 7 conductors, 14.17 mm². The conclusion holds.
+7. Section 2 table, "ground clearance at stance 62.6 / 65.6" → 62.15 / 65.15
+   settled in the sim (62.13 with the mass).
+8. Section 2 table, legs: "about 205 poses per leg … Leg 0 never reaches it"
+   → 114 / 97 / 97 / 114 (sim capsules), 138 / 122 with r 15 / 12; leg 0
+   never reaches the tub but reaches the shelf box (15 poses) and the shelf
+   boards.
+9. Section 2 "Stand" and section 3 risks, "serviced from under the deck (on
+   the stand the cradle leaves the north underside open)" → open only north
+   of y 47.2; with face-down boards at z −54.4 the adapter screws are blocked
+   from below and the shelf cannot be lowered on the stand (one agent).
+10. Section 3, shelf hangers "(±40, 20), (0, 20), (0, 40)" → they block every
+    arrangement with the bus adapter; posts at (−50, 34), (50, 34), (26, 64)
+    (0.59 to the hook sweep, 0.89 to the coxa bases, 0.57 to drops +5).
+11. Section 3, "boards facing up … 28 mm deep (… z −38 … −10)" → with the bus
+    adapter on the shelf it hangs face-down to z −54.4 (adapter (−19.8, 30.8),
+    node (−20.2, 38.2) up, star (21.8, 34.2) up turned 90; plate top −36.3).
+12. Section 3, lanes "5 × 7 mm (x ±44.6 … 49.6 south to y −38, out past the
+    hook envelope at x ±51.8 … 57, then down to the cutout)" → 8 × 7:
+    A x ±45 … 53, y −38 … 12; B x ±45 … 59.8, y −38 … −30 (the jog north of
+    y −38); C x ±51.8 … 59.8, y −53.43 … −30; the riser inside the drop
+    keep-out box; the loom leaves the shelf through its south face. A bare
+    loom fits 5 × 7; a zip-tied one needs 8 × 7.
+13. Section 3, "The 14 AWG … along y 8–11, z −26 … −22" → overlaps the
+    bay_w 53 tub's north wall; at bay_w 53 no y position clears leg 4's drop
+    (one agent); at bay_w 50 only y 7.9 … 8.8. A route near x 70–90 is
+    needed (B133).
+14. Section 3 margins, "Lane side clearance: 0.5 mm to the Ø8 hanger bosses
+    (1 mm more and it touches: 15 mm³)" → 0.60; 1 mm more is 26.31 mm³ in the
+    8 mm layer (15.03 is the 5 mm layer); the 8 × 7 lane keeps 1.00.
+15. Section 3 deck holes, "(0, 50) | 10 | grommet: the tray trunk + tray
+    XT30" → passes no plug with leads on (XT30U needs Ø11.42, XHP-5 + leads
+    Ø11.47–12.88). Route before termination, or a 12.5 × 7.5 r1 slot (4.05 to
+    option A's holes). The J6 foot-switch lines also cross here (B122, B123).
+16. Section 3 deck holes, "(0, −43) … the tray's latch strike" → inside the
+    tub's plan; its driver column meets the tub for 734.3 mm³.
+17. Section 3 CAD changes, `iface.leg_port_hook_envelope()` "bottom −13.8" →
+    derived from params after the I1 fix: −13.30 path / −13.76 any pose with
+    the seats fix.
+18. Section 3 risks: add the righter folding legs under the keel (12/200 with
+    the mass, B130), and "Nothing gates those poses" → once the MJCF has a
+    belly, SELF_CONTACT gates the gesture audit and the cockpit studio; the
+    righter, `save_keyframe_gesture()` alone and the playground `check` are
+    not gated.
+19. Section 4, "A 3 mm margin needs … lift ≤ 11.4" → 11.40 centred / 11.10
+    floated under a vertical reading only; as a 3D gap 8.28 (Pi drawing
+    model) or 6.12 (16 mm stack + overhang). "(with it −x … lift at 4.4)" →
+    4.15, 1.15 with the overhang, fails at lift 0 as a 3D gap.
+20. Section 4, "B survives only with a hub at most about 14.3 tall (12.1
+    under the IMU) … not measured here" → measured: ceiling 14.20 / 12.00
+    (vertical), 11.38 / 9.18 (drawing 3D), 9.22 / 7.02 (strict). A
+    vertical-header star never fits; a side-entry star on a new 38.9 × 49.2
+    board (10.20 tall) plus a 30.5 node (8.30, ESTIMATE) fit the vertical rule
+    only. B's rails would be 19.10, not 26; its (0, 52) pass-through and the
+    (29, 14) grommet collide with that hub. B as drawn is out.
+21. Section 6 table, tray height over the deck, B "21.4" → about 14.5 at
+    lift 11.10. Section 6 note, "1434.6 g torso at (0, 0, 24.5)" → 1439.7 g.
+22. Section 7, "The lanes are why the layer is 8 mm instead of 5" → a bare
+    loom fits 7 × 4 in the 5 mm layer (5 × 4 is marginal); 8 mm is kept for
+    the hook margin (4.26 vs 1.26 at any pose with the seats fix) and for
+    tied looms.
+23. Section 8, decision 10: "26.5 / 30.7 mm at the south corners" → 26.94 /
+    31.12 at bay_w 53; the nose-south corner reaches r 112.4.
+24. Section 11: add an I1 dock-path regression (planar C-space + 3D replay
+    at ≥ 0.30), a connector pass-through check (cutout, grommet), a Pi
+    part-height envelope from the STEP with the ±0.3 tray float and a 3D gap,
+    and `part_shell` against the posed `coxa_yaw_base` (42.801 mm³ today,
+    B124).
 
 It fixes these rows together:
 
@@ -431,7 +560,10 @@ if an enclosed belly matters more than 30 g and a big print.
    raised tray) or C (in a belly pan). *(review: B only with a hub ≤ ~14 mm
    tall, not yet measured.)*
 2. **How deep the tub hangs:** a 5 mm layer (roof −15, 65.6 mm clearance,
-   lanes 5 × 4) or 8 mm (−18, 62.6, lanes 5 × 7). B needs only 5.
+   lanes 5 × 4) or 8 mm (−18, 62.6, lanes 5 × 7). B needs only 5. *(prep
+   2026-10-02: righting and rubble show no difference; the 5 mm layer leaves
+   1.26 mm to the hook sweep with the seats fix against 4.26 for 8 mm, and
+   takes a bare loom only (7 × 4); 8 mm is the measured choice.)*
 3. **The loop key in the belly** (tub nose wall, +x, reachable with the
    carapace on) or on a lead up through the carapace.
 4. **A separate `dock_block`** (replaceable; B86's flanges) or its floating
@@ -447,6 +579,12 @@ if an enclosed belly matters more than 30 g and a big print.
      is 57.8 wide and still fits at y −20);
    - **(b)** no strap inside the robot: the tub boxes the pack, with a 2 mm
      foam pad on the roof.
+
+   *(prep 2026-10-02: the wider tub of (a) costs the uniform-cut option of
+   decision 13 (legs 1/4 reach it 1.4° sooner), leaves the 14 AWG feed no
+   route past leg 4's drop (B133), fits all three boards on the shelf only
+   moved 0.70 north with a 0.50 gap, and halves the slack to the leg drops;
+   it changes no righting outcome. (b) keeps every margin.)*
 9. **The 12 V node part:** a 30.5 × 30.5 FPV-style PDB (the mount is the
    pattern, so the pick does not move the CAD) or bus bars / lever blocks
    (then a new mount).
@@ -467,7 +605,33 @@ if an enclosed belly matters more than 30 g and a big print.
 13. *(review)* **The legs' soft limits vs the tub.** Legs 1–4 can fold into
     it (hip −70 … −45 with the knee −130 … −90). Either give the sim a belly
     body and teach `pebble_feasibility` the tub, or narrow the soft limits
-    for those combinations.
+    for those combinations. *(prep 2026-10-02, measured: only the righter's
+    fall path reaches the tub (12/200 drops with the battery mass, max
+    3.06 mm, outcome unchanged). A uniform hip limit costs 12–15 % of the
+    reach, 17–39 mm on a 20 mm stair and, at bay_w 53, switches off the
+    cliff void guard (B129). A hip clamp on the righter's commands in
+    FALLEN/RIGHTED only gives 0/200 contacts with the outcome unchanged
+    (B130). The measured path: model the belly, then that clamp; re-derive
+    the value for the fitted foot (B131).)*
+14. *(2026-09-30, B108)* **Where the three small power and bus boards go**
+    (the bus adapter, the 5 V buck, the 6 V UBEC; none fits the tray as
+    drawn). *(prep 2026-10-02, measured: Pi on 18.5 mm standoffs fails the
+    3 mm carapace rule with the real Pi 5 parts; Pi on 13 mm leaves no USB-A
+    port that takes a plug reliably (B128). The measured home is all three
+    boards face-down on option A's hub shelf with the Pi kept at 11 mm
+    (bay_w 50: 0 mm³, 0.80 margin; the adapter alone also at 53) and the bus
+    adapter driven over the Pi's UART. The Pi's USB end: +x gives 6.84 mm to
+    the carapace and one usable USB-A port with a right-angle plug ≤ 20 mm;
+    −x gives 3.56 mm and straight plugs. B127, B128, B134 list what the
+    build must add.)*
+15. *(2026-10-02, B117)* **The I1 leg-port fix.** Today's port cannot dock.
+    Three verified fixes ([archive/prep-2026-10-01/I1_DOCK_OPTIONS.md](archive/prep-2026-10-01/I1_DOCK_OPTIONS.md)):
+    **seats** (two 30° cone posts at (−32, ±17.3), slot 6.2 at x −47, a plate
+    rib; recommended), **minimal** (slot 5.2, short foot, 3 mm tapered posts;
+    play ±0.9°, plate still at SF 0.76), **sequence** (flat slide, chevron
+    hook, knob skirts; print risk high). Seats changes three frozen values
+    (`dowel_xy` → `seat_xy`, `hook_slot_x`, `hook_slot_w`), so it needs a
+    D020 sign-off like decision 11. Print the port coupon pair first.
 
 ## 9. Rejected, with the measurement
 

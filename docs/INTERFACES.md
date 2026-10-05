@@ -27,6 +27,24 @@ One leg is one field-replaceable module. The target is a leg swap in
 **under two minutes** with one tool-free sequence: *hook, pivot, two
 thumbscrews, plug two connectors.*
 
+> ⚠ **As drawn, this port cannot be docked (found 2026-10-01, backlog B117).**
+> The hook's L is 5.15 mm wide at its foot against the 4.2 mm slot (4.6 fails
+> too), and the 8 mm dowel posts block the pivot even with a 5.2–7.0 slot: no
+> rigid-body path exists, so neither the port coupons nor the fit ladder's
+> row D can rehearse it (B137). Three verified fixes are compared in
+> [archive/prep-2026-10-01/I1_DOCK_OPTIONS.md](archive/prep-2026-10-01/I1_DOCK_OPTIONS.md);
+> the recommended one ("seats": two 30° cone posts at (−32, ±17.3), slot 6.2 at
+> x −47, a plate rib, insertion at 7–10° with a radial approach) changes three
+> of the frozen values below and waits for the owner's sign-off (body-layout
+> decision 15). Also wrong below: the **load path**. In stance the foot lifts
+> the plate's outboard end, the plate pivots on its most inboard deck contact,
+> the hook carries nothing, and the two thumbscrews with their inserts carry
+> about 972 N per pair in the design case (568 N with the seats fix); the plate
+> is at SF 0.74 at the screw line (B118, B119). A leg swap also needs its own
+> carapace sector off, which takes a flat screwdriver from under the deck
+> (B125), and the mated XH-5 pair does not pass the 11 × 11 cutout (B120).
+> Nothing in the frozen values has been changed yet.
+
 **Mechanical**
 - **Hook-pivot:** the coxa base plate's INBOARD edge carries a downturned
   lip. Its foot drops through a through-slot in the deck and hooks under the

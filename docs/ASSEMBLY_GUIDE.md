@@ -1134,6 +1134,15 @@ The dowels and hook lip take shear and torque; the thumbscrews only clamp and,
 with the hook, resist lifting
 ([I1](INTERFACES.md#i1--leg-port-deck--coxa-base-the-flagship)).
 
+> ⚠ **These steps cannot be done with the parts as drawn (2026-10-01, B117).**
+> The lip's foot does not pass the 4.2 slot and the dowel posts block the pivot;
+> step 3's plugging at the cutout is 1.6–2.5 mm out of reach while hooked, and
+> the mated XH-5 pair does not pass the cutout (B120). The leg's own carapace
+> sector must also be off (B125). The sequence is rewritten once the I1 fix is
+> signed (body-layout decision 15; the recommended fix docks at 7–10° onto two
+> cone seats). The load-path sentence above is also wrong: in stance the
+> thumbscrews carry the plate, not the hook (B118).
+
 1. Loop key out.
 2. Leg by its coxa, plate at ~15°: inboard lip through the station's hook slot
    (leg-local x −48), slide inboard until the lip's foot hooks under.
