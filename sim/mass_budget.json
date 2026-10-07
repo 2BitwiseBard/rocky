@@ -1,8 +1,29 @@
 {
- "torso": 1439.8,
+ "torso": 1527.6,
+ "torso_com_mm": [
+  -2.12,
+  -3.95,
+  -2.55
+ ],
+ "torso_inertia": [
+  0.004680112,
+  0.005389033,
+  0.006680401,
+  -9.0171e-05,
+  -0.000152426,
+  -0.000202211
+ ],
  "coxa": 83.9,
  "femur": 42.7,
  "tibia": 131.0,
  "hand": 38.6,
- "_note": "derived from cad/out STL volumes x PLA/PETG x print_estimate fill factors + params.mass_hw (ALL VERIFY); grams"
+ "provisional": true,
+ "provisional_items": [
+  "bay_tub",
+  "bay_door",
+  "bay_lid",
+  "hub_shelf"
+ ],
+ "_note": "derived from cad/out STL volumes x PLA/PETG x print_estimate fill factors + params.mass_hw (ALL VERIFY); grams",
+ "_note_torso": "D064: torso_com_mm = the torso's CoM (mm, body frame: z = leg z, deck -10..-4); torso_inertia = ixx iyy izz ixy ixz iyz about it (kg m^2, body axes, MuJoCo fullinertia order), from mass_audit's pose table"
 }

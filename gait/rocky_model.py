@@ -242,8 +242,114 @@ def gait_defaults() -> dict:
 
 
 def reflex_defaults() -> dict:
-    """ReflexSupervisor kwargs seeded from today's values (gyro_trip, stall_s, ...)."""
-    return {k: float(v) for k, v in _p()["reflex"].items()}
+    """ReflexSupervisor kwargs seeded from today's values (gyro_trip, stall_s, ...).
+    A list-valued key (a leg set) comes back as a tuple, every other one as a float."""
+    return {k: (tuple(v) if isinstance(v, (list, tuple)) else float(v))
+            for k, v in _p()["reflex"].items()}
+
+
+# D064 (pick 13, B130): the righter's hip clamp. Leg 0 is not in the set: it never reaches
+# the keel tub inside its soft limits (BODY_LAYOUT_PROPOSAL correction 8; the tub runs
+# east-west at y -20, south of leg 0's station). params may name the set as
+# reflex.righter_clamp_legs; until it does, this is the default every consumer shares.
+RIGHTER_CLAMP_LEGS = (1, 2, 3, 4)
+
+
+def righter_hip_min_deg() -> float | None:
+    """params reflex.righter_hip_min_deg (-51.05): the floor on the righter's hip COMMANDS
+    for righter_clamp_legs(), in FALLEN / RIGHTED only (ReflexSupervisor) and in the
+    recover env's action map (RecoverEnv: the same floor, so training and the supervisor
+    agree). Not a servo limit or a joint range: NORMAL / BRACE keep -70 (B129). None when
+    params has no such key (the pre-D064 robot)."""
+    v = _p().get("reflex", {}).get("righter_hip_min_deg")
+    return None if v is None else float(v)
+
+
+def righter_clamp_legs() -> tuple:
+    """The legs the righter's hip clamp applies to: params reflex.righter_clamp_legs, else
+    RIGHTER_CLAMP_LEGS (1-4)."""
+    v = _p().get("reflex", {}).get("righter_clamp_legs")
+    return tuple(int(i) for i in (RIGHTER_CLAMP_LEGS if v is None else v))
+
+
+# ------------------------------------------------------------------ the belly (D064)
+# Option A's under-deck volumes (picks 1, 2, 8, 14) as two boxes in the BODY frame (mm, z =
+# leg z, deck -10..-4): the sim's contact geoms (build_mjcf), the URDF's collisions
+# (generate_urdf) and the feasibility checker's SELF_CONTACT all read these. The CAD side is
+# cad/iface.bay_tub_extent(): the sim cannot import it (build123d), so the SAME sums are
+# written out here and sim/tests/test_belly.py re-derives both from params.
+DECK_BOT_Z_MM = -10.0          # the deck's underside: the CAD cuts a 6 deck (B27 OPEN: params
+                               # body.deck_t 4.0 is unread), deck top -4 (iface.DECK_BOT_Z)
+SHELF_PAD_WALL_MM = 3.0        # the shelf's pad round each Ø post_d post: 3 a side, Ø14 at post_d 8
+
+
+def bay_tub_extent_mm() -> dict:
+    """The keel tub's outer box, {'x', 'y', 'z'} (lo, hi) mm, body frame: x from the door's
+    outer face bay_door_x to bay_door_x + door_t + bay_l + bay_wall (the nose moves with
+    bay_l, pick 4), y bay_centre[1] -+ (bay_w / 2 + bay_wall), z from bay_top_z down roof +
+    bay_h + floor. At bay_l 194: x -97.5..101.9, y -47.4..7.4, z -55.4..-18.0. A box: the nose
+    chamfers (nose_chamfer), the latch boss and the hanger bosses are part_bay's."""
+    bs = _p()["interfaces"]["battery_sled"]
+    x0 = float(bs["bay_door_x"])
+    x1 = x0 + float(bs["door_t"]) + float(bs["bay_l"]) + float(bs["bay_wall"])
+    yc, hw = float(bs["bay_centre"][1]), float(bs["bay_w"]) / 2 + float(bs["bay_wall"])
+    z1 = float(bs["bay_top_z"])
+    z0 = z1 - float(bs["bay_roof"]) - float(bs["bay_h"]) - float(bs["bay_floor"])
+    return {"x": (x0, x1), "y": (yc - hw, yc + hw), "z": (z0, z1)}
+
+
+def hub_shelf_extent_mm() -> dict:
+    """The hub shelf's envelope, {'x', 'y', 'z'} (lo, hi) mm, body frame. Rule: the
+    axis-aligned hull of params hub_shelf x / y (the plate and the five boards with their
+    plug halos, as packed) and the square round each post's pad (Ø post_d + 2 x
+    SHELF_PAD_WALL_MM = 14 at the posts' xy), from bottom_z (the face-down adapter's pins)
+    up to the deck's underside (the posts hang from it; the star's top is -13.9). Today:
+    x -57..57 (the pads at x +-50 stand past the 53.9 / -56.2 boards), y 12.2..71 (the
+    (26, 64) pad past the UBEC's 64.2), z -54.4..-10."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    r = float(hs["post_d"]) / 2 + SHELF_PAD_WALL_MM
+    xs = [float(v) for v in hs["x"]] + [float(p[0]) + s * r for p in hs["posts"] for s in (-1, 1)]
+    ys = [float(v) for v in hs["y"]] + [float(p[1]) + s * r for p in hs["posts"] for s in (-1, 1)]
+    return {"x": (min(xs), max(xs)), "y": (min(ys), max(ys)),
+            "z": (float(hs["bottom_z"]), DECK_BOT_Z_MM)}
+
+
+def belly_boxes() -> dict:
+    """{'belly_tub': ((x0, x1), (y0, y1), (z0, z1)), 'belly_shelf': (...)} mm, body frame:
+    the geoms the MJCF hangs on the torso (massless: the torso's <inertial> carries the
+    mass) and the names pebble_feasibility reports a belly SELF_CONTACT under."""
+    out = {}
+    for name, e in (("belly_tub", bay_tub_extent_mm()), ("belly_shelf", hub_shelf_extent_mm())):
+        out[name] = (e["x"], e["y"], e["z"])
+    return out
+
+
+# ------------------------------------------------------------------ the torso's mass (D039, D064)
+MASS_BUDGET_PATH = os.path.normpath(os.path.join(_HERE, "..", "sim", "mass_budget.json"))
+
+
+def mass_budget(path: str | None = None) -> dict | None:
+    """sim/mass_budget.json (sim/mass_audit.py writes it from the CAD tree), or None when it
+    is missing. A fresh dict: callers may mutate it."""
+    p = path or MASS_BUDGET_PATH
+    if not os.path.exists(p):
+        return None
+    with open(p) as f:
+        return json.load(f)
+
+
+def torso_inertial(path: str | None = None) -> dict | None:
+    """The torso's mass distribution from the budget (D064): {'mass_g', 'com_mm' (x, y, z) body
+    frame, 'inertia' (ixx, iyy, izz, ixy, ixz, iyz) kg m^2 about the CoM in body axes (MuJoCo's
+    fullinertia order), 'provisional' (bool: mass_audit --allow-missing filled a part that has
+    no STL yet)}. None for a budget that predates it (mass only) or no budget at all: the
+    MJCF then falls back to the two weighted cylinders (CoM z 24.5)."""
+    mb = mass_budget(path)
+    if not mb or "torso_com_mm" not in mb or "torso_inertia" not in mb:
+        return None
+    return {"mass_g": float(mb["torso"]), "com_mm": tuple(float(v) for v in mb["torso_com_mm"]),
+            "inertia": tuple(float(v) for v in mb["torso_inertia"]),
+            "provisional": bool(mb.get("provisional", False))}
 
 
 def foot_switch() -> tuple[float, float]:

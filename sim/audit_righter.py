@@ -94,6 +94,9 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="au
     falls = 0                                 # FALLEN entries (re-falls after a ramp count)
     reason = None
     prev = NORMAL
+    belly, body_leg = rc.belly_geoms(model), rc.leg_of_body(model)   # D064, read-only
+    clamp_legs = list(sup.righter_clamp_legs)
+    hip_min, b_steps, b_max, b_where = np.inf, 0, 0.0, set()
     for k in range(int(T_TOTAL / DT)):
         t = k * DT
         R = data.xmat[torso].reshape(3, 3)
@@ -123,14 +126,23 @@ def audit_episode(model, ckpt, seed, shove_n=SHOVE_N, shove_s=SHOVE_S, servo="au
                 ticks.append(tg)
                 last = tg
             terr.append(np.abs(data.qpos[righter._jadr] - data.ctrl[:15]))
+        if state in (FALLEN, RIGHTED):
+            hip_min = min(hip_min, float(np.min(np.asarray(q, float).reshape(N_LEGS, 3)[clamp_legs, 1])))
         shove.apply(model, data, torso, t)
         mujoco.mj_step(model, data)
+        hits = rc.belly_contacts(model, data, belly, body_leg) if belly else []
+        if hits:
+            b_steps += 1
+            b_max = max(b_max, max(h[2] for h in hits))
+            b_where.update(f"{g[6:]} L{leg} {state}" for g, leg, _pen in hits)   # 'tub L2 FALLEN'
     R = data.xmat[torso].reshape(3, 3)
     end_tilt = float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1))))
     out = dict(seed=seed, fell=t_fallen is not None, upright_end=end_tilt < 25, falls=falls, reason=reason,
                land_tilt=None if land_tilt is None else round(land_tilt),
                by_policy=(reason == "handoff"),
-               t_right=None if t_fallen is None or t_righted is None else round(t_righted - t_fallen, 2))
+               t_right=None if t_fallen is None or t_righted is None else round(t_righted - t_fallen, 2),
+               hip_cmd_min_deg=None if not np.isfinite(hip_min) else round(float(np.degrees(hip_min)), 2),
+               belly_steps=b_steps, belly_max_mm=round(b_max, 2), belly_where=sorted(b_where))
     if len(ticks) > 3:
         T = np.array(ticks)
         d = np.diff(T, axis=0)
@@ -170,6 +182,11 @@ def main():
               f"{f('move_deg'):5.2f}°  {f('track_deg'):4.1f}°  {f('ctrl_rev_s'):9.1f}  {f('qvel_flip_s'):11.1f}  "
               f"{servo_mode_for(probe.contract, args.servo)}   landed at tilt {lands}°, FALLEN entries {falls}, "
               f"ramp reasons {[r['reason'] for r in rs]}")
+        hips = [r["hip_cmd_min_deg"] for r in rs if r["hip_cmd_min_deg"] is not None]
+        print(f"{'':34s} D064: FALLEN/RIGHTED hip command min (legs 1-4) "
+              f"{min(hips) if hips else float('nan'):.2f} deg; belly contact steps "
+              f"{[r['belly_steps'] for r in rs]}, max {max(r['belly_max_mm'] for r in rs):.2f} mm "
+              f"({', '.join(sorted({w for r in rs for w in r['belly_where']})) or 'none'})")
 
 
 if __name__ == "__main__":

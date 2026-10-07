@@ -189,3 +189,59 @@ def test_handoff_uses_the_joint_state_when_q_meas_is_fed():
             assert t >= sup.handoff_hold_s - 1e-9
         else:
             assert st == FALLEN and sup.right_reason != "handoff"   # height 0.12 m alone no longer passes
+
+
+def _hip_at(deg, legs=range(N_LEGS)):
+    """A (5, 3) righter command: the planted-ish knee, every listed leg's hip at `deg`."""
+    q = np.tile(np.radians([0.0, -20.0, -80.0]), (N_LEGS, 1))
+    for i in legs:
+        q[i, 1] = np.radians(deg)
+    return q
+
+
+def test_righter_hip_clamp_in_fallen_and_righted_only():
+    """D064 (pick 13, B130): in FALLEN a righter command of hip -70 on legs 1-4 is held at the
+    params clamp (-51.05); leg 0 keeps its -70; the RIGHTED ramp starts from the clamped pose
+    and never dips below it; NORMAL is never clamped (B129: the cliff guard needs the hip)."""
+    import rocky_model as rm
+    floor = rm.righter_hip_min_deg()
+    assert floor == -51.05 and rm.righter_clamp_legs() == (1, 2, 3, 4)
+    sup = make_sup(righter=lambda t, dt: _hip_at(-70.0), stall_s=10.0, fallen_max_s=1.0)
+    assert sup.righter_hip_min_deg == floor and sup.righter_clamp_legs == (1, 2, 3, 4)
+    t, seen = 0.0, {}
+    for _ in range(int(4.0 / DT)):
+        q, st = sup.step(t, 0.0, 0.0, 0.0, 0.2, tilt_deg=90.0 if t < 1.9 else 5.0, height=0.05)
+        seen.setdefault(st, []).append(np.degrees(q))
+        t += DT
+    fallen = np.array(seen[FALLEN])
+    assert np.allclose(fallen[:, 1:, 1], floor)                 # legs 1-4: on the clamp
+    assert np.allclose(fallen[:, 0, 1], -70.0)                  # leg 0: untouched
+    assert sup.righter_clamped > 0
+    righted = np.array(seen[RIGHTED])
+    assert (righted[:, 1:, 1] >= floor - 1e-9).all()            # the ramp stays above it
+    assert np.isfinite(righted).all() and seen[NORMAL]           # ... and it hands back to NORMAL
+    assert np.allclose(righted[-1], np.degrees(sup._planted_q()))
+
+
+def test_righter_hip_clamp_never_touches_normal_or_is_switched_off():
+    import rocky_model as rm
+    sup = make_sup()
+    q = _hip_at(-70.0)
+    assert np.array_equal(sup._righter_clamp(q)[0], q[0])       # leg 0 is not in the set
+    assert sup._righter_clamp(q)[1, 1] == np.radians(rm.righter_hip_min_deg())
+    # NORMAL with the stance probe 40 mm deep on leg 1 (the cliff guard's reading, B129): the hip
+    # goes to -63 and must stay there, the clamp is a FALLEN-only call
+    n0 = sup.righter_clamped                                    # the two direct calls above
+    q_n, st = sup.step(0.0, 0.0, 0.0, 0.0, 0.2, tilt_deg=5.0, height=0.12,
+                       probe_dz=np.array([0.0, 40.0, 0.0, 0.0, 0.0]))
+    assert st == NORMAL and sup.righter_clamped == n0
+    assert np.degrees(q_n[1, 1]) < rm.righter_hip_min_deg() - 10.0
+    off = make_sup(righter=lambda t, dt: _hip_at(-70.0), righter_hip_min_deg=False)
+    off._enter_fallen(0.0)
+    q_f, st = off.step(0.0, 0.0, 0.0, 0.0, 0.2, tilt_deg=90.0, height=0.05)
+    assert st == FALLEN and np.allclose(np.degrees(q_f[:, 1]), -70.0)
+    some = make_sup(righter=lambda t, dt: _hip_at(-70.0), righter_hip_min_deg=-60.0,
+                    righter_clamp_legs=(2,))
+    some._enter_fallen(0.0)
+    q_s, _ = some.step(0.0, 0.0, 0.0, 0.0, 0.2, tilt_deg=90.0, height=0.05)
+    assert np.allclose(np.degrees(q_s[:, 1]), [-70.0, -70.0, -60.0, -70.0, -70.0])

@@ -304,7 +304,7 @@ def test_urdf_xacro_is_regenerated():
     CI's regenerate-then-git-diff caught a stale URDF)."""
     sys.path.insert(0, os.path.join(REPO, "ros2", "rocky_description"))
     import generate_urdf as gu
-    want = gu.build_xacro().replace("__TORSO_INERTIAL__", gu.inertial(*gu.combine_torso_inertia()))
+    want = gu.build_xacro().replace("__TORSO_INERTIAL__", gu.torso_inertial_xml())   # D064: the budget's
     with open(os.path.join(REPO, "ros2", "rocky_description", "urdf", "pebble.urdf.xacro")) as f:
         assert f.read() == want, "pebble.urdf.xacro is stale: run ros2/rocky_description/generate_urdf.py"
 
@@ -458,8 +458,10 @@ def test_contacts_ignore_self_contact_count_world():
 def test_scenes_contacts_keep_their_1p5_newton_threshold(model):
     """V2 (review): the old version tested a robot in the air (every force 0), so a
     foot_contacts that ignored CONTACT_FORCE_N passed. Now the planted robot is
-    unloaded by a lift on the torso until the feet carry 1.84 N (between 1.5 and
-    the params switch's 2.0) and 1.04 N (between righter's 0.3 and 1.5)."""
+    unloaded by a lift on the torso until the feet carry ~1.75 N (between 1.5 and
+    the params switch's 2.0) and ~0.9 N (between righter's 0.3 and 1.5). D064: the lift
+    is the compiled robot's weight less those loads (it was 17 / 21 N for the 2728 g
+    robot; the belly's torso put the 17 N case at 2.12 N a foot, past the band)."""
     import scenes
     from contacts import foot_forces
     from pebble_gait import WaveGait, leg_ik, body_to_leg
@@ -469,7 +471,8 @@ def test_scenes_contacts_keep_their_1p5_newton_threshold(model):
     jadr = [model.joint(f"{n}{i}").qposadr[0] for i in range(N) for n in rm.LEG_JOINTS]
     fids = [model.geom(f"foot{i}").id for i in range(N)]
     torso = model.body("torso").id
-    bands = {17.0: (1.5, 2.0), 21.0: (0.3, 1.5)}      # lift N -> the band every foot load must fall in
+    W = float(model.body_subtreemass[torso] * -model.opt.gravity[2])   # N, the whole robot
+    bands = {W - N * 1.75: (1.5, 2.0), W - N * 0.9: (0.3, 1.5)}   # lift N -> every foot load's band
     for lift, (lo, hi) in bands.items():
         d = mujoco.MjData(model)
         d.qpos[2] = rm.spawn_z_m(g.h)
