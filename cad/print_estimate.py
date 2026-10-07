@@ -80,7 +80,9 @@ FILL = {
     "coupon_cup": 0.7, "coupon_yaw_hub": 0.7, "coupon_hip_hub": 0.7, "coupon_idler": 0.7,
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
-    "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
+    "sled_rail": 0.6, "belly_door": 0.5,
+    "hub_shelf": 0.7,    # 2026-10-07 (part_busboard, retires busboard_bracket): a 3 mm plate, mostly
+                         # top/bottom skin, + three Ø8 posts and the board standoffs
     "shell_sector": 0.6, "shell_cap": 0.6,
     # bench
     "stand_base": 0.4, "stand_section": 0.4, "stand_crown": 0.4,
@@ -106,7 +108,7 @@ PLATES = {
     # here as the batch's budget. The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
-        ("busboard_bracket", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
+        ("hub_shelf", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
         ("battery_sled", 1, 0.2), ("sled_rail", 2, 0.2),
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
