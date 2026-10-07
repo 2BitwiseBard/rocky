@@ -81,6 +81,7 @@ FILL = {
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
     "busboard_bracket": 0.6,
+    "tray_latch_boss": 0.6,     # 30 x 23 x 5.1 round the latch pocket: small, mostly perimeter
     # the keel tub (part_bay, B84), weighted by feature at 0.4 nozzle / 0.2 layers / 4 top +
     # 4 bottom / 25 % infill: its 2.4 walls are 6 perimeters (1.0, ~34 of its 71 cm^3), the
     # 2.4 floor 1.6 solid + 0.8 infill (0.75, ~26), the rails solid, the latch boss and the
