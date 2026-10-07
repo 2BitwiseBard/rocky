@@ -80,8 +80,9 @@ FILL = {
     "coupon_cup": 0.7, "coupon_yaw_hub": 0.7, "coupon_hip_hub": 0.7, "coupon_idler": 0.7,
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
-    "busboard_bracket": 0.6,
     "tray_latch_boss": 0.6,     # 30 x 23 x 5.1 round the latch pocket: small, mostly perimeter
+    "hub_shelf": 0.7,    # 2026-10-07 (part_busboard, retires busboard_bracket): a 3 mm plate, mostly
+                         # top/bottom skin, + three Ø8 posts and the board standoffs
     # the keel tub (part_bay, B84), weighted by feature at 0.4 nozzle / 0.2 layers / 4 top +
     # 4 bottom / 25 % infill: its 2.4 walls are 6 perimeters (1.0, ~34 of its 71 cm^3), the
     # 2.4 floor 1.6 solid + 0.8 infill (0.75, ~26), the rails solid, the latch boss and the
@@ -114,7 +115,7 @@ PLATES = {
     # the tub). The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
-        ("busboard_bracket", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
+        ("hub_shelf", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
         ("battery_sled", 1, 0.2), ("bay_tub", 1, 0.2), ("bay_lid", 1, 0.2), ("bay_door", 1, 0.2),
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
