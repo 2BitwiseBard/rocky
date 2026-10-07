@@ -160,15 +160,51 @@ def hook_geometry(plate_bot_z=-4.0):
 
 # The L's reach under the deck (z < -10, leg-local), as check_dock measured it 2026-10-07 on
 # the real solids. check_dock re-measures it on every run and FAILS if it moves more than
-# HOOK_ENVELOPE_TOL, so the body layout's tub roof and keep-outs can import it from here and a
-# param change that moves the L cannot pass silently (it did before: only z > -15 was asserted).
-# "paths": over check_dock's stored dock paths; "any": at any free pose of the base (z is the
-# rock on the pads' inboard edge, 17.6 deg). r = R_STATION 110 + x on the station axis: paths
-# r 57.50..65.29, any r 56.88..66.61; the L is hook_lip_w wide, so its corners (|y| 12; 12.3
-# with the unseated lip-end play) reach body radius hypot(110 + x, 12) = 67.68 (67.73).
+# HOOK_ENVELOPE_TOL; leg_port_hook_envelope() (below) builds the layout's keep-outs from it
+# (body_keepouts), and the tub roof may read it directly, so a param change that moves the L
+# cannot pass silently (it did before: only z > -15 was asserted). "paths": over check_dock's
+# stored dock paths; "any": at any free pose of the base (z is the rock on the pads' inboard
+# edge, 17.6 deg). r = R_STATION 110 + x on the station axis: paths r 57.50..65.29, any r
+# 56.88..66.61; the L is hook_lip_w wide, so its corners (|y| 12; 12.3 with the unseated
+# lip-end play) reach body radius hypot(110 + x, 12) = 67.68 (67.73).
 HOOK_ENVELOPE = {"paths": {"z": -13.300, "x": (-52.500, -44.707)},
                  "any": {"z": -13.757, "x": (-53.121, -43.395)}}
 HOOK_ENVELOPE_TOL = 0.02
+# ... and the params it was measured WITH (2026-10-07, the seats tree d99cdc2). The record is
+# only as good as these: the docked-L test in leg_port_hook_envelope sees a param that moves
+# the docked L, but not one that only changes where the base can go (a seat's height, the
+# slot's outboard edge, the plate extension, a fit), and the 'any' extremes are exactly such
+# poses (2026-10-07 layout verifier). Any difference raises (hook_envelope_stale): re-run
+# check_dock, re-record both dicts together.
+HOOK_ENVELOPE_PARAMS = {
+    "leg_port": {"hook_slot_x": -47.0, "hook_slot_w": 6.2, "hook_lip_w": 24.0, "hook_lip_t": 3.0,
+                 "hook_foot": 3.5, "hook_foot_gap": 1.5, "hook_stem_gap": 0.55,
+                 "plate_ext_half_w": 18.0, "seat_xy": [[-32, 17.3], [-32, -17.3]], "seat_r": 2.9,
+                 "seat_half_angle": 30.0, "seat_h": 3.0, "seat_vee_len": 0.0, "seat_vee_slack": 0.3,
+                 "seat_roof": 0.6, "seat_mouth": 0.3, "seat_relief": 0.2, "seat_relief_x0": -46.0},
+    "print": {"clearance_fit": 0.30, "seat_fit": 0.0}}
+# 'any' only: roll (about the leg's x) is not in check_dock's planar search. The 2026-10-07
+# layout verifier's 6-DoF search on the real solids (free at >= 0.0002) found the L's foot
+# ~0.002 outside this envelope's plan (the yaw ear + tol) at roll 2.06 deg, tilt 0.84, yaw
+# -0.13, lifted 0.67: the inboard foot corner at leg (-52.44, 12.386, -12.26), the raw ear
+# there 12.364 + 0.02 = 12.384. The built solid held that corner by only 0.0004 (its mitred
+# buffer and simplify happen to reach 12.397 there), luck, not a bound: a sampled search can
+# miss the true maximum. A flat pad on the whole 'any' plan (box half-width and ear) takes the
+# corner to 0.061 inside, ~28x the miss (measured 2026-10-07)
+HOOK_ROLL_PAD = 0.05
+
+
+def hook_envelope_stale():
+    """[(key, as recorded, now)] for every param in HOOK_ENVELOPE_PARAMS that differs from
+    params.yaml now (a key that vanished reads None). [] = the record still applies."""
+    out = []
+    for blk, src in (("leg_port", IF["leg_port"]), ("print", PR)):
+        for k, rec in HOOK_ENVELOPE_PARAMS[blk].items():
+            now = src.get(k)
+            a, b = np.asarray(rec, float), None if now is None else np.asarray(now, float)
+            if b is None or a.shape != b.shape or not np.allclose(a, b, rtol=0, atol=1e-9):
+                out.append((f"{blk}.{k}", rec, now))
+    return out
 
 
 def leg_port_deck_features(deck, top_z, station_tf=None, seats=True):
@@ -299,29 +335,43 @@ def leg_port_hook_envelope(mode="any"):
     anything hung from the deck near a port. A conservative hull, not the exact swept set:
     the box of check_dock's measured extremes (iface.HOOK_ENVELOPE, which check_dock re-measures
     on the real solids and holds to +-HOOK_ENVELOPE_TOL), grown by that tolerance, +-HOOK_HALF_W
-    in y, from the deck bottom down; 'any' adds the yaw ear (_hook_yaw_ear), full height.
+    in y, from the deck bottom down; 'any' adds the yaw ear (_hook_yaw_ear), full height, and
+    HOOK_ROLL_PAD on its whole plan (roll).
 
       'path'  the L along check_dock's four stored dock paths (tilt 7-10 deg, a radial approach,
               lowered onto the cones). The exact region (2026-10-07, the union of the L's
               sections along the densified paths): x -52.50..-44.71, z -13.30 (docked), 20.75
-              mm^2 in section; this box 26.01. Planar: the paths do not yaw.
+              mm^2 in section; this box 26.01. Planar: the paths neither yaw nor roll.
       'any'   the L at ANY free pose of the hooked base (check_dock's tilt -3..40 x slide box,
               refined; the deepest is the rock on the pads' inboard edge, 17.6 deg): x
               -53.12..-43.39, z -13.757; its grid region's hull is 32.02 mm^2 in section, this
               box 36.89. The yaw ear takes |y| 12.30 -> 12.79 at x -49 (12.30 at -53 and -46,
               linear between; tilt 0: tilted, the stem fills more of the slot and yaws less),
-              inside the box's x span. It is what brings the shelf posts (+-50, 34) to 0.39 of
-              this envelope (0.59 to the planar one)
+              inside the box's x span. Roll is covered too: the layout verifier's 6-DoF search
+              (roll 2.06 deg, see HOOK_ROLL_PAD) put the foot ~0.002 past the ear, so the whole
+              plan is grown 0.05 (box |y| 12.35, the ear 12.86 at x -49).
+              The yaw ear is an UPPER BOUND the seats do not allow: it is the stem yawing 9.6
+              deg in the slot at tilt 0 with the plate free, but at tilt 0 a lift dz frees only
+              about dz tan 30 at each cone (17.3 off the port axis), and the posts leave their
+              sockets only when lifted ~3, when the foot hangs at most ~0.3 under the deck. It
+              is extruded the envelope's full height anyway. It is what brings the shelf posts
+              (+-50, 34) to 0.34 of this envelope (0.59 to the planar box; 0.39 before the pad)
 
-    Measured on these solids (2026-10-07): 'path' x -52.520..-44.687, y +-12.300, z -13.320..
-    -10.000 (r 57.480..65.313 on the station axis), 639.7 mm^3; 'any' x -53.141..-43.375, y
-    +-12.807, z -13.777..-10.000 (r 56.859..66.625), 921.6 mm^3. The prep rounds' r
-    56.94..66.79 (BODY_LAYOUT correction 3) was their seats model, not this tree (the second
-    I1 verifier measured 56.88..66.61 on it). Raises if the record no longer holds the docked
-    L (a param moved the hook: re-run check_dock and re-record HOOK_ENVELOPE)."""
+    Measured on these solids (2026-10-07, before HOOK_ROLL_PAD): 'path' x -52.520..-44.687, y
+    +-12.300, z -13.320..-10.000 (r 57.480..65.313 on the station axis), 639.7 mm^3; 'any' x
+    -53.141..-43.375, y +-12.807, z -13.777..-10.000 (r 56.859..66.625), 921.6 mm^3. The prep
+    rounds' r 56.94..66.79 (BODY_LAYOUT correction 3) was their seats model, not this tree (the
+    second I1 verifier measured 56.88..66.61 on it). Raises if the record no longer holds the
+    docked L, or if any param it was recorded with has changed (HOOK_ENVELOPE_PARAMS): re-run
+    check_dock and re-record both."""
     rec = HOOK_ENVELOPE["paths" if mode == "path" else "any"] if mode in ("path", "any") else None
     if rec is None:
         raise ValueError(f"mode {mode!r}: 'path' or 'any'")
+    moved = hook_envelope_stale()
+    if moved:
+        raise RuntimeError("iface.HOOK_ENVELOPE was recorded with other params: " + "; ".join(
+            f"{k} {a} -> {b}" for k, a, b in moved) + ": run check_dock.py and re-record "
+            "HOOK_ENVELOPE + HOOK_ENVELOPE_PARAMS")
     hg, tol = hook_geometry(), HOOK_ENVELOPE_TOL
     stale = (hg["foot_z0"] < rec["z"] - tol or hg["foot_x0"] < rec["x"][0] - tol or
              hg["x1"] > rec["x"][1] + tol)
@@ -329,14 +379,16 @@ def leg_port_hook_envelope(mode="any"):
         raise RuntimeError(f"iface.HOOK_ENVELOPE['{mode}'] no longer holds the docked L (x "
                            f"{hg['foot_x0']:.2f}..{hg['x1']:.2f}, z {hg['foot_z0']:.2f}): run "
                            f"check_dock.py and re-record it")
+    pad = HOOK_ROLL_PAD if mode == "any" else 0.0
     x0, x1, z0 = rec["x"][0] - tol, rec["x"][1] + tol, rec["z"] - tol
     h = DECK_BOT_Z - z0
-    env = Pos((x0 + x1) / 2, 0, DECK_BOT_Z - h / 2) * Box(x1 - x0, 2 * HOOK_HALF_W, h)
+    env = Pos((x0 + x1) / 2, 0, DECK_BOT_Z - h / 2) * Box(x1 - x0, 2 * (HOOK_HALF_W + pad), h)
     if mode == "any":
         ear = _hook_yaw_ear()
         if ear.geom_type != "Polygon":                  # overlapping hulls: one polygon, but be safe
             ear = ear.convex_hull
-        ear = ear.simplify(0.005).buffer(tol, join_style=2)   # simplify cuts <= 0.005, tol grows 0.02
+        # simplify cuts <= 0.005, the buffer grows tol + the roll pad
+        ear = ear.simplify(0.005).buffer(tol + pad, join_style=2)
         pts = [(float(x), float(y)) for x, y in list(ear.exterior.coords)[:-1]]
         env += Pos(0, 0, z0) * extrude(make_face(Polyline(*pts, close=True)), h)
     return env

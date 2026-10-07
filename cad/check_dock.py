@@ -41,7 +41,10 @@ undockable without a failing check:
            the L's own 8-corner outline (its extremes are a corner or an edge crossing
            z -10); x is leg-local, r = 110 + x is on the station axis, and the L is
            hook_lip_w wide, so its corners reach body radius hypot(110 + x, 12). Both
-           envelopes are held to iface.HOOK_ENVELOPE (+-0.02), which the keep-outs import
+           envelopes are held to iface.HOOK_ENVELOPE (+-0.02), from which
+           iface.leg_port_hook_envelope builds the layout's keep-outs (body_keepouts), and
+           the params here must be the ones it was recorded with (HOOK_ENVELOPE_PARAMS: the
+           keep-outs raise on any difference)
 
 Numbers to expect (2026-10-07, I1_DOCK_OPTIONS.md + the verification; the judge's graft =
 this tree, seat_fit 0): docked 0 mm^3, relieved face 0.200, in-plane 0.305 (HAND) / 0.400 (MARGIN) /
@@ -68,7 +71,7 @@ from shapely.ops import unary_union
 from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from build123d import Pos, Rot, Box, export_stl
 from iface import (IF, PR, FIT, hook_geometry, seat_posts_symdiff, HOOK_ENVELOPE,
-                   HOOK_ENVELOPE_TOL)
+                   HOOK_ENVELOPE_TOL, HOOK_ENVELOPE_PARAMS, hook_envelope_stale)
 from part_coxa import coxa_yaw_base
 from part_deck import body_deck, STATIONS, R_STATION
 
@@ -571,6 +574,13 @@ if __name__ == "__main__":
               f"{rec['z']:.3f}, x {rec['x'][0]:.3f}..{rec['x'][1]:.3f}: off {dev:.3f}"
               + ("" if dev <= HOOK_ENVELOPE_TOL else "; moved on purpose: re-check the tub roof and "
                  "the keep-outs, then re-record it"))
+    # the record also names the params it was taken with: a change that leaves these extremes
+    # inside the tolerance still re-records them, or every keep-out raises
+    moved = hook_envelope_stale()
+    check("iface.HOOK_ENVELOPE_PARAMS are the params now (else the keep-outs raise)", not moved,
+          "; ".join(f"{k} {a} -> {b}" for k, a, b in moved) + ": re-record HOOK_ENVELOPE and "
+          "HOOK_ENVELOPE_PARAMS together" if moved else
+          f"{sum(len(v) for v in HOOK_ENVELOPE_PARAMS.values())} keys as recorded")
 
     print(f"== 3D replay (BRep common volume + BRepExtrema distance; <= {REPLAY_DISP} of motion between poses)")
     trim = None
