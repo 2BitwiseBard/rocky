@@ -80,6 +80,7 @@ FILL = {
     "coupon_cup": 0.7, "coupon_yaw_hub": 0.7, "coupon_hip_hub": 0.7, "coupon_idler": 0.7,
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
+    "tray_latch_boss": 0.6,     # 30 x 23 x 5.1 round the latch pocket: small, mostly perimeter
     "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
     "shell_sector": 0.6, "shell_cap": 0.6,
     # bench
