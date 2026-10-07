@@ -91,9 +91,6 @@ FILL = {
     # "at fill 0.5" for tub + door counted a part that is nearly all wall as half infill
     "bay_tub": 0.85, "bay_lid": 0.85, "bay_door": 0.7,
     "shell_sector": 0.6, "shell_cap": 0.6,
-    # D064 option A's belly parts (sim/mass_audit weighs them): BODY_LAYOUT_PROPOSAL s2 priced the
-    # tub + door at 0.5 (56 g); the lid as the tub; the shelf's plate + posts as busboard_bracket
-    "bay_tub": 0.5, "bay_door": 0.5, "bay_lid": 0.5, "hub_shelf": 0.6,
     # bench
     "stand_base": 0.4, "stand_section": 0.4,
     "stand_crown": 0.5,   # B85 cradle: 3 mm walls + a 3 mm relieved plate are mostly perimeter at the

@@ -603,7 +603,7 @@ if __name__ == "__main__":
     audit("drops +5 (5)", Compound(children=ko5["drops"]), "posts 3.57, plate + pads 0.57")
     audit("drops +0 (5)", Compound(children=ko["drops"]))
     # the deck: posed as part_deck poses it; the posts end ON its underside (0 mm^3, 0 gap)
-    from part_deck import body_deck, DECK_HOLES, T as T_DECK
+    from part_deck import body_deck, T as T_DECK
     deck = Pos(0, 0, -10) * body_deck()
     audit("the posed deck (Pos(0, 0, -10) * body_deck())", deck)
     for k, xy in enumerate(POSTS):

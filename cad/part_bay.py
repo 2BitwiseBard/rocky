@@ -635,7 +635,7 @@ def main():
     press = _v(door & sled)
     lip_x = SLED_X + PB.TAIL_X0
     boss_face = (SLED_X + PB.TAIL_X0) + PRESS
-    check(f"I5: the door's boss presses the sled's tail lip 0.3..0.8", 0.3 <= boss_face - lip_x <= 0.8 and press > 1.0,
+    check("I5: the door's boss presses the sled's tail lip 0.3..0.8", 0.3 <= boss_face - lip_x <= 0.8 and press > 1.0,
           f"press {boss_face - lip_x:.2f} (the boss face x {boss_face:.2f}, the lip x {lip_x:.2f} with the plug mated); "
           f"{press:.1f} mm^3 of overlap, taken by the door's 3 mm plate and the latch's 0.2 bite")
 
