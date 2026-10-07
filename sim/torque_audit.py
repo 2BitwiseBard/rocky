@@ -43,7 +43,10 @@ PAYLOAD_G = 100.0                                   # carried-pebble case
 def load_masses():
     with open(os.path.join(HERE, "mass_budget.json")) as f:
         mb = json.load(f)
-    m = {k: v / 1000.0 for k, v in mb.items() if not k.startswith("_")}
+    # the grams only: since D064 the budget also carries the torso's CoM / inertia (lists) and
+    # a 'provisional' flag, which are not masses
+    m = {k: v / 1000.0 for k, v in mb.items()
+         if not k.startswith("_") and isinstance(v, (int, float)) and not isinstance(v, bool)}
     # the tibia budget already INCLUDES the hand (mass_audit; build_mjcf splits
     # it without adding mass), so the robot is the MJCF's: torso + 5 legs (B106)
     m["robot"] = m["torso"] + N_LEGS * (m["coxa"] + m["femur"] + m["tibia"])

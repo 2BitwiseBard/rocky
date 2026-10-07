@@ -4,7 +4,7 @@
   <material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>
 
   <link name="base_link">
-    <inertial><origin xyz="0.000000 0.000000 0.024500"/><mass value="1.4398"/><inertia ixx="4.058e-03" ixy="0" ixz="0" iyy="4.058e-03" iyz="0" izz="7.600e-03"/></inertial>
+    <inertial><origin xyz="-0.002120 -0.003950 -0.002550"/><mass value="1.5276"/><inertia ixx="4.680112e-03" ixy="-9.017100e-05" ixz="-1.524260e-04" iyy="5.389033e-03" iyz="-2.022110e-04" izz="6.680401e-03"/></inertial>
     <visual><origin xyz="0 0 0.018"/>
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry>
       <material name="pebble"/></visual>
@@ -15,6 +15,16 @@
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry></collision>
     <collision><origin xyz="0 0 0.044"/>
       <geometry><cylinder radius="0.0770" length="0.028"/></geometry></collision>
+    <visual name="belly_tub"><origin xyz="0.00220 -0.02000 -0.03670"/>
+      <geometry><box size="0.19940 0.05480 0.03740"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_tub"><origin xyz="0.00220 -0.02000 -0.03670"/>
+      <geometry><box size="0.19940 0.05480 0.03740"/></geometry></collision>
+    <visual name="belly_shelf"><origin xyz="0.00000 0.04160 -0.03220"/>
+      <geometry><box size="0.11400 0.05880 0.04440"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_shelf"><origin xyz="0.00000 0.04160 -0.03220"/>
+      <geometry><box size="0.11400 0.05880 0.04440"/></geometry></collision>
   </link>
 
   <xacro:macro name="pebble_leg" params="i angle">

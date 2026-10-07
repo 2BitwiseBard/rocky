@@ -6,7 +6,7 @@ Every tool a brain can call, from one registry (`harness/capabilities.py` `REGIS
 
 This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`harness/backend.py`) and every capability on. A running cockpit's lists also carry its saved keyframe gestures and custom chord words.
 
-- snapshot version: `daaec292b194` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
+- snapshot version: `cbec90b4a421` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
 - capabilities: cockpit, eye, memory, places
 
 ## Summary
@@ -67,7 +67,7 @@ Source: gait/pebble_gait.WaveGait().max_command() on cad/params.yaml.
 | `stations_deg` | 90.0, 162.0, 234.0, 306.0, 378.0 |
 | `actuators` | 20 |
 | `topology_hash` | 7f066d9bd8c0 |
-| `params_rev` | 0.1/D063 |
+| `params_rev` | 0.1/D064 |
 
 Source: gait/rocky_model.robot() (cad/params.yaml robot:).
 

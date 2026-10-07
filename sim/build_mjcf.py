@@ -39,6 +39,22 @@ comes from params.yaml through gait/rocky_model.py (no literals here):
     centre — is the gait's IK foot point. Site `foot_tip{i}` marks that
     point. Stance deck height is now h (+~0.4 mm), not h + 13: spawn with
     rocky_model.spawn_dz_mm() (1.4 mm), not the old hard-coded 14.
+
+D064 — the belly (pick 13, B97, B138). The torso had no belly: its lowest
+surface was the cylinder at z +6 (124 mm over the ground), while option A's
+keel tub hangs to z -55.4 (62.6 mm). Now:
+  * the torso carries an explicit <inertial> (mass, CoM, full tensor) from
+    sim/mass_budget.json (mass_audit's pose table: the 380 g pack and the hub
+    under the deck put the CoM ~27 mm lower than the cylinders' 24.5). With an
+    <inertial> MuJoCo takes no mass from the torso's geoms, so the two
+    cylinders stay as the carapace's collision hull, mass 0. A budget with no
+    CoM (pre-D064) falls back to the cylinders' masses, with a WARNING.
+  * two massless boxes, belly_tub and belly_shelf (rocky_model.belly_boxes():
+    the keel tub's outer box and the hub shelf's envelope), right after the
+    free joint, default contact (contype 1, conaffinity 1, condim 3) with the
+    floor's friction. A leg folded under the keel now meets them (the righter's
+    fall path did, B130), the ground meets the tub first, and pebble_feasibility's
+    SELF_CONTACT names them. The nose chamfer (pick 10) is NOT in the box.
 """
 import os, sys
 import numpy as np
@@ -99,6 +115,37 @@ else:
 M_PRONG = 0.004                        # each visual claw prong (fixed one + the claw joint's)
 M_FOOT = M_TIBIA * 0.3                 # tip: cone, pad, SEA slider
 M_SHIN = M_TIBIA * 0.7 - 2 * M_PRONG   # D052: was 0.7 M + 2 prongs on top (+40 g robot-wide)
+
+# D064: the torso's own mass distribution (mass_audit's pose table), None before D064
+TORSO_INERTIAL = rm.torso_inertial() if os.path.exists(_MB) else None
+BELLY_RGBA = {"belly_tub": "0.45 0.36 0.60 1", "belly_shelf": "0.50 0.44 0.66 1"}
+
+
+def torso_xml() -> str:
+    """The torso's mass and geoms: the explicit <inertial> + the cylinders at mass 0 (D064), or
+    the pre-D064 cylinders carrying 0.75 / 0.25 of the mass; then the belly boxes."""
+    lines = []
+    if TORSO_INERTIAL is not None:
+        ti = TORSO_INERTIAL
+        pos = " ".join(f"{v * MM:.5f}" for v in ti["com_mm"])
+        full = " ".join(f"{v:.6e}" for v in ti["inertia"])
+        lines.append(f'<!-- the torso\'s mass, CoM and inertia: sim/mass_budget.json (mass_audit\'s pose table'
+                     f'{", PROVISIONAL" if ti["provisional"] else ""}); the geoms below carry none -->')
+        lines.append(f'<inertial pos="{pos}" mass="{ti["mass_g"] / 1000:.4f}" fullinertia="{full}"/>')
+        m1 = m2 = "0"
+    else:
+        m1, m2 = f"{M_TORSO * 0.75:.4f}", f"{M_TORSO * 0.25:.4f}"
+    for name, ((x0, x1), (y0, y1), (z0, z1)) in rm.belly_boxes().items():
+        c = [(a + b) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
+        h = [(b - a) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
+        lines.append(f'<geom name="{name}" type="box" size="{h[0]:.5f} {h[1]:.5f} {h[2]:.5f}" '
+                     f'pos="{c[0]:.5f} {c[1]:.5f} {c[2]:.5f}" mass="0" friction="{FRICTION}" '
+                     f'rgba="{BELLY_RGBA.get(name, "0.45 0.36 0.60 1")}"/>')
+    lines.append(f'<geom type="cylinder" size="{RB:.4f} 0.012" pos="0 0 0.018" mass="{m1}" '
+                 f'rgba="0.62 0.50 0.82 1"/>')
+    lines.append(f'<geom type="cylinder" size="{RB*0.7:.4f} 0.014" pos="0 0 0.044" mass="{m2}" '
+                 f'rgba="0.55 0.42 0.75 1"/>')
+    return "\n".join("      " + ln for ln in lines)
 
 
 def leg_xml(i):
@@ -168,8 +215,7 @@ def build_xml() -> str:
     <geom name="floor" type="plane" size="6 6 0.1" material="grid" friction="{FRICTION}"/>
     <body name="torso" pos="0 0 {SPAWN_Z:.4f}">
       <freejoint/>
-      <geom type="cylinder" size="{RB:.4f} 0.012" pos="0 0 0.018" mass="{M_TORSO*0.75:.4f}" rgba="0.62 0.50 0.82 1"/>
-      <geom type="cylinder" size="{RB*0.7:.4f} 0.014" pos="0 0 0.044" mass="{M_TORSO*0.25:.4f}" rgba="0.55 0.42 0.75 1"/>
+{torso_xml()}
       {"".join(leg_xml(i) for i in range(rm.n_legs()))}
     </body>
   </worldbody>
@@ -183,6 +229,17 @@ def main():
     path = os.path.join(HERE, "pebble.xml")
     with open(path, "w") as f:
         f.write(build_xml())
+    if TORSO_INERTIAL is None:
+        print("WARNING: mass_budget.json has no torso_com_mm / torso_inertia (pre-D064, or missing): the "
+              "torso's mass sits on the two cylinders (CoM z 24.5) — run sim/mass_audit.py")
+    elif TORSO_INERTIAL["provisional"]:
+        print("WARNING: mass_budget.json is PROVISIONAL (mass_audit --allow-missing): re-run mass_audit "
+              "on the built CAD tree, then this")
+    ti = TORSO_INERTIAL
+    if ti is not None:
+        print(f"torso <inertial>: {ti['mass_g']:.1f} g at ({', '.join(f'{v:.2f}' for v in ti['com_mm'])}) mm | "
+              "belly: " + ", ".join(f"{k} x {a[0]:g}..{a[1]:g} y {b[0]:g}..{b[1]:g} z {c[0]:g}..{c[1]:g}"
+                                    for k, (a, b, c) in rm.belly_boxes().items()))
     print("wrote", path, "| masses:", MASS_SOURCE,
           f"torso {M_TORSO:.3f} coxa {M_COXA:.3f} femur {M_FEMUR:.3f} tibia {M_TIBIA:.3f} kg"
           f" | leg servo: forcerange {F_PEAK:.3f} N.m (peak; continuous {F_CONT:.3f} is thermal),"

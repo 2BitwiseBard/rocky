@@ -85,10 +85,12 @@ def env_for(contract, condition="nominal", servo=None, reward=None, seed=0):
         servo_mode = servo or ("off" if trained == "off" else "nominal")
         randomize = False
     rate = contract.get("rate_limit_rad_s", rc.LEGACY_RATE_LIMIT_RAD_S)
+    # D064: the action map the checkpoint trained on (no hip_floor_deg key = the uncut map)
     return RecoverEnv(seed=seed, reward=reward or contract.get("reward", "v1"),
                       rate_limit_rad_s=rate, servo=servo_mode, randomize=randomize,
                       ema_alpha=contract.get("ema_alpha", 1.0),
-                      obs_version=contract["obs_version"])
+                      obs_version=contract["obs_version"],
+                      hip_clamp=contract.get("hip_floor_deg"), hip_clamp_legs=contract.get("hip_floor_legs"))
 
 
 def _planted_q0():
@@ -150,7 +152,12 @@ def run_supervisor(env, policy, contract, seed, seconds=SUPERVISOR_S):
     ramp) through the env's servo path. Zero velocity command throughout.
     policy=None: no righter installed (the supervisor holds pose in FALLEN
     until the stall rule / deadline ramps) — the analytic-only baseline the
-    policy has to beat. t_stood = first time the stood test passed."""
+    policy has to beat. t_stood = first time the stood test passed.
+    D064 (read-only, the run is unchanged): hip_cmd_min_deg = the lowest hip command of the
+    clamp's legs (1-4) in FALLEN / RIGHTED (the supervisor holds it >= -51.05), clamped_frac =
+    the share of FALLEN ticks whose command the clamp raised (the prep measured 38-43 %),
+    belly = every physics step a leg was inside the keel tub / hub shelf: steps, max mm, legs,
+    states."""
     import mujoco
     import rocky_model as rm
     from pebble_gait import WaveGait
@@ -171,6 +178,10 @@ def run_supervisor(env, policy, contract, seed, seconds=SUPERVISOR_S):
     jadr = env._jadr
     prev, t_fallen, t_righted, reason, best, t_stood = None, None, None, None, 180.0, None
     every = int(round(CTRL_DT / DT))
+    belly, body_leg = rc.belly_geoms(m), rc.leg_of_body(m)
+    legs = list(sup.righter_clamp_legs)
+    hip_min, b_steps, b_max, b_legs, b_states = np.inf, 0, 0.0, set(), set()
+    n_fallen = 0                                  # FALLEN ticks (the clamp's share of them: below)
     for k in range(int(seconds / DT)):
         t = k * DT
         if t_stood is None and k % every == 0 and _stood(env)[0]:
@@ -190,17 +201,31 @@ def run_supervisor(env, policy, contract, seed, seconds=SUPERVISOR_S):
         if state == RIGHTED and prev == FALLEN and t_righted is None:
             t_righted, reason = t, sup.right_reason
         prev = state
+        n_fallen += state == FALLEN
+        if state in (FALLEN, RIGHTED):
+            hip_min = min(hip_min, float(np.min(np.asarray(q, float).reshape(5, 3)[legs, 1])))
         tgt = env.servo.filter(np.asarray(q, float).flatten(), DT, force=d.actuator_force[:15])
         d.ctrl[:15] = tgt + env._q_offset
         d.ctrl[15:20] = 0.0
         mujoco.mj_step(m, d)
+        if belly:
+            hits = rc.belly_contacts(m, d, belly, body_leg)
+            if hits:
+                b_steps += 1
+                b_max = max(b_max, max(h_[2] for h_ in hits))
+                b_legs.update(h_[1] for h_ in hits)
+                b_states.add(state)
     env._feet_state[:] = False
     env.true_feet()
     stood, tilt, h, feet = _stood(env)
     return dict(seed=seed, mode=mode, stood=stood, fallen=t_fallen is not None, reason=reason,
                 t_stood=None if t_stood is None else round(t_stood, 2),
                 t_right=None if t_righted is None or t_fallen is None else round(t_righted - t_fallen, 2),
-                end_tilt=tilt, end_h=h, best_tilt=best, state=prev)
+                end_tilt=tilt, end_h=h, best_tilt=best, state=prev,
+                hip_cmd_min_deg=None if not np.isfinite(hip_min) else round(float(np.degrees(hip_min)), 3),
+                clamped_frac=round(sup.righter_clamped / n_fallen, 4) if n_fallen else None,
+                belly=dict(steps=b_steps, max_mm=round(b_max, 3), legs=sorted(b_legs),
+                           states=sorted(b_states)))
 
 
 def header(ckpt, ck, contract, model):
@@ -253,6 +278,15 @@ def main():
                       f"t_stood median {np.median(ts) if ts else float('nan'):.2f} s")
                 print("    " + "  ".join(f"{m_}: {sum(r['stood'] for r in rs if r['mode'] == m_)}/"
                                          f"{sum(r['mode'] == m_ for r in rs)}" for m_ in ("back", "side", "tumble")))
+                hips = [r["hip_cmd_min_deg"] for r in rs if r["hip_cmd_min_deg"] is not None]
+                bel = [r for r in rs if r["belly"]["steps"]]
+                cf = [r["clamped_frac"] for r in rs if r["clamped_frac"] is not None]
+                print(f"    D064: FALLEN/RIGHTED hip command min (legs 1-4) "
+                      f"{min(hips) if hips else float('nan'):.2f} deg, {100 * np.mean(cf) if cf else float('nan'):.1f} % "
+                      f"of FALLEN ticks clamped; belly contacts in {len(bel)}/{len(rs)} "
+                      f"falls (max {max([r['belly']['max_mm'] for r in bel], default=0.0):.2f} mm, legs "
+                      f"{sorted({x for r in bel for x in r['belly']['legs']})}, states "
+                      f"{sorted({x for r in bel for x in r['belly']['states']})})")
             continue
         pols = [("policy", policy)]
         if not args.no_baselines and cond == "nominal":

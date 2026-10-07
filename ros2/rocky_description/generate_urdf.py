@@ -20,6 +20,9 @@ limit — a URDF effort is the latter), velocity = the no-load speed (the
 hard ceiling); the foot is the 6.5 mm contact sphere whose surface is
 the foot_fix frame (the IK foot point), and the claw prongs are carved out
 of the tibia budget instead of added on top.
+D064: base_link's inertial is the budget's torso (mass, CoM, full tensor:
+the MJCF's <inertial>, from sim/mass_audit's pose table) and it carries the
+belly_tub / belly_shelf boxes (rocky_model.belly_boxes) as collisions.
 
 Run:  python3 generate_urdf.py        (writes urdf/pebble.urdf.xacro + .urdf)
 Verify parity against the MJCF:  python3 ../../sim/check_urdf_parity.py
@@ -89,6 +92,38 @@ def inertial(m, i, com=(0, 0, 0)):
             f'<mass value="{m}"/>'
             f'<inertia ixx="{i[0]:.3e}" ixy="0" ixz="0" '
             f'iyy="{i[1]:.3e}" iyz="0" izz="{i[2]:.3e}"/></inertial>')
+
+
+# D064: the torso's own mass distribution (sim/mass_audit's pose table), the MJCF's <inertial>
+TORSO_INERTIAL = rm.torso_inertial() if os.path.exists(_MB_PATH) else None
+
+
+def torso_inertial_xml() -> str:
+    """base_link's ONE inertial: the budget's torso (mass, CoM, full tensor about it: the
+    MJCF's <inertial>, D064), or before D064 the two deck disks combined."""
+    if TORSO_INERTIAL is None:
+        return inertial(*combine_torso_inertia())
+    ti = TORSO_INERTIAL
+    c = [v * MM for v in ti["com_mm"]]
+    ixx, iyy, izz, ixy, ixz, iyz = ti["inertia"]
+    return (f'<inertial><origin xyz="{c[0]:.6f} {c[1]:.6f} {c[2]:.6f}"/>'
+            f'<mass value="{ti["mass_g"] / 1000:.4f}"/>'
+            f'<inertia ixx="{ixx:.6e}" ixy="{ixy:.6e}" ixz="{ixz:.6e}" '
+            f'iyy="{iyy:.6e}" iyz="{iyz:.6e}" izz="{izz:.6e}"/></inertial>')
+
+
+def belly_xml() -> str:
+    """The keel tub + hub shelf boxes (rocky_model.belly_boxes, = the MJCF's belly geoms) as
+    base_link visuals + collisions (D064)."""
+    out = []
+    for name, ((x0, x1), (y0, y1), (z0, z1)) in rm.belly_boxes().items():
+        c = [(a + b) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
+        s = [(b - a) * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
+        o = f'<origin xyz="{c[0]:.5f} {c[1]:.5f} {c[2]:.5f}"/>'
+        g = f'<geometry><box size="{s[0]:.5f} {s[1]:.5f} {s[2]:.5f}"/></geometry>'
+        out.append(f'    <visual name="{name}">{o}\n      {g}\n      <material name="pebble"/></visual>')
+        out.append(f'    <collision name="{name}">{o}\n      {g}</collision>')
+    return "\n".join(out)
 
 
 def deg(v):
@@ -212,6 +247,7 @@ def build_xacro() -> str:
       <geometry><cylinder radius="{RB:.4f}" length="0.024"/></geometry></collision>
     <collision><origin xyz="0 0 0.044"/>
       <geometry><cylinder radius="{RB * 0.7:.4f}" length="0.028"/></geometry></collision>
+{belly_xml()}
   </link>
 {leg_macro()}
 {legs}
@@ -237,9 +273,8 @@ def combine_torso_inertia():
 def main():
     urdf_dir = os.path.join(HERE, "urdf")
     os.makedirs(urdf_dir, exist_ok=True)
-    # base_link carries ONE inertial = both deck disks combined (parallel axis)
-    m, i, com = combine_torso_inertia()
-    xacro_txt = build_xacro().replace("__TORSO_INERTIAL__", inertial(m, i, com))
+    # base_link carries ONE inertial: the budget's torso (D064), else both deck disks combined
+    xacro_txt = build_xacro().replace("__TORSO_INERTIAL__", torso_inertial_xml())
     xacro_path = os.path.join(urdf_dir, "pebble.urdf.xacro")
     with open(xacro_path, "w") as f:
         f.write(xacro_txt)

@@ -16,6 +16,12 @@ A checkpoint whose observation this code cannot build (unknown obs
 version, or an obs dim that disagrees with its version) is REFUSED with a
 ValueError; a robot-fingerprint mismatch only warns (the physics moved,
 the policy may still work — evaluate it).
+
+D064: the action map is the contract's. A checkpoint trained with the
+righter's hip floor (env_config hip_floor_deg, legs 1-4) maps those hips
+over [floor, 90] exactly as RecoverEnv did; an older one (no key: every
+checkpoint on disk) keeps the uncut map it learned, and ReflexSupervisor's
+FALLEN / RIGHTED clamp cuts its commands instead (the measured 0/200 form).
 """
 from __future__ import annotations
 import os
@@ -30,7 +36,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "perception"))
 sys.path.insert(0, HERE)
 from pebble_gait import N_LEGS                                        # noqa: E402
 from rocky_recover_env import (Q_LO, Q_HI, CTRL_DT, RATE_LIMIT_RAD_S,  # noqa: E402,F401
-                               action_to_q, q_to_action)
+                               action_to_q, q_to_action, action_range, hip_floor)
 import rl_common as rc                                                # noqa: E402
 
 CONTACT_FORCE_N = 0.3     # foot switch stand-in threshold for the demos' supervisor feed
@@ -85,6 +91,9 @@ class PolicyRighter:
         self.rate_limit = float(RATE_LIMIT_RAD_S if rate is None else rate) * CTRL_DT
         self.ema_alpha = float(contract.get("ema_alpha", 1.0))
         self.obs_version = int(contract["obs_version"])
+        # D064: the contract's floor (None: the uncut map); its legs, else the params set (1-4)
+        self.hip_floor_deg, legs = hip_floor(contract.get("hip_floor_deg"), contract.get("hip_floor_legs"))
+        self.q_lo, self.q_hi = action_range(self.hip_floor_deg, legs)
         self._jadr, self._vadr = rc.joint_addrs(model)
         # the builder wants the ROBOT's foot geoms: the caller's fids when given
         self.obs_builder = rc.make_recover_obs(self.obs_version, model, self.torso, self._jadr,
@@ -109,9 +118,11 @@ class PolicyRighter:
         self.obs_builder.reset(noise=False)
         if self.obs_version == 1:
             self._target = self.data.qpos[self._jadr].copy()
+            if self.hip_floor_deg is not None:
+                self._target = np.clip(self._target, self.q_lo, self.q_hi)
         else:
-            self._target = np.clip(self.obs_builder.encoder(self.data), Q_LO, Q_HI)
-        self._a_f = q_to_action(self._target)
+            self._target = np.clip(self.obs_builder.encoder(self.data), self.q_lo, self.q_hi)
+        self._a_f = q_to_action(self._target, self.q_lo, self.q_hi)
         self._next_tick = t
 
     def _obs(self, t=None):
@@ -125,7 +136,7 @@ class PolicyRighter:
             self.last_obs = obs
             a = np.clip(self.policy(obs.astype(np.float32)), -1, 1)
             self._a_f = self.ema_alpha * a + (1.0 - self.ema_alpha) * self._a_f
-            want = action_to_q(self._a_f)
+            want = action_to_q(self._a_f, self.q_lo, self.q_hi)
             self._target += np.clip(want - self._target, -self.rate_limit, self.rate_limit)
             self._next_tick = t + CTRL_DT
         return self._target.reshape(N_LEGS, 3)

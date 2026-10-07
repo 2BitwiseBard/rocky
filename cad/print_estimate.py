@@ -82,6 +82,9 @@ FILL = {
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
     "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
     "shell_sector": 0.6, "shell_cap": 0.6,
+    # D064 option A's belly parts (sim/mass_audit weighs them): BODY_LAYOUT_PROPOSAL s2 priced the
+    # tub + door at 0.5 (56 g); the lid as the tub; the shelf's plate + posts as busboard_bracket
+    "bay_tub": 0.5, "bay_door": 0.5, "bay_lid": 0.5, "hub_shelf": 0.6,
     # bench
     "stand_base": 0.4, "stand_section": 0.4, "stand_crown": 0.4,
     "jig_base": 0.4, "jig_column": 0.4,

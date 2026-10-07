@@ -540,6 +540,44 @@ class DomainRandomizer:
         m.opt.gravity[:] = draws["gravity"]
 
 
+def belly_geoms(model):
+    """{geom id: name} of the torso's belly boxes (D064: rocky_model.belly_boxes, the keel tub
+    and the hub shelf); {} on a model without them."""
+    out = {}
+    for name in rm.belly_boxes():
+        try:
+            out[int(model.geom(name).id)] = name
+        except KeyError:
+            pass
+    return out
+
+
+def leg_of_body(model, n_legs=N_LEGS):
+    """{body id: leg index} for every body of a leg's chain (coxa, femur, tibia, the claw)."""
+    out = {}
+    for i in range(n_legs):
+        for stem in ("coxa", "femur", "tibia", "clawb"):
+            try:
+                out[int(model.body(f"{stem}{i}").id)] = i
+            except KeyError:
+                pass
+    return out
+
+
+def belly_contacts(model, data, belly, body_leg):
+    """[(belly geom name, leg, penetration mm)] of every leg geom inside a belly box right now
+    (belly = belly_geoms(model), body_leg = leg_of_body(model)). Read-only."""
+    out = []
+    for c in data.contact[:data.ncon]:
+        g1, g2 = int(c.geom1), int(c.geom2)
+        if g1 in belly or g2 in belly:
+            b, other = (g1, g2) if g1 in belly else (g2, g1)
+            leg = body_leg.get(int(model.geom_bodyid[other]))
+            if leg is not None and c.dist < 0:
+                out.append((belly[b], leg, -float(c.dist) * 1000.0))
+    return out
+
+
 def refresh_constants(model, data):
     """Recompute mass-derived constants (subtree masses, invweights) after DR
     changed masses; mj_setConst uses `data` as scratch, so call it BEFORE the
