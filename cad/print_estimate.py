@@ -83,7 +83,9 @@ FILL = {
     "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
     "shell_sector": 0.6, "shell_cap": 0.6,
     # bench
-    "stand_base": 0.4, "stand_section": 0.4, "stand_crown": 0.4,
+    "stand_base": 0.4, "stand_section": 0.4,
+    "stand_crown": 0.5,   # B85 cradle: 3 mm walls + a 3 mm relieved plate are mostly perimeter at the
+                          # plan's 2 walls / 15 % (the old crown's arms were 8 mm spars)
     "jig_base": 0.4, "jig_column": 0.4,
 }
 
