@@ -21,8 +21,10 @@ is the same either way. ~150 s wall on a laptop (part_hand is the long pole).
 The servo model is checked first against the reference STEP (servo_st3215:
 cad/ref/STS3215_03a.step); servo_mount and part_port_coupon are the only
 writers of servo_cup / port_coupon_* that check_printability audits;
-leg_assembly writes the posed dry-fit exports the viewer shows; and
-check_interference sweeps the yaw stage with the real servo solids.
+leg_assembly writes the posed dry-fit exports the viewer shows;
+check_interference sweeps the yaw stage with the real servo solids; and
+check_dock moves a coxa base onto the deck along stored dock paths (planar +
+3D replay) and checks the docked seats (B117: the D020 port could not dock).
 
 --derived (after a clean tree) rebuilds the outputs nothing checks but
 people look at, in this order: pentapod_preview (full-robot meshes + render),
@@ -64,6 +66,7 @@ MODULES = [
     "part_clips", "part_dock", "part_servo_blank",
     "part_leg_coupons", "check_assembly",        # D046: joint coupons + joint suite
     "leg_assembly", "check_interference",
+    "check_dock",                                # 2026-10-07: the I1 dock path + docked seats
 ]
 TIMEOUT_S = 900
 

@@ -72,7 +72,8 @@ PARTS = {
     "fit_ladder": ("PLA", "flat, as exported", "none", "3 walls / 25%, 0.2 mm",
                    "B28, blocking. Elephant-foot compensation ~0.15 mm, sliced like the parts. "
                    "Rows A-E: see the GO / NO-GO table on the print-order page. Numbers go to "
-                   "NOTES_INBOX.md, then params.yaml (print:), then regenerate (D032)."),
+                   "NOTES_INBOX.md, then params.yaml (print:), then regenerate (D032). The I1 seat "
+                   "fit is not on the ladder: the port coupon plates test it."),
     # batch 1: D047 joint coupons + the blank
     "servo_blank": ("PLA", "bottom DOWN (rims on the bed, horn up)", "none", "2 walls / 15%",
                     "D047 v0.3 ST3215 stand-in, measured from the STEP. Glue a blank_idler into "
@@ -146,11 +147,16 @@ PARTS = {
                    "I2 tool socket, as tool_hook."),
     # batch 2: one leg
     "coxa_yaw_base": ("PETG", "plate DOWN (the I1 hook lip on the bed)",
-                      "YES under the whole plate: the hook lip holds it off the bed. The harness "
+                      "YES under the whole plate: the hook lip holds it off the bed. A support "
+                      "BLOCKER in both seat sockets (no support inside a socket: its cone flank "
+                      "and bridged roof print clean, I1_DOCK_OPTIONS 6.3). The pads (x < -46) and "
+                      "the 0.2 relief outboard of them sit on the support interface. The harness "
                       "channel's roof bridges 11 mm",
                       "5 walls / 40%",
                       "D047: I1 plate + servo cup (yaw servo shaft-down), D059 harness channel on "
-                      "-Y. 4 rim self-tappers hold the servo (2 from above, 2 from under the plate)."),
+                      "-Y. 4 rim self-tappers hold the servo (2 from above, 2 from under the plate). "
+                      "Clean up only the pads: the 0.2 relief outboard of x -46 is drawn so the face "
+                      "does not bear (decision 15)."),
     "coxa_fork": ("PETG", "lower hub DOWN, upright as assembled",
                   "YES in three places: under the upper plate (z ~41), the hip cup's lower wall "
                   "(z ~44) and its upper side wall over the hip servo (z ~72.5); widths: the "
@@ -185,11 +191,38 @@ PARTS = {
                   "port coupons dock cleanly: each of them changes holes in the deck. Today's deck "
                   "has holes only for the star-board bracket."),
     "port_coupon_deck": ("PLA", "as exported", "none", PLA_DEFAULT,
-                         "I1, with port_coupon_plate: tilt 15°, lip through the slot, slide "
-                         "inboard to hook, pivot flat onto the dowels. Binds: note which step."),
-    "port_coupon_plate": ("PLA", "as exported", "none (the audit reports a cantilever: check the "
-                          "slicer preview)", PLA_DEFAULT,
-                          "The leg half of the I1 port coupon."),
+                         "I1 seats (decision 15), with the four plate patches: hold the plate at "
+                         "7-10° and bring the L in radially through the 6.2 slot, lower it onto "
+                         "the two cones; it must centre itself. Binds at the slot: print the 6.6 "
+                         "slot (fit ladder row D)."),
+    "port_coupon_plate_relief46": ("PLA", "plate DOWN, as exported (the L on the bed, as "
+                                   "coxa_yaw_base)",
+                                   "YES under the whole plate (the L holds it 9.3 off the bed), with "
+                                   "a support blocker in both seat sockets, as coxa_yaw_base: the "
+                                   "coupon tests that print. The pads and the 0.2 relief sit on the "
+                                   "support interface", PLA_DEFAULT,
+                                   "The leg half, underside relieved outboard of x -46 (the "
+                                   "repo's seat_relief_x0), sockets at fit 0. Finger-tight: no rock, "
+                                   "no x / y play (< 0.05 on a dial), a 0.2 feeler stays out from "
+                                   "under the pads."),
+    "port_coupon_plate_relief42": ("PLA", "plate DOWN, as exported (as relief46)",
+                                   "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                   "The designer's variant, relieved outboard of x -42: pads to "
+                                   "x -42. Dock both and keep the one that sits without rock."),
+    "port_coupon_plate_fit10": ("PLA", "plate DOWN, as exported (as relief46)",
+                                "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                "relief46 with both seat sockets 0.1 bigger radially: the "
+                                "seat-fit test. Try it if relief46 perches on its cones (light "
+                                "under the pads). Its vee mouth leaves 1.1 of plate to the -y "
+                                "edge (see fit20)."),
+    "port_coupon_plate_fit20": ("PLA", "plate DOWN, as exported (as relief46)",
+                                "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                "relief46 with the sockets 0.2 bigger: the last seat-fit step. "
+                                "The smallest of relief46 / fit10 / fit20 that sits flat is "
+                                "print.seat_fit. Its vee socket's mouth leaves 1.0 of plate to "
+                                "the -y edge (1.2 at fit 0): if fit 0.2 wins, apply "
+                                "I1_DOCK_OPTIONS 7 (mouth 0.2 or the seats at |y| 17.1) before "
+                                "any coxa_yaw_base."),
     "busboard_bracket": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
                          "The star board: print once the electronics exist (WIRING_HARNESS.md)."),
     "avionics_tray": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
@@ -275,7 +308,9 @@ BATCHES = [
                "check_assembly.py asserts the final fits and the paths of steps 1, 2 and 7 "
                "(step 1's slide-on since D063, B80)."),
     dict(key="Batch 3 body", title="Batch 3: the body",
-         extra=[("port_coupon_deck", 1), ("port_coupon_plate", 1), ("thumb_knob_m3", 8)],
+         extra=[("port_coupon_deck", 1), ("port_coupon_plate_relief46", 1),
+                ("port_coupon_plate_relief42", 1), ("port_coupon_plate_fit10", 1),
+                ("port_coupon_plate_fit20", 1), ("thumb_knob_m3", 8)],
          intro="The deck after B27, B28, B51 and the bay (B84), and after the port coupons dock "
                "cleanly; the star board once the electronics exist; the avionics tray only as a "
                "bench carrier (B51). tray_rail waits for B51, battery_sled and sled_rail for the "
@@ -519,12 +554,21 @@ def print_order(fem):
                  ["", "only 4.40 / 4.50 slides", "holes print small: slicer XY hole compensation "
                   "+0.05...+0.10 mm, GO, file the numbers"],
                  ["", "4.15 / 4.20 already slides", "true to CAD or roomy: GO and note it"],
-                 ["Row D (slots)", "the lip passes 4.2", "GO"],
-                 ["", "only 4.6 passes", "file it; regenerate with hook_slot_w 4.6 before the deck"],
+                 ["Row D (slots)", "the L passes 6.2 at 7-10°, radial", "GO"],
+                 ["", "only 6.6 passes", "file it; regenerate with hook_slot_w 6.6 before the deck"],
+                 ["", "5.8 passes too", "GO, note it (6.2 keeps the proven 0.40 margin)"],
+                 ["Seat fit (port coupon plates relief46 / fit10 / fit20)",
+                  "relief46 sits on the cones: no rock, no light under the pads", "GO: "
+                  "print.seat_fit stays 0"],
+                 ["", "only fit10 or fit20 sits flat", "file 0.1 / 0.2 as print.seat_fit, "
+                  "regenerate before any coxa_yaw_base"],
+                 ["", "all three rock, or play > 0.15", "the seats fail: fall back to the "
+                  "'minimal' port (I1_DOCK_OPTIONS 3), owner call"],
                  ["Row E (Ø2 pins)", "snug at 2.10", "loose at 2.00: glue the pins. Binds at "
                   "2.20: ream the finger pin holes with a 2 mm drill"],
-                 ["Port coupons", "dock without force", "binds at the dowels: note which step. "
-                  "Slop after the pivot: note it, proceed (the thumbscrews close it)"]],
+                 ["Port coupons", "relief46 and relief42 dock, centre on the cones",
+                  "binds at the slot: print the 6.6 slot. Note which of the two sits without "
+                  "rock; the seat fit is the row above"]],
                 [1.25 * inch, 1.75 * inch, 4.3 * inch]),
           Paragraph("Rows B (M3 tap 2.5-2.9) and C (heat-set 4.4-4.8) need screws and inserts from "
                     "the bench kit (bom/BOM.csv A-09 to A-13).", SMALL),

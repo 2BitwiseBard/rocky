@@ -9,7 +9,11 @@
 meta:
   version: 0.1
   robot: pebble
-  params_rev: D063       # bump when a physics-relevant number changes (sim/model_fingerprint notes it)
+  params_rev: D064       # bump when a physics-relevant number changes (sim/model_fingerprint notes it).
+                         # D064 (2026-10-07, the owner's body-layout picks): the keel tub, the hub
+                         # shelf and the righter's hip clamp enter params; the belly + the torso CoM
+                         # enter the model next (a fingerprint change: the robot hash is still
+                         # 87215110e9c4 until build_mjcf carries the belly)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -92,6 +96,17 @@ reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults(
   fallen_max_s: 10.0
   right_ramp_s: 1.0      # D052: was 0.6 (5.4 rad/s hip from a righter that left it at +90);
                          # the RIGHTED ramp also stretches to 1.5*max|dq|/loaded speed
+  righter_hip_min_deg: -51.05  # pick 13 (2026-10-07), B130: the hip clamp on the righter's
+                         # commands for legs 1-4 in FALLEN / RIGHTED only. With the battery mass the
+                         # righter folded legs under the keel in 12/200 drops (max 3.06 mm); clamped
+                         # here: 0/200 tub contacts, 196/200 righting unchanged, 38-43 % of FALLEN
+                         # ticks clipped (bay_w 50; legs 1/4 clear by +0.08, PREP_REPORT_2 s2/s4).
+                         # Derived with a 135 mm foot: re-derive for the fitted foot (B131: the
+                         # B95 hand on the shortest tube needs >= -24 .. -20 on legs 1/4, -32 on
+                         # 2/3 for the tub, -40 for the shelf). NOT a servo limit: never applied in
+                         # NORMAL / BRACE (a uniform hip stop above -47.91 switches off the cliff
+                         # void guard, B129). Accepted and stored by ReflexSupervisor; the sim
+                         # agent wires the clamp (and the belly it protects) next
 
 sensing:
   foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold
@@ -187,7 +202,7 @@ leg:
 body:
   circumradius: &body_r 110.0  # pentagon center -> leg station
   deck_t: 4.0            # B27 OPEN: nothing reads this key; the CAD cuts a 6.0 deck
-                         # (iface.leg_port_plate_features, part_deck.T, part_port_coupon.T_DECK)
+                         # (iface.hook_geometry, part_deck.T, part_port_coupon.T_DECK)
   shell_rim_z: 60.0      # mm above the deck plane: carapace top rim, where a hand shoves
                          # (sim/shove.py lever; part_shell tier 4 tops at 52 + the hatch cap).
                          # D048's number, kept — VERIFY against the printed shell
@@ -240,13 +255,48 @@ robot:
   overrides: {}                # per-leg / per-joint servo: validate() REFUSES non-empty until a
                                # consumer honours it (ROBOT_AS_DATA step 10)
 
-interfaces:              # D020 — see docs/INTERFACES.md. Loads through
-                         # dowels/lips/shoulders, NEVER latches. FROZEN.
+interfaces:              # D020 — see docs/INTERFACES.md. Loads through features
+                         # (seats, lips, shoulders), NEVER latches; at I1 the seats take the
+                         # shear, the thumbscrews the stance tension (B118) and the hook is
+                         # only a catch (hook_foot_gap below). Frozen D020; leg_port revised
+                         # 2026-10-07 (body-layout decision 15, below); avionics_tray (I4) and
+                         # battery_sled (I5) revised 2026-10-07 (decision 11, the owner's sign-off):
+                         # docs/BODY_LAYOUT_PROPOSAL.md option A (pick 1). hub_shelf and stand are
+                         # new: the under-deck layout the CAD parts and the sim's belly share
   leg_port:              # I1: deck <-> coxa base
-    dowel_d: 4.0
-    dowel_engage: 8.0
-    dowel_xy: [[-28, 19], [-28, -19]]     # on-deck (r 84.2 < pentagon 88.4)
-                                          # and clear of the cradle walls
+    # 2026-10-07 revision (body-layout decision 15 = "seats", B117): as frozen in D020 the
+    # port could not dock at all. The L's 5.15 foot met a 4.2 slot, and the Ø4 x 8 dowels
+    # at (-28, +-19) blocked the pivot even at slots 5.2-7.0 (no rigid path at 0.10
+    # clearance, docs/archive/prep-2026-10-01/I1_DOCK_OPTIONS.md). The dowels
+    # (dowel_d 4.0, dowel_engage 8.0, dowel_xy) are replaced by two printed 30-deg cone
+    # posts that the plate is lowered onto: seat_xy[0]'s socket is the matching cone
+    # (locates x, y), seat_xy[1]'s is that cone drawn out +-seat_vee_slack along y, a short
+    # V-groove (x only), so x, y and yaw are set once. Docked, z is set by the seats and the
+    # inboard pads (the plate's underside is relieved outboard of seat_relief_x0).
+    # check_dock.py proves the dock path (in-plane 0.469 on the widest stored path at tilt
+    # <= 10; 0.300 in 3D at the lip ends) and the docked fit on the real solids.
+    seat_xy: [[-32, 17.3], [-32, -17.3]]  # was dowel_xy [[-28, 19], [-28, -19]]. The sockets'
+                                          # mouths leave 1.5 (cone) and exactly 1.20 (vee) of
+                                          # plate to its y +-22 edge (I1_DOCK_OPTIONS 7: |y| 17.1
+                                          # or mouth 0.2 would add margin, not re-proven) and
+                                          # clear the Ø5 rim-screw pockets at (-29, +-10.1)
+    seat_r: 2.9                           # post base radius on the deck top
+    seat_half_angle: 30.0                 # flank angle from vertical (deg): a lift of dz opens
+                                          # the cones by dz * sin 30
+    seat_h: 3.0                           # post height above the deck top (< the 4 plate)
+    seat_vee_len: 0.0                     # the vee's POST stretch along +y (0: both posts are cones)
+    seat_vee_slack: 0.3                   # the vee's SOCKET is the cone's drawn out +-0.3 along y
+                                          # (x located, y free for print scale)
+    seat_roof: 0.6                        # the socket stops this far under the plate top
+    seat_mouth: 0.3                       # socket mouth relief: radius over the post base,
+                                          # 0.3 tall over the relieved face (eats elephant foot)
+    seat_relief: 0.2                      # one layer off the plate underside, outboard of
+    seat_relief_x0: -46.0                 # this x. The designer drew -42.0; -46.0 is the judge's
+                                          # graft (decision 15): with the thumbscrews (x -41)
+                                          # outboard of the pad edge the seats got 8 % of the
+                                          # screw preload, now 30 %. It only removes material
+                                          # (34.45 mm^3), so every proven path keeps its
+                                          # clearance. The port coupon prints both (-46, -42)
     thumbscrew_m: 3.0                     # spec only (INTERFACES.md), not read by CAD
     thumbscrew_xy: [[-41, 17], [-41, -17]]  # inboard corners: reachable with
                                           # the servo installed (mid-pair was
@@ -254,10 +304,25 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through
                                           # BUILD_LOG 07-30)
     thumbscrew_head_d: 12.0               # printed knurled head
     hook_lip_w: 24.0                      # tangential width, INBOARD edge
-    hook_slot_x: -48.0                    # deck through-slot center (leg-local)
-    hook_slot_w: 4.2                      # slot x-width (lip 2.2 + swing room)
+    hook_slot_x: -47.0                    # deck through-slot center (leg-local); was -48.0
+                                          # (2026-10-07, decision 15). Widened OUTBOARD only:
+                                          # the inboard edge stays -50.1, so the L stays where it
+                                          # was (the tray-rail corners sit 2 mm inboard of it)
+    hook_slot_w: 6.2                      # slot x-width; was 4.2: the L's 5.15 foot + 2 x 0.3
+                                          # + the 7-10 deg tilt the seats need (x -50.1..-43.9)
+    hook_stem_gap: 0.55                   # docked gap, the stem to the slot's inboard edge
+    plate_ext_half_w: 18.0                # the plate runs inboard to the stem for |y| <= this
+                                          # (over the slot and the deck beside it: the inboard
+                                          # pads, the stance fulcrum)
     hook_lip_t: 3.0                       # lip down-turn thickness
     hook_foot: 3.5                        # under-deck hook reach (toward -x)
+    hook_foot_gap: 1.5                    # docked: the foot top under the deck bottom. A name for
+                                          # the old hard-coded value, unchanged: the hook is a
+                                          # CATCH for a hanging leg, not a clamp. In stance the
+                                          # ground on the leg's foot lifts the plate's outboard
+                                          # end, the plate pivots on the inboard pads and the
+                                          # thumbscrews carry the tension (568 N per pair in the
+                                          # design case, B118); the hook carries nothing
     conn_power: XT30                      # spec only (INTERFACES.md), not read by CAD
     conn_data: JST-XH-5                   # data, GND, 6V, spare, spare (spec only)
   tool_socket:           # I2: SEA stub <-> hand/tool (quarter-turn bayonet)
@@ -277,24 +342,162 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through
     throw_deg: 90.0      # spec only (INTERFACES.md), not read by CAD
     magnet_d: 6.0
     magnet_t: 3.0
-  avionics_tray:         # I4
+  avionics_tray:         # I4. Revised 2026-10-07 (decision 11): its pose, its turn, the rail tabs
+                         # turned INBOARD and the release (B51). It cannot slide off its rails with
+                         # the legs docked anywhere (fact 4: 36 north / 22 south of room at (0, 0))
     plate_w: 84.0
     plate_l: 70.0
     plate_t: 3.0
     rail: 3.0
     bulkhead_w: 70.0
     bulkhead_h: 26.0
-  battery_sled:          # I5 (bay VERIFY against the purchased 3S 5200 pack)
-    bay_l: 175.0         # sled 168 (pack 138 + walls + XT60 nose + tail lip)
-                         # + insertion travel — the belly shell cavity length
-    bay_w: 50.0
-    bay_h: 30.0
-    pack_l: 138.0        # VERIFY
+    tray_xy: [0.0, 0.0]  # body xy of the plate centre: the only pose clear of the five coxa bases and
+                         # yaw servos, with tab holes on the deck's (+-40, -20 / 0 / 20) (B51; was
+                         # part_avionics.TRAY_XY (0, -38): 534 + 954 mm^3 into bases 2 and 3)
+    tray_rot_deg: 180.0  # bulkhead north, latch tongue south: its I3 strike in the deck at (0, -43)
+                         # (part_deck.DECK_HOLES). The tray's own +x, the strike's +x, turns with it
+    tray_lift: 2.0       # the rails' channel 2 higher: the tray stands 2 mm over the deck than drawn,
+                         # so the M3 heads on the inboard tabs (under the plate now) keep 3.4 (button 1.65)
+    lug_release: 16.0    # pick 7: the wings are three 10 mm lugs, the channel lips windowed: slide 16
+                         # (north or south), then lift. The path is 0 mm^3 against the bases and the
+                         # fork + hip servo yawed -40..40 (BODY_LAYOUT_PROPOSAL s2)
+    pi_standoff_h: 11.0  # D063 (B90): 6 -> 11, so the IMU fits under the Pi; pick 14 keeps it (on 13 no
+                         # USB-A port takes a plug reliably; on 18.5 the Pi fails the 3 mm carapace
+                         # rule, B128). part_avionics.PI_STANDOFF_H reads this
+    pi_usb_end: '+x'     # pick 14, in the BODY frame (east, toward leg 4): with tray_rot_deg 180 that is
+                         # the tray's own -x (part_avionics.PI_BOARD_DX's sign flips). Real Pi 5 STEP:
+                         # 6.84 mm 3D to the carapace (-x: 3.56); the lower middle USB-A port takes a
+                         # right-angle plug <= 20 long, overmold <= 14 x 7, cable down or south (B128).
+                         # The bus adapter runs over the Pi's UART, not USB (pick 14)
+  battery_sled:          # I5 (bay VERIFY against the purchased 3S 5200 pack). Revised 2026-10-07
+                         # (decision 11): the bay is a part now, option A's keel tub (bay_tub + bay_lid
+                         # + bay_door, B84), east-west under the deck, nose (XT60) +x, door -x
+    bay_l: 194.0         # tub interior, door face to nose wall (was 175: sled 168 + travel, never a
+                         # part; 194 is the proposal's measured interior). PROVISIONAL: with the dock's
+                         # floating carrier printed into the nose wall (pick 4, no dock_block) the tub
+                         # comes out ~10 shorter at the nose; the bay agent owns this one key
+    bay_door_x: -97.5    # the tub's place in x (body x of the end door's OUTER face): the one number
+                         # that pins it, because bay_centre is the pack's and the sled stack between
+                         # them is part_battery's geometry, not params (the sled's 7 overhang + its 6
+                         # tail lip put the sled's tail at -12 - 69 - 13 = -94.0, 0.5 short of the
+                         # interior's door face at -94.5; the nose end adds the XT60 nose and
+                         # dock_block, x 73 .. 99). The tub is then x bay_door_x ..
+                         # bay_door_x + door_t + bay_l + bay_wall (-97.5 .. 101.9 at bay_l 194; the
+                         # interior -94.5 .. 99.5); iface.bay_tub_extent() is that sum, the sim's belly
+                         # takes the same one. The DOOR end stays put: when bay_l is finalized (pick 4,
+                         # the carrier in the nose wall) the NOSE comes in (~101.9 -> ~91.9). Moving
+                         # bay_centre or pack_l does NOT move this: re-pin it (the bay agent's key, with
+                         # bay_l)
+    bay_w: 50.0          # pick 8 (b): no strap inside the robot, so the sled's 48.8 keeps 0.6 a side.
+                         # (a)'s 53 cost the uniform hip cut, the 14 AWG route past leg 4's drop and
+                         # half the drop slack (PREP_REPORT_2 s4); it changed no righting outcome
+    bay_h: 33.0          # interior (was 30): floor -> rail 2.25 + sled 3 + pack 25 + foam pad 2.0 = 32.25
+    bay_top_z: -18.0     # pick 2: the tub roof's TOP, body z: the 8 mm layer under the deck bottom (-10)
+                         # that carries the leg 2/3 lanes; the hook L reaches -13.76 at any pose (4.24
+                         # over the roof; 1.26 in the 5 mm layer). Bottom -18 - 2.0 - 33 - 2.4 = -55.4:
+                         # 62.15 mm of ground clearance settled in the sim (62.13 with the mass)
+    bay_centre: [-12.0, -20.0]  # body xy of the PACK's centre, docked (the proposal's 'pose'), not the
+                         # tub's: its x is bay_door_x's; in y the tub is centred here, y -20 +- (bay_w / 2
+                         # + bay_wall) = -47.4 .. 7.4. y -20 is the one east-west band clear of all five
+                         # leg drops (fact 3)
+    bay_wall: 2.4        # side and nose walls (outer width 54.8)
+    bay_floor: 2.4       # carries the two sled rails, integral (sled_rail retires)
+    bay_roof: 2.0        # bay_lid; its six Ø8 hanger bosses rise to the deck bottom (part_deck.DECK_HOLES)
+    foam_pad_t: 2.0      # pick 8 (b): a 2 mm foam pad under the roof takes the pack's play. No strap
+                         # keys on purpose: nothing straps the pack in the robot, and it rides loose
+                         # on the sled whenever the sled is out
+    nose_chamfer: 10.0   # pick 10: 45-deg plan chamfer (leg length) on the nose's two vertical edges;
+                         # the interior follows at 10 - 1.41 to keep the 2.4 wall. The square nose
+                         # corners were the only tub-caused stalls in the sim (jamming sideways on
+                         # 64-70 mm rubble, R1). 10 because with the nose ~10 in (pick 4) the whole nose
+                         # then sits inside the carapace skirt's plan outline (0.11 in; 2.44 past
+                         # unchamfered; 8 leaves 0.37 past), and its inner chamfer keeps 5.3 to a
+                         # 22.2-wide XT60 carrier on the sled axis (0.3 to dock_block's 32.2 frame).
+                         # At the provisional bay_l 194 the nose-south corner goes r 112.38 -> 108.55
+                         # and still stands 9.72 past the skirt (measured 2026-10-07 against
+                         # part_shell's tier-1 outline). Unsimulated: an ESTIMATE until the belly runs
+    door_t: 3.0          # the end door -x (54.8 x 37.4 x 3, replaces belly_door); its boss presses the
+                         # sled's tail lip. Pick 12: ONE I3 latch, its strike in a boss outside the
+                         # south wall at the door end (x -94.5 .. -88 measured: 0 mm^3 with everything;
+                         # north wall 102 mm^3 into leg 1's drop, roof 99 into the carapace), and a hook
+                         # tab on the door's north edge. The boss is iface's, not a param: the
+                         # latch_strike cutter (10.8 x 12.2, r 6.1) in a ~14.6 x 14.6 pad, >= LATCH_REACH
+                         # + 0.2 = 6.0 deep, >= 1.2 of wall round the cutter (section 11)
+    pack_l: 138.0        # VERIFY. Pick 5: kept at the VERIFY maximum (the bought pack is 132)
     pack_w: 44.0         # VERIFY. D062 (B72): 46 -> 44, so the sled (pack + 2 x 2.4 walls = 48.8)
                          # fits bay_w 50; the BOM's soft pack is 43 wide
     pack_h: 25.0         # VERIFY: soft-case packs only; hard cases are ~37 mm and do not fit bay_h
     xt60_float: 0.8
     xt60_panel_mm: [16.2, 8.6, 16.0]   # Amass XT60E-M body W x H x D (sled nose + dock carrier) — VERIFY with calipers
+  hub_shelf:             # NEW 2026-10-07 (picks 1, 9, 14): option A's north shelf under the deck: the
+                         # harness hub (star board + 12 V node) and the three small boards the tray could
+                         # not hold (B108), face-down, hung from three posts. The measured arrangement is
+                         # PREP_REPORT_2 s3's 'offtray' (case iii) at bay_w 50: G3 b4b_pack.py (log
+                         # pack_50_h3_cradle_f-54.4_c3) + g3_verify, 0 mm^3 against every keep-out,
+                         # smallest gap 0.57 (the plate to the drops + 5); K3: 0 mm^3, star to post 0.80
+    x: [-56.2, 53.9]     # plan envelope (body): the plate as packed, the union of the five boards'
+    y: [12.2, 64.2]      # footprints + their plug / lead halos. NOT the proposal's x +-45, y 12..54 (the
+                         # boards-up shelf before pick 14): the UBEC hangs to y 64.3, the buck to x 45.95,
+                         # the adapter's plug halo to x -56.2. Righting and rubble ran with that old box
+                         # (z -38..-10, PREP_REPORT_2 s3): the sim's belly takes this one
+    plate_top_z: -36.3   # the up boards stand on it (star top -13.9, 3.9 under the deck)
+    plate_t: 3.0         # the packing's plate. Thicker pushes the face-down adapter under bottom_z, into
+                         # its 1.00 to the stand's crown plate (the thinnest stand margin, B134)
+    bottom_z: -54.4      # the face-down adapter's pins: plate underside -39.3 - 15.1; 1.0 over the tub's
+                         # bottom (-55.4), so a flat floor meets the tub first
+    posts: [[-50.0, 34.0], [50.0, 34.0], [26.0, 64.0]]   # body xy, Ø post_d from the deck bottom to the
+                         # plate. Not the proposal's (+-40, 20), (0, 20), (0, 40): those block every
+                         # arrangement with the adapter (correction 10). 0.59 to the planar hook envelope
+                         # (leg y 12.89 vs the L's 12.3; 0.39 to iface's, whose yaw ear reaches 12.79),
+                         # 0.89 to the coxa bases, 3.57 to the drops + 5 (the plate: 0.57)
+    post_d: 8.0
+    post_screw: below    # 2026-10-07 (measured here): M3 from BELOW, through the plate and the post into a
+                         # blind Ø2.8 thread-forming hole in the deck's underside, 5 deep, 1.0 skin
+                         # (part_deck.DECK_HOLES; or a short M3 x 3-4 insert). NOT the proposal's M3 x 16
+                         # from the deck top: at (+-50, 34) that head (Ø6, z -4..0) sits under the docked
+                         # coxa plate's extension, the inboard pads of the I1 seats fix, 5.41 mm^3 each
+                         # (Ø5.5 socket head 2.58), and removing the shelf would mean undocking legs 1
+                         # and 4. (26, 64) keeps 1.00 from base 0 but is under a carapace sector: below
+                         # too, one direction for all three. The prep's 'screwable' test predates the
+                         # plate extension
+    node_pattern: 30.5   # pick 9: the 12 V node is a 30.5 x 30.5 FPV-style PDB (M3 on 30.5 square,
+                         # >= 6 pad pairs, >= 15 A, no BEC); 36 x 36 board
+    star_posts: [34.0, 24.0]  # the 40 x 30 perfboard star's M3 corner pattern (part_busboard, WIRING_HARNESS)
+    standoff_h: 5.0      # star and node standoffs over the plate top, as packed (star stack 22.4 = 5 + 1.6
+                         # + mated XH 9.8 + lead bend 6; node 12.6 = 5 + 1.6 + flat-soldered leads 6). The
+                         # bracket's 8 mm posts leave the star top 0.90 under the deck (K3)
+    boards:              # the measured poses: [x, y] board centre (body), rot about z, face up = parts
+                         # toward the deck on the plate's top, down = under the plate toward the ground.
+                         # Envelopes: part_avionics.BOARDS (adapter 42 x 33, stack 15.1; UBEC 43 x 17, 8.2);
+                         # the buck's is 27.8 x 20.3 x 10.0, its 1000 uF can lying beside the D24V50F5
+                         # (ESTIMATE). Not correction 11's node (-20.2, 38.2) / star (21.8, 34.2) turned
+                         # 90: those are case i (bay_w 53, the adapter alone on the shelf)
+      bus_adapter: {xy: [-20.2, 28.8], rot_deg: 0, face: down}   # z -54.4 .. -39.3; over the Pi's UART
+      buck_5v: {xy: [35.8, 26.2], rot_deg: 90, face: down}       # z -49.3 .. -39.3
+      ubec_6v: {xy: [-1.8, 55.8], rot_deg: 0, face: down}        # z -47.5 .. -39.3; open below on the stand
+      node_12v: {xy: [-20.8, 36.2], rot_deg: 0, face: up}        # z -36.3 .. -23.7
+      star: {xy: [25.2, 28.2], rot_deg: 0, face: up}             # z -36.3 .. -13.9; 0.80 to post (50, 34)
+    lanes:               # the leg 2 / 3 looms over the tub, in the 8 mm layer (correction 12; L, LV): 8 x 7
+      w: 8.0             # a bare 7-conductor loom fits 5 x 7, a zip-tied one needs 8 x 7
+      h: 7.0
+      z: [-17.0, -10.0]
+      route: [[[45.0, 53.0], [-38.0, 12.0]], [[45.0, 59.8], [-38.0, -30.0]], [[51.8, 59.8], [-53.43, -30.0]]]
+                         # A, B, C as [x span, y span] for +x (mirror for -x): A south from the shelf, B the
+                         # jog (north of y -38: south of it the lane meets the hook by 10.92 mm^3), C down
+                         # to the drop; the riser stays inside the drop keep-out box, the loom leaves the
+                         # shelf through its south face. 1.00 to the tub / bosses, 1.755 to the hooks
+  stand:                 # NEW 2026-10-07 (B85, option A): stand_crown becomes a U-cradle that holds the
+                         # TUB, so the carapace stays on and both tub ends are free (the sled swaps on the
+                         # stand). Deck bottom over the floor: 89.4 / 169.4 / 249.4 (base + crown / + 1
+                         # section / + 2; was 47 / 127 / 207); the legs reach 172 below the deck
+    cradle_x: [-45.0, 45.0]   # the cradle floor's x span (body), under the tub's middle
+    wall_h: 25.0         # the two side walls over the floor (the tub bottom -55.4 -> -30.4)
+    wall_t: 3.0          # ESTIMATE (G3 / K3's model): at bay_w 50 up to 6 leaves 0.30 (K3)
+    tub_clear: 0.5       # each wall's gap to the tub's side: the tub can roll 2.29 deg in it (K3)
+    xstop_pin_d: 6.0     # the x stop (proposal s3 risks; the cradle alone holds the tub in y only): a Ø6
+    xstop_xy: [0.0, -20.0]    # pin up from the cradle floor at body (0, -20) ...
+    xstop_hole_depth: 1.5     # ... into a 1.5 blind hole in the tub floor (2.4: 0.9 skin over it). The
+                         # pin stands FIT (0.3) less, so the floor, not the pin's tip, carries the robot
   dovetail:              # I6 accessory ring
     base_w: 12.0         # the frozen D020 widths, named for the KEY (part_stand's spigots: 12 at
     crest_w: 8.0         # the root). The I6 ring turns it over (B83, iface.dovetail_male(undercut=
@@ -332,11 +535,17 @@ print:                   # FDM design rules (0.4 mm nozzle); fits get re-filed f
   screw_m25_clear: 2.9   # spec only, not read by CAD
   heatset_m3_d: 4.6      # insert pocket dia
   heatset_m3_h: 5.7
+  seat_fit: 0.0          # I1 seat sockets' radial offset over the deck's cone posts (iface.
+                         # leg_port_plate_features; 0 = touching, nominal). File it from the port
+                         # coupons: the smallest of 0 / 0.1 / 0.2 (port_coupon_plate_relief46 /
+                         # _fit10 / _fit20) that docks with no rock and no light under the pads
 
 mass_hw:                 # non-printed masses (g) for the sim mass audit — ALL VERIFY on a kitchen scale
   servo_st3215: *st3215_mass_g    # D052 alias of actuators.st3215.mass_g
   servo_scs0009: *scs0009_mass_g  # D052 alias of actuators.scs0009.mass_g
-  battery_3s_5200: 380.0 # typical 3S 5200 mAh LiPo, VERIFY on purchase
+  battery_3s_5200: 380.0 # typical 3S 5200 mAh LiPo, VERIFY on purchase. Pick 6 (2026-10-07): the owner
+                         # kept 380 (the BOM's Zeee pack is 343): the conservative mass for the belly,
+                         # the righter (it doubled the tub contacts, B130) and the stand
   electronics_pod: 400.0 # estimate: sensors + compute + bus adapter + wiring
   tibia_tube: 5.0        # Ø10 carbon, ~120 mm
   sea_spring_switch: 4.0 # spring + KW10 + wire

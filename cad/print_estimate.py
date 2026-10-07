@@ -66,7 +66,9 @@ FILL = {
     # calibration + interface coupons
     "fit_ladder": 0.55, "latch_housing": 0.85, "latch_rotor": 0.9,
     "thumb_knob_m3": 0.7, "dovetail_male_coupon": 0.7, "dovetail_shoe": 0.6,
-    "coupler_recess_demo": 0.6, "port_coupon_deck": 0.55, "port_coupon_plate": 0.6,
+    "coupler_recess_demo": 0.6, "port_coupon_deck": 0.55,
+    "port_coupon_plate_relief46": 0.6, "port_coupon_plate_relief42": 0.6,
+    "port_coupon_plate_fit10": 0.6, "port_coupon_plate_fit20": 0.6,
     # hand + SEA + tools
     "hand_hub": 0.6, "hand_cam": 0.75, "hand_finger": 0.8,
     "tibia_sea_slider": 0.8, "tibia_sea_outer": 0.8,

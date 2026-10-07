@@ -94,7 +94,9 @@ ORIENT = {
     "fit_ladder": None, "latch_housing": None, "latch_rotor": None,
     "thumb_knob_m3": None, "dovetail_male_coupon": None, "dovetail_shoe": None,
     "coupler_recess_demo": None, "port_coupon_deck": None,
-    "port_coupon_plate": None, "frame_coupon": None,
+    "port_coupon_plate_relief46": None, "port_coupon_plate_relief42": None,   # plate DOWN, the L on
+    "port_coupon_plate_fit10": None, "port_coupon_plate_fit20": None,         # the bed (as coxa_yaw_base)
+    "frame_coupon": None,
     # bench / misc
     "jig_base": None,
     "jig_column": rot([0, 1, 0], -90),           # on its back, spine down

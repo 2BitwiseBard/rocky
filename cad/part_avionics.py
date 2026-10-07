@@ -45,7 +45,10 @@ PI_HOLES = [(-29, -24.5), (29, -24.5), (-29, 24.5), (29, 24.5)]
 PI_BOARD = (85.0, 56.0, 1.6)
 PI_BOARD_DX = 10.0                   # board centre off the hole-pattern centre, toward the USB end
 PI_UNDERSIDE = 2.0                   # keep-out under the board: solder tails, microSD, passives
-PI_STANDOFF_H = 11.0                 # D063 (B90): 6 -> 11, so the IMU fits under the Pi (see __main__)
+PI_STANDOFF_H = AT["pi_standoff_h"]  # 11. D063 (B90): 6 -> 11, so the IMU fits under the Pi (see __main__);
+                                     # in params since 2026-10-07 (pick 14 keeps it), so the carapace and
+                                     # USB-plug checks read the same number (BODY_LAYOUT s11: a copied 6
+                                     # once overstated A's carapace margin by 5)
 # BNO085 (Adafruit 4754 board file): 25.4 x 22.86 board, 4.6 tall with its parts, 4 x Ø2.5
 # holes 2.54 in from the edges = 20.32 x 17.78. It sits on four imu_grommets (B4) under the
 # Pi: an 84 x 70 plate has no 28 x 26 patch (board + grommet flanges) beside an 85 x 56 Pi

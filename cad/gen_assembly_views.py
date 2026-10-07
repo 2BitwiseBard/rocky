@@ -498,8 +498,8 @@ def leg_on_deck():
     a = to_px(frame, (0, R_STATION + 14, 0))                        # the port plate, outboard
     return save(render([(deck, DECK), (base, MOVE)], frame), "leg_on_deck",
                 "Leg port I1: a coxa base on the deck",
-                "Leg 0 (station 0, north, one dot). Tilt 15°, lip through the slot, slide "
-                "inboard to hook, plug the leg drop, pivot onto the dowels; 2 thumbscrews.",
+                "Leg 0 (station 0, north, one dot), its carapace sector off. Hook at 7-10° "
+                "with a radial approach, plug the leg drop, lower onto the cones; 2 thumbscrews.",
                 labels=[("coxa_yaw_base", a, (a[0] - 220, a[1] + 50))],
                 legend=[(MOVE, "coxa_yaw_base"), (DECK, "body_deck")])
 

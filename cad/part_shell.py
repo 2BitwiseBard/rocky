@@ -373,12 +373,17 @@ def keepouts():
     # cheeks (D063) reach r 29.5 and its hip cup r 41. Measured directly, the
     # fork yawed -40..40 vs this sector: 0.00 mm^3, min gap 15.89 at yaw 40
     ko["fork_swing"] = Pos(110, 0, 28) * Cylinder(28, 48)
-    # leg-port knobs (dia 12 at leg x -41, y +/-17) + dowel tops: columns
-    # to z 13 over leg-local x -49..-22 -> body r 61..88, y +/-25
+    # leg-port knobs (dia 12 at leg x -41, y +/-17): columns to z 13 over
+    # leg-local x -49..-22 -> body r 61..88, y +/-25. It was sized for the D020
+    # dowel tops too (z 8 over the deck); since 2026-10-07 the seat posts sit
+    # inside the plate's sockets (top 1 under the plate top) and the plate's
+    # spine rib (x -46..-38, |y| <= 8, z 0..6) is inside this box
     ko["port_hardware"] = Pos(74.5, 0, 6.5) * Box(27, 50, 13)
     # coxa base plate slab: Box(66, 44, 4) leg x -46..20 (+ cantilever to
-    # the fork zone), y +/-22 (+2.5 margin), z -4..0 (+0.5)
-    ko["coxa_plate"] = Pos(97.0, 0, -2.0) * Box(70, 49, 5.0)
+    # the fork zone), y +/-22 (+2.5 margin), z -4..0 (+0.5). Since 2026-10-07
+    # the plate runs inboard to the hook's stem (leg x -49.55, |y| <= 18), so
+    # the slab starts at leg x -50 (was -48); the sector is 0.000 mm^3 clear of it
+    ko["coxa_plate"] = Pos(96.0, 0, -2.0) * Box(72, 49, 5.0)
     # the leg harness route (part_coxa.harness_path): deck cutout -> up beside
     # the yaw cup -> over the top to the yaw plugs, 11 x 11
     from part_coxa import harness_solid

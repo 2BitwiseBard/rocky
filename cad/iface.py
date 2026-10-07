@@ -5,7 +5,11 @@ the same functions: fit is guaranteed by construction, not by diligence.
 
 Frames: leg-port features are defined in LEG-LOCAL coords (yaw axis at
 origin, +x outboard) exactly like part_coxa.py; callers pass a build123d
-transform (e.g. Rot(0,0,ang) * Pos(110,0,0)) placing the leg station.
+transform (e.g. Rot(0,0,ang) * Pos(110,0,0), station_tf(i)) placing the leg station.
+
+Since 2026-10-07 the under-deck keep-outs live here too (leg_port_hook_envelope,
+leg_drop_keepout, body_keepouts): every body-layout part checks against the same
+solids. iface never imports a part module (part_deck imports iface).
 """
 import numpy as np
 from build123d import *
@@ -23,22 +27,161 @@ CABLE_CUTOUT_W = 11.0
 
 
 # ====================================================================== I1
-def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
+# The seats (2026-10-07, body-layout decision 15, B117). As frozen in D020 the port could
+# not dock: the L's 5.15 foot met a 4.2 slot and the Ø4 x 8 dowels blocked the pivot. Now
+# the deck carries two printed 30-deg cone posts at seat_xy and the plate two blind sockets
+# that are the posts' own flanks: the plate is hooked at 7-10 deg with a radial approach
+# and lowered onto the cones, which close by design in the last 0.61 of the drop
+# (check_dock.py proves the path and the docked fit on the real solids).
+PLATE_X0 = -46.0      # the coxa plate's inboard edge (part_coxa, the port coupon): the plate
+                      # extension below runs inboard of it to the hook's stem
+
+
+def _seat_frustum(x, y0, y1, z0, r0, h, ta):
+    """A cone frustum (base radius r0 at z0, flank tan ta, height h) stretched along +y from
+    y0 to y1 (y1 == y0: a plain cone frustum): the two end frustums + the prism of their
+    axial trapezoid, i.e. their hull."""
+    r1 = r0 - h * ta
+    s = Pos(x, y0, z0 + h / 2) * Cone(r0, r1, h)
+    if y1 > y0 + 1e-9:
+        s += Pos(x, y1, z0 + h / 2) * Cone(r0, r1, h)
+        f = make_face(Polyline((x - r0, y0, z0), (x + r0, y0, z0), (x + r1, y0, z0 + h),
+                               (x - r1, y0, z0 + h), close=True))
+        s += extrude(f, amount=y1 - y0, dir=(0, 1, 0))
+    return s
+
+
+def leg_port_seats(top_z):
+    """The deck's two seat posts (leg-local, deck top at top_z): the cone at seat_xy[0] and
+    the vee (the cone stretched seat_vee_len toward +y) at seat_xy[1]."""
+    lp = IF["leg_port"]
+    ta = np.tan(np.deg2rad(lp["seat_half_angle"]))
+    (cx, cy), (vx, vy) = lp["seat_xy"]
+    out = _seat_frustum(cx, cy, cy, top_z, lp["seat_r"], lp["seat_h"], ta)
+    out += _seat_frustum(vx, vy, vy + lp["seat_vee_len"], top_z, lp["seat_r"], lp["seat_h"], ta)
+    return out
+
+
+def leg_port_seat_zone(top_z):
+    """A box over each seat post's footprint (+0.5 all round), from 0.01 over the deck top
+    at top_z to 0.5 over the posts' tips: a REAL deck (or jig, or deck coupon) intersected
+    with it is that part's own posts, which a check compares with leg_port_seats(top_z) &
+    this zone and then docks against. Checking the sockets against leg_port_seats() alone
+    cannot see a deck that lost its posts (2026-10-07 review: with seats=False check_dock
+    stayed CLEAN, though such a leg has no x / y / yaw location). The 0.01 keeps the zone's
+    floor off the deck top (no coincident faces); the posts' bottom 0.01 sits in the
+    sockets' mouth relief, which nothing touches."""
+    lp = IF["leg_port"]
+    g, h = lp["seat_r"] + 0.5, lp["seat_h"] + 0.49
+    (cx, cy), (vx, vy) = lp["seat_xy"]
+    out = Pos(cx, cy, top_z + 0.01 + h / 2) * Box(2 * g, 2 * g, h)
+    vl = lp["seat_vee_len"]
+    out += Pos(vx, vy + vl / 2, top_z + 0.01 + h / 2) * Box(2 * g, 2 * g + vl, h)
+    return out
+
+
+def seat_posts_symdiff(part, top_z, tf=None):
+    """How far `part`'s OWN seat posts (part & the zone, both placed by tf: leg-local -> part)
+    are from leg_port_seats(top_z) as drawn: (symmetric-difference volume, the posts or None).
+    0: as drawn; the drawn posts' whole volume (82.17 mm^3): the part has none."""
+    tf = tf if tf is not None else Pos(0, 0, 0)
+    zone = tf * leg_port_seat_zone(top_z)
+    ref = (tf * leg_port_seats(top_z)) & zone
+    real = part & zone
+    if real is None or real.volume < 1e-9:          # an empty compound: no posts at all
+        return ref.volume, None
+    return (real - ref).volume + (ref - real).volume, real
+
+
+def leg_port_socket_walls(plate_half_w, fit):
+    """Plate left between each seat socket's mouth and the plate's y edge (|y| plate_half_w):
+    (cone, vee). At fit 0 that is 1.5 / exactly 1.20 (I1_DOCK_OPTIONS 7); a filed seat_fit
+    takes it straight off both (fit 0.2: 1.3 / 1.00). If the vee wall drops under 1.20,
+    I1_DOCK_OPTIONS 7's options are mouth 0.2 or the seats at |y| 17.1 (not re-proven)."""
+    lp = IF["leg_port"]
+    rm = lp["seat_r"] + fit + lp["seat_mouth"]
+    (cx, cy), (vx, vy) = lp["seat_xy"]
+    sl, vl = lp["seat_vee_slack"], lp["seat_vee_len"]
+    vee = max(abs(vy - sl - rm), abs(vy + vl + sl + rm))
+    return plate_half_w - (abs(cy) + rm), plate_half_w - vee
+
+
+def seat_socket(x, y0, y1, plate_bot_z, plate_top_z, fit=0.0):
+    """ONE seat socket (a cutter), blind from the plate underside at plate_bot_z: the post's
+    own flank grown radially by `fit` (0: it touches the post when docked, nominal), stopped
+    seat_roof under the plate top, run from y0 to y1 (y1 > y0: the vee's slot), plus the
+    mouth relief: seat_mouth over the post's base radius, seat_mouth + seat_relief tall from
+    the underside, i.e. 0.3 over the relieved face, so the post's base corner (and its
+    elephant foot) never meets the socket's edge. The port coupons print it at fit 0 /
+    +0.1 / +0.2 (port_coupon_plate_relief46 / _fit10 / _fit20, I1_DOCK_OPTIONS 6.2) and
+    the winner is filed as print.seat_fit: docked play grows from 0 at about +0.05 to
+    x +-0.15 at +0.2 (J/f2_relief)."""
+    lp = IF["leg_port"]
+    ta = np.tan(np.deg2rad(lp["seat_half_angle"]))
+    h = plate_top_z - lp["seat_roof"] - plate_bot_z
+    r0 = lp["seat_r"] + fit
+    # 0.01 below the underside, so the cutter breaks the face cleanly (same flank line)
+    out = _seat_frustum(x, y0, y1, plate_bot_z - 0.01, r0 + 0.01 * ta, h + 0.01, ta)
+    rm, m = r0 + lp["seat_mouth"], lp["seat_mouth"] + lp["seat_relief"]
+    zc = plate_bot_z + m / 2 - 0.01
+    out += Pos(x, y0, zc) * Cylinder(rm, m + 0.02)
+    if y1 > y0 + 1e-9:                               # the vee's mouth: a stadium
+        out += Pos(x, y1, zc) * Cylinder(rm, m + 0.02)
+        out += Pos(x, (y0 + y1) / 2, zc) * Box(2 * rm, y1 - y0, m + 0.02)
+    return out
+
+
+def leg_port_sockets(plate_bot_z, plate_top_z, fit=0.0):
+    """The plate's two seat sockets (cutters): the cone's at seat_xy[0], and the vee's
+    socket seat_vee_slack longer at each end of seat_xy[1]'s post (free along y)."""
+    lp = IF["leg_port"]
+    (cx, cy), (vx, vy) = lp["seat_xy"]
+    sl = lp["seat_vee_slack"]
+    return seat_socket(cx, cy, cy, plate_bot_z, plate_top_z, fit) + \
+        seat_socket(vx, vy - sl, vy + lp["seat_vee_len"] + sl, plate_bot_z, plate_top_z, fit)
+
+
+def hook_geometry(plate_bot_z=-4.0):
+    """The hook in the leg frame: the deck slot [xi, xo] and the L. The L itself is the
+    D020 one (stem hook_lip_t - 0.8 = 2.2 wide, foot hook_foot - 0.55 = 2.95 past the
+    stem, 1.8 thick, its top hook_foot_gap under the deck): its stem sits hook_stem_gap off
+    the slot's inboard edge, which stayed at -50.1 when the slot was widened OUTBOARD to
+    6.2 (2026-10-07; the L moved 0.05 inboard of where D020 drew it)."""
+    lp = IF["leg_port"]
+    deck_t = 6.0                     # B27 OPEN: params body.deck_t (4.0) is unread
+    xi = lp["hook_slot_x"] - lp["hook_slot_w"] / 2
+    xo = lp["hook_slot_x"] + lp["hook_slot_w"] / 2
+    x0 = xi + lp["hook_stem_gap"]
+    x1 = x0 + lp["hook_lip_t"] - 0.8
+    ft1 = plate_bot_z - deck_t - lp["hook_foot_gap"]
+    return dict(xi=xi, xo=xo, x0=x0, x1=x1, foot_x0=x0 - (lp["hook_foot"] - 0.55),
+                foot_x1=x1 - 0.55, foot_z0=ft1 - 1.8, foot_z1=ft1, stem_z0=ft1 - 0.1)
+
+
+# The L's reach under the deck (z < -10, leg-local), as check_dock measured it 2026-10-07 on
+# the real solids. check_dock re-measures it on every run and FAILS if it moves more than
+# HOOK_ENVELOPE_TOL, so the body layout's tub roof and keep-outs can import it from here and a
+# param change that moves the L cannot pass silently (it did before: only z > -15 was asserted).
+# "paths": over check_dock's stored dock paths; "any": at any free pose of the base (z is the
+# rock on the pads' inboard edge, 17.6 deg). r = R_STATION 110 + x on the station axis: paths
+# r 57.50..65.29, any r 56.88..66.61; the L is hook_lip_w wide, so its corners (|y| 12; 12.3
+# with the unseated lip-end play) reach body radius hypot(110 + x, 12) = 67.68 (67.73).
+HOOK_ENVELOPE = {"paths": {"z": -13.300, "x": (-52.500, -44.707)},
+                 "any": {"z": -13.757, "x": (-53.121, -43.395)}}
+HOOK_ENVELOPE_TOL = 0.02
+
+
+def leg_port_deck_features(deck, top_z, station_tf=None, seats=True):
     """Apply the DECK side of the leg port to `deck` (top surface at z=top_z):
-    + dowel posts (Ø4 x engage), heat-set pockets under the thumbscrew
-    stations, the hook catch bar at the outboard edge, 11 mm cable cutout.
+    + the two seat posts (cone + vee), heat-set pockets under the thumbscrew
+    stations, the hook through-slot, the 11 mm cable cutout.
     station_tf: transform from leg-local to deck coords (default: identity).
     """
     lp = IF["leg_port"]
     tf = station_tf if station_tf is not None else Pos(0, 0, 0)
-    # dowel posts (printed, proud of the deck top)
-    if dowels:
-        for dx, dy in lp["dowel_xy"]:
-            post = Pos(dx, dy, top_z + lp["dowel_engage"] / 2) * \
-                Cylinder((lp["dowel_d"] - 0.05) / 2, lp["dowel_engage"])
-            tip = Pos(dx, dy, top_z + lp["dowel_engage"]) * \
-                Cone((lp["dowel_d"] - 0.05) / 2, (lp["dowel_d"] - 0.05) / 2 - 0.8, 1.2)
-            deck += tf * (post + tip)
+    # seat posts (printed with the deck, proud of its top; seats=False leaves them off)
+    if seats:
+        deck += tf * leg_port_seats(top_z)
     # heat-set pockets for the thumbscrews
     for dx, dy in lp["thumbscrew_xy"]:
         deck -= tf * Pos(dx, dy, top_z - PR["heatset_m3_h"] / 2 + 0.01) * \
@@ -46,7 +189,8 @@ def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
         deck -= tf * Pos(dx, dy, top_z - 8) * Cylinder(3.4 / 2, 16)  # through
     # hook catch: THROUGH-SLOT at the plate's inboard edge; the plate's
     # downturned lip drops through and its foot hooks under the deck bottom
-    # (the deck ends at R100 — there is no deck outboard of the plate, D012)
+    # (the deck ends at R100 — there is no deck outboard of the plate, D012).
+    # 2026-10-07: 6.2 wide at x -47, so x -50.1..-43.9 (was 4.2 at -48: the L could not pass)
     deck -= tf * Pos(lp["hook_slot_x"], 0, top_z - 10) * \
         Box(lp["hook_slot_w"], lp["hook_lip_w"] + 2 * FIT, 24)
     # cable pass-through (existing deck convention: leg-local x=-29)
@@ -54,20 +198,32 @@ def leg_port_deck_features(deck, top_z, station_tf=None, dowels=True):
     return deck
 
 
-def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
+def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0, relief_x0=None, fit=None):
     """Apply the LEG side of the port to a coxa base plate solid (part_coxa
-    frame: the plate is z -4..0, top at 0): dowel bores, thumbscrew
-    clearance bores (not captive: no lip is modelled, B82), and the inboard hook lip.
-    Pass the actual plate z-extents."""
+    frame: the plate is z -4..0, top at 0, its inboard edge at PLATE_X0): the plate
+    extension to the hook's stem, the underside relief, the two seat sockets, thumbscrew
+    clearance bores (not captive: no lip is modelled, B82), and the inboard hook's L.
+    Pass the actual plate z-extents. relief_x0 overrides params seat_relief_x0 (the port
+    coupon prints the designer's -42 beside the repo's -46); fit overrides params
+    print.seat_fit, the sockets' radial offset (the port coupons print 0 / 0.1 / 0.2)."""
     lp = IF["leg_port"]
     t = plate_top_z - plate_bot_z
-    # dowel bores (through)
-    for dx, dy in lp["dowel_xy"]:
-        plate -= Pos(dx, dy, (plate_top_z + plate_bot_z) / 2) * \
-            Cylinder((lp["dowel_d"] + FIT) / 2, t + 2)
-        # lead-in chamfer from below
-        plate -= Pos(dx, dy, plate_bot_z + 0.6) * \
-            Cone((lp["dowel_d"] + FIT) / 2 + 0.8, (lp["dowel_d"] + FIT) / 2, 1.3)
+    hg = hook_geometry(plate_bot_z)
+    # the plate runs inboard to the hook's stem for |y| <= plate_ext_half_w: over the slot,
+    # and over the deck beside it (|y| 12.3..18), whose underside there is the inboard pad
+    # pair, the stance fulcrum and docked z datum. Replaces D020's 2 mm reach under the lip.
+    ew = lp["plate_ext_half_w"]
+    plate += Pos((hg["x0"] + PLATE_X0 + 0.5) / 2, 0, (plate_top_z + plate_bot_z) / 2) * \
+        Box(PLATE_X0 + 0.5 - hg["x0"], 2 * ew, t)
+    # one layer off the underside outboard of relief_x0 (to past any plate's outboard end):
+    # docked, z is set by the two seats and the pads (x < relief_x0), not by the whole face,
+    # which sits seat_relief over the deck (J/f2: 0.200)
+    rx0 = lp["seat_relief_x0"] if relief_x0 is None else relief_x0
+    rel = lp["seat_relief"]
+    plate -= Pos((rx0 + 100.0) / 2, 0, plate_bot_z + rel / 2 - 0.01) * \
+        Box(100.0 - rx0, 2 * ew + 30.0, rel + 0.02)
+    # the seat sockets (blind, from below), grown by the printer's filed seat fit
+    plate -= leg_port_sockets(plate_bot_z, plate_top_z, PR["seat_fit"] if fit is None else fit)
     # thumbscrews: a loose Ø3.7 shaft pass. The 'head well' below sits ABOVE
     # the plate (z top..top+8), so on the plate alone it removes nothing; no lip (B82).
     for dx, dy in lp["thumbscrew_xy"]:
@@ -75,19 +231,157 @@ def leg_port_plate_features(plate, plate_top_z=2.0, plate_bot_z=-4.0):
             Cylinder(3.7 / 2, t + 2)                     # loose shaft pass
         plate -= Pos(dx, dy, plate_top_z + 4.0) * \
             Cylinder((lp["thumbscrew_head_d"] + 1.2) / 2, 8)   # head well
-    # hook lip: down-turned tab at the INBOARD edge (plate ends x=-46):
-    # reach-out to the slot, down-turn through it (deck is 6 thick), then a
-    # foot pointing further inboard (-x) that hooks under the deck bottom
+    # the hook's L at the INBOARD edge: the down-turn (stem) from the plate top through the
+    # 6 deck (B27), then a foot pointing further inboard (-x) under the deck bottom. The
+    # reach is the plate extension above. A catch for a hanging leg, not a clamp
     lipw = lp["hook_lip_w"]
-    deck_t = 6.0                     # B27 OPEN: params body.deck_t (4.0) is unread
-    lip = Pos(-47.2, 0, plate_bot_z + 1.0) * Box(4.4, lipw, 2)         # reach
-    lip += Pos(lp["hook_slot_x"] - 0.4, 0,
-               plate_bot_z - (deck_t + 1.6) / 2 + 2.0) * \
-        Box(lp["hook_lip_t"] - 0.8, lipw, deck_t + 5.6)                # down-turn
-    lip += Pos(lp["hook_slot_x"] - 0.4 - (lp["hook_foot"] + 1.1) / 2 + 1.1 / 2,
-               0, plate_bot_z - deck_t - 2.4) * \
-        Box(lp["hook_foot"] + 1.1, lipw, 1.8)                          # foot
+    lip = Pos((hg["x0"] + hg["x1"]) / 2, 0, (hg["stem_z0"] + plate_top_z) / 2) * \
+        Box(hg["x1"] - hg["x0"], lipw, plate_top_z - hg["stem_z0"])    # down-turn
+    lip += Pos((hg["foot_x0"] + hg["foot_x1"]) / 2, 0, (hg["foot_z0"] + hg["foot_z1"]) / 2) * \
+        Box(hg["foot_x1"] - hg["foot_x0"], lipw, hg["foot_z1"] - hg["foot_z0"])   # foot
     return plate + lip
+
+
+# ====================================================================== under-deck keep-outs
+# 2026-10-07 (the body layout, option A, the owner's picks): what hangs under each leg port and
+# must stay clear of the keel tub (part_bay), the hub shelf (part_busboard), the stand's cradle
+# (part_stand) and the deck's own holes (part_deck.DECK_HOLES). Built ONCE here in the leg frame
+# and posed by station_tf, so those parts cannot each carry their own copy (the prep rounds did:
+# docs/archive/prep-2026-10-01, keepouts.py). Body frame z = leg z; the deck spans z -10..-4.
+_LEGS = P["robot"]["legs"]
+STATIONS = [_LEGS["first_station_deg"] + i * 360.0 / _LEGS["count"]
+            for i in range(_LEGS["count"])]     # 90, 162, 234, 306, 378 (not wrapped, like pebble.xml)
+R_STATION = P["body"]["circumradius"]           # pentagon centre -> leg station (110)
+DECK_BOT_Z = -10.0                              # the deck's underside, leg / body z (6 deck, B27)
+HOOK_HALF_W = IF["leg_port"]["hook_lip_w"] / 2 + FIT   # 12.3: the 24 lip's play along its 24.6 slot
+DROP_HALF = CABLE_CUTOUT_W / 2 + 5.0            # 10.5: the cutout + 5 mm round it (the proposal's
+                                                # +-10.5 IS that; fact 3's bands reproduce only so)
+DROP_DEPTH = 35.0                               # under the deck bottom: the mated XT30 (20.1) + its
+                                                # wire bend (8) hang 28.1, the XH-5 pair 21.2 (ESTIMATE)
+
+
+def station_tf(i):
+    """Leg i's frame -> the body frame: the yaw axis on the station, +x radially outboard, z
+    unchanged. The deck, the jig and the check modules pose a leg port with exactly this."""
+    return Rot(0, 0, STATIONS[i]) * Pos(R_STATION, 0, 0)
+
+
+def _hook_yaw_ear(step_deg=0.25):
+    """Plan region (leg x, y) of the L's foot when the stem yaws and slides inside the deck slot
+    (tilt 0), as a shapely polygon. For a yaw psi the stem's free translations are a box (its
+    rotated bbox inside the slot), so the foot covers the hull of its rotated copy moved to that
+    box's four corners; the union runs over every feasible psi (|psi| <= 9.6 at slot 6.2). The
+    stored dock paths and check_dock's envelope are planar (x, z): this is the y they leave out.
+    Measured 2026-10-07: |y| 12.79 at x -49.0, yaw 9.6 deg (the planar L stops at 12.3)."""
+    from shapely.geometry import box as sbox, MultiPoint
+    from shapely import affinity
+    from shapely.ops import unary_union
+    hg = hook_geometry()
+    hw = IF["leg_port"]["hook_lip_w"] / 2
+    o = ((hg["x0"] + hg["x1"]) / 2, 0.0)
+    stem = sbox(hg["x0"], -hw, hg["x1"], hw)
+    foot = sbox(hg["foot_x0"], -hw, hg["foot_x1"], hw)
+    out = []
+    for psi in np.arange(-20.0, 20.0 + 1e-9, step_deg):
+        sx0, sy0, sx1, sy1 = affinity.rotate(stem, psi, origin=o).bounds
+        dx = (hg["xi"] - sx0, hg["xo"] - sx1)
+        dy = (-HOOK_HALF_W - sy0, HOOK_HALF_W - sy1)
+        if dx[0] > dx[1] or dy[0] > dy[1]:
+            continue                                    # the stem no longer fits the slot
+        f = affinity.rotate(foot, psi, origin=o)
+        out.append(MultiPoint([p for a in dx for b in dy
+                               for p in affinity.translate(f, a, b).exterior.coords]).convex_hull)
+    return unary_union(out)
+
+
+def leg_port_hook_envelope(mode="any"):
+    """The volume the hook's L can sweep UNDER the deck (z <= -10), leg frame: a keep-out for
+    anything hung from the deck near a port. A conservative hull, not the exact swept set:
+    the box of check_dock's measured extremes (iface.HOOK_ENVELOPE, which check_dock re-measures
+    on the real solids and holds to +-HOOK_ENVELOPE_TOL), grown by that tolerance, +-HOOK_HALF_W
+    in y, from the deck bottom down; 'any' adds the yaw ear (_hook_yaw_ear), full height.
+
+      'path'  the L along check_dock's four stored dock paths (tilt 7-10 deg, a radial approach,
+              lowered onto the cones). The exact region (2026-10-07, the union of the L's
+              sections along the densified paths): x -52.50..-44.71, z -13.30 (docked), 20.75
+              mm^2 in section; this box 26.01. Planar: the paths do not yaw.
+      'any'   the L at ANY free pose of the hooked base (check_dock's tilt -3..40 x slide box,
+              refined; the deepest is the rock on the pads' inboard edge, 17.6 deg): x
+              -53.12..-43.39, z -13.757; its grid region's hull is 32.02 mm^2 in section, this
+              box 36.89. The yaw ear takes |y| 12.30 -> 12.79 at x -49 (12.30 at -53 and -46,
+              linear between; tilt 0: tilted, the stem fills more of the slot and yaws less),
+              inside the box's x span. It is what brings the shelf posts (+-50, 34) to 0.39 of
+              this envelope (0.59 to the planar one)
+
+    Measured on these solids (2026-10-07): 'path' x -52.520..-44.687, y +-12.300, z -13.320..
+    -10.000 (r 57.480..65.313 on the station axis), 639.7 mm^3; 'any' x -53.141..-43.375, y
+    +-12.807, z -13.777..-10.000 (r 56.859..66.625), 921.6 mm^3. The prep rounds' r
+    56.94..66.79 (BODY_LAYOUT correction 3) was their seats model, not this tree (the second
+    I1 verifier measured 56.88..66.61 on it). Raises if the record no longer holds the docked
+    L (a param moved the hook: re-run check_dock and re-record HOOK_ENVELOPE)."""
+    rec = HOOK_ENVELOPE["paths" if mode == "path" else "any"] if mode in ("path", "any") else None
+    if rec is None:
+        raise ValueError(f"mode {mode!r}: 'path' or 'any'")
+    hg, tol = hook_geometry(), HOOK_ENVELOPE_TOL
+    stale = (hg["foot_z0"] < rec["z"] - tol or hg["foot_x0"] < rec["x"][0] - tol or
+             hg["x1"] > rec["x"][1] + tol)
+    if stale:
+        raise RuntimeError(f"iface.HOOK_ENVELOPE['{mode}'] no longer holds the docked L (x "
+                           f"{hg['foot_x0']:.2f}..{hg['x1']:.2f}, z {hg['foot_z0']:.2f}): run "
+                           f"check_dock.py and re-record it")
+    x0, x1, z0 = rec["x"][0] - tol, rec["x"][1] + tol, rec["z"] - tol
+    h = DECK_BOT_Z - z0
+    env = Pos((x0 + x1) / 2, 0, DECK_BOT_Z - h / 2) * Box(x1 - x0, 2 * HOOK_HALF_W, h)
+    if mode == "any":
+        ear = _hook_yaw_ear()
+        if ear.geom_type != "Polygon":                  # overlapping hulls: one polygon, but be safe
+            ear = ear.convex_hull
+        ear = ear.simplify(0.005).buffer(tol, join_style=2)   # simplify cuts <= 0.005, tol grows 0.02
+        pts = [(float(x), float(y)) for x, y in list(ear.exterior.coords)[:-1]]
+        env += Pos(0, 0, z0) * extrude(make_face(Polyline(*pts, close=True)), h)
+    return env
+
+
+def leg_drop_keepout(extra=0.0):
+    """The mated leg drop (XT30 pair + JST-XH-5 on its header) hanging under the I1 cable cutout,
+    leg frame: a leg-aligned box 2 x (DROP_HALF + extra) square about (CABLE_CUTOUT_X, 0), from
+    the deck bottom (z -10) down DROP_DEPTH + extra; `extra` grows plan and depth, never up
+    (above -10 is the deck and its cutout). As the prep's keepouts.drop_keepout: the 10.5 is
+    already the cutout's 5.5 + 5, so extra 5 on top (+-15.5) is the stricter 'drops + 5' the
+    prep measured the tub (0 mm^3) and the shelf (its plate 0.57 off) against. B120's cross
+    arm (7 x 16 on the cutout) sits inside it (2.50); legs 2/3 reach their own box (B136)."""
+    h, d = DROP_HALF + extra, DROP_DEPTH + extra
+    return Pos(CABLE_CUTOUT_X, 0, DECK_BOT_Z - d / 2) * Box(2 * h, 2 * h, d)
+
+
+def body_keepouts(extra=0.0, mode="any"):
+    """The five ports' under-deck keep-outs, posed in the body frame: {'hooks': [the hook
+    envelope (mode) at stations 0..4], 'drops': [the drop (+extra) at 0..4]}. The tub, the
+    shelf, the cradle and the deck's hole audit all intersect against these same solids."""
+    hook, drop = leg_port_hook_envelope(mode), leg_drop_keepout(extra)
+    n = len(STATIONS)
+    return {"hooks": [station_tf(i) * hook for i in range(n)],
+            "drops": [station_tf(i) * drop for i in range(n)]}
+
+
+def bay_tub_extent():
+    """The keel tub (I5, option A, B84) in the body frame, from params alone: {'x', 'y', 'z'}
+    its outer box (door included: the 54.8 x 37.4 door covers the whole end), {'x_in', 'y_in',
+    'z_in'} the interior, each (lo, hi). x is pinned at the DOOR end by battery_sled.bay_door_x
+    (bay_l moves the nose, pick 4); y is centred on bay_centre[1] (the pack's y, the clear band);
+    z hangs from bay_top_z (pick 2). A box: the nose's two vertical edges are chamfered
+    (nose_chamfer), the latch boss, the hanger bosses and the door's hook tab are part_bay's. The
+    sim's belly takes these same sums from params (it does not import CAD). At bay_l 194: x
+    -97.5..101.9, y -47.4..7.4, z -55.4..-18.0, as BODY_LAYOUT_PROPOSAL s2 measured the tub."""
+    bs = IF["battery_sled"]
+    xi0 = bs["bay_door_x"] + bs["door_t"]
+    xi1 = xi0 + bs["bay_l"]
+    yc, wi = bs["bay_centre"][1], bs["bay_w"] / 2
+    zi1 = bs["bay_top_z"] - bs["bay_roof"]
+    zi0 = zi1 - bs["bay_h"]
+    return {"x": (bs["bay_door_x"], xi1 + bs["bay_wall"]), "x_in": (xi0, xi1),
+            "y": (yc - wi - bs["bay_wall"], yc + wi + bs["bay_wall"]), "y_in": (yc - wi, yc + wi),
+            "z": (zi0 - bs["bay_floor"], bs["bay_top_z"]), "z_in": (zi0, zi1)}
 
 
 # ====================================================================== I3
@@ -130,8 +424,9 @@ LATCH_KEYWAY_DEG = 135.0
 LATCH_FLAT_R = 6.0                # leaves 2.7 of wall to the Ø6.6 bore at the flat
 # the carapace latch station (D030): each sector's latch pad over the deck's strike.
 # Worked from under the deck, so nothing may hang under a strike: station 162's sits
-# at body (-73.5, -12.3), inside the 175 x 50 battery bay's footprint (B84), and the
-# bay must leave that column open (a Ø5 driver + its hand) or that sector cannot come off
+# at body (-73.5, -12.3), inside the keel tub's plan (bay_tub_extent: x -97.5..101.9, y
+# -47.4..7.4 at bay_l 194; B84, B100), as do station 306's and the tray's (B126), and the tub must
+# leave those columns open (a Ø5 driver + its hand) or that sector cannot come off
 SHELL_LATCH_AZ, SHELL_LATCH_R = 27.5, 74.5
 
 

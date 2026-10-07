@@ -222,18 +222,18 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 2901.5,
+  "overhang_area": 2929.4,
   "widest_overhang_step": 32.9,
-  "widest_overhang_z": 9.5,
+  "widest_overhang_z": 9.7,
   "widest_cantilever": 32.9,
-  "widest_cantilever_z": 9.5,
+  "widest_cantilever_z": 9.7,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 6.63,
+  "thin_soft_area": 5.49,
   "hard": [],
   "warn": [
-   "overhang step 32.9 mm wide at z=9.5 (cantilever)",
-   "walls < 1.6 mm: 6.6 mm\u00b2 in a layer"
+   "overhang step 32.9 mm wide at z=9.7 (cantilever)",
+   "walls < 1.6 mm: 5.5 mm\u00b2 in a layer"
   ]
  },
  {
@@ -572,10 +572,10 @@
   "size": [
    190.2,
    180.9,
-   14.6
+   9.0
   ],
   "bed_ok": true,
-  "layers": 73,
+  "layers": 45,
   "bed_support_islands": [],
   "part_support_islands": 0,
   "supported_island_area": 0,
@@ -911,10 +911,10 @@
   "size": [
    46.0,
    54.0,
-   14.6
+   9.0
   ],
   "bed_ok": true,
-  "layers": 73,
+  "layers": 45,
   "bed_support_islands": [],
   "part_support_islands": 0,
   "supported_island_area": 0,
@@ -931,9 +931,9 @@
   "warn": []
  },
  {
-  "part": "port_coupon_plate",
+  "part": "port_coupon_plate_relief46",
   "size": [
-   46.0,
+   41.5,
    44.0,
    13.3
   ],
@@ -943,18 +943,95 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 1890.6,
-  "widest_overhang_step": 32.7,
-  "widest_overhang_z": 9.5,
-  "widest_cantilever": 32.7,
-  "widest_cantilever_z": 9.5,
+  "overhang_area": 1527.3,
+  "widest_overhang_step": 29.9,
+  "widest_overhang_z": 9.7,
+  "widest_cantilever": 29.9,
+  "widest_cantilever_z": 9.7,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 5.86,
+  "thin_soft_area": 0.83,
   "hard": [],
   "warn": [
-   "overhang step 32.7 mm wide at z=9.5 (cantilever)",
-   "walls < 1.6 mm: 5.9 mm\u00b2 in a layer"
+   "overhang step 29.9 mm wide at z=9.7 (cantilever)"
+  ]
+ },
+ {
+  "part": "port_coupon_plate_relief42",
+  "size": [
+   41.5,
+   44.0,
+   13.3
+  ],
+  "bed_ok": true,
+  "layers": 67,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1527.1,
+  "widest_overhang_step": 29.4,
+  "widest_overhang_z": 9.7,
+  "widest_cantilever": 29.4,
+  "widest_cantilever_z": 9.7,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.83,
+  "hard": [],
+  "warn": [
+   "overhang step 29.4 mm wide at z=9.7 (cantilever)"
+  ]
+ },
+ {
+  "part": "port_coupon_plate_fit10",
+  "size": [
+   41.5,
+   44.0,
+   13.3
+  ],
+  "bed_ok": true,
+  "layers": 67,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1524.6,
+  "widest_overhang_step": 29.8,
+  "widest_overhang_z": 9.7,
+  "widest_cantilever": 29.8,
+  "widest_cantilever_z": 9.7,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.83,
+  "hard": [],
+  "warn": [
+   "overhang step 29.8 mm wide at z=9.7 (cantilever)"
+  ]
+ },
+ {
+  "part": "port_coupon_plate_fit20",
+  "size": [
+   41.5,
+   44.0,
+   13.3
+  ],
+  "bed_ok": true,
+  "layers": 67,
+  "bed_support_islands": [],
+  "part_support_islands": 0,
+  "supported_island_area": 0,
+  "first_supported_island": null,
+  "overhang_area": 1521.8,
+  "widest_overhang_step": 29.6,
+  "widest_overhang_z": 9.7,
+  "widest_cantilever": 29.6,
+  "widest_cantilever_z": 9.7,
+  "thin_hard_area": 0.0,
+  "thin_hard_z": null,
+  "thin_soft_area": 0.83,
+  "hard": [],
+  "warn": [
+   "overhang step 29.6 mm wide at z=9.7 (cantilever)"
   ]
  },
  {
@@ -1010,7 +1087,7 @@
  {
   "part": "jig_column",
   "size": [
-   132.6,
+   127.0,
    84.0,
    128.0
   ],
@@ -1020,18 +1097,18 @@
   "part_support_islands": 0,
   "supported_island_area": 0,
   "first_supported_island": null,
-  "overhang_area": 9411.4,
+  "overhang_area": 9389.7,
   "widest_overhang_step": 21.3,
   "widest_overhang_z": 40.1,
   "widest_cantilever": 6.0,
-  "widest_cantilever_z": 58.1,
+  "widest_cantilever_z": 60.1,
   "thin_hard_area": 0.0,
   "thin_hard_z": null,
-  "thin_soft_area": 17.98,
+  "thin_soft_area": 4.8,
   "hard": [],
   "warn": [
    "overhang step 21.3 mm wide at z=40.1 (cantilever)",
-   "walls < 1.6 mm: 18.0 mm\u00b2 in a layer"
+   "walls < 1.6 mm: 4.8 mm\u00b2 in a layer"
   ]
  },
  {

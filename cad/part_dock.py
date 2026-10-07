@@ -14,9 +14,11 @@ a belly-door recess — simplest, print a new door insert then; (b) pogo
 pads on an I3 panel insert. Either mates the same tower.
 
 Geometry (body z, deck top -4, ground -118 at nominal stance h):
-  belly-bay floor ......... z -40  (deck -10 minus bay_h 30)
-  ground at stance ........ z -118 -> bay floor is 78 above ground
-  crouch 20 mm ............ bay floor 58 above ground = MATE height
+  belly-bay floor ......... z -43  (deck -10 minus bay_h 33; was 30 until 2026-10-07.
+                            STALE: option A's keel tub bottom is z -55.4, params
+                            interfaces.battery_sled.bay_top_z; B14 re-targets this)
+  ground at stance ........ z -118 -> bay floor is 75 above ground
+  crouch 20 mm ............ bay floor 55 above ground = MATE height
   tower plug face ......... 52 above plate (6 mm engagement + float)
 Feet at stance radius 185 never touch the 96-wide plate (fillet feet land
 outboard); checks below print every margin.

@@ -151,7 +151,7 @@ class ReflexSupervisor:
                  righter=None, fall_tilt_deg=60.0, fall_confirm_s=1.0,
                  handoff_tilt_deg=25.0, handoff_h=0.09, handoff_hold_s=0.5,
                  right_ramp_s=None, right_hold_s=0.5, fallen_max_s=None,
-                 stall_s=None, stall_tilt_deg=None,
+                 stall_s=None, stall_tilt_deg=None, righter_hip_min_deg=None,
                  trip_escalate_n=3, trip_escalate_s=5.0, cmd_accel=None, slew=True):
         # D052: a None kwarg comes from params.yaml `reflex:` (rocky_model.
         # reflex_defaults()); anything passed wins, so every existing caller
@@ -164,6 +164,11 @@ class ReflexSupervisor:
         fallen_max_s = d["fallen_max_s"] if fallen_max_s is None else fallen_max_s
         stall_s = d["stall_s"] if stall_s is None else stall_s
         stall_tilt_deg = d["stall_tilt_deg"] if stall_tilt_deg is None else stall_tilt_deg
+        # D064 (pick 13, B130): params reflex: carries the righter's hip clamp, and every
+        # reflex: key is a kwarg here (eval_recover passes **reflex_defaults()). Stored only:
+        # the clamp on legs 1-4's righter commands in FALLEN / RIGHTED lands with the belly
+        righter_hip_min_deg = d.get("righter_hip_min_deg") if righter_hip_min_deg is None \
+            else righter_hip_min_deg
         self.g = gait
         # D063 (B76 fix 1): every velocity reaches the gait through the slew;
         # slew=False passes commands straight through (the pre-D063 behaviour)
@@ -215,6 +220,7 @@ class ReflexSupervisor:
         # mode no checkpoint solves) 5/5 in the demo, the policy never does.
         self.stall_s = stall_s
         self.stall_tilt = stall_tilt_deg
+        self.righter_hip_min_deg = righter_hip_min_deg   # D064: not applied yet (see above)
         self._fallen_best = None
         self._fallen_best_t = None
         self.fall_count = 0
