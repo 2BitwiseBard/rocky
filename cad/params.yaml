@@ -372,20 +372,25 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
   battery_sled:          # I5 (bay VERIFY against the purchased 3S 5200 pack). Revised 2026-10-07
                          # (decision 11): the bay is a part now, option A's keel tub (bay_tub + bay_lid
                          # + bay_door, B84), east-west under the deck, nose (XT60) +x, door -x
-    bay_l: 194.0         # tub interior, door face to nose wall (was 175: sled 168 + travel, never a
-                         # part; 194 is the proposal's measured interior). PROVISIONAL: with the dock's
-                         # floating carrier printed into the nose wall (pick 4, no dock_block) the tub
-                         # comes out ~10 shorter at the nose; the bay agent owns this one key
+    bay_l: 192.0         # tub interior, door face to nose wall (was 175: sled 168 + travel, never a
+                         # part; 194 the proposal's, which laid sled and dock_block end to end with no
+                         # XT60 mate in between). 2026-10-07, pick 4 (the floating carrier printed into
+                         # the tub's nose, part_bay): the mate sets it. From the sled's nose face (x 74
+                         # docked): 0.5 to the carrier's mouth, the female 0.5 in, 16 deep (the sled's
+                         # male, glued 8.0 proud, telescopes 7.0 over it: VERIFY), 6.0 of lead bend
+                         # behind it, 0.3 to the nose wall: interior to 97.3 needed, 97.5 here (0.2 of
+                         # slack, part_bay asserts it). So the nose comes in 2.0 (101.9 -> 99.9), not
+                         # the ~10 the proposal estimated: the carrier's 22 replaces dock_block's 26, and
+                         # the XT60 pair's own 25 of mated length did not shrink
     bay_door_x: -97.5    # the tub's place in x (body x of the end door's OUTER face): the one number
                          # that pins it, because bay_centre is the pack's and the sled stack between
                          # them is part_battery's geometry, not params (the sled's 7 overhang + its 6
                          # tail lip put the sled's tail at -12 - 69 - 13 = -94.0, 0.5 short of the
-                         # interior's door face at -94.5; the nose end adds the XT60 nose and
-                         # dock_block, x 73 .. 99). The tub is then x bay_door_x ..
-                         # bay_door_x + door_t + bay_l + bay_wall (-97.5 .. 101.9 at bay_l 194; the
-                         # interior -94.5 .. 99.5); iface.bay_tub_extent() is that sum, the sim's belly
-                         # takes the same one. The DOOR end stays put: when bay_l is finalized (pick 4,
-                         # the carrier in the nose wall) the NOSE comes in (~101.9 -> ~91.9). Moving
+                         # interior's door face at -94.5: the door's press boss takes that 0.5 and
+                         # presses 0.5 more, part_bay). The tub is then x bay_door_x ..
+                         # bay_door_x + door_t + bay_l + bay_wall (-97.5 .. 99.9 at bay_l 192; the
+                         # interior -94.5 .. 97.5); iface.bay_tub_extent() is that sum, the sim's belly
+                         # takes the same one. The DOOR end stays put; bay_l moves the nose. Moving
                          # bay_centre or pack_l does NOT move this: re-pin it (the bay agent's key, with
                          # bay_l)
     bay_w: 50.0          # pick 8 (b): no strap inside the robot, so the sled's 48.8 keeps 0.6 a side.

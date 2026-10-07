@@ -80,7 +80,14 @@ FILL = {
     "coupon_cup": 0.7, "coupon_yaw_hub": 0.7, "coupon_hip_hub": 0.7, "coupon_idler": 0.7,
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
-    "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
+    "busboard_bracket": 0.6,
+    # the keel tub (part_bay, B84), weighted by feature at 0.4 nozzle / 0.2 layers / 4 top +
+    # 4 bottom / 25 % infill: its 2.4 walls are 6 perimeters (1.0, ~34 of its 71 cm^3), the
+    # 2.4 floor 1.6 solid + 0.8 infill (0.75, ~26), the rails solid, the latch boss and the
+    # carrier mostly infill (0.45-0.6, ~5): 0.87 -> 0.85. The lid: a 2.0 plate (0.85) + Ø8
+    # bosses (~1.0). The door: a 3 mm plate (0.65) + its 6 mm ear: 0.7. The proposal's 56 g
+    # "at fill 0.5" for tub + door counted a part that is nearly all wall as half infill
+    "bay_tub": 0.85, "bay_lid": 0.85, "bay_door": 0.7,
     "shell_sector": 0.6, "shell_cap": 0.6,
     # bench
     "stand_base": 0.4, "stand_section": 0.4, "stand_crown": 0.4,
@@ -102,12 +109,12 @@ PLATES = {
     "Batch 2 one leg": [("coxa_yaw_base", 1, 0.2)] + [(n, q, 0.2) for n, q in _ONE_LEG] + [
         ("servo_blank", 3, 0.2), ("blank_idler", 3, 0.2),
     ],
-    # tray_rail waits for B51, battery_sled + sled_rail for the bay (B84); they stay priced
-    # here as the batch's budget. The 8 thumb_knob_m3 of this batch are not priced.
+    # tray_rail waits for B51; the bay is part_bay's three parts (B84; sled_rail retired into
+    # the tub). The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
         ("busboard_bracket", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
-        ("battery_sled", 1, 0.2), ("sled_rail", 2, 0.2),
+        ("battery_sled", 1, 0.2), ("bay_tub", 1, 0.2), ("bay_lid", 1, 0.2), ("bay_door", 1, 0.2),
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
     "Deferred: bench jig": [("jig_base", 1, 0.3), ("jig_column", 1, 0.3)],

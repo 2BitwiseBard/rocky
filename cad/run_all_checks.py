@@ -60,7 +60,7 @@ from concurrent.futures import ThreadPoolExecutor
 MODULES = [
     "servo_st3215", "servo_mount", "part_port_coupon",
     "part_coxa", "part_femur", "part_tibia", "part_hand", "part_deck",
-    "part_panel", "part_battery", "part_avionics", "part_bench_jig",
+    "part_panel", "part_battery", "part_bay", "part_avionics", "part_bench_jig",
     "part_coupler", "part_footpad", "part_fit_ladder", "part_smallwins",
     "part_shell", "part_busboard", "part_stand", "part_tools",
     "part_clips", "part_dock", "part_servo_blank",
