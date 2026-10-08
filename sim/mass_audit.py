@@ -105,8 +105,23 @@ LIDAR_BOX = (54.0, 46.3, 35.0)                 # D500 (STL-19P datasheet, VERIFY
 # the task's / proposal's estimates (BODY_LAYOUT_PROPOSAL s2: tub + door 56 g at fill 0.5;
 # lid ~20, shelf ~25); the poses are the params boxes. PROVISIONAL: never final numbers.
 PROVISIONAL_G = {"bay_tub": 52.0, "bay_door": 4.0, "bay_lid": 20.0, "hub_shelf": 25.0}
-NEW_BODY_FRAME_PARTS = tuple(PROVISIONAL_G)    # exported POSED in the body frame (as part_shell
-                                               # does); the audit checks their centroid lands there
+NEW_BODY_FRAME_PARTS = tuple(PROVISIONAL_G)    # the audit checks each centroid lands in its params box
+
+
+def _ry(deg):
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    return np.array([[c, 0.0, s], [0.0, 1.0, 0.0], [-s, 0.0, c]])
+
+
+# each new part's export frame -> the body frame (read from the module that exports it): bay_tub and
+# bay_lid are exported in the body frame (part_bay: their print poses ARE it, the tub open top up,
+# the lid's roof down), bay_door lying on its outer face (part_bay.DOOR_PRINT = Pos(0, 0, -bay_door_x)
+# * Rot(0, -90, 0), so body = Ry(+90) p + (bay_door_x, 0, 0)), hub_shelf in the body frame
+# (part_busboard: plate down, its print pose)
+NEW_PART_POSE = {"bay_tub": (None, (0.0, 0.0, 0.0)), "bay_lid": (None, (0.0, 0.0, 0.0)),
+                 "bay_door": (_ry(90.0), (float(BS["bay_door_x"]), 0.0, 0.0)),
+                 "hub_shelf": (None, (0.0, 0.0, 0.0))}
 
 
 def printed_g(name, material=PLA):
@@ -226,7 +241,7 @@ def stl_item(name, stem, rho, tfs, src="STL", note="", expect=None):
     """A printed part from its STL: mass = volume x rho x FILL (the old rule, per copy),
     centroid and inertia from the mesh at uniform density, one copy per transform.
     expect: a ((x0, x1), (y0, y1), (z0, z1)) box its body-frame centroid must fall in
-    (the new parts are exported posed: a print-frame STL would land elsewhere)."""
+    (the new parts are posed by NEW_PART_POSE: a wrong pose lands elsewhere)."""
     path = os.path.join(OUT, f"{stem}.stl")
     if not os.path.exists(path):
         raise MissingSTL(stem)
@@ -323,7 +338,9 @@ def torso_items(allow_missing=False):
               "hub_shelf": tuple(rm.hub_shelf_extent_mm()[k] for k in "xyz")}
     for stem in NEW_BODY_FRAME_PARTS:
         try:
-            items.append(stl_item(stem, stem, PLA, [tf()], note="body frame", expect=expect[stem]))
+            R, t = NEW_PART_POSE[stem]
+            items.append(stl_item(stem, stem, PLA, [tf(R, t)], expect=expect[stem],
+                                  note="body frame" if R is None else "print frame -> body (DOOR_PRINT)"))
         except MissingSTL:
             if not allow_missing:
                 raise

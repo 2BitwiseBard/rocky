@@ -36,11 +36,14 @@ Four things the proposal's cradle did not have (2026-10-07, measured here):
     lower, so the floor is the only face the tub rests on and the hub
     shelf's face-down boards (bottom_z -54.4) keep 4.00 to the plate, not
     1.00 (B134: that 1.00 goes with +1.0 of plate height or a 1.42 deg
-    roll, and the cradle's walls allow 2.00 with the pin, 2.49 without).
-    Relieved, +1.0 leaves 3.00 and the shelf would need 5.68 deg north (2.79
-    south, the pin's play taken): the walls stop every roll first. The shelf's nearest crown face is now the north
-    wall's outside, 1.30 beside it (1.00 slid by the pin's play, 0.87 after
-    a knock south, 1.04 at the north wall's give under B134's CoM).
+    roll, and the cradle's walls allow 2.37 with the pin's play, 2.49
+    without). Relieved, +1.0 leaves 3.00 and the real shelf would need 6.06
+    deg north (2.04 south, the pin's play taken): the walls stop every roll
+    first. The shelf's nearest crown face is now the north wall's outside,
+    1.30 beside it (0.85 slid by the pin's 0.45 of play, 0.77 after a knock
+    south, 1.00 at the north wall's give under B134's CoM). Measured
+    2026-10-07 on part_bay's tub (its Ø6.3 x-stop hole) and part_busboard's
+    shelf; the params boxes gave 2.00 / 5.68 / 2.79 / 1.00 / 0.87 / 1.04.
   * the SOUTH WALL'S ENDS stop at x +-40.5: at +-45 its outer corners ran
     into legs 2 / 3's drops + 5 (iface.leg_drop_keepout(5): 35 + 5 deep,
     which the 25 walls reach). _wall_x derives the end from the keep-out.
@@ -48,16 +51,22 @@ Four things the proposal's cradle did not have (2026-10-07, measured here):
     the tub goes into its 0.5 slot unseen.
 
 Checks (__main__, the robot posed in the cradle in the body frame): crown
-x tub (+ bosses, latch pad, hole), shelf, deck, docked bases, hook
+x the REAL tub (part_bay.bay_assembly: tub + lid + door, bosses, latch boss,
+pilasters, the x-stop hole), the REAL shelf (part_busboard.shelf_model:
+plate, posts, the boards with their halos), deck, docked bases, hook
 envelopes 'any', drops + 5, lanes, carapace, sled path, both tub ends =
 0 mm^3 with the gaps; registration (tub +-1 in y binds on the walls, +-1 in
-x on the pin, 0 free); the pin's play and engagement; the shelf margin at
+x on the pin, 0 free); the pin's play in part_bay's hole and its
+engagement; the shelf margin at
 +1.0 of plate height (either plate) and the roll the cradle allows (both
 ways) vs the roll that closes it; the north wall as the tipping stop B134's
 CoM offset makes it (load, stress, give: an ESTIMATE); the heights; the
 legs' reach (below the deck, and on the stand into the tub, the cradle and
 the stand's column); the stack joints (aligned slides, 36 deg misaligned
 registers, 0.1 low binds); bed fit, print orientation.
+
+stand_keepouts() gives the crown in the body frame to part_busboard and part_bay (the relieved
+plate, the floor, the walls, the pin), so they check against the real cradle, not params boxes.
 """
 import numpy as np
 from build123d import *
@@ -93,8 +102,6 @@ WALL_DROP_GAP = 0.5              # ... by this much at a wall's end
 PIN_CHAMFER = 0.3                # the x stop's lead-in (45 deg) at its tip
 WALL_LEAD_IN = 2.0               # 45-deg chamfer on each wall's inner top edge: with the carapace on
                                  # the tub goes into its 0.5 slot unseen, so the walls catch it +-2.5
-LATCH_PAD = (14.6, 14.6, 6.5)    # the door latch's strike boss, y x z x along-x (proposal s2:
-                                 # 'outside the south wall, x -94.5 .. -88', pick 12; part_bay's)
 HAND_SOLE = 165.2                # the B95 hand on the shortest tube: sole below the knee axis
                                  # (PREP_REPORT_2, B131; one agent, unverified)
 COM_PAST_EDGE = 17.0             # B134: joint-box poses put the CoM 15-17 north of the tub's
@@ -256,41 +263,40 @@ def to_body(s):
 
 
 def tub_model(dx=0.0, dy=0.0):
-    """The keel tub as the stand meets it, body frame, shifted (dx, dy). part_bay builds the real
-    one; this is params + the proposal: bay_tub_extent()'s outer box (the door_t door at -x
-    included), the nose's two 45-deg nose_chamfer plan chamfers, the door latch's strike boss
-    (LATCH_PAD outside the south wall from the door's inner face; set at the tub's bottom, the
-    nearest the cradle could be), the six Ø TUB_BOSS_D lid bosses from the roof top to the deck
-    bottom at part_deck.DECK_HOLES' hanger xy, and the x stop's blind hole in the floor."""
-    from part_deck import DECK_HOLES, TUB_BOSS_D
-    (x0, x1), (y0, y1), (z0, z1) = TUB["x"], TUB["y"], TUB["z"]
-    tub = _box(x0, x1, y0, y1, z0, z1)
-    c = BS["nose_chamfer"]
-    for yc, sy in ((y0, 1), (y1, -1)):                    # the corner beyond the 45-deg line
-        tri = make_face(Polyline((x1 - c - 1, yc - sy, z0 - 1), (x1 + 1, yc - sy, z0 - 1),
-                                 (x1 + 1, yc + sy * (c + 1), z0 - 1), close=True))
-        tub -= extrude(tri, amount=z1 - z0 + 2, dir=(0, 0, 1))
-    ly, lz, lx = LATCH_PAD
-    tub += _box(TUB["x_in"][0], TUB["x_in"][0] + lx, y0 - ly, y0 + 0.5, z0, z0 + lz)
-    for name, (bx, by), *_ in DECK_HOLES:
-        if name.startswith(("tray_tab_tub_", "tub_hanger_")):
-            tub += Pos(bx, by, (z1 - 0.5 + DECK_BOT_Z) / 2) * Cylinder(TUB_BOSS_D / 2, DECK_BOT_Z - z1 + 0.5)
-    hx, hy = ST["xstop_xy"]
-    hd = ST["xstop_hole_depth"]
-    tub -= Pos(hx, hy, z0 + (hd - 1.0) / 2) * Cylinder(ST["xstop_pin_d"] / 2, hd + 1.0)
-    return Pos(dx, dy, 0) * tub
+    """The keel tub as the stand meets it, body frame, shifted (dx, dy): part_bay's real one
+    (bay_tub + bay_lid + bay_door fused, part_bay.bay_assembly: the latch boss and the door's
+    ear, the pilasters, the six lid bosses, the x stop's blind hole, the riser clip). It replaced
+    the params box + the proposal's latch pad on 2026-10-07 (the wiring round)."""
+    import part_bay as PBY                               # local: part_bay imports this module
+    return Pos(dx, dy, 0) * PBY.bay_assembly()
 
 
 def shelf_model():
-    """The hub shelf as params hub_shelf gives it (part_busboard builds the real one), body frame:
-    its plan box (the plate as packed + the five boards' footprints and plug / lead halos) from
-    bottom_z (the face-down adapter's pins) to plate_top_z, and a Ø14 pad round each post from
-    bottom_z to the deck bottom (post, screw head from below)."""
-    (x0, x1), (y0, y1) = HS["x"], HS["y"]
-    s = _box(x0, x1, y0, y1, HS["bottom_z"], HS["plate_top_z"])
-    for px, py in HS["posts"]:
-        s += Pos(px, py, (HS["bottom_z"] + DECK_BOT_Z) / 2) * Cylinder(7.0, DECK_BOT_Z - HS["bottom_z"])
-    return s
+    """The hub shelf as part_busboard builds it, body frame: plate + posts + pads + standoffs,
+    the five boards with their plug / lead halos, the adapter's spacers and heads, the flush M3
+    heads, the ties (part_busboard.shelf_model, one fused solid). It replaced params hub_shelf's
+    box + Ø14 pad columns on 2026-10-07."""
+    import part_busboard as BB                           # local: part_busboard imports this module
+    return BB.shelf_model()
+
+
+def stand_keepouts(relief=PLATE_RELIEF):
+    """The crown in the BODY frame, the robot standing in it by its tub (for part_busboard and
+    part_bay): {'crown plate' (the seat ring, the skirt and the relieved plate: what is under the
+    shelf), 'cradle floor', 'cradle walls' (south + north), 'x-stop pin', 'crown' (all of it)}."""
+    p = cradle_parts(relief)
+    return {"crown plate": to_body(p["skirt"] + p["seat"] + p["plate"]),
+            "cradle floor": to_body(p["floor"]),
+            "cradle walls": to_body(p["walls"][0] + p["walls"][1]),
+            "x-stop pin": to_body(p["pin"]),
+            "crown": to_body(stand_crown(relief))}
+
+
+def xstop_play():
+    """The pin's radial play in the tub's hole, as built: part_bay's hole (Ø xstop_pin_d + FIT)
+    against this pin (Ø xstop_pin_d - 2 FIT): 0.45. The proposal's Ø6.0 hole gave 0.30."""
+    import part_bay as PBY
+    return PBY.XSTOP_D / 2 - (ST["xstop_pin_d"] / 2 - FIT)
 
 
 def lane_models():
@@ -478,10 +484,11 @@ if __name__ == "__main__":
     (tx0, tx1), (ty0, ty1), (tz0, tz1) = TUB["x"], TUB["y"], TUB["z"]
     xi, yi, zi = TUB["x_in"], TUB["y_in"], TUB["z_in"]
     sled_path = _box(xi[0] - 200.0, xi[1], yi[0], yi[1], zi[0], zi[1])    # the sled out -x, door off
-    ey0 = ty0 - LATCH_PAD[0]
+    tbb = tub.bounding_box()
+    ey0 = tbb.min.Y                                      # the latch boss's ear, south of the wall
     ends = [_box(tx0 - 10.0, tx0, ey0, ty1, tz0, tz1), _box(tx1, tx1 + 10.0, ey0, ty1, tz0, tz1)]
-    groups = [("tub (+ lid bosses, latch pad, x-stop hole)", [tub]),
-              ("hub shelf (params box + Ø14 post pads)", [shelf]),
+    groups = [("tub + lid + door (part_bay, as built: bosses, latch boss, pilasters, x-stop hole)", [tub]),
+              ("hub shelf (part_busboard.shelf_model, as built: plate, posts, boards + halos)", [shelf]),
               ("deck (body_deck at z -10..-4)", [deck]),
               ("docked coxa bases x5", bases),
               ("hook envelopes 'any' x5", ko5["hooks"]),
@@ -502,9 +509,11 @@ if __name__ == "__main__":
     g_plate = to_body(cp["plate"]).distance_to(shelf)
     print(f"    the walls to the tub {g_w:.3f} ({verdict(abs(g_w - ST['tub_clear']) < 1e-3)}: tub_clear "
           f"{ST['tub_clear']}); the pin to the tub {g_pin:.3f}; the floor carries it (touching)")
-    print(f"    the shelf: {g_plate:.3f} to the relieved plate (face-down boards at {HS['bottom_z']}), "
-          f"{g_sw:.3f} to the north wall's outer face (the shelf box from y {HS['y'][0]}), "
-          f"{g_sw - FIT:.2f} with the robot slid south by the pin's play: wall_t may grow that much")
+    play = xstop_play()
+    sbb = shelf.bounding_box()
+    print(f"    the shelf: {g_plate:.3f} to the relieved plate (face-down boards down to z {sbb.min.Z:.2f}), "
+          f"{g_sw:.3f} to the north wall's outer face (the shelf's south face at y {sbb.min.Y:.2f}), "
+          f"{g_sw - play:.2f} with the robot slid south by the pin's play ({play:.2f}): wall_t may grow that much")
     g_d5 = min(w.distance_to(d) for w in walls for d in ko5["drops"])
     print(f"    the south wall's ends x {sx[0]:.1f} / {sx[1]:.1f} to legs 2 / 3's drops + {DROP_EXTRA:.0f}: "
           f"{g_d5:.3f} ({verdict(g_d5 >= WALL_DROP_GAP - 1e-3)}; at x +-{ST['cradle_x'][1]:.0f} they ran in)")
@@ -521,7 +530,6 @@ if __name__ == "__main__":
             (dy != 0 and vw > 1e-3)
         print(f"    ({dx:+d}, {dy:+d}): walls {vw:8.2f}, pin {vp:6.2f} mm^3 "
               f"({verdict(want, 'FREE' if dx == dy == 0 else 'BINDS', 'WRONG')})")
-    play = FIT
     for d in (play - 0.05, play + 0.05):
         vx = max(_vol(pin, tub_model(s * d, 0)) for s in (1, -1))
         vy = max(_vol(pin, tub_model(0, s * d)) for s in (1, -1))
@@ -529,11 +537,14 @@ if __name__ == "__main__":
         print(f"    +-{d:.2f} on the pin: x {vx:.4f}, y {vy:.4f} mm^3 "
               f"({verdict(good, 'free' if d < play else 'binds')})")
     h_pin = ST["xstop_hole_depth"] - FIT
-    print(f"    the x stop: Ø{ST['xstop_pin_d'] - 2 * FIT:.1f} x {h_pin:.1f} pin in the tub's "
-          f"Ø{ST['xstop_pin_d']:.1f} x {ST['xstop_hole_depth']:.1f} hole: play +-{play:.2f} in x and y "
-          f"(the walls allow +-{ST['tub_clear']:.2f}), engaged {h_pin:.1f} ({h_pin - PIN_CHAMFER:.1f} "
-          f"straight + {PIN_CHAMFER} lead-in), tip {ST['xstop_hole_depth'] - h_pin:.1f} under the ceiling; "
-          f"it holds x until the robot is lifted {h_pin - PIN_CHAMFER:.1f}, then the lead-in cams it out")
+    import part_bay as PBY
+    hold = h_pin - PIN_CHAMFER - PBY.XSTOP_MOUTH
+    print(f"    the x stop: Ø{ST['xstop_pin_d'] - 2 * FIT:.1f} x {h_pin:.1f} pin in part_bay's "
+          f"Ø{PBY.XSTOP_D:.2f} x {ST['xstop_hole_depth']:.1f} hole (mouth chamfer {PBY.XSTOP_MOUTH:.1f}): play "
+          f"+-{play:.2f} in x and y (the walls allow +-{ST['tub_clear']:.2f}), engaged {h_pin:.1f} "
+          f"({h_pin - PIN_CHAMFER:.1f} straight + {PIN_CHAMFER} lead-in), tip {ST['xstop_hole_depth'] - h_pin:.1f} "
+          f"under the ceiling; it holds x until the robot is lifted {hold:.1f}, then the lead-in cams it out "
+          f"({verdict(play < ST['tub_clear'] - 1e-6, 'OK: the pin stops x and y before the walls', 'the walls first')})")
 
     # ---- the shelf margin at +1.0 of plate height (B134), either plate
     crown_full = to_body(stand_crown(relief=0.0))

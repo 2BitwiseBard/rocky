@@ -26,13 +26,29 @@ The lid-to-tub joint (the proposal left it open): north, the north wall's top re
 the lid's north edge (the tub goes on shifted 1.6 north, rises to the lid, slides 1.6 south
 under it); south, one M3 x 10 from below in each pilaster (a Ø6.4 bore up from the belly to
 its seat) through the lid's tab into a heat-set insert in its boss. Nothing outside the north
-wall takes a screw: between the hub shelf (y >= 12.2), the leg 1/4 hook envelopes and their
-drops there is no room for one (measured below, 'why no north screw').
+wall takes a screw: between the hub shelf (y >= 12.2), the leg 2 loom's cross run, lanes A, the
+leg 1/4 hook envelopes and their drops there is no room for one (measured below, 'why no north
+screw').
 
 B126: three under-deck turn points sit inside the tub's plan, carapace latches 162 and 306 and
 the tray's latch strike at (0, -43). Each gets a Ø6 driver column through the floor and the
 roof (a 1.0 notch in the south wall's inner face at (0, -43), the south rail broken there). The
 interior between is the SLED's: those three latches are turned with the sled OUT.
+
+The wiring round (2026-10-07, the cross-part requests of the shelf and the stand):
+  B133    the 14 AWG feed (part_busboard.awg_route) leaves through a Ø5.5 exit in the NE nose
+          chamfer's middle, on the feed's axis just over the floor, and its riser is held by a
+          snap clip on the north wall's outside (x 55.5..62.8, z -44..-38, on a 45-deg wedge).
+          Under leg 4's drop nothing can hold it: the window between the tub's bottom and the drop
+          + 5's floor is 5.4 for a Ø5 (measured: a tie would stand 1.0 into one or under the other)
+  looms   a tie bar (a rod from the boss to a post) beside each (+-40, 0) lid boss, 1.00 off lane
+          A: the leg 2 / 3 looms' tie points the shelf cannot give
+  stand   the x-stop hole is Ø6.3 x 1.5 at (0, -20), sharp-mouthed (the pin's 0.45 of play takes
+          the elephant foot), the floor 2.4 there; the checks pose part_stand's REAL crown
+          (stand_keepouts) and part_busboard's REAL shelf (shelf_model), not params boxes; the door
+          latch's driver path, the door's and the sled's way out are measured ON the stand, with
+          the legs at stance (the owner was promised the sled swaps on the stand)
+bay_assembly() is the fused tub + lid + door the stand and the shelf check against.
 
 Every check prints, and the module exits non-zero on a failure (the CAD tree's CI).
 """
@@ -42,6 +58,7 @@ from common import params, export
 from iface import (IF, bay_tub_extent, body_keepouts, latch_strike, latch_pocket, station_tf,
                    STATIONS, DECK_BOT_Z, SHELL_LATCH_AZ, SHELL_LATCH_R, LATCH_REACH)
 import part_battery as PB
+import part_busboard as BB                       # the 14 AWG feed's route (B133) and the real shelf
 from part_deck import DECK_HOLES, TUB_BOSS_D     # the deck's hole audit holds the bosses on this plan
 
 P = params()
@@ -130,6 +147,47 @@ LANE_SKIP = 1.0                         # the north return stops this far from t
 
 # ---- B126: the three under-deck turn points inside the tub's plan, worked with the sled OUT
 COL_D = 6.0                             # a Ø5 flat screwdriver + 0.5 a side
+
+# ---- the stand's x stop (params stand, part_stand's pin Ø xstop_pin_d - 2 FIT = 5.4): the blind
+# hole in the belly. Ø pin_d + FIT = 6.3 (0.45 of radial play round the pin, under the walls' 0.5),
+# xstop_hole_depth deep, a sharp mouth: the play takes the bed face's ~0.15 elephant foot (the fit
+# ladder's figure), and a chamfer would eat the pin's 0.9 of straight engagement mm for mm
+XSTOP_D = ST["xstop_pin_d"] + FIT
+XSTOP_MOUTH = 0.0                       # the mouth chamfer (<= 0.3 allowed: part_stand)
+
+# ---- B133: the 14 AWG feed (part_busboard.awg_route, the shelf's route: out of the nose
+# compartment through the NE nose chamfer just over the floor, under leg 4's drop, up a riser to
+# the node). The tub carries its exit and a clip for the riser. Under the drop it can carry
+# nothing: the window between the tub's bottom (-55.4) and the drop + 5's floor (-50.0) is 5.4
+# for a Ø5, and a band or a jaw round it needs >= 0.8 more above or below (measured below)
+AWG_R = BB.AWG_R                        # the Ø5 envelope (14 AWG silicone pair + sleeve)
+_AWG_PTS, AWG_INFO = BB.awg_route()
+AWG_HOLE_D = 2 * AWG_R + 0.5            # Ø5.5: 0.25 round the feed
+AWG_Z = AWG_INFO["z_0"]                 # -50.5: on the feed's axis (concentric), its bottom 2.15 over
+                                        # the tub's bottom, its own bottom 0.25 under the floor's top
+NE_N = np.array([1.0, 1.0]) / R2        # the NE chamfer's outward normal
+AWG_OUT = np.array([XN - CHAMF / 2, YO1 - CHAMF / 2])   # the hole's centre on the chamfer's outer face
+CLIP_XY = (AWG_INFO["x_r"], AWG_INFO["y_c"])            # the riser's axis (59.15, 10.3)
+CLIP_BORE = AWG_R + 0.15                # Ø5.3 round the riser
+CLIP_T = 1.0                            # the jaws: PETG, bent in the layer plane
+CLIP_MOUTH = 4.2                        # the riser snaps in from the north: the jaws spread 0.4 a side
+CLIP_Z = (-44.0, -38.0)                 # on the riser's vertical run, below the shelf plate's -39.3
+                                        # beside it in plan; its 45-deg wedge reaches the wall at -50.55
+                                        # and keeps 1.07 off the feed's horizontal run under it
+
+# ---- the leg 2 / 3 looms' tie bars (the shelf agent's request: nothing on the shelf stands at the
+# looms' height): beside each (+-40, 0) lid boss a rod from the boss to a post, the zip tie's slot
+# the opening under it. Lane A's 1.00 to the bosses is kept (the rod's outer face 1.00 off it);
+# over and under the loom there is no room outside the lane (the lane's top IS the deck bottom,
+# its floor 1.0 over the roof), so the tie wraps the loom inside the lane and the rod beside it
+LANE_A_X0 = min(abs(v) for v in HS["lanes"]["route"][0][0])     # 45: lane A's inboard face
+LT_ROD_X = (LANE_A_X0 - 1.0 - 2.0, LANE_A_X0 - 1.0)            # 42 .. 44 (+x; mirrored)
+LT_ROD_Z = (-15.6, -13.2)               # the band under it (1.2) clears the roof top by 1.2, over it
+                                        # the deck by 2.0
+LT_ROD_Y = (-10.6, -2.5)                # from the post's south face into the boss
+LT_POST = ((LANE_A_X0 - 4.0, LANE_A_X0 - 1.0), (-10.6, -9.0))   # x, y: 3.0 x 1.6, on the roof
+LT_BAND = (-8.2, -4.6)                  # the 3.6 tie's y in the opening (5.08 .. 5.54 between the
+                                        # post and the boss's round face, measured in the checks)
 
 
 def _latch_xy(i):
@@ -258,6 +316,60 @@ def carrier_frame():
     return frame, webs
 
 
+# ====================================================================== B133: the feed's exit + clip
+def awg_hole(extra=0.0):
+    """The Ø AWG_HOLE_D (+ 2 extra) exit through the NE nose chamfer at its middle, on the
+    chamfer's normal at AWG_Z: from 1.0 outside the outer face to 0.2 inside the inner face (no
+    notch in the interior floor beyond it). extra > 0 gives the ring the wall must hold round it."""
+    mid = AWG_OUT - NE_N * WALL / 2                     # the wall's mid-plane on the hole's axis
+    c, L = (mid + NE_N * (1.0 - 0.2) / 2, WALL + 1.2) if extra == 0 else (mid, WALL - 0.02)
+    return Location(Plane(origin=(c[0], c[1], AWG_Z), z_dir=(NE_N[0], NE_N[1], 0))) * \
+        Cylinder(AWG_HOLE_D / 2 + extra, L)
+
+
+def riser_clip():
+    """The riser's snap clip on the north wall's outside: a ring (Ø CLIP_BORE x 2 bore, CLIP_T
+    jaws) round the riser's axis, open CLIP_MOUTH wide to the north, CLIP_Z tall, fused into the
+    wall (the riser runs 0.4 off its face), on a 45-deg wedge down to the wall so it prints with
+    no support (as the pilasters). The bore runs through the wedge: the riser passes down it."""
+    cx, cy = CLIP_XY
+    ro = CLIP_BORE + CLIP_T
+    z0, z1 = CLIP_Z
+    foot = Pos(cx, cy) * (Circle(ro) - Circle(CLIP_BORE))
+    foot -= Pos(cx, cy + (ro + 1.0) / 2) * Rectangle(CLIP_MOUTH, ro + 1.0)
+    clip = Pos(0, 0, z0) * extrude(foot, z1 - z0)
+    reach = cy + ro - YO1
+    wedge = Pos(0, 0, z0 - reach - 0.01) * extrude(foot, reach + 0.02)
+    keep = Location(Plane(origin=(cx, YO1, z0 - reach), z_dir=(0, -1, 1))) * Pos(0, 0, 25) * Box(40, 60, 50)
+    return clip + (wedge & keep)
+
+
+def loom_tie_bars():
+    """Beside each (+-40, 0) lid boss: a post on the roof and a rod from it into the boss, LT_ROD_X
+    off the boss's axis side facing lane A; a zip tie round the lane's loom passes under, behind
+    and over the rod."""
+    out = []
+    for sx in (1, -1):
+        xr = sorted((sx * LT_ROD_X[0], sx * LT_ROD_X[1]))
+        xp = sorted((sx * LT_POST[0][0], sx * LT_POST[0][1]))
+        out.append(_box(*xr, *LT_ROD_Y, *LT_ROD_Z))
+        out.append(_box(*xp, *LT_POST[1], ZT - 0.01, LT_ROD_Z[1]))
+    return out
+
+
+def loom_tie_bands():
+    """The ties' bands outside lane A (keep-outs for the checks): behind the rod (west of it on
+    +x), under it and over it, out to the lane's face; the 3.6 band at LT_BAND in y."""
+    out = []
+    t = 1.2
+    for sx in (1, -1):
+        xa, xb = LT_ROD_X[0] - t, LANE_A_X0
+        zb, zt = LT_ROD_Z[0] - t, LT_ROD_Z[1] + t
+        for x0, x1, z0, z1 in ((xa, LT_ROD_X[0], zb, zt), (xa, xb, zb, LT_ROD_Z[0]), (xa, xb, LT_ROD_Z[1], zt)):
+            out.append(_box(*sorted((sx * x0, sx * x1)), *LT_BAND, z0, z1))
+    return out
+
+
 # ====================================================================== bay_tub
 def _strike_tf():
     """The I3 latch frame at the door end (z 0 = the seating plane at LB_X0, +z toward the door,
@@ -343,9 +455,26 @@ def bay_tub():
         tub -= c
     # the stand's x stop (params stand): a blind hole in the belly for the cradle's pin
     sx, sy = ST["xstop_xy"]
-    d = ST["xstop_pin_d"] + FIT
-    tub -= Pos(sx, sy, ZB + (ST["xstop_hole_depth"] - 0.02) / 2 - 0.01) * Cylinder(d / 2, ST["xstop_hole_depth"] + 0.02)
+    hd = ST["xstop_hole_depth"]                  # from 0.02 under the belly to exactly hd deep (it was 1.49)
+    tub -= Pos(sx, sy, ZB + hd / 2 - 0.01) * Cylinder(XSTOP_D / 2, hd + 0.02)
+    if XSTOP_MOUTH > 0:
+        tub -= Pos(sx, sy, ZB - 0.01) * Cone(XSTOP_D / 2 + XSTOP_MOUTH + 0.01, XSTOP_D / 2, XSTOP_MOUTH + 0.01,
+                                             align=(Align.CENTER, Align.CENTER, Align.MIN))
+    # B133: the 14 AWG feed's exit through the NE nose chamfer, and the clip that holds its riser
+    tub -= awg_hole()
+    tub += riser_clip()
     return tub
+
+
+_ASSY = {}
+
+
+def bay_assembly():
+    """bay_tub + bay_lid + bay_door, the door closed, fused in the body frame: what part_stand and
+    part_busboard check the cradle and the shelf against. Cached (build123d never mutates it)."""
+    if "a" not in _ASSY:
+        _ASSY["a"] = bay_tub() + bay_lid() + bay_door()
+    return _ASSY["a"]
 
 
 # ====================================================================== bay_lid
@@ -366,6 +495,9 @@ def bay_lid():
         lid -= Pos(x, y, ZR + hh / 2 - 0.01) * Cylinder(hd / 2, hh)
     for c in _turn_columns():
         lid -= c
+    # the leg 2 / 3 looms' tie bars beside the (+-40, 0) bosses (lane A's tie points)
+    for b in loom_tie_bars():
+        lid += b
     return lid
 
 
@@ -424,28 +556,43 @@ def stance_leg_moving(yaw_deg):
 _LEG_PARTS = {}
 
 
-def cradle_box():
-    """params stand: the U-cradle's floor under the tub (x cradle_x, 3 thick: ESTIMATE), its two
-    walls wall_h tall at tub_clear off the tub's sides, and the x-stop pin (FIT shorter than its
-    hole is deep)."""
-    x0, x1 = ST["cradle_x"]
-    g, t, h = ST["tub_clear"], ST["wall_t"], ST["wall_h"]
-    out = [_box(x0, x1, YO0 - g - t, YO1 + g + t, ZB - 3.0, ZB),
-           _box(x0, x1, YO1 + g, YO1 + g + t, ZB, ZB + h),
-           _box(x0, x1, YO0 - g - t, YO0 - g, ZB, ZB + h)]
-    px, py = ST["xstop_xy"]
-    ph = ST["xstop_hole_depth"] - FIT
-    out.append(Pos(px, py, ZB + ph / 2 - 0.01) * Cylinder(ST["xstop_pin_d"] / 2, ph + 0.02))
-    return out
+def stand_keepouts():
+    """The stand as part_stand builds it, posed in the body frame with the robot in it
+    (part_stand.stand_keepouts: 'crown plate', 'cradle floor', 'cradle walls', 'x-stop pin',
+    'crown'). It replaced params stand's boxes on 2026-10-07."""
+    from part_stand import stand_keepouts as sk          # local: part_stand imports this module
+    return sk()
 
 
-def shelf_box():
-    """params hub_shelf: its plan envelope from bottom_z to the deck bottom, + Ø14 pads at the posts."""
-    (x0, x1), (y0, y1) = HS["x"], HS["y"]
-    out = [_box(x0, x1, y0, y1, HS["bottom_z"], DECK_BOT_Z)]
-    for px, py in HS["posts"]:
-        out.append(Pos(px, py, (HS["bottom_z"] + DECK_BOT_Z) / 2) * Cylinder(7.0, DECK_BOT_Z - HS["bottom_z"]))
-    return out
+def latch_driver(L, d=5.0):
+    """The door latch's driver (pick 12): a Ø d straight blade from the rotor's slot (x -85.7,
+    facing +x) L along +x, beside the south wall (y -56.05, z -48.05)."""
+    return _strike_tf() * Pos(0, 0, -LATCH_REACH - L / 2 - 0.3) * Cylinder(d / 2, L)
+
+
+def stance_legs(yaws=range(-40, 41, 10)):
+    """{yaw: [the moving leg solids at the stance pose, yawed, at all five stations, body frame]}."""
+    return {y: [station_tf(i) * s for i in range(len(STATIONS)) for s in stance_leg_moving(y)[0]]
+            for y in yaws}
+
+
+def _bb_apart(a, b, pad=0.0):
+    p, q = a.bounding_box(), b.bounding_box()
+    return (p.max.X + pad < q.min.X or q.max.X + pad < p.min.X or p.max.Y + pad < q.min.Y or
+            q.max.Y + pad < p.min.Y or p.max.Z + pad < q.min.Z or q.max.Z + pad < p.min.Z)
+
+
+def worst_vs(moving, fixed):
+    """(the largest overlap mm^3 of `moving` with any of `fixed`, the index of that solid);
+    bounding boxes first."""
+    w = (0.0, None)
+    for k, f in enumerate(fixed):
+        if _bb_apart(moving, f):
+            continue
+        v = _v(moving & f)
+        if v > w[0]:
+            w = (v, k)
+    return w
 
 
 def skirt_r(az_deg):
@@ -466,7 +613,10 @@ def main():
         print(f"  {name}: {'OK' if ok else 'FAIL'}" + (f" ({detail})" if detail else ""), flush=True)
 
     tub, lid, door = bay_tub(), bay_lid(), bay_door()
+    _ASSY["a"] = tub + lid + door
     door_print = DOOR_PRINT * door
+    shelf = BB.shelf_model()                     # the real shelf, body frame (part_busboard)
+    stand = stand_keepouts()                     # the real crown, body frame (part_stand)
     export(tub, "bay_tub")
     export(lid, "bay_lid")
     export(door_print, "bay_door")
@@ -663,19 +813,26 @@ def main():
           v_s < 1e-3 and 3.5 <= eng <= hh - 0.3 and col_v < 1e-3,
           f"screws x tub + lid {v_s:.4f}; tip z {tip:.1f}: {eng:.1f} into the insert (z {ZR:.1f}..{ZR + hh:.1f}, "
           f"{ZR + hh - tip:.1f} short of its end); a Ø5 column up each pilaster bore x tub + lid + door {col_v:.4f} mm^3")
-    # why no north screw: the room outside the north wall
+    # why no north screw: the room outside the north wall. Against the REAL shelf (part_busboard)
+    # the boards leave x -50..0 open over the node, but that is the leg 2 loom's cross run (Ø7 at
+    # y 9.5, z -14, part_busboard.looms) and lane A crosses the wall at +-45..53: those count too
     hooks_any = body_keepouts(0.0, "any")["hooks"]
-    nb = []
+    looms = [BB.capsule(lp, BB.LOOM_R) for lp, _ in BB.looms().values()] + _lane_boxes()
+    nb, nb_shelf = [], []
     for x in np.arange(-95.0, 96.0, 5.0):
         p = Pos(x, YO1 + 0.3 + 4.0, (ZR + ZT) / 2 + 3.0) * Cylinder(4.0, 8.0)       # an Ø8 insert boss
-        ok = _v(p & shelf_box()[0]) < 1e-3 and all(_v(p & h) < 1e-3 for h in hooks_any) and \
+        ok = _v(p & shelf) < 1e-3 and all(_v(p & h) < 1e-3 for h in hooks_any) and \
             all(_v(p & dd) < 1e-3 for dd in body_keepouts(0.0)["drops"])
-        nb.append(ok)
-    xs = [x for x, ok in zip(np.arange(-95.0, 96.0, 5.0), nb) if ok]
+        nb_shelf.append(ok)
+        nb.append(ok and worst_vs(p, looms)[0] < 1e-3)
+    xr = np.arange(-95.0, 96.0, 5.0)
+    xs = [x for x, ok in zip(xr, nb) if ok]
+    xs_s = [x for x, ok in zip(xr, nb_shelf) if ok]
     print(f"  why no north screw: an Ø8 insert boss outside the north wall (y {YO1 + 0.3:.1f}..{YO1 + 8.3:.1f}, z "
-          f"{ZR:.0f}..{ZT + 6:.0f}) clears the shelf, the hook envelopes and the drops only at x "
-          f"{', '.join(f'{x:.0f}' for x in xs)} (of -95..95 step 5): the door's hook tab holds the west end, the "
-          f"east end is the nose chamfer; the north return holds the whole north edge instead")
+          f"{ZR:.0f}..{ZT + 6:.0f}) clears the real shelf, the hook envelopes, the drops and the looms (leg 2's "
+          f"cross run, lanes A) only at x {', '.join(f'{x:.0f}' for x in xs)} (of -95..95 step 5; without the looms "
+          f"also {', '.join(f'{x:.0f}' for x in xs_s if x not in xs) or 'nothing more'}): the door's hook tab holds the "
+          f"west end, the east end is the nose chamfer; the north return holds the whole north edge instead")
 
     print("== B126: the three turn points (the sled OUT)")
     for (name, (x, y)), c in zip(TURN_POINTS, _turn_columns(d=COL_D)):
@@ -707,14 +864,35 @@ def main():
     lanes = _lane_boxes()
     bosses8 = [Pos(x, y, (ZT + DECK_BOT_Z) / 2) * Cylinder(TUB_BOSS_D / 2, DECK_BOT_Z - ZT) for _, (x, y), *_ in HANGERS]
     bosses8 += [Pos(x, y, (ZT + ZR + hh + 1.0) / 2) * Cylinder(LID_BOSS_D / 2, ZR + hh + 1.0 - ZT) for x, y in PIL_XY]
+    bosses8 += loom_tie_bars()
     bc = Compound(children=bosses8)
     per = [(l.distance_to(bc), l.distance_to(tub + lid)) for l in lanes]
     lv = sum(_v(l & (tub + lid + door)) for l in lanes)
     names = [f"{n}{'+' if s > 0 else '-'}x" for n in "ABC" for s in (1, -1)]
-    check("the leg 2/3 lanes (8 x 7, correction 12) clear of tub + lid, >= 1.0 to the bosses",
-          lv < 1e-3 and min(g for g, _ in per) >= 1.0 - 1e-6,
-          f"{lv:.4f} mm^3; each lane to the bosses / to tub + lid: " +
+    check("the leg 2/3 lanes (8 x 7, correction 12) clear of tub + lid, >= 1.0 to the bosses and the loom "
+          "tie bars", lv < 1e-3 and min(g for g, _ in per) >= 1.0 - 1e-6,
+          f"{lv:.4f} mm^3; each lane to the bosses + bars / to tub + lid: " +
           ", ".join(f"{n} {g:.2f}/{t:.2f}" for n, (g, t) in zip(names, per)))
+    # the tie bars: the band's room round each rod (under / behind / over it, out to lane A) is
+    # free of the lid, the bosses and the deck; the opening it passes through is >= the 4.2 slot
+    bands = loom_tie_bands()
+    from part_deck import body_deck
+    deck_ = Pos(0, 0, -10) * body_deck()
+    vb_lid = sum(_v(b & (tub + lid)) for b in bands)
+    vb_deck = sum(_v(b & deck_) for b in bands)
+    g_boss = min(b.distance_to(Compound(children=bosses8[:len(HANGERS)])) for b in bands[::3])  # behind each rod
+    g_post = min(Compound(children=bands).distance_to(s) for s in loom_tie_bars()[1::2])
+    x_b = LT_ROD_X[0] - 1.2                                       # the band's far side, x 40.8
+    bx = [x for _, (x, y), *_ in HANGERS if abs(y) < 1e-6 and x > 0][0]
+    open_min = (-np.sqrt((TUB_BOSS_D / 2) ** 2 - (x_b - bx) ** 2)) - LT_POST[1][1]
+    under, over = LT_ROD_Z[0] - ZT, DECK_BOT_Z - LT_ROD_Z[1]
+    check("the loom tie bars beside the (+-40, 0) bosses: the 3.6 x 1.2 tie's room round each rod is free "
+          "of the lid and the deck; the opening >= 4.2; >= 1.2 + 0.6 under and over the rod",
+          vb_lid < 1e-3 and vb_deck < 1e-3 and open_min >= 4.2 and under >= 1.8 and over >= 1.8,
+          f"band x lid {vb_lid:.4f}, x deck {vb_deck:.4f} mm^3; the band's leg behind the rod {g_boss:.2f} "
+          f"from the boss's round face, {g_post:.2f} from the post; the opening (post to boss) {open_min:.2f} at "
+          f"x {x_b:.1f}; under the rod {under:.1f} over the roof, over it {over:.1f} under the deck; rod "
+          f"x {LT_ROD_X[0]:.0f}..{LT_ROD_X[1]:.0f} z {LT_ROD_Z[0]}..{LT_ROD_Z[1]}, lane A from x {LANE_A_X0:.0f}")
     print(f"  the hanger screws (M3 x 16 from the deck top): at (+-58, -18) the tip reaches z "
           f"{-4.0 - 16.0:.1f}, flush with the roof's underside (no longer); through a 2 mm tray-rail tab it stops "
           f"{2.0:.1f} above it")
@@ -745,41 +923,186 @@ def main():
     vs = sum(_v(assy & s) for s in shell)
     check("x the carapace (five sectors + cap, at the stations)", vs < 1e-3,
           f"{vs:.4f} mm^3; its lowest z {zmin:.2f} vs the assembly's top {assy.bounding_box().max.Z:.2f}")
-    cr = cradle_box()
-    vc = sum(_v(assy & c) for c in cr)
-    gw = min(assy.distance_to(c) for c in cr[1:3])
-    xbind = min(_v((Pos(dx, 0, 0) * tub) & cr[3]) for dx in (-1.0, 1.0))
-    check("x the stand cradle (floor, walls, x-stop pin) 0; shifted 1 along x the pin binds",
-          vc < 1e-3 and xbind > 0.1, f"{vc:.4f} mm^3; walls {gw:.2f} off; the tub shifted +-1: {xbind:.2f} mm^3 on the pin")
-    sh = shelf_box()
-    vsh = sum(_v(assy & s) for s in sh)
-    check("x the hub shelf box (+ Ø14 post pads)", vsh < 1e-3, f"{vsh:.4f} mm^3; closest {min(assy.distance_to(s) for s in sh):.2f}")
-    worst_leg, q = 0.0, None
-    abb = assy.bounding_box()
-    for i in range(len(STATIONS)):
-        for yaw in range(-40, 41, 10):
-            mov, q = stance_leg_moving(yaw)
-            for s in mov:
-                ps = station_tf(i) * s
-                sb2 = ps.bounding_box()
-                if sb2.max.X < abb.min.X or sb2.min.X > abb.max.X or sb2.max.Y < abb.min.Y or \
-                        sb2.min.Y > abb.max.Y or sb2.max.Z < abb.min.Z or sb2.min.Z > abb.max.Z:
-                    continue
-                worst_leg = max(worst_leg, _v(ps & assy))
+    # the hub shelf as part_busboard builds it (plate, posts, standoffs, the five boards with their
+    # halos, the hardware, the ties): it replaced params' box + Ø14 pad columns (the wiring round)
+    vsh = _v(assy & shelf)
+    g_sh = assy.distance_to(shelf)
+    sbb = shelf.bounding_box()
+    check("x the hub shelf as built (part_busboard.shelf_model: plate, posts, boards + halos, hardware)",
+          vsh < 1e-3, f"{vsh:.4f} mm^3; closest {g_sh:.2f} (the params box gave 4.80); the shelf's south face y "
+          f"{sbb.min.Y:.2f} is {sbb.min.Y - YO1:.2f} off the north wall's face, its lowest z {sbb.min.Z:.2f}")
+    legs = stance_legs()
+    _, q = stance_leg_moving(0)
+    worst_leg = max(worst_vs(s, [assy])[0] for ls in legs.values() for s in ls)
     check(f"x the stance legs (q {q[0]:.1f} / {q[1]:.1f} deg), yaw -40..40 step 10, all five stations",
           worst_leg < 1e-3, f"{worst_leg:.4f} mm^3 (fork, hip servo, femur group, tibia group; bounding boxes first)")
 
-    print("== the sled's way out (door off)")
+    print("== B133: the 14 AWG feed's exit (NE nose chamfer) and its riser clip")
+    s0 = np.array(AWG_INFO["s0"])
+    hole_ok = np.allclose(AWG_OUT + NE_N * (AWG_R + BB.AWG_OFF), s0, atol=1e-6) and abs(AWG_Z - _AWG_PTS[0][2]) < 1e-9
+    hole = awg_hole()
+    g_hole = {"the carrier + its stop window": hole.distance_to(frame + carrier),
+              "the loop key's pocket": hole.distance_to(kp), "the female's lead room": hole.distance_to(lr),
+              "the key's body": hole.distance_to(key)}
+    ring = awg_hole(1.2) - awg_hole(1e-3)
+    v_ring = _v(ring - tub)
+    check("the exit: Ø5.5 on the feed's axis (part_busboard.awg_route s0, AWG_OFF + its radius off the chamfer's "
+          "middle), clear of the carrier window, the key pocket and the lead room; >= 1.2 of wall round it",
+          hole_ok and min(g_hole.values()) > 1.0 and v_ring < 1e-3,
+          f"centre ({AWG_OUT[0]:.2f}, {AWG_OUT[1]:.2f}, {AWG_Z:.2f}) on the outer face, axis (1, 1, 0)/√2; " +
+          ", ".join(f"{n} {g:.2f}" for n, g in g_hole.items()) + f"; a 1.2 ring round it x air {v_ring:.4f} mm^3 "
+          f"(its bottom z {AWG_Z - AWG_HOLE_D / 2:.2f}: {AWG_Z - AWG_HOLE_D / 2 - ZB:.2f} over the tub's bottom, "
+          f"{ZF - (AWG_Z - AWG_HOLE_D / 2):.2f} under the floor's top)")
+    fpts = BB.awg_route(inside=True)[0][:6]                      # inside -> the hole -> down -> west -> up
+    feed = BB.capsule(fpts, AWG_R)
+    v_feed = _v(feed & assy)
+    g_out = BB.capsule(fpts[1:], AWG_R).distance_to(assy)          # outside the tub
+    check("the feed (Ø5) from inside the nose compartment out through the exit, under leg 4's drop, up the "
+          "riser through the clip: x tub + lid + door 0", v_feed < 1e-3,
+          f"{v_feed:.4f} mm^3 (inside it lies on the floor); outside the tub {g_out:.2f} off it (the north wall "
+          f"0.40, the clip's bore 0.15); in the exit {AWG_HOLE_D / 2 - AWG_R:.2f} all round")
+    clip = riser_clip()
+    cbb = clip.bounding_box()
+    ko5_4 = ko5["drops"][4]
+    g_c = {"leg 4's drop + 5": clip.distance_to(ko5_4), "the shelf": clip.distance_to(shelf),
+           "the hook envelopes": min(clip.distance_to(h) for h in koa["hooks"]),
+           "the feed's horizontal run": clip.distance_to(BB.capsule(_AWG_PTS[2:4], AWG_R))}
+    riser = BB.capsule(_AWG_PTS[3:5], AWG_R)
+    v_r = _v(riser & clip)
+    mouth_in = _v((Pos(0, 1.0, 0) * riser) & clip)                  # pulled 1.0 north it meets the jaws
+    th_w = np.degrees(np.arcsin((YO1 - CLIP_XY[1]) / (CLIP_BORE + CLIP_T / 2)))
+    th_t = 90.0 - np.degrees(np.arcsin(CLIP_MOUTH / 2 / CLIP_BORE))
+    L_jaw = np.radians(th_t - th_w) * (CLIP_BORE + CLIP_T / 2)
+    spread = (2 * AWG_R - CLIP_MOUTH) / 2
+    check("the riser clip: holds the Ø5 riser (0 mm^3 in its bore, pulled north it meets the jaws), clear of leg 4's "
+          "drop + 5, the shelf, the hooks and the feed's run under it",
+          v_r < 1e-3 and mouth_in > 1.0 and min(g_c.values()) > 1.0,
+          f"axis ({CLIP_XY[0]:.2f}, {CLIP_XY[1]:.2f}) z {CLIP_Z[0]}..{CLIP_Z[1]}, x {cbb.min.X:.2f}..{cbb.max.X:.2f}, "
+          f"y to {cbb.max.Y:.2f}, wedge to z {cbb.min.Z:.2f}; riser x clip {v_r:.4f}, pulled 1.0 north "
+          f"{mouth_in:.1f} mm^3; " + ", ".join(f"{n} {g:.2f}" for n, g in g_c.items()) + f"; jaws {CLIP_T} thick, "
+          f"{L_jaw:.1f} long, spread {spread:.1f} a side through the {CLIP_MOUTH} mouth: strain 1.5 t d / L^2 = "
+          f"{100 * 1.5 * CLIP_T * spread / L_jaw ** 2:.1f} % (VERIFY the snap on a print)")
+    # why nothing holds the feed under leg 4's drop: the window, and where the drop + 5 is overhead
+    win = (DECK_BOT_Z - 35.0 - 5.0) - ZB
+    band_over = AWG_INFO["z_u"] + AWG_R + 1.2 - (DECK_BOT_Z - 40.0)
+    band_under = ZB - (AWG_INFO["z_u"] - AWG_R - 1.2)
+    xs_run = np.arange(_AWG_PTS[3][0], _AWG_PTS[2][0] + 1e-6, 0.25)
+    under = [x for x in xs_run if _v(_box(x - 0.125, x + 0.125, YO1, AWG_INFO["y_c"] + AWG_R + 1.2,
+                                          DECK_BOT_Z - 41.0, DECK_BOT_Z - 39.0) & ko5_4) > 1e-6]
+    print(f"  under leg 4's drop + 5 (x {min(under):.2f}..{max(under):.2f} of the run, measured at the feed's band + a "
+          f"1.2 tie) the window is {win:.1f} (the tub's bottom {ZB} to the drop + 5's floor -50.0) for the Ø5: a tie or "
+          f"a jaw round it would stand {band_over:.1f} into the drop + 5 or {band_under:.1f} under the tub's bottom. "
+          f"So the feed is held at the exit and at the riser clip and spans {max(under) - min(under):.1f} free under "
+          f"the drop, 0.40 off the north wall and {AWG_INFO['z_u'] - AWG_R - ZB:.2f} over the tub's bottom")
+
+    print("== the stand (part_stand's crown, posed in the body frame with the robot in it)")
+    # the x stop's hole, measured on the solid: a probe column at (0, -20) from the belly up
+    sx, sy = ST["xstop_xy"]
+    probe = Pos(sx, sy, (ZB + ZF) / 2) * Cylinder(XSTOP_D / 2 + 1.0, ZF - ZB)
+    void = probe - tub
+    vbb = void.bounding_box()
+    skin = ZF - vbb.max.Z
+    floor_there = ZF - ZB
+    over = _v(_box(sx - XSTOP_D / 2, sx + XSTOP_D / 2, sy - XSTOP_D / 2, sy + XSTOP_D / 2, ZF, ZF + 3.0) & tub)
+    check(f"the x-stop hole: Ø{XSTOP_D:.2f} x {ST['xstop_hole_depth']:.2f} at ({sx:g}, {sy:g}), mouth chamfer "
+          f"{XSTOP_MOUTH:.1f} (<= 0.3), the floor {floor_there:.1f} there",
+          abs(vbb.size.X - XSTOP_D - 2 * XSTOP_MOUTH) < 0.02 and abs(vbb.size.Z - ST["xstop_hole_depth"]) < 0.02 and
+          abs((vbb.min.X + vbb.max.X) / 2 - sx) < 0.01 and abs((vbb.min.Y + vbb.max.Y) / 2 - sy) < 0.01 and
+          XSTOP_MOUTH <= 0.3 and abs(floor_there - BS["bay_floor"]) < 1e-6 and over < 1e-3,
+          f"void Ø{vbb.size.X:.2f} x {vbb.size.Z:.2f} centred ({(vbb.min.X + vbb.max.X) / 2:.2f}, "
+          f"{(vbb.min.Y + vbb.max.Y) / 2:.2f}); {skin:.2f} of floor over it; nothing on the floor over it "
+          f"({over:.4f} mm^3: no rail, no rib); the pin Ø{ST['xstop_pin_d'] - 2 * FIT:.1f}: "
+          f"{XSTOP_D / 2 - (ST['xstop_pin_d'] / 2 - FIT):.2f} of radial play")
+    crown = stand["crown"]
+    v_cr = _v(assy & crown)
+    gw = min(assy.distance_to(stand["cradle walls"]), 99)
+    g_pl = assy.distance_to(stand["crown plate"])
+    pin = stand["x-stop pin"]
+    g_pin = pin.distance_to(tub)
+    xbind = min(_v((Pos(dx, 0, 0) * tub) & pin) for dx in (-1.0, 1.0))
+    check("x the stand's crown as built (part_stand: seat, relieved plate, floor, walls, pin) 0; the walls "
+          "tub_clear off; shifted 1 along x the pin binds",
+          v_cr < 1e-3 and abs(gw - ST["tub_clear"]) < 1e-3 and xbind > 0.1,
+          f"{v_cr:.4f} mm^3; walls {gw:.3f} off, the crown plate {g_pl:.2f} under, the pin {g_pin:.2f} (its tip "
+          f"under the hole's ceiling); the tub shifted +-1: {xbind:.2f} mm^3 on the pin")
+    # the cradle's request: nothing proud of the tub's outer y faces or its bottom where the
+    # cradle is (x +-45.5, below z -30.4)
+    zw = ZB + ST["wall_h"]
+    cx0, cx1 = ST["cradle_x"]
+    slabs = [_box(cx0 - 0.5, cx1 + 0.5, YO0 - 20, YO0, ZB - 5, zw), _box(cx0 - 0.5, cx1 + 0.5, YO1, YO1 + 20, ZB - 5, zw),
+             _box(cx0 - 0.5, cx1 + 0.5, YO0 - 20, YO1 + 20, ZB - 5, ZB)]
+    v_pr = sum(_v(assy & s) for s in slabs)
+    check(f"nothing proud of the tub's y faces ({YO0} / {YO1}) or its bottom ({ZB}) at x {cx0 - 0.5}..{cx1 + 0.5} "
+          f"below z {zw} (the cradle walls sit {ST['tub_clear']} off)", v_pr < 1e-3, f"{v_pr:.4f} mm^3")
+    sp = stand["crown plate"]
+    print(f"  the shelf on the stand: {shelf.distance_to(sp):.2f} to the relieved crown plate, "
+          f"{shelf.distance_to(stand['cradle walls']):.2f} to the cradle walls (the north wall's outer face)")
+
+    print("== the door on the stand (pick 12; 'the sled swaps on the stand')")
+    # the latch's driver: from the slot along +x beside the south wall, against everything that is
+    # there with the robot in the cradle: tub + lid, the crown, the drops (+0), the hooks, the
+    # bases, the deck, the carapace, the shelf and the legs at stance, yaw -40..40
+    fixed = {"tub + lid + door": [assy], "the crown": [crown], "drops +0": ko0["drops"],
+             "hooks 'any'": koa["hooks"], "coxa bases": bases, "deck": [deck], "carapace": shell,
+             "the shelf": [shelf]}
+    run, hit = None, None
+    for L in np.arange(10, 261, 10):
+        col = latch_driver(L)
+        hits = [n for n, fs in fixed.items() if worst_vs(col, fs)[0] > 1e-3]
+        hits += [f"a stance leg at yaw {y}" for y, ls in legs.items() if worst_vs(col, ls)[0] > 1e-3]
+        if hits:
+            hit = (L, hits)
+            break
+        run = L
+    y_d, z_d = LB_Y, LB_Z
+    x_slot = LB_X0 + LATCH_REACH
+    # the shaft runs east under the belly: its handle must sit past where the line y_d leaves the
+    # carapace skirt's plan on the far (east) side
+    xe = max(x for x in np.arange(x_slot, 200, 0.5) if np.hypot(x, y_d) <= skirt_r(np.degrees(np.arctan2(y_d, x))))
+    col_run = latch_driver(run)
+    g_d = {"the crown's south wall": col_run.distance_to(stand["cradle walls"]),
+           "the crown plate": col_run.distance_to(stand["crown plate"]),
+           "the cradle floor": col_run.distance_to(stand["cradle floor"]),
+           "leg 2's drop (+0)": col_run.distance_to(ko0["drops"][2]),
+           "leg 3's drop (+0)": col_run.distance_to(ko0["drops"][3]),
+           "the stance legs": min([col_run.distance_to(s) for ls in legs.values() for s in ls
+                                   if not _bb_apart(col_run, s, 30.0)] or [30.0])}
+    need_l = xe - x_slot + 10.0
+    check("the door's latch turns on the stand: a straight Ø5 driver from the slot along +x is free past the "
+          "carapace skirt (+10) with the robot in the cradle and the legs at stance, yaw -40..40",
+          run is not None and run >= need_l,
+          f"free for {run} mm" + (f" (then {', '.join(hit[1])} at {hit[0]})" if hit else " (all 260 checked)") +
+          f"; the slot x {x_slot:.1f} (y {y_d:.2f}, z {z_d:.2f}), the skirt crossed at x {xe:.1f}: a shaft >= "
+          f"{need_l:.0f} mm reaches; " + ", ".join(f"{n} {g:.2f}" for n, g in g_d.items()))
+    # the door off (-x, the hook tab pushed out) and the sled out (-x 0..180), on the stand
+    door_w = (0.0, None)
+    for dx in range(0, 41, 5):
+        dm = Pos(-dx, 0, 0) * door
+        for n, fs in (("the crown", [crown]), ("legs at yaw 0", legs[0])):
+            v = worst_vs(dm, fs)[0]
+            if v > door_w[0]:
+                door_w = (v, f"{n} at {dx}")
+    check("the door comes off -x on the stand (0..40, the legs at stance, yaw 0): x the crown and the legs",
+          door_w[0] < 1e-3, f"worst {door_w[0]:.4f} mm^3" + (f" ({door_w[1]})" if door_w[1] else ""))
     hooks_a = koa["hooks"]
-    worst = (0.0, None)
+    worst, by_yaw = (0.0, None), {}
     for dx in range(0, 181, 10):
         moving = sled_tf(-dx) * (_SLED + pack_solid() + male_xt60())
         v1 = _v(moving & (tub + lid))
         v2 = max(_v(moving & s) for s in bases + hooks_a + ko0["drops"])
-        if max(v1, v2) > worst[0]:
-            worst = (max(v1, v2), dx)
-    check("sled + pack + its XT60 slid -x 0..180 (10 mm steps) x tub + lid, the bases, hooks and drops",
-          worst[0] < 1e-3, f"worst {worst[0]:.4f} mm^3" + (f" at {worst[1]} mm" if worst[1] is not None else ""))
+        v3 = worst_vs(moving, [crown])[0]
+        for y, ls in legs.items():
+            vl, k = worst_vs(moving, ls)
+            if vl > 1e-3:
+                by_yaw.setdefault(y, (dx, k // (len(ls) // len(STATIONS))))
+        if max(v1, v2, v3) > worst[0]:
+            worst = (max(v1, v2, v3), dx)
+    check("sled + pack + its XT60 slid -x 0..180 (10 mm steps) x tub + lid, the bases, hooks, drops and the crown "
+          "on the stand; x the legs at stance, yaw 0",
+          worst[0] < 1e-3 and 0 not in by_yaw, f"worst {worst[0]:.4f} mm^3" +
+          (f" at {worst[1]} mm" if worst[1] is not None else "") + "; the legs: " +
+          (", ".join(f"leg {i} at yaw {y:+d} meets it from {d} mm out" for y, (d, i) in sorted(by_yaw.items())) or
+           "free at every yaw -40..40"))
 
     print("== print")
     bed = PR["bed_mm"]
@@ -790,8 +1113,9 @@ def main():
               f"{len(s.solids())} solid, {b.size.X:.1f} x {b.size.Y:.1f} x {b.size.Z:.1f} mm, {s.volume / 1000:.1f} cm^3")
     print("  printability: bay_tub open top up, floor on the bed; the carrier floats 2.9 over the floor (supports "
           "under it, through the open top) and its webs bridge 14; the latch boss stands on the bed, the "
-          "pilasters on 45-deg wedges off the wall; the north return is a 1.2 overhang at the top. bay_lid bottom down, bosses up. bay_door on its outer "
-          "face: the ear, the spigot, the boss and the tab stand up from it")
+          "pilasters and the riser clip on 45-deg wedges off the wall; the north return is a 1.2 overhang at the top. "
+          "bay_lid bottom down, bosses up, the loom tie bars' rods bridge 5 from their posts to the bosses. bay_door "
+          "on its outer face: the ear, the spigot, the boss and the tab stand up from it")
     print(f"part_bay checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
     return 1 if bad else 0
 

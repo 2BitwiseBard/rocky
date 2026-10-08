@@ -11,9 +11,11 @@ meta:
   robot: pebble
   params_rev: D064       # bump when a physics-relevant number changes (sim/model_fingerprint notes it).
                          # D064 (2026-10-07, the owner's body-layout picks): the keel tub, the hub
-                         # shelf and the righter's hip clamp enter params; the belly + the torso CoM
-                         # enter the model next (a fingerprint change: the robot hash is still
-                         # 87215110e9c4 until build_mjcf carries the belly)
+                         # shelf and the righter's hip clamp enter params, and the model: build_mjcf
+                         # carries the belly (belly_tub + belly_shelf, rocky_model.belly_boxes) and
+                         # the torso's <inertial> from sim/mass_budget.json (mass_audit's pose
+                         # table), so the robot hash moved off 87215110e9c4 (c10b970d2bb2 on the
+                         # provisional budget; final once mass_audit weighs the four new STLs)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -105,8 +107,18 @@ reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults(
                          # B95 hand on the shortest tube needs >= -24 .. -20 on legs 1/4, -32 on
                          # 2/3 for the tub, -40 for the shelf). NOT a servo limit: never applied in
                          # NORMAL / BRACE (a uniform hip stop above -47.91 switches off the cliff
-                         # void guard, B129). Accepted and stored by ReflexSupervisor; the sim
-                         # agent wires the clamp (and the belly it protects) next
+                         # void guard, B129). Applied (D064 sim) by ReflexSupervisor in FALLEN and
+                         # at the RIGHTED ramp's start, on righter_clamp_legs, and in RecoverEnv's
+                         # action map for new training runs (contract key hip_floor_deg; the
+                         # checkpoints on disk replay their uncut map and the supervisor clamps it)
+  righter_clamp_legs: [1, 2, 3, 4]   # pick 13: the legs righter_hip_min_deg applies to (rocky_model.
+                         # righter_clamp_legs reads it; this is its default). Leg 0 is out by the pick,
+                         # and with recover1 it touched the sim's shelf HULL in 20/20 falls (max 2.93,
+                         # at y 70-71 where the real plate ends at 64.3): that hull over-states the
+                         # shelf (one box from bottom_z, grown north by the (26, 64) post pad) and is
+                         # being replaced by the plate box + the pad columns. Re-measure leg 0 there
+                         # before widening the set (its zero-margin hip: -57.55 on the hull, -62.5
+                         # on plate + pad)
 
 sensing:
   foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold
@@ -396,7 +408,9 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
     bay_w: 50.0          # pick 8 (b): no strap inside the robot, so the sled's 48.8 keeps 0.6 a side.
                          # (a)'s 53 cost the uniform hip cut, the 14 AWG route past leg 4's drop and
                          # half the drop slack (PREP_REPORT_2 s4); it changed no righting outcome
-    bay_h: 33.0          # interior (was 30): floor -> rail 2.25 + sled 3 + pack 25 + foam pad 2.0 = 32.25
+    bay_h: 33.0          # interior (was 30): floor -> the sled at rest 2.10 over it (the 4.0 rail in its
+                         # 1.9 groove, part_bay measured; the proposal said 2.25) + sled 3 + pack 25 +
+                         # foam pad 2.0 = 32.10 of 33: 0.90 between the pack and the pad
     bay_top_z: -18.0     # pick 2: the tub roof's TOP, body z: the 8 mm layer under the deck bottom (-10)
                          # that carries the leg 2/3 lanes; the hook L reaches -13.76 at any pose (4.24
                          # over the roof; 1.26 in the 5 mm layer). Bottom -18 - 2.0 - 33 - 2.4 = -55.4:
@@ -414,20 +428,24 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
     nose_chamfer: 10.0   # pick 10: 45-deg plan chamfer (leg length) on the nose's two vertical edges;
                          # the interior follows at 10 - 1.41 to keep the 2.4 wall. The square nose
                          # corners were the only tub-caused stalls in the sim (jamming sideways on
-                         # 64-70 mm rubble, R1). 10 because with the nose ~10 in (pick 4) the whole nose
-                         # then sits inside the carapace skirt's plan outline (0.11 in; 2.44 past
-                         # unchamfered; 8 leaves 0.37 past), and its inner chamfer keeps 5.3 to a
-                         # 22.2-wide XT60 carrier on the sled axis (0.3 to dock_block's 32.2 frame).
-                         # At the provisional bay_l 194 the nose-south corner goes r 112.38 -> 108.55
-                         # and still stands 9.72 past the skirt (measured 2026-10-07 against
-                         # part_shell's tier-1 outline). Unsimulated: an ESTIMATE until the belly runs
+                         # 64-70 mm rubble, R1). 10 was picked for a nose ~10 in (pick 4), where the
+                         # whole nose would sit inside the carapace skirt's plan; the carrier brought it
+                         # in only 2.0 (bay_l 192, part_bay): the nose-south corner goes r 110.57 ->
+                         # 106.67 and still stands 7.76 past the skirt (10.29 unchamfered; north corner
+                         # -2.16, inside), measured against part_shell's tier-1 outline. The interior
+                         # chamfer is 8.59: 4.21 from the cut-off corners to the carrier, its stop
+                         # window, the loop key and the lead room; 2.400 of wall normal to it. The NE
+                         # chamfer carries the 14 AWG exit (B133, part_bay). The sim's belly box is
+                         # square-nosed: the chamfer itself is unsimulated
     door_t: 3.0          # the end door -x (54.8 x 37.4 x 3, replaces belly_door); its boss presses the
                          # sled's tail lip. Pick 12: ONE I3 latch, its strike in a boss outside the
-                         # south wall at the door end (x -94.5 .. -88 measured: 0 mm^3 with everything;
-                         # north wall 102 mm^3 into leg 1's drop, roof 99 into the carapace), and a hook
-                         # tab on the door's north edge. The boss is iface's, not a param: the
-                         # latch_strike cutter (10.8 x 12.2, r 6.1) in a ~14.6 x 14.6 pad, >= LATCH_REACH
-                         # + 0.2 = 6.0 deep, >= 1.2 of wall round the cutter (section 11)
+                         # south wall at the door end (part_bay: boss x -91.5 .. -85.5, y -63.35 ..
+                         # -47.4, z -55.4 .. -40.75; the door's ear over it 6 thick, x -97.5 .. -91.5,
+                         # so the door prints flat on its outer face), and a hook tab on the door's
+                         # north edge. The boss is part_bay's, not a param: the latch_strike cutter
+                         # (10.8 x 12.2, r 6.1) in a 14.6 pad, LATCH_REACH + 0.2 = 6.0 deep, >= 1.2 of
+                         # wall round the cutter. Its slot faces +x at x -85.7: a Ø5 driver along the
+                         # south wall turns it, on the stand too (part_bay measures the path)
     pack_l: 138.0        # VERIFY. Pick 5: kept at the VERIFY maximum (the bought pack is 132)
     pack_w: 44.0         # VERIFY. D062 (B72): 46 -> 44, so the sled (pack + 2 x 2.4 walls = 48.8)
                          # fits bay_w 50; the BOM's soft pack is 43 wide
@@ -440,21 +458,26 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
                          # PREP_REPORT_2 s3's 'offtray' (case iii) at bay_w 50: G3 b4b_pack.py (log
                          # pack_50_h3_cradle_f-54.4_c3) + g3_verify, 0 mm^3 against every keep-out,
                          # smallest gap 0.57 (the plate to the drops + 5); K3: 0 mm^3, star to post 0.80
-    x: [-56.2, 53.9]     # plan envelope (body): the plate as packed, the union of the five boards'
-    y: [12.2, 64.2]      # footprints + their plug / lead halos. NOT the proposal's x +-45, y 12..54 (the
+    x: [-56.2, 53.95]    # plan envelope (body): the plate as packed, the union of the five boards'
+    y: [12.2, 64.3]      # footprints + their plug / lead halos (2026-10-07: 53.9 / 64.2 -> 53.95 / 64.3, the
+                         # union the board poses give; G3 packed on a 0.25 grid and printed .1f, part_
+                         # busboard asserts it to 0.11). NOT the proposal's x +-45, y 12..54 (the
                          # boards-up shelf before pick 14): the UBEC hangs to y 64.3, the buck to x 45.95,
                          # the adapter's plug halo to x -56.2. Righting and rubble ran with that old box
                          # (z -38..-10, PREP_REPORT_2 s3): the sim's belly takes this one
     plate_top_z: -36.3   # the up boards stand on it (star top -13.9, 3.9 under the deck)
-    plate_t: 3.0         # the packing's plate. Thicker pushes the face-down adapter under bottom_z, into
-                         # its 1.00 to the stand's crown plate (the thinnest stand margin, B134)
+    plate_t: 3.0         # the packing's plate. Thicker pushes the face-down adapter under bottom_z: it
+                         # keeps 4.00 to the stand's lowered crown plate (3.00 at plate_t + 1; part_stand,
+                         # B134). The thinnest stand margin is now horizontal: 1.30 from the shelf's
+                         # south face to the cradle's north wall (0.85 with the x-stop pin's play taken)
     bottom_z: -54.4      # the face-down adapter's pins: plate underside -39.3 - 15.1; 1.0 over the tub's
                          # bottom (-55.4), so a flat floor meets the tub first
     posts: [[-50.0, 34.0], [50.0, 34.0], [26.0, 64.0]]   # body xy, Ø post_d from the deck bottom to the
                          # plate. Not the proposal's (+-40, 20), (0, 20), (0, 40): those block every
                          # arrangement with the adapter (correction 10). 0.59 to the planar hook envelope
-                         # (leg y 12.89 vs the L's 12.3; 0.39 to iface's, whose yaw ear reaches 12.79),
-                         # 0.89 to the coxa bases, 3.57 to the drops + 5 (the plate: 0.57)
+                         # (leg y 12.89 vs the L's 12.3), 0.339 to iface's 'any' envelope with its
+                         # HOOK_ROLL_PAD 0.05 (yaw ear 12.86, box 12.35), 0.585 to 'path', 0.885 to
+                         # the coxa bases, 3.57 to the drops + 5 (the plate: 0.57)
     post_d: 8.0
     post_screw: below    # 2026-10-07 (measured here): M3 from BELOW, through the plate and the post into a
                          # blind Ø2.8 thread-forming hole in the deck's underside, 5 deep, 1.0 skin
@@ -494,13 +517,20 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
   stand:                 # NEW 2026-10-07 (B85, option A): stand_crown becomes a U-cradle that holds the
                          # TUB, so the carapace stays on and both tub ends are free (the sled swaps on the
                          # stand). Deck bottom over the floor: 89.4 / 169.4 / 249.4 (base + crown / + 1
-                         # section / + 2; was 47 / 127 / 207); the legs reach 172 below the deck
+                         # section / + 2; was 47 / 127 / 207, really 44 / 124 / 204: the old crown had
+                         # no seat); the legs reach 153.3 below the deck bottom to the foot point, 183.5
+                         # with the B95 hand (part_stand): two sections free the whole envelope
     cradle_x: [-45.0, 45.0]   # the cradle floor's x span (body), under the tub's middle
     wall_h: 25.0         # the two side walls over the floor (the tub bottom -55.4 -> -30.4)
-    wall_t: 3.0          # ESTIMATE (G3 / K3's model): at bay_w 50 up to 6 leaves 0.30 (K3)
-    tub_clear: 0.5       # each wall's gap to the tub's side: the tub can roll 2.29 deg in it (K3)
+    wall_t: 3.0          # ESTIMATE (G3 / K3's model). In this tree the north wall's outside keeps 1.30
+                         # to the hub shelf (0.85 with the x-stop pin's 0.45 of play taken): wall_t <= 3.8
+    tub_clear: 0.5       # each wall's gap to the tub's side: the tub can roll 1.25 deg in it in place,
+                         # 2.37 slid by the x-stop pin's 0.45 of play, 2.49 with no pin (the walls' 2 mm
+                         # lead-ins; part_stand on part_bay's tub; K3's 2.29 had no lead-in)
     xstop_pin_d: 6.0     # the x stop (proposal s3 risks; the cradle alone holds the tub in y only): a Ø6
-    xstop_xy: [0.0, -20.0]    # pin up from the cradle floor at body (0, -20) ...
+                         # nominal pin up from the cradle floor (printed Ø5.4 = - 2 FIT, part_stand) into
+                         # a Ø6.3 (+ FIT, part_bay) hole: 0.45 of radial play, under the walls' 0.5
+    xstop_xy: [0.0, -20.0]    # ... at body (0, -20) ...
     xstop_hole_depth: 1.5     # ... into a 1.5 blind hole in the tub floor (2.4: 0.9 skin over it). The
                          # pin stands FIT (0.3) less, so the floor, not the pin's tip, carries the robot
   dovetail:              # I6 accessory ring
