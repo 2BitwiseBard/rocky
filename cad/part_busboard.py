@@ -37,14 +37,19 @@ the node (-20.8, 36.2) and the star (25.2, 28.2) rot 0, up. Envelopes: part_avio
 the three small boards (imported); the node / star stacks and every halo are G3's ESTIMATEs.
 
 Checks (run this file, exit non-zero on a failure): the poses are params'; the shelf + boards +
-hardware against iface.body_keepouts (hooks 'any', drops +5), the posed deck, the post axes
-through the DECK_HOLES table (ray test: the table, not today's deck solid), the keel tub + its
-lid bosses (iface.bay_tub_extent), the carapace, the docked coxa bases, the stand's cradle
-(params stand + G3's crown-plate ESTIMATE), the lanes, the leg 2 / 3 lanes + the leg 0 / 1 / 4
-looms (Ø7), the 14 AWG feed (B133, Ø5: at the provisional nose AND the pick-4 nose 10 in), the
-tray's (0, 50) cable round the plate's north-west edge (Ø9.42), the latch driver columns; the
-boards pairwise; one solid, the bed. Reported, not gated: which adapter screws a driver reaches
-from below on the stand (B134), and how deep a straight Dupont on the adapter's H2 would hang.
+hardware (shelf_model: one fused solid) against iface.body_keepouts (hooks 'any', drops +5), the
+posed deck, the post axes through the DECK_HOLES table (ray test: the table, not today's deck
+solid), the keel tub as part_bay builds it (tub + lid + door), the carapace, the docked coxa
+bases, the stand as part_stand builds it (stand_keepouts: the relieved crown plate, the cradle
+floor and walls, the pin), the lanes, the leg 2 / 3 lanes + the leg 0 / 1 / 4 looms (Ø7), the 14
+AWG feed (B133, Ø5: from inside the nose compartment out through part_bay's exit in the NE
+chamfer), the tray's (0, 50) cable round the plate's north-west edge (Ø9.42), the latch driver
+columns; the boards pairwise; one solid, the bed. Reported, not gated: which adapter screws a
+driver reaches from below on the stand (B134), and how deep a straight Dupont on the adapter's H2
+would hang.
+
+shelf_model() / shelf_parts() are the posed shelf for the other modules (part_stand, part_bay):
+the real solid in place of params hub_shelf's box.
 """
 import numpy as np
 from build123d import *
@@ -92,13 +97,15 @@ STAR_POST_D, NODE_POST_D = 6.4, 6.4           # 1.8 of wall round the Ø2.8 tap:
                                               # 0.45 past the board's edge, under it
 M25_TAP = 2.05                                # M2.5 thread-forming, as part_avionics' Pi standoffs
 ADAPTER_HOLES = (37.0, 28.0)                  # Waveshare Bus Servo Adapter (A): Ø2.5 on 37 x 28
-                                              # (part_avionics' BOARDS comment; not in BOARDS: B108)
+                                              # (part_avionics' BOARDS comment; not in BOARDS: B108).
+                                              # To import from BOARDS once it carries holes / cap_l
 SPACER_D = 5.0                                # bought round nylon spacer, ID >= 2.6, 2.5 long
 TIE_W = 3.6                                   # part_avionics' 3.6 mm zip tie (TIE_T thick)
 TIE_SLOT = (TIE_W + 2 * FIT, TIE_T + 2 * FIT)  # 4.2 along the band's width x 1.8
 GROOVE_D = TIE_T + 0.2                        # the buck's tie sunk under the star's header tails
 BUCK_CAP_L = 10.0                             # its 1000 uF can (Ø10 x 16) lying beside the D24V50F5
-                                              # (ESTIMATE, the part bought): 17.8 + 10 = 27.8
+                                              # (ESTIMATE, the part bought): 17.8 + 10 = 27.8. To
+                                              # import from BOARDS once it carries holes / cap_l
 # the adapter's H2 (UART, pick 14): where it sits on the board is not in the repo (no STEP; the
 # prep's 30.42 'headroom' is the Pi's GPIO header on the tray, q_usb/s4_other.py). Face-down, a
 # STRAIGHT 2.54 Dupont on a vertical header hangs header base + housing under the component face
@@ -306,6 +313,36 @@ def tie_bands():
     return out
 
 
+# ====================================================================== the shelf as others see it
+def shelf_parts(halo=True):
+    """The shelf as built and loaded, BODY frame, solid by solid: {'hub_shelf' (plate + posts +
+    Ø14 pads + standoffs), 'board <name>' (the five envelopes, each with its plug / lead halo
+    when halo), 'hardware <k>' (the adapter's spacers and M2.5 heads, the flush M3 heads), 'tie
+    band <k>'}. Overlap checks go solid by solid: OCCT booleans on a Compound of overlapping
+    solids can be wrong (part_avionics found 193 mm^3 where each solid gave 0)."""
+    out = {"hub_shelf": hub_shelf()}
+    out.update({f"board {n}": board_box(n, halo) for n in SHELF_BOARDS})
+    out.update({f"hardware {k}": s for k, s in enumerate(hardware())})
+    out.update({f"tie band {k}": s for k, s in enumerate(tie_bands())})
+    return out
+
+
+_SHELF_MODEL = {}
+
+
+def shelf_model(halo=True):
+    """The posed shelf as ONE fused solid in the body frame (shelf_parts fused, so no overlapping
+    children): what part_stand and part_bay check the cradle and the keel tub against, in place
+    of params hub_shelf's box. Cached: build123d's booleans return new shapes, none mutates it."""
+    if halo not in _SHELF_MODEL:
+        parts = list(shelf_parts(halo).values())
+        s = parts[0]
+        for p in parts[1:]:
+            s = s + p
+        _SHELF_MODEL[halo] = s
+    return _SHELF_MODEL[halo]
+
+
 # ====================================================================== the audit's keep-outs
 def capsule(points, r):
     """A tube of radius r along a polyline: cylinders + spheres at the nodes (a flexible run)."""
@@ -319,42 +356,27 @@ def capsule(points, r):
     return s
 
 
-def tub_solid(bosses=True, t=None):
-    """The keel tub as the shelf sees it: iface.bay_tub_extent's box (or the extent `t`), the
-    nose's two vertical edges chamfered (nose_chamfer, pick 10), and the six Ø8 lid bosses from
-    the roof to the deck bottom at DECK_HOLES' hangers. part_bay owns the real one (latch boss,
-    door tab: far south-west)."""
-    t = t or bay_tub_extent()
-    (x0, x1), (y0, y1), (z0, z1) = t["x"], t["y"], t["z"]
-    c = BS["nose_chamfer"]
-    pts = [(x0, y0), (x1 - c, y0), (x1, y0 + c), (x1, y1 - c), (x1 - c, y1), (x0, y1)]
-    s = Pos(0, 0, z0) * extrude(make_face(Polyline(*pts, close=True)), z1 - z0)
-    if bosses:
-        from part_deck import DECK_HOLES
-        for n, (x, y), *_ in DECK_HOLES:
-            if n.startswith(("tray_tab_tub_", "tub_hanger_")):
-                s += Pos(x, y, (z1 + DECK_BOT_Z) / 2) * Cylinder(4.0, DECK_BOT_Z - z1)
-    return s
+_TUB = {}
 
 
-CROWN_APO, CROWN_T = 47.2, 6.0     # ESTIMATE (G3 v3_keepouts.crown_plate): today's crown plate
-                                   # (apothem 40 + FIT + skirt 6.9) kept under the U-cradle, top at
-                                   # the tub bottom. part_stand owns the real one (B85, B134)
-CRADLE_FLOOR_T = 3.0               # ESTIMATE (G3)
+def tub_solid():
+    """The keel tub as part_bay builds it (bay_tub + bay_lid + bay_door, fused, body frame: the
+    door closed, the six Ø8 lid bosses up to the deck, the latch boss, the pilasters, the 14 AWG
+    exit through the NE nose chamfer and the riser clip). It replaced params' chamfered box and
+    G3's crown-plate ESTIMATE on 2026-10-07 (the wiring round). Cached."""
+    if "t" not in _TUB:
+        import part_bay as PBY                       # local: part_bay imports this module
+        _TUB["t"] = PBY.bay_tub() + PBY.bay_lid() + PBY.bay_door()
+    return _TUB["t"]
 
 
 def stand_solids():
-    """The stand under option A (params stand, B85): {'crown plate', 'cradle floor', 'cradle
-    walls'} in the body frame, the robot sitting in it by its tub."""
-    t = bay_tub_extent()
-    zb = t["z"][0]
-    (y0, y1), (cx0, cx1) = t["y"], STAND["cradle_x"]
-    cl, wt = STAND["tub_clear"], STAND["wall_t"]
-    crown = Pos(0, 0, zb - CROWN_T) * extrude(RegularPolygon(CROWN_APO / np.cos(np.pi / 5), 5, rotation=54), CROWN_T)
-    floor = _box(cx0, cx1, y0 - cl - wt, y1 + cl + wt, zb - CRADLE_FLOOR_T, zb)
-    walls = (_box(cx0, cx1, y1 + cl, y1 + cl + wt, zb - CRADLE_FLOOR_T, zb + STAND["wall_h"]) +
-             _box(cx0, cx1, y0 - cl - wt, y0 - cl, zb - CRADLE_FLOOR_T, zb + STAND["wall_h"]))
-    return {"crown plate (ESTIMATE)": crown, "cradle floor": floor, "cradle walls": walls}
+    """The stand as part_stand builds it, body frame, the robot standing in it by its tub:
+    part_stand.stand_keepouts() ({'crown plate' (seat ring + skirt + the relieved plate),
+    'cradle floor', 'cradle walls', 'x-stop pin'}; its whole 'crown' left out of the audit's
+    rows: each piece is there)."""
+    from part_stand import stand_keepouts            # local: part_stand imports this module
+    return {k: v for k, v in stand_keepouts().items() if k != "crown"}
 
 
 def lane_boxes():
@@ -397,24 +419,18 @@ AWG_R = 2.5                        # the orchestrated Ø5 envelope (14 AWG silic
 
 
 AWG_OFF = 0.4                      # the feed's gap to the tub's outer faces it runs along
-PICK4_NOSE_IN = 10.0               # pick 4: the dock carrier in the nose wall brings the nose ~10 in
+AWG_IN = 3.0                       # where the feed starts inside the nose compartment: this far in
+                                   # from the NE chamfer's inner face (it comes from the fuse and the
+                                   # loop key, part_bay), so the checked tube runs through the hole
 
 
-def tub_extent_nose_in(dx):
-    """iface.bay_tub_extent with the NOSE dx in (the door end stays put, pick 4): the tub the bay
-    agent will settle on, so the feed is checked at both noses."""
-    t = dict(bay_tub_extent())
-    t["x"] = (t["x"][0], t["x"][1] - dx)
-    t["x_in"] = (t["x_in"][0], t["x_in"][1] - dx)
-    return t
-
-
-def awg_route(t=None):
+def awg_route(t=None, inside=False):
     """The feed as a polyline (body frame), derived from the keep-outs, not typed in:
       - it leaves the nose compartment (pick 3: the loop key's panel XT60 is in the nose wall)
         through the NE nose chamfer, just over the interior floor, AWG_OFF + its radius out from
         the chamfer's middle: so its drop to z_u stays inside the unchamfered corner's plan and
-        adds nothing to the robot's outline (the bay agent cuts the hole and a saddle there);
+        adds nothing to the robot's outline (part_bay cuts the Ø5.5 exit there, on this axis;
+        inside=True starts the tube AWG_IN inside the chamfer's inner face, through that hole);
       - along the chamfer to y_c, then west at z_u UNDER leg 4's drop +5 (z -10..-50): z_u is midway
         between the drop box's floor and the tub's bottom. North of the tub there is no way past
         that drop: its +5 box reaches y 5.50 at x 67.1, inside the tub's plan (north wall y 7.4),
@@ -449,7 +465,10 @@ def awg_route(t=None):
     x_j = nb[1] - 4.0                                        # the node's SE pads
     pts = [(s0[0], s0[1], z_0), (s0[0], s0[1], z_u), (s2[0], s2[1], z_u), (x_r, y_c, z_u),
            (x_r, y_c, z_b), (x_j, y_c, z_b), (x_j, nb[2], z_b)]
-    return pts, dict(z_u=z_u, y_c=y_c, x_r=x_r, z_b=z_b, ok=(min(ok), max(ok)), x1=x1)
+    if inside:                                               # back along the chamfer's normal
+        d_in = (AWG_R + AWG_OFF + BS["bay_wall"] + AWG_IN) / np.sqrt(2)
+        pts.insert(0, (s0[0] - d_in, s0[1] - d_in, z_0))
+    return pts, dict(z_u=z_u, y_c=y_c, x_r=x_r, z_b=z_b, z_0=z_0, s0=s0, ok=(min(ok), max(ok)), x1=x1)
 
 
 # ---- the looms: legs 0, 1, 4 straight from the star to their drops below the hook feet (Ø7);
@@ -581,7 +600,11 @@ if __name__ == "__main__":
     posts_only = Compound(children=[Pos(px, py, (PLATE_TOP + DECK_BOT_Z) / 2) * Cylinder(POST_D / 2, POST_L)
                                     for px, py in POSTS])
     plate_pads = Pos(0, 0, PLATE_BOT) * extrude(_face(poly), PLATE_T)
-    every = Compound(children=list(asm.values()))
+    # the whole loaded shelf as ONE fused solid (shelf_model: what part_stand and part_bay check
+    # against); a Compound of its overlapping children (the spacers in the adapter's envelope) is
+    # what the OCCT booleans can get wrong
+    every = shelf_model()
+    assert asm["hub_shelf"] is shelf
 
     def audit(tag, ko, expect=None, items=None, gate=True):
         rows = []
@@ -599,7 +622,7 @@ if __name__ == "__main__":
 
     ko = body_keepouts(0.0, "any")
     ko5 = body_keepouts(5.0)
-    audit("hook envelopes 'any' (5)", Compound(children=ko["hooks"]), "posts 0.39")
+    audit("hook envelopes 'any' (5)", Compound(children=ko["hooks"]), "posts 0.339")
     audit("drops +5 (5)", Compound(children=ko5["drops"]), "posts 3.57, plate + pads 0.57")
     audit("drops +0 (5)", Compound(children=ko["drops"]))
     # the deck: posed as part_deck poses it; the posts end ON its underside (0 mm^3, 0 gap)
@@ -617,7 +640,13 @@ if __name__ == "__main__":
              f"shank x shelf {v_shelf:.3f} mm^3, axis outside the hole {outside:.3f} mm^3, tip z {z_tip:.2f} "
              f"({hole_top - z_tip:.2f} under the hole's end z {hole_top:.1f}, {DECK_BOT_Z + T_DECK - hole_top:.1f} skin)")
     tub = tub_solid()
-    audit("the keel tub + its six lid bosses (iface.bay_tub_extent)", tub)
+    audit("the keel tub as part_bay builds it (bay_tub + bay_lid + bay_door, the exit hole, the "
+          "riser clip)", tub, "4.80 from the params box")
+    t_ext = bay_tub_extent()
+    sb_ = every.bounding_box()
+    print(f"    the shelf's south face y {sb_.min.Y:.2f} (params y {HS['y'][0]}): {sb_.min.Y - t_ext['y'][1]:.2f} "
+          f"north of the tub's north wall (y {t_ext['y'][1]}), its lowest z {sb_.min.Z:.2f} "
+          f"(params bottom_z {HS['bottom_z']})")
     # the carapace: part_shell builds a sector (and the cap's magnets) at station az 0, body z, so
     # each goes on its station, Rot(0, 0, STATIONS[k]) (Rot(0, 0, 72 k) is 18 deg off every leg)
     from part_shell import shell_sector, shell_cap
@@ -629,8 +658,10 @@ if __name__ == "__main__":
     bases = Compound(children=[station_tf(i) * base for i in range(len(STATIONS))])
     audit("the docked coxa bases (5)", bases, "posts 0.885")
     stand = stand_solids()
+    expect_st = {"crown plate": "4.00 (the adapter over the relieved plate)",
+                 "cradle walls": "1.30 (the shelf's south face to the north wall's outer face)"}
     for n, s in stand.items():
-        audit(f"the stand: {n}", s, "1.00 (the adapter)" if n.startswith("crown") else None,
+        audit(f"the stand (part_stand, posed): {n}", s, expect_st.get(n),
               items={"shelf + boards + hardware": every, "board bus_adapter": boards["bus_adapter"]})
     lanes = lane_boxes()
     audit("the lanes A / B / C (+x, -x)", Compound(children=list(lanes.values())), "star 1.20",
@@ -686,32 +717,32 @@ if __name__ == "__main__":
     need("every tie / anchor slot off the boards' footprints (both faces)", worst[0] > 0.1,
          f"tightest {worst[1]} {worst[0]:.2f}")
 
-    # ---- B133: the 14 AWG feed, at the provisional nose (params bay_l) and at the pick-4 nose
-    awg = None
-    for tag, tt in (("params' nose", None), (f"the pick-4 nose ({PICK4_NOSE_IN:g} in)", tub_extent_nose_in(PICK4_NOSE_IN))):
-        pts, info = awg_route(tt)
-        tube = capsule(pts, AWG_R)
-        awg = awg if awg is not None else tube           # the looms are checked against params' route
-        feed_ko = {"drops +5": Compound(children=ko5["drops"]), "hooks 'any'": Compound(children=ko["hooks"]),
-                   "deck": deck, "tub + bosses": tub if tt is None else tub_solid(t=tt), **stand,
-                   **{k: v for k, v in lanes.items()}, "coxa bases": bases, **cols,
-                   "shelf": shelf, **{f"board {n}": b for n, b in boards.items() if n != "node_12v"},
-                   "hardware": Compound(children=hw), "tie bands": Compound(children=bands)}
-        rows = sorted((gap(tube, s)[::-1] + (n,)) for n, s in feed_ko.items())
-        hit = [r for r in rows if r[1] > 1e-3]
-        L_feed = sum(float(np.linalg.norm(np.subtract(q, p))) for p, q in zip(pts[:-1], pts[1:]))
-        print(f"  B133 14 AWG feed (Ø{2 * AWG_R:g}), {tag} x {info['x1']:.1f} -> the node's SE pads, {L_feed:.0f} long: "
-              + " -> ".join(f"({x:.2f}, {y:.2f}, {z:.2f})" for x, y, z in pts))
-        print(f"    out through the NE chamfer over the interior floor; under leg 4's drop +5 at z {info['z_u']:.2f} "
-              f"(its floor {DECK_BOT_Z - DROP_DEPTH - 5:.1f}, the tub bottom {bay_tub_extent()['z'][0]:.1f}); riser x "
-              f"{info['x_r']:.2f} (feasible {info['ok'][0]:.2f}..{info['ok'][1]:.2f}); band y {info['y_c']:.2f} z {info['z_b']:.1f}")
-        need(f"the 14 AWG feed ({tag}) >= 0 from drops +5, hooks, deck, tub + bosses, stand, lanes, bases, latch "
-             "columns, the shelf, its ties and the other boards", not hit,
-             "tightest " + "; ".join(f"{n} {g:.2f}" for g, v, n in rows[:5]) +
-             ("; HITS " + "; ".join(f"{n} {v:.2f} mm^3" for g, v, n in hit) if hit else ""))
-        print(f"    against the drops +0 (the connectors' own box): {gap(tube, Compound(children=ko['drops']))[1]:.2f}")
-        v_n, g_n = gap(tube, boards["node_12v"])
-        print(f"    the node (its termination): {v_n:.1f} mm^3 into its board + lead halo, as it must")
+    # ---- B133: the 14 AWG feed, from inside the nose compartment out through part_bay's exit in
+    # the NE chamfer (the real tub: the hole, the riser clip), under leg 4's drop, up, to the node
+    pts, info = awg_route(inside=True)
+    tube = capsule(pts, AWG_R)
+    awg = capsule(pts[1:], AWG_R)                        # the looms meet the feed outside the tub
+    feed_ko = {"drops +5": Compound(children=ko5["drops"]), "hooks 'any'": Compound(children=ko["hooks"]),
+               "deck": deck, "tub + lid + door (part_bay)": tub, **stand,
+               **{k: v for k, v in lanes.items()}, "coxa bases": bases, **cols,
+               "shelf": shelf, **{f"board {n}": b for n, b in boards.items() if n != "node_12v"},
+               "hardware": Compound(children=hw), "tie bands": Compound(children=bands)}
+    rows = sorted((gap(tube, s)[::-1] + (n,)) for n, s in feed_ko.items())
+    hit = [r for r in rows if r[1] > 1e-3]
+    L_feed = sum(float(np.linalg.norm(np.subtract(q, p))) for p, q in zip(pts[1:-1], pts[2:]))
+    print(f"  B133 14 AWG feed (Ø{2 * AWG_R:g}), the nose x {info['x1']:.1f} -> the node's SE pads, {L_feed:.0f} long "
+          f"from the chamfer: " + " -> ".join(f"({x:.2f}, {y:.2f}, {z:.2f})" for x, y, z in pts))
+    print(f"    through part_bay's exit in the NE chamfer over the interior floor (z {info['z_0']:.2f}); under leg 4's "
+          f"drop +5 at z {info['z_u']:.2f} (its floor {DECK_BOT_Z - DROP_DEPTH - 5:.1f}, the tub bottom "
+          f"{bay_tub_extent()['z'][0]:.1f}); riser x {info['x_r']:.2f} (feasible {info['ok'][0]:.2f}..{info['ok'][1]:.2f}, "
+          f"part_bay's clip on it); band y {info['y_c']:.2f} z {info['z_b']:.1f}")
+    need("the 14 AWG feed through the real tub's exit >= 0 from drops +5, hooks, deck, tub + lid + door, the "
+         "stand, lanes, bases, latch columns, the shelf, its ties and the other boards", not hit,
+         "tightest " + "; ".join(f"{n} {g:.2f}" for g, v, n in rows[:5]) +
+         ("; HITS " + "; ".join(f"{n} {v:.2f} mm^3" for g, v, n in hit) if hit else ""))
+    print(f"    against the drops +0 (the connectors' own box): {gap(tube, Compound(children=ko['drops']))[1]:.2f}")
+    v_n, g_n = gap(tube, boards["node_12v"])
+    print(f"    the node (its termination): {v_n:.1f} mm^3 into its board + lead halo, as it must")
     # the proposal's band (y 8..11, z -26..-22, the nose -> the node) for the record
     nb = board_plan("node_12v", halo=False)
     t = bay_tub_extent()
@@ -766,8 +797,8 @@ if __name__ == "__main__":
         g = min((Pos(x, y, PLATE_BOT - 60) * Cylinder(2.5, 120)).distance_to(s) for s in stand.values())
         reach.append(f"({x:.0f}, {y:.0f}) " + (f"free ({g:.2f} to the stand)" if not h else "blocked"))
     print("    the shelf's M3s from below on the stand: " + "; ".join(reach))
-    v, g = gap(boards["bus_adapter"], stand["crown plate (ESTIMATE)"])
-    print(f"    the shelf lowered on the stand: the adapter meets the crown plate after {g:.2f} mm; "
+    v, g = gap(boards["bus_adapter"], stand["crown plate"])
+    print(f"    the shelf lowered on the stand: the adapter meets the relieved crown plate after {g:.2f} mm; "
           "hub service = the robot off the stand (B134)")
     # ---- the adapter's H2 (report): a straight Dupont, face-down, against its own envelope, the
     # tub's bottom (the robot's lowest point) and the crown plate's top on the stand

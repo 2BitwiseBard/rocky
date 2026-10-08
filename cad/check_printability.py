@@ -102,20 +102,28 @@ ORIENT = {
     "jig_column": rot([0, 1, 0], -90),           # on its back, spine down
     "calib_gauge_knee": None,
     "calib_gauge_hip": None,   # standing (audit: both lying poses island a 150-270 mm² face)
-    "trim_cup": None, "trim_cup_lid": None, "belly_skid": None,
-    "imu_grommet": None, "busboard_bracket": None, "battery_sled": None,
-    "sled_rail": None, "avionics_tray": None, "tray_rail": None,
-    "belly_door": None, "shell_sector_demo": None, "tube_clip": None,
-    "link_clip": None, "dock_base": None, "dock_block": None,
+    "trim_cup": None, "trim_cup_lid": None,
+    "imu_grommet": None, "battery_sled": None,
+    "avionics_tray": None, "tray_rail": None,
+    "tray_latch_boss": None,                      # glued under the tray's tongue: underside down
+    "shell_sector_demo": None, "tube_clip": None,
+    "link_clip": None, "dock_base": None,
     "dock_tower": None, "whisker_shoe": None, "foot_pad_tpu": None,
+    # the body layout (option A, 2026-10-07): each exported in its print pose. bay_tub and bay_lid
+    # are body-frame exports that ARE their print poses (the tub open top up, the lid's roof down,
+    # bosses up), bay_door is exported lying on its outer face (part_bay.DOOR_PRINT), hub_shelf
+    # body frame = plate down, posts up. Retired with them: sled_rail, dock_block, belly_door,
+    # belly_skid (part_bay / part_smallwins), busboard_bracket (part_busboard)
+    "bay_tub": None, "bay_lid": None, "bay_door": None, "hub_shelf": None,
 }
 
 # what the print plan says about supports for each part:
 #   'yes'  — plan prescribes supports: islands are expected, reported only
 #   'none' — plan says NO support: any island is a HARD failure
 #   absent — plan is silent: islands are a SURPRISE warning (fix the plan)
-# walls thinner than 0.8 mm that are DELIBERATE (printed flexures)
-THIN_OK = {"dock_block"}
+# walls thinner than 0.8 mm that are DELIBERATE (printed flexures). Empty since dock_block retired
+# (2026-10-07): its successor, bay_tub's carrier, hangs on 1.2 x 1.2 webs, above the 0.8 line
+THIN_OK = set()
 
 SUPPORT_POLICY = {
     "hand_hub": "yes", "tool_hook": "yes", "tool_scoop": "yes",
@@ -131,6 +139,10 @@ SUPPORT_POLICY = {
     "blank_idler": "none",
     "tibia_sea_outer": "none", "horn_coupler": "none", "fit_ladder": "none",
     "body_deck": "none",
+    "bay_tub": "yes",     # pick 4: the XT60 carrier is a 488.4 mm^2 island 2.9 over the floor, held
+                          # by its webs only after they print: supports under it, through the open top
+    "bay_lid": "none", "bay_door": "none",          # audited 2026-10-07: no islands
+    "hub_shelf": "none", "tray_latch_boss": "none",
 }
 
 

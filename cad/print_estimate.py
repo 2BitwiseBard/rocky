@@ -113,16 +113,22 @@ PLATES = {
     "Batch 2 one leg": [("coxa_yaw_base", 1, 0.2)] + [(n, q, 0.2) for n, q in _ONE_LEG] + [
         ("servo_blank", 3, 0.2), ("blank_idler", 3, 0.2),
     ],
-    # tray_rail waits for B51; the bay is part_bay's three parts (B84; sled_rail retired into
-    # the tub). The 8 thumb_knob_m3 of this batch are not priced.
+    # option A (2026-10-07): the deck v0.5, the hub shelf under it (part_busboard), the tray at
+    # its measured home (B51 built: (0, 0) turned 180 on two rails, tray_latch_boss glued under
+    # its tongue; it cannot slide out until the slotted strike is cut, part_avionics), the keel
+    # tub as part_bay's three parts (B84; sled_rail, dock_block and belly_door retired into
+    # them) and the sled. The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
         ("hub_shelf", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
+        ("tray_latch_boss", 1, 0.2),
         ("battery_sled", 1, 0.2), ("bay_tub", 1, 0.2), ("bay_lid", 1, 0.2), ("bay_door", 1, 0.2),
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
     "Deferred: bench jig": [("jig_base", 1, 0.3), ("jig_column", 1, 0.3)],
-    "Deferred: stand": [    # two sections free the leg's full 172 mm reach (part_stand)
+    "Deferred: stand": [    # the U-cradle holds the robot by its tub (B85): deck bottom 89.4 / 169.4 /
+                            # 249.4 over the bench; two sections free the leg's reach, 153.3 to the
+                            # foot point, 183.5 with the B95 hand (part_stand). Print it after part_bay
         ("stand_base", 1, 0.3), ("stand_section", 2, 0.3), ("stand_crown", 1, 0.3),
     ],
     "Deferred: carapace": [("shell_sector", 5, 0.25), ("shell_cap", 1, 0.25)],
