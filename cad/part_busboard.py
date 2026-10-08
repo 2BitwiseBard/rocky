@@ -72,7 +72,9 @@ PLATE_BOT = PLATE_TOP - PLATE_T               # -39.3
 POSTS = [tuple(map(float, p)) for p in HS["posts"]]
 POST_D = HS["post_d"]                         # 8
 POST_L = DECK_BOT_Z - PLATE_TOP               # 26.3: plate top -> deck bottom
-PAD_D, ARM_W = 14.0, 10.0                     # G3's pads / arms (g3_verify), plate-thick
+PAD_D = HS["pad_d"]                           # 14: G3's pads (g3_verify), plate-thick; the sim's post
+                                              # columns read the same key (rocky_model.belly_posts)
+ARM_W = 10.0                                  # G3's arms
 NOTCH_R = 3.0                                 # closing radius: notches < 6 wide filled
 STANDOFF_H = HS["standoff_h"]                 # 5: the node and star standoffs (as packed)
 
@@ -640,7 +642,7 @@ if __name__ == "__main__":
              f"({hole_top - z_tip:.2f} under the hole's end z {hole_top:.1f}, {DECK_BOT_Z + T_DECK - hole_top:.1f} skin)")
     tub = tub_solid()
     audit("the keel tub as part_bay builds it (bay_tub + bay_lid + bay_door, the exit hole, the "
-          "riser clip)", tub, "4.80 from the params box")
+          "riser clip)", tub, "1.92: the plate's SE corner to part_bay's riser clip, 4.80 to the params box")
     t_ext = bay_tub_extent()
     sb_ = every.bounding_box()
     print(f"    the shelf's south face y {sb_.min.Y:.2f} (params y {HS['y'][0]}): {sb_.min.Y - t_ext['y'][1]:.2f} "

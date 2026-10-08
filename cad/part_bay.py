@@ -694,6 +694,10 @@ def main():
           f"k {k(wy, wz):.1f} N/mm a direction (0.8 at {k(wy, wz) * FLOAT:.1f} N); axial "
           f"{4 * E_ * wy * wz / wl:.0f} N/mm (the push: tension); buckling on the pull "
           f"{4 * 4 * np.pi ** 2 * E_ * (wy * wz ** 3 / 12) / wl ** 2:.0f} N")
+    # review 9q: gated, not only printed (the webs are 1.2, not 2.2, for this number)
+    s_all = P["fem"]["petg"]["strength_xy_mpa"]
+    check(f"the flexure webs at the {STOP:.2f} stop under the PETG allowable (fem.petg.strength_xy_mpa)",
+          sig(wy, STOP) < s_all, f"{sig(wy, STOP):.1f} < {s_all:.0f} MPa")
     one = len(tub.solids()) == 1
     check("the carrier is one solid with the tub (the webs join it)", one, f"{len(tub.solids())} solid(s)")
 
@@ -779,9 +783,14 @@ def main():
     check("the door closed: x tub + lid 0; pulled 0.5 off, its barb meets the keeper (hooked)",
           v_d < 1e-3 and barb_in > 0.01, f"{v_d:.4f} mm^3; pulled 0.5: {hooked:.2f} mm^3 in all, {barb_in:.2f} at the keeper")
     tab_l = (KEEP_X[1] + FIT + BARB_L / 2) - XI0
+    strain = 100 * 1.5 * TAB_T * (KEEP_P + FIT) / tab_l ** 2
     print(f"  the hook tab: a {TAB_T} x {TAB_Z[1] - TAB_Z[0]:.0f} cantilever {tab_l:.1f} long, the barb {KEEP_P} "
           f"onto the keeper: bent {KEEP_P + FIT:.1f} to pass it, strain 1.5 t d / L^2 = "
-          f"{100 * 1.5 * TAB_T * (KEEP_P + FIT) / tab_l ** 2:.2f} % (PETG ~4 % to yield); push its free end out to release")
+          f"{strain:.2f} % (PETG ~4 % to yield); push its free end out to release")
+    # review 9q: gated against the allowable's strain (strength_xy / E, 2.33 %), a third under yield
+    e_all = 100 * P["fem"]["petg"]["strength_xy_mpa"] / P["fem"]["petg"]["E_mpa"]
+    check("the hook tab's snap strain under the PETG allowable's (fem.petg strength_xy / E)", strain < e_all,
+          f"{strain:.2f} < {e_all:.2f} %")
     press = _v(door & sled)
     lip_x = SLED_X + PB.TAIL_X0
     boss_face = (SLED_X + PB.TAIL_X0) + PRESS

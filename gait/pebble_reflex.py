@@ -190,8 +190,7 @@ class ReflexSupervisor:
             else righter_hip_min_deg
         if righter_hip_min_deg is False:
             righter_hip_min_deg = None
-        righter_clamp_legs = (d.get("righter_clamp_legs") or _rm.righter_clamp_legs()) \
-            if righter_clamp_legs is None else righter_clamp_legs
+        righter_clamp_legs = _rm.righter_clamp_legs() if righter_clamp_legs is None else righter_clamp_legs
         self.g = gait
         # D063 (B76 fix 1): every velocity reaches the gait through the slew;
         # slew=False passes commands straight through (the pre-D063 behaviour)

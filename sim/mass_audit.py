@@ -16,7 +16,8 @@ inertia tensor about it, and build_mjcf writes them as the torso's explicit
 solid at uniform density, scaled to its mass); a bought part is a box of its
 bounding dims (a disc for the spread wiring). The torso of D063 was 1439.8 g
 on two cylinders at (0, 0, 24.5): option A puts the 380 g pack and the hub
-under the deck, so its CoM drops ~27 mm (z 24.5 -> -2.5).
+under the deck, so its CoM drops ~28 mm (z 24.5 -> -3.2: 1555.0 g at (-2.21, -4.63,
+-3.18), 2026-10-08).
 
 electronics_pod (params 400 g, an estimate: sensors + compute + bus adapter +
 wiring) is split BY LOCATION, every share VERIFY: compute and sensors on the
@@ -61,24 +62,28 @@ CLAW_SERVO_G = float(P["actuators"][P["leg"].get("claw_servo", "scs0009")]["mass
 PETG = 1.27
 OUT = os.path.join(CAD, "out")
 
-# ---- frame constants the pose table needs that are part geometry, not params (each cited;
-# re-read them if that part changes)
+# ---- frame constants the pose table needs that are part geometry, not params. What params gives
+# is derived; the rest are mirrors of a part module's constant (cited), and cad/check_sim_mirror.py
+# (run_all_checks' POST stage, so CI's cad job) asserts each one against that module (review 9q:
+# nothing did, so a part change moved the robot's real CoM and the pipeline diff never saw it)
+FIT = float(P["print"]["clearance_fit"])
 DECK_TOP_Z = rm.DECK_BOT_Z_MM + 6.0   # -4: the 6 deck (B27) from -10; part_deck models it 0..6
-TRAY_GAP_DRAWN = 3.4                   # part_avionics: the rails' channel holds the tray plate 3.4
-                                       # over the deck top as drawn; + tray_lift (params) since D064
-TRAY_REST_DROP = 0.3                   # part_avionics.TRAY_Z = SEAT_Z - FIT: the tray RESTS with its
+TRAY_GAP_DRAWN = 3.4                   # part_avionics.SEAT_Z - tray_lift: the rails' channel holds the
+                                       # tray plate 3.4 over the deck top as drawn (its CH_Z 5.4 less the
+                                       # lugs' mid-height); + tray_lift (params) since D064
+TRAY_REST_DROP = FIT                   # part_avionics.TRAY_Z = SEAT_Z - FIT: the tray RESTS with its
                                        # lugs on the channel floor (plate 5.1 over the deck top, its
-                                       # gravity pose and its latched one), 0.3 under the centred 5.4
-TONGUE_Y = float(AT["plate_l"]) / 2 + 8.0   # part_avionics.TONGUE_Y 43: the latch axis (tray frame);
-                                            # tray_latch_boss is exported in the tongue's frame
+                                       # gravity pose and its latched one), FIT under the centred 5.4
+TONGUE_Y = float(AT["plate_l"]) / 2 + 8.0   # part_avionics.TONGUE_Y 43 (L / 2 + TONGUE_L / 2): the latch
+                                            # axis (tray frame); tray_latch_boss is exported in its frame
 TRAY_T = float(AT["plate_t"])
-RAIL_POSE_X = float(AT["plate_w"]) / 2 + 5.3   # part_avionics.RAIL_POSE_X: rail block centre off
-                                               # the tray centre (0.3 clearance + the 10 block / 2)
+RAIL_POSE_X = float(AT["plate_w"]) / 2 + FIT + 5.0   # part_avionics.RAIL_POSE_X (W / 2 + FIT +
+                                                     # RAIL_BLK_W / 2): rail block centre off the tray's
 PI_BOARD_DX = 10.0                     # part_avionics: the Pi's centre off its hole pattern, USB end
-SLED_RAIL_H = 2.10                     # part_bay.SLED_Z0 - floor: part_battery's 4.0 rail into the
-                                       # sled's 1.9 groove, the rest lift part_bay measures (was 2.25)
+SLED_RAIL_H = 2.10                     # part_bay.SLED_Z0 - ZF: part_battery's 4.0 rail into the sled's
+                                       # GROOVE_D 1.9 (1.6 + FIT) groove, the rest lift (was 2.25)
 SLED_T = 3.0                           # part_battery.SLED_T: the sled floor the pack sits on
-YAW_HUB_Z1 = 1.3 + 6.0                 # cad/leg_frame: fork lower hub 1.3 over the plate, 6 thick
+YAW_HUB_Z1 = 1.3 + 6.0                 # cad/leg_frame.HUB_Z1: fork lower hub 1.3 over the plate, 6 thick
 STATIONS = rm.stations_deg()
 R_ST = float(P["body"]["circumradius"])
 
@@ -100,7 +105,8 @@ POD_SHARE_G = {
 }
 assert abs(sum(POD_SHARE_G.values()) - POD_REF_G) < 1e-9
 # the hub boards' envelopes (plan w x l along the board's own x / y, stack height): params
-# hub_shelf.boards places them; part_avionics.BOARDS and the hub_shelf notes size them
+# hub_shelf.boards places them; part_busboard.SHELF_BOARDS sizes them (from part_avionics.BOARDS),
+# check_sim_mirror asserts these against it
 SHELF_BOARDS = {"bus_adapter": (42.0, 33.0, 15.1), "buck_5v": (27.8, 20.3, 10.0),
                 "ubec_6v": (43.0, 17.0, 8.2), "node_12v": (36.0, 36.0, 12.6), "star": (40.0, 30.0, 22.4)}
 WIRING_DISC = dict(r=80.0, t=10.0, z=-15.0)   # ESTIMATE: the looms and hardware as a disc in the
@@ -291,7 +297,7 @@ def torso_items(allow_missing=False):
     # 3.4, resting (part_avionics.TRAY_Z: the lugs on the channel floor, 0.3 under the centred pose)
     tx, ty = (float(v) for v in AT["tray_xy"])
     Rt = rz(float(AT["tray_rot_deg"]))
-    tz0 = DECK_TOP_Z + TRAY_GAP_DRAWN + float(AT["tray_lift"]) - TRAY_REST_DROP
+    tz0 = tray_plate_z()
     tray = tf(Rt, (tx, ty, tz0))
     items.append(stl_item("avionics_tray", "avionics_tray", PLA, [tray],
                           note=f"({tx:g}, {ty:g}) rot {AT['tray_rot_deg']:g}, plate z {tz0:.1f}"))
@@ -324,12 +330,11 @@ def torso_items(allow_missing=False):
 
     # the keel tub (I5, option A): the sled + pack in it, then the tub's own parts
     tub = rm.bay_tub_extent_mm()
-    zin0 = float(BS["bay_top_z"]) - float(BS["bay_roof"]) - float(BS["bay_h"])
     bx, by = (float(v) for v in BS["bay_centre"])
-    items.append(stl_item("battery_sled", "battery_sled", PLA, [tf(t=(bx, by, zin0 + SLED_RAIL_H))],
-                          note=f"on the tub's rails, z {zin0 + SLED_RAIL_H:.2f}"))
+    items.append(stl_item("battery_sled", "battery_sled", PLA, [tf(t=(bx, by, sled_z()))],
+                          note=f"on the tub's rails, z {sled_z():.2f}"))
     pack = (float(BS["pack_l"]), float(BS["pack_w"]), float(BS["pack_h"]))
-    pz = zin0 + SLED_RAIL_H + SLED_T + pack[2] / 2
+    pz = sled_z() + SLED_T + pack[2] / 2
     items.append(box_item("battery", HW["battery_3s_5200"], (bx, by, pz), pack, src="hw",
                           note=f"pack centre z {pz:.2f}"))
     x0, x1 = tub["x"]
@@ -380,11 +385,8 @@ def torso_items(allow_missing=False):
                            note=f"ESTIMATE: a disc r {WIRING_DISC['r']:g} under the deck"))
 
     # the five stations: the yaw servo (shaft down, case hanging -x, cad/leg_frame) + the base
-    S = P["servo_st3215"]
-    zc_yaw = YAW_HUB_Z1 + float(S["body_h"]) + float(S["out_boss_h"]) + float(S["horn_t"]) \
-        - float(S["body_h"]) / 2                           # leg_frame.ZC_YAW, 26.0
-    c_leg = np.array([float(S["shaft_offset"]) - float(S["body_l"]) / 2, 0.0, zc_yaw])
-    dims = (float(S["body_l"]), float(S["body_w"]), float(S["body_h"]))
+    c_leg, dims = yaw_case_leg()
+    zc_yaw = c_leg[2]
     parts = []
     for i in range(len(STATIONS)):
         R, t = station_tf(i)
@@ -393,6 +395,28 @@ def torso_items(allow_missing=False):
     items.append(stl_item("coxa_yaw_base x5", "coxa_yaw_base", PLA,
                           [station_tf(i) for i in range(len(STATIONS))], note="station_tf"))
     return items, provisional
+
+
+def yaw_case_leg():
+    """The yaw servo's case box in the leg frame: (centre (3,), dims (l, w, h)) mm. The case
+    hangs -x of the shaft, shaft down: its mid-plane is leg_frame.ZC_YAW (26.0), which
+    check_sim_mirror asserts."""
+    S = P["servo_st3215"]
+    zc_yaw = YAW_HUB_Z1 + float(S["body_h"]) + float(S["out_boss_h"]) + float(S["horn_t"]) \
+        - float(S["body_h"]) / 2                           # leg_frame.ZC_YAW, 26.0
+    c_leg = np.array([float(S["shaft_offset"]) - float(S["body_l"]) / 2, 0.0, zc_yaw])
+    return c_leg, (float(S["body_l"]), float(S["body_w"]), float(S["body_h"]))
+
+
+def tray_plate_z():
+    """The tray plate's underside, body z, resting (part_avionics: DECK_TOP + TRAY_Z, 1.1)."""
+    return DECK_TOP_Z + TRAY_GAP_DRAWN + float(AT["tray_lift"]) - TRAY_REST_DROP
+
+
+def sled_z():
+    """The battery sled's underside, body z, on the tub's rails (part_bay.SLED_Z0, -50.9)."""
+    zin0 = float(BS["bay_top_z"]) - float(BS["bay_roof"]) - float(BS["bay_h"])
+    return zin0 + SLED_RAIL_H
 
 
 def _shelf_fallback(g):

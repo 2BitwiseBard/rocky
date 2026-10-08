@@ -108,11 +108,10 @@ if os.path.exists(_MB):
     M_FEMUR = _mb["femur"] / 1000.0
     M_TIBIA = _mb["tibia"] / 1000.0
     MASS_SOURCE = "mass_budget.json (CAD-derived, D039)"
-else:
-    M_TORSO = 1.35                     # deck + battery + electronics + carapace
-    M_COXA = 0.14                      # fork + femur servo
-    M_FEMUR = 0.03                     # link plate
-    M_TIBIA = 0.17                     # knee servo + carrier + tube + SEA + hand
+else:                                  # rocky_model.FALLBACK_MASS_G, the one copy: deck + battery +
+    # electronics + carapace / fork + femur servo / link plate / knee servo + carrier + tube + SEA + hand
+    M_TORSO, M_COXA, M_FEMUR, M_TIBIA = (rm.FALLBACK_MASS_G[k] / 1000.0
+                                         for k in ("torso", "coxa", "femur", "tibia"))
     MASS_SOURCE = "pre-D039 estimate (fallback)"
 
 # the tibia budget INCLUDES the hand (mass_audit); split it without adding mass:

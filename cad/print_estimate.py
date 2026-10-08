@@ -115,7 +115,7 @@ PLATES = {
     ],
     # option A (2026-10-07): the deck v0.5, the hub shelf under it (part_busboard), the tray at
     # its measured home (B51 built: (0, 0) turned 180 on two rails, tray_latch_boss glued under
-    # its tongue; it cannot slide out until the slotted strike is cut, part_avionics), the keel
+    # its tongue; at OPEN it slides 16 south in the deck's slotted strike, then lifts), the keel
     # tub as part_bay's three parts (B84; sled_rail, dock_block and belly_door retired into
     # them) and the sled. The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [

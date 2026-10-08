@@ -16,7 +16,9 @@ meta:
                          # Ø14 post columns, rocky_model.belly_boxes / belly_posts) and the torso's
                          # <inertial> from sim/mass_budget.json (mass_audit's pose table, every part
                          # weighed from its STL), so the robot hash moved 87215110e9c4 -> deae868522cc
-                         # (c10b970d2bb2 was the provisional budget on the shelf's hull box)
+                         # (c10b970d2bb2 was the provisional budget on the shelf's hull box); the 9q
+                         # review's shell relief over the docked cup's back wall (part_shell
+                         # cup_back_relief, -69 mm^3 a sector, torso 1555.2 -> 1555.0 g) -> c3e82f13b671
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -113,7 +115,7 @@ reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults(
                          # action map for new training runs (contract key hip_floor_deg; the
                          # checkpoints on disk replay their uncut map and the supervisor clamps it)
   righter_clamp_legs: [1, 2, 3, 4]   # pick 13: the legs righter_hip_min_deg applies to (rocky_model.
-                         # righter_clamp_legs reads it; this is its default). Leg 0 is out by the pick,
+                         # righter_clamp_legs reads it, the one copy). Leg 0 is out by the pick,
                          # and with recover1 it touched the sim's shelf HULL in 20/20 falls (max 2.93,
                          # at y 70-71 where the real plate ends at 64.3): that hull over-stated the
                          # shelf (one box from bottom_z, grown north by the (26, 64) post pad); the
@@ -373,8 +375,10 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
     tray_lift: 2.0       # the rails' channel 2 higher: the tray stands 2 mm over the deck than drawn,
                          # so the M3 heads on the inboard tabs (under the plate now) keep 3.4 (button 1.65)
     lug_release: 16.0    # pick 7: the wings are three 10 mm lugs, the channel lips windowed: slide 16
-                         # (north or south), then lift. The path is 0 mm^3 against the bases and the
-                         # fork + hip servo yawed -40..40 (BODY_LAYOUT_PROPOSAL s2)
+                         # SOUTH (the latch's slotted strike; north the rails would let it go but the
+                         # plate covers the (0, 50) trunk slot and the strike holds it), then lift. The
+                         # path is 0 mm^3 against the bases and the fork + hip servo yawed -40..40 with
+                         # the carapace OFF; with it on it meets sectors 2-4 and the cap (part_avionics)
     pi_standoff_h: 11.0  # D063 (B90): 6 -> 11, so the IMU fits under the Pi; pick 14 keeps it (on 13 no
                          # USB-A port takes a plug reliably; on 18.5 the Pi fails the 3 mm carapace
                          # rule, B128). part_avionics.PI_STANDOFF_H reads this
@@ -481,6 +485,10 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
                          # HOOK_ROLL_PAD 0.05 (yaw ear 12.86, box 12.35), 0.585 to 'path', 0.885 to
                          # the coxa bases, 3.57 to the drops + 5 (the plate: 0.57)
     post_d: 8.0
+    pad_d: 14.0          # the plate's round pad under each post (G3's pads, g3_verify), plate-thick. One key
+                         # for part_busboard's plate outline and the sim's post columns (rocky_model.
+                         # belly_posts: Ø pad_d over the post's height); review 9q: the sim derived it as
+                         # post_d + 6 while the part drew a literal 14
     post_screw: below    # 2026-10-07 (measured here): M3 from BELOW, through the plate and the post into a
                          # blind Ø2.8 thread-forming hole in the deck's underside, 5 deep, 1.0 skin
                          # (part_deck.DECK_HOLES; or a short M3 x 3-4 insert). NOT the proposal's M3 x 16
@@ -494,8 +502,8 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
                          # >= 6 pad pairs, >= 15 A, no BEC); 36 x 36 board
     star_posts: [34.0, 24.0]  # the 40 x 30 perfboard star's M3 corner pattern (part_busboard, WIRING_HARNESS)
     standoff_h: 5.0      # star and node standoffs over the plate top, as packed (star stack 22.4 = 5 + 1.6
-                         # + mated XH 9.8 + lead bend 6; node 12.6 = 5 + 1.6 + flat-soldered leads 6). The
-                         # bracket's 8 mm posts leave the star top 0.90 under the deck (K3)
+                         # + mated XH 9.8 + lead bend 6; node 12.6 = 5 + 1.6 + flat-soldered leads 6): the
+                         # star top -36.3 + 22.4 = -13.9, 3.9 under the deck's underside
     boards:              # the measured poses: [x, y] board centre (body), rot about z, face up = parts
                          # toward the deck on the plate's top, down = under the plate toward the ground.
                          # Envelopes: part_avionics.BOARDS (adapter 42 x 33, stack 15.1; UBEC 43 x 17, 8.2);

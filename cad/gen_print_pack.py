@@ -237,15 +237,18 @@ PARTS = {
                       "The Pi 5 (standoffs on 58 x 49, 11 tall, B89; M2.5 x 6 or x 8) and the IMU "
                       "on four imu_grommets (B90; M2.5 x 10 + nut), nothing else (pick 14: the "
                       "boards are on the hub shelf). It sits at (0, 0) turned 180 on its two rails "
-                      "(B51), three lugs a side under the windowed lips: slide 16 south, then lift. "
-                      "Glue tray_latch_boss under the tongue. The tray cannot slide out yet: the "
-                      "I3 rotor pins the slide in the round strike until the slotted strike is "
-                      "cut (part_avionics)."),
+                      "(B51), three lugs a side under the windowed lips. Glue tray_latch_boss "
+                      "under the tongue. Out: the carapace off first (the boss meets sector 2's "
+                      "latch pad from slide 14; lifted, the Pi meets sectors 3 and 4, the cap and "
+                      "by lift 42 sector 1), the robot off the stand and the sled out (the strike's "
+                      "driver column runs through both), the I3 latch to OPEN, slide 16 south "
+                      "(the deck strike's slot stops it at 16.5), then lift (part_avionics)."),
     "tray_latch_boss": ("PLA or PETG", "as exported (underside down)", "none", PLA_DEFAULT,
                         "Glued under avionics_tray's tongue (the tray prints plate-down, so a "
                         "boss there would float): it brings the tongue's I3 cartridge down onto "
-                        "the deck top, where the (0, -43) strike bites. 0.85 of wall between its "
-                        "Ø14.3 pocket and the tongue's south end: VERIFY on the coupon."),
+                        "the deck top, where the (0, -43) strike bites. The Ø14.3 pocket keeps 1.6 "
+                        "of wall (LATCH_WALL, four perimeters) all round, in the boss and in the "
+                        "tongue, its south end included (part_avionics gates it)."),
     "tray_rail": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
                   "The avionics tray's two rails, on the deck's inboard tab holes (+-40, -20 / 0 "
                   "/ 20) with M3 ISO 7380 button heads (a socket head does not fit under the "
@@ -353,7 +356,8 @@ BATCHES = [
          intro="Option A (the owner's picks, 2026-10-07). The deck v0.5 after B27 and B28, and "
                "after the port coupons dock cleanly; the hub shelf under it once the electronics "
                "exist; the avionics tray on its rails with tray_latch_boss glued under its "
-               "tongue (it cannot slide out until the slotted strike is cut); the keel tub "
+               "tongue (it slides 16 south at OPEN, the strike's slot stops it, then lifts; the "
+               "carapace comes off first); the keel tub "
                "(bay_tub + bay_lid + bay_door) and the battery sled that rides in it. 8 more "
                "thumb_knob_m3, 2 per coxa_yaw_base. The port coupons and the 8 knobs are not in "
                "the estimate."),

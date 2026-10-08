@@ -250,9 +250,8 @@ def reflex_defaults() -> dict:
 
 # D064 (pick 13, B130): the righter's hip clamp. Leg 0 is not in the set: it never reaches
 # the keel tub inside its soft limits (BODY_LAYOUT_PROPOSAL correction 8; the tub runs
-# east-west at y -20, south of leg 0's station). params may name the set as
-# reflex.righter_clamp_legs; until it does, this is the default every consumer shares.
-RIGHTER_CLAMP_LEGS = (1, 2, 3, 4)
+# east-west at y -20, south of leg 0's station). params reflex.righter_clamp_legs names the
+# set, the one copy (review 9q: a literal (1, 2, 3, 4) here was a silent second default).
 
 
 def righter_hip_min_deg() -> float | None:
@@ -266,10 +265,16 @@ def righter_hip_min_deg() -> float | None:
 
 
 def righter_clamp_legs() -> tuple:
-    """The legs the righter's hip clamp applies to: params reflex.righter_clamp_legs, else
-    RIGHTER_CLAMP_LEGS (1-4)."""
+    """The legs the righter's hip clamp applies to: params reflex.righter_clamp_legs (1-4).
+    () when params has no clamp at all (the pre-D064 robot); a clamp with no leg set is an
+    error, not a guess."""
     v = _p().get("reflex", {}).get("righter_clamp_legs")
-    return tuple(int(i) for i in (RIGHTER_CLAMP_LEGS if v is None else v))
+    if v is None:
+        if righter_hip_min_deg() is not None:
+            raise ValueError("params reflex.righter_hip_min_deg is set but reflex.righter_clamp_legs is "
+                             "missing: name the legs the righter's hip clamp applies to")
+        return ()
+    return tuple(int(i) for i in v)
 
 
 # ------------------------------------------------------------------ the belly (D064)
@@ -281,7 +286,13 @@ def righter_clamp_legs() -> tuple:
 # written out here and sim/tests/test_belly.py re-derives both from params.
 DECK_BOT_Z_MM = -10.0          # the deck's underside: the CAD cuts a 6 deck (B27 OPEN: params
                                # body.deck_t 4.0 is unread), deck top -4 (iface.DECK_BOT_Z)
-SHELF_PAD_WALL_MM = 3.0        # the shelf's pad round each Ø post_d post: 3 a side, Ø14 at post_d 8
+
+
+def shelf_pad_r_mm() -> float:
+    """The radius of the hub shelf's pad round each post: params hub_shelf.pad_d / 2 (7), the
+    key part_busboard draws the plate's pads from (review 9q: this was post_d / 2 + a literal 3,
+    while the part drew a literal Ø14, so a post_d change moved only the sim's columns)."""
+    return float(_p()["interfaces"]["hub_shelf"]["pad_d"]) / 2
 
 
 def bay_tub_extent_mm() -> dict:
@@ -305,13 +316,13 @@ def bay_tub_extent_mm() -> dict:
 def hub_shelf_extent_mm() -> dict:
     """The hub shelf's ENVELOPE (its hull), {'x', 'y', 'z'} (lo, hi) mm, body frame: the
     axis-aligned hull of params hub_shelf x / y (the plate and the five boards with their plug
-    halos, as packed) and the square round each post's pad (Ø post_d + 2 x SHELF_PAD_WALL_MM =
-    14 at the posts' xy), from bottom_z (the face-down adapter's pins) up to the deck's underside
+    halos, as packed) and the square round each post's pad (Ø params hub_shelf.pad_d, 14, at
+    the posts' xy), from bottom_z (the face-down adapter's pins) up to the deck's underside
     (the posts hang from it; the star's top is -13.9). Today: x -57..57, y 12.2..71, z
     -54.4..-10. A bound for checks (mass_audit's centroid gate), NOT the sim's geoms since the
     D064 integration: belly_boxes() + belly_posts() carry the plate and the three post columns."""
     hs = _p()["interfaces"]["hub_shelf"]
-    r = float(hs["post_d"]) / 2 + SHELF_PAD_WALL_MM
+    r = shelf_pad_r_mm()
     xs = [float(v) for v in hs["x"]] + [float(p[0]) + s * r for p in hs["posts"] for s in (-1, 1)]
     ys = [float(v) for v in hs["y"]] + [float(p[1]) + s * r for p in hs["posts"] for s in (-1, 1)]
     return {"x": (min(xs), max(xs)), "y": (min(ys), max(ys)),
@@ -336,13 +347,13 @@ def belly_boxes() -> dict:
 
 def belly_posts() -> dict:
     """{'belly_shelf_post<k>': ((x, y), r, (z0, z1))} mm, body frame: the hub shelf's three
-    posts with their pads as vertical cylinders (the MJCF's / URDF's cylinder geoms), Ø post_d
-    + 2 x SHELF_PAD_WALL_MM (14) at params hub_shelf.posts, from the plate's underside
+    posts with their pads as vertical cylinders (the MJCF's / URDF's cylinder geoms), Ø params
+    hub_shelf.pad_d (14) at params hub_shelf.posts, from the plate's underside
     (plate_top_z - plate_t) to the deck's underside. A Ø14 column over the whole height bounds
     the part (its Ø8 posts stand on Ø14 pads, part_busboard). The names start 'belly_shelf' so
     every report that says 'hub shelf' for belly_shelf says it for them too."""
     hs = _p()["interfaces"]["hub_shelf"]
-    r = float(hs["post_d"]) / 2 + SHELF_PAD_WALL_MM
+    r = shelf_pad_r_mm()
     z0 = float(hs["plate_top_z"]) - float(hs["plate_t"])
     return {f"belly_shelf_post{k}": ((float(p[0]), float(p[1])), r, (z0, DECK_BOT_Z_MM))
             for k, p in enumerate(hs["posts"])}
@@ -355,6 +366,13 @@ def belly_geom_names() -> tuple:
 
 
 # ------------------------------------------------------------------ the torso's mass (D039, D064)
+# The pre-D039 estimate (the budget D015 sized the servos on), g: what build_mjcf, generate_urdf
+# and pebble_feasibility fall back to when sim/mass_budget.json is missing, one copy (review 9q:
+# three hand copies). Each of them WARNS when it uses it.
+FALLBACK_MASS_G = {"torso": 1350.0, "coxa": 140.0, "femur": 30.0, "tibia": 170.0}
+# the torso CoM that fallback's two weighted cylinders give (build_mjcf: 0.75 of the mass at z 18,
+# 0.25 at z 44): z 24.5
+FALLBACK_TORSO_COM_MM = (0.0, 0.0, 0.75 * 18.0 + 0.25 * 44.0)
 MASS_BUDGET_PATH = os.path.normpath(os.path.join(_HERE, "..", "sim", "mass_budget.json"))
 
 

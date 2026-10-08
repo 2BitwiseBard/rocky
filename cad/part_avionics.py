@@ -32,6 +32,12 @@ end stops it at lug_release + 0.5 inside the lift window, and at LOCKED it holds
 (part_deck.tray_on_deck measures all of it on the deck as cut). The plate's two corners at the
 tongue end are cut square to stations 234 / 306 (corner_cuts): uncut, they met the coxa bases'
 inboard faces by slide 16, the plate now standing 2 higher (tray_lift).
+The carapace comes off FIRST (review 9q): with it on, slid south the boss meets sector 2's (az 234)
+latch pad from slide 14 and that pad's I3 cartridge by 16, and lifted the Pi meets sector 3 from lift
+10, sector 4 by 14, the cap by 18, sector 1 by 42 (sector 0 never). The gated release path is the
+carapace-off one; the carapace-on path is a reported row below. The strike's driver column also runs
+through the sled and the stand's cradle (part_bay, B126), so: the robot off the stand, the sled out,
+the carapace off, then the latch.
 
 Pick 14: the bus adapter, the 5 V buck and the 6 V UBEC live face-down on the hub shelf
 (part_busboard); the bus adapter runs over the Pi's UART. BOARDS stays here as the envelope
@@ -212,12 +218,9 @@ def _box(x0, x1, y0, y1, z0, z1):
 
 
 def _vol(s):
-    if s is None:
-        return 0.0
-    try:
-        return float(s.volume)
-    except Exception:
-        return 0.0
+    # no try/except: a boolean OCCT cannot do must fail the module, never read as 0 mm^3 of overlap
+    # (872dba5 swallowed every exception here, so a failed intersection printed CLEAR; review 9q)
+    return 0.0 if s is None else float(s.volume)
 
 
 # ====================================================================== pose
@@ -725,8 +728,8 @@ if __name__ == "__main__":
         return worst, worst_at
     worst, worst_at = release_path(LUG_RELEASE)
     need(f"the release path (slid {LUG_RELEASE:g} south in 4 mm steps, then lifted 5..45) x rails, bases, yaw "
-         "servos and the forks + hip servos at yaw -40..40 (tray + boss + Pi)", worst, lambda q: q < 0.01, "CLEAR",
-         f"CLASH at {worst_at}")
+         "servos and the forks + hip servos at yaw -40..40 (tray + boss + Pi; the carapace off, as it comes out: "
+         "the carapace-on path is reported below)", worst, lambda q: q < 0.01, "CLEAR", f"CLASH at {worst_at}")
     wn, wn_at = release_path(-LUG_RELEASE)
     print(f"  (the same path slid {LUG_RELEASE:g} north, not the release: {wn:.2f} mm^3"
           + (f" at {wn_at})" if wn > 0.01 else ")"))
@@ -902,6 +905,38 @@ if __name__ == "__main__":
           f"carapace centred ({gd0[1]}), {gd:.2f} worst float; the housing top at body z "
           f"{(tray_tf() * dup).bounding_box().max.Z:.2f})")
     print("  (unmodelled: the Active Cooler or any HAT over the SoC)")
+
+    # ---- the release with the carapace ON (review 9q): reported, not gated ---------------------
+    # The release path above is gated with the carapace off, and it has to be off: this row says
+    # where the carapace (five sectors, the cap, the five sector latch cartridges LOCKED) meets the
+    # tray + boss + Pi on the same path (slid south, then lifted straight up at lug_release). Each
+    # piece is reported at its first contact (9q measured: sector 2 at slide 14, 4.04 mm^3; its
+    # cartridge by 16; sector 3 at lift 10, 0.34; sector 4 by 14; the cap by 18; sector 1 by 42).
+    # If sector 2's pad ever moves out of the tongue's path, this row shows it
+    from iface import latch_insert_housing, latch_housing_tf, latch_insert_rotor, SHELL_LATCH_AZ, SHELL_LATCH_R
+    hs_, ro_ = latch_insert_housing(), latch_insert_rotor()
+    on = {f"sector {k} (az {a:.0f})": [Rot(0, 0, a) * sec] for k, a in enumerate(STATIONS)}
+    on["the cap"] = [shell[-1]]
+    for k, a in enumerate(STATIONS):
+        lt = Rot(0, 0, a + SHELL_LATCH_AZ) * Pos(SHELL_LATCH_R, 0, DECK_TOP)
+        on[f"sector {k}'s I3 cartridge"] = [lt * latch_housing_tf() * hs_,
+                                            lt * Rot(0, 0, LATCH_ENTRY_DEG + 90) * ro_]
+    on_b = {k: boxed(v) for k, v in on.items()}
+    met = {}
+    steps = [(s_, 0.0) for s_ in (0.0, 4.0, 8.0, 12.0, 14.0, LUG_RELEASE)] + \
+        [(LUG_RELEASE, float(z)) for z in (2, 4, 6, 8, 10, 14, 18, 26, 34, 42)]
+    for s_, z in steps:
+        mv = [tray_tf(s_, z, rest=True) * q for q in moving_t]
+        for k, b in on_b.items():
+            if k not in met:
+                v = xvol(mv, b)
+                if v > 0.01:
+                    met[k] = (s_, z, v)
+    order = sorted(met, key=lambda k: (met[k][1], met[k][0]))
+    print("the release path with the carapace ON (reported, not gated: the carapace comes off first): " +
+          ("; ".join(f"{k} at slide {met[k][0]:g} lift {met[k][1]:g} ({met[k][2]:.2f} mm^3)" for k in order)
+           if met else "clear") +
+          f"; never met: {', '.join(k for k in on if k not in met) or 'none'}")
 
     # ---- pick 14: the USB end +x, the lower middle port's plug room -----------------------------
     px, py, pz, pd = pi5_port("usb_middle", "lower")

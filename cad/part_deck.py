@@ -742,7 +742,8 @@ if __name__ == "__main__":
     print("DECK_HOLES audit (plan; retired: the four strap slots, the (52, -6) grommet + its two anchors, "
           "grid (0, -40)):")
     for name, ok, detail in deck_hole_audit(bases_model, feet):
-        bad += ok is False                        # None = PENDING (another part's to close)
+        bad += ok is None or not ok               # review 9q: a PENDING (None) row fails too, now that
+                                                  # part_avionics.TRAY_Z closes the last one (numpy bools pass)
         print(f"  {name}: {'OK' if ok else 'PENDING' if ok is None else 'FAIL'}" + (f" ({detail})" if detail else ""))
     # the tray's latch where the tray really is (part_avionics' tongue + boss, resting on its
     # rails): seated, LOCKED, the slide out along the slot, the slot's end as the stop, held

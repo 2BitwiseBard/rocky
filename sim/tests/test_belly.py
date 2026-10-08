@@ -61,7 +61,7 @@ def test_belly_shelf_is_the_plate_box_and_the_post_columns():
     shelf = rm.belly_boxes()["belly_shelf"]
     assert flat(shelf) == pytest.approx([*hs["x"], *hs["y"], hs["bottom_z"], -10.0])
     assert flat(shelf) == pytest.approx([-56.2, 53.95, 12.2, 64.3, -54.4, -10.0])
-    r = hs["post_d"] / 2 + rm.SHELF_PAD_WALL_MM            # the Ø14 pads
+    r = hs["pad_d"] / 2                                    # the Ø14 pads (params, as part_busboard)
     posts = rm.belly_posts()
     assert list(posts) == [f"belly_shelf_post{k}" for k in range(len(hs["posts"]))]
     for ((x, y), rr, (z0, z1)), p in zip(posts.values(), hs["posts"]):
@@ -129,11 +129,12 @@ def test_torso_inertial_is_the_budget(model):
     assert rm.torso_inertial()["com_mm"] == pytest.approx(tuple(mb["torso_com_mm"]))
 
 
-def test_the_budget_says_whether_it_is_provisional():
+def test_the_committed_budget_is_not_provisional():
+    """mass_audit --allow-missing is a DEV flag: a budget with PROVISIONAL masses never ships
+    (review 9q: this only asked that a provisional budget name its items)."""
     mb = json.load(open(BUDGET))
-    assert isinstance(mb.get("provisional"), bool)
-    if mb["provisional"]:
-        assert mb["provisional_items"], "a provisional budget names what was estimated"
+    assert mb.get("provisional") is False, mb.get("provisional_items")
+    assert not mb.get("provisional_items")
 
 
 def test_belly_clearance_at_stance(model):
@@ -226,6 +227,86 @@ def test_eval_replays_the_contract_map_and_the_righter_agrees():
 def RecoverEnvConfig():
     from rocky_recover_env import RecoverEnv
     return RecoverEnv(seed=0).config()
+
+
+def _belly_at_drop_start(env):
+    """rl_common.belly_contacts on the last drop's starting pose (before the landing)."""
+    import rl_common as rc
+    d = mujoco.MjData(env.model)
+    d.qpos[:] = env.last_drop_qpos
+    mujoco.mj_fwdPosition(env.model, d)
+    return rc.belly_contacts(env.model, d, rc.belly_geoms(env.model), rc.leg_of_body(env.model))
+
+
+def test_default_drops_never_start_inside_the_belly():
+    """Review 9q: the uniform joint draw put 3.7 % of drops inside the keel tub or the shelf; the
+    default env draws those again, records it in its contract, and a drop that needed no redraw is
+    the pre-9q drop exactly (same rng stream, same landing), so old seeds replay with the flag off."""
+    from rocky_recover_env import RecoverEnv
+    new, old = RecoverEnv(seed=0), RecoverEnv(seed=0, drop_clear_of_belly=False)
+    assert new.config()["drop_clear_of_belly"] is True and old.config()["drop_clear_of_belly"] is False
+    inside_old = redraws = same = 0
+    for seed in range(60):
+        new.reset(seed=seed)
+        old.reset(seed=seed)
+        assert not _belly_at_drop_start(new), seed
+        hit = bool(_belly_at_drop_start(old))
+        inside_old += hit
+        redraws += new.last_q0_redraws
+        assert old.last_q0_redraws == 0
+        if new.last_q0_redraws == 0:
+            assert not hit
+            assert np.array_equal(new.last_drop_qpos, old.last_drop_qpos)
+            assert np.array_equal(new.data.qpos, old.data.qpos)          # the same landing
+            same += 1
+    assert inside_old > 0 and redraws >= inside_old and same == 60 - inside_old
+
+
+def test_eval_replays_the_drop_stream_it_trained_on():
+    import eval_recover as er
+    import rl_common as rc
+    legacy = rc.checkpoint_contract({"args": {"env": "recover"}}, env_hint="recover")
+    assert er.env_for(legacy).drop_clear_of_belly is False       # no key: the pre-9q draws
+    assert er.env_for(dict(RecoverEnvConfig(), obs_version=2)).drop_clear_of_belly is True
+
+
+def test_resume_refuses_a_changed_action_map():
+    """Review 9q: a pre-D064 checkpoint (no hip_floor_deg: the uncut map) resumed under the
+    'params' floor would have every hip action of legs 1-4 mean something else."""
+    import rl_common as rc
+    from rocky_recover_env import RecoverEnv
+    legacy = rc.checkpoint_contract({"args": {"env": "recover"}}, env_hint="recover")
+    new = RecoverEnvConfig()
+    assert "hip floor" in rc.action_map_mismatch(legacy, new)
+    assert rc.action_map_mismatch(legacy, RecoverEnv(seed=0, hip_clamp=None).config()) is None
+    assert rc.action_map_mismatch(new, new) is None
+    assert "legs" in rc.action_map_mismatch(dict(new, hip_floor_legs=[2, 3]), new)
+    assert rc.action_map_mismatch(dict(new, hip_floor_deg=-60.0), new)
+    assert rc.action_map_mismatch(dict(new, env="gait"), dict(new, env="gait")) is None
+
+
+def test_train_ppo_takes_the_hip_clamp_and_refuses_a_legacy_resume(tmp_path):
+    torch = pytest.importorskip("torch")
+    import train_ppo
+    a = train_ppo.parse_args(["--env", "recover"])
+    kw = train_ppo.env_kwargs(a, (0.0, 0.0, 0.0))
+    assert kw["hip_clamp"] == "params" and kw["drop_clear_of_belly"] is True
+    kw = train_ppo.env_kwargs(train_ppo.parse_args(["--env", "recover", "--hip-clamp", "none",
+                                                    "--belly-drops"]), (0.0, 0.0, 0.0))
+    assert kw["hip_clamp"] is None and kw["drop_clear_of_belly"] is False
+    assert train_ppo.parse_hip_clamp("-55") == pytest.approx(-55.0)
+    with pytest.raises(SystemExit):
+        train_ppo.parse_hip_clamp("low")
+    # a legacy-shaped checkpoint (env_config without hip_floor_deg) resumed with the default map
+    from rocky_recover_env import RecoverEnv
+    cfg = RecoverEnv(seed=0, hip_clamp=None).config()
+    cfg.pop("hip_floor_deg")
+    cfg.pop("hip_floor_legs")
+    ck = tmp_path / "legacy.pt"
+    torch.save({"env_config": cfg, "args": {"env": "recover"}}, ck)
+    with pytest.raises(SystemExit, match="hip-clamp none"):
+        train_ppo.main(["--env", "recover", "--num-envs", "1", "--sync", "--rollout", "8",
+                        "--total-steps", "8", "--run-dir", str(tmp_path / "r"), "--resume", str(ck)])
 
 
 # ------------------------------------------------------------------ the system path

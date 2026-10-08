@@ -68,7 +68,8 @@ if os.path.exists(_MB_PATH):
     M_TORSO, M_COXA, M_FEMUR, M_TIBIA = (_mb[k] / 1000.0 for k in ("torso", "coxa", "femur", "tibia"))
     MASS_SOURCE = "mass_budget.json"
 else:                                    # the pre-D039 estimate (D015's sizing budget), the fallback
-    M_TORSO, M_COXA, M_FEMUR, M_TIBIA = 1.35, 0.14, 0.03, 0.17
+    M_TORSO, M_COXA, M_FEMUR, M_TIBIA = (rm.FALLBACK_MASS_G[k] / 1000.0
+                                         for k in ("torso", "coxa", "femur", "tibia"))
     MASS_SOURCE = "fallback constants"
 
 
@@ -281,6 +282,13 @@ def main():
     urdf_dir = os.path.join(HERE, "urdf")
     os.makedirs(urdf_dir, exist_ok=True)
     # base_link carries ONE inertial: the budget's torso (D064), else both deck disks combined
+    # (review 9q: that fallback was silent here; build_mjcf and pebble_feasibility warn)
+    if TORSO_INERTIAL is None:
+        print(f"WARNING: sim/mass_budget.json is missing or has no torso_com_mm / torso_inertia (pre-D064): "
+              f"base_link carries {MASS_SOURCE} on the two deck disks — run sim/mass_audit.py")
+    elif TORSO_INERTIAL["provisional"]:
+        print("WARNING: mass_budget.json is PROVISIONAL (mass_audit --allow-missing): re-run mass_audit "
+              "on the built CAD tree, then this")
     xacro_txt = build_xacro().replace("__TORSO_INERTIAL__", torso_inertial_xml())
     xacro_path = os.path.join(urdf_dir, "pebble.urdf.xacro")
     with open(xacro_path, "w") as f:

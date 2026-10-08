@@ -43,6 +43,10 @@ Notes
   every rollout and logs the reach. --curriculum-ramp LO,HI: the fractions
   of the run between which reach goes 0 -> 1 (default 0.15,0.75). Resuming
   with a larger --total-steps rescales the progress. Evaluation never uses it.
+* D064: --hip-clamp params|none|DEG (recover env) is the righter's hip floor in the
+  action map; a resume refuses a checkpoint whose map differs (a pre-D064 one
+  continues with --hip-clamp none). Review 9q: drop poses that start a leg inside
+  the belly are drawn again (--belly-drops keeps the old stream).
 * Checkpoints are atomic (tmp+rename); Ctrl-C saves before exiting.
 * KL early stop (--target-kl) keeps the residual policy from tearing up
   the gait prior in one bad update.
@@ -150,10 +154,26 @@ def env_kwargs(args, cmd):
     """The env constructor kwargs a run's args imply (both envs take **_)."""
     kw = dict(cmd=cmd, randomize=not args.no_randomize, push_prob=args.push_prob,
               cmd_sample=args.cmd_sample, reward=args.reward, rate_limit_rad_s=args.rate_limit,
-              servo=args.servo, ema_alpha=args.ema_alpha)
+              servo=args.servo, ema_alpha=args.ema_alpha,
+              hip_clamp=parse_hip_clamp(getattr(args, "hip_clamp", "params")),
+              drop_clear_of_belly=not getattr(args, "belly_drops", False))
     if getattr(args, "curriculum", "none") != "none":
         kw.update(curriculum=args.curriculum, curriculum_ramp=parse_ramp(args.curriculum_ramp))
     return kw
+
+
+def parse_hip_clamp(text):
+    """--hip-clamp: 'params' (rocky_model.righter_hip_min_deg, -51.05 on legs 1-4: every new
+    run), 'none' (the uncut map of the pre-D064 checkpoints, the A/B) or degrees."""
+    t = str(text).strip().lower()
+    if t == "params":
+        return "params"
+    if t == "none":
+        return None
+    try:
+        return float(t)
+    except ValueError:
+        raise SystemExit(f"--hip-clamp {text}: params, none or degrees") from None
 
 
 def parse_ramp(text):
@@ -221,6 +241,14 @@ def parse_args(argv=None):
     p.add_argument("--curriculum-ramp", type=str, default="0.15,0.75",
                    help="LO,HI: fractions of --total-steps between which the curriculum's reach "
                         "goes 0 -> 1 (side landings only before LO, the full fall mix after HI)")
+    p.add_argument("--hip-clamp", type=str, default="params",
+                   help="recover env only (D064): the righter's hip floor in the action map. params "
+                        "(-51.05 on legs 1-4, as ReflexSupervisor clamps FALLEN / RIGHTED), none (the "
+                        "uncut map every pre-D064 checkpoint trained on: continue a legacy run or A/B "
+                        "it) or degrees. A resume must match the checkpoint's")
+    p.add_argument("--belly-drops", action="store_true",
+                   help="recover env only: keep the pre-9q drop draws, 3.7 %% of which start a leg "
+                        "inside the belly (default: redrawn, RecoverEnv drop_clear_of_belly)")
     p.add_argument("--seed", type=int, default=1)
     p.add_argument("--device", type=str, default="auto")
     p.add_argument("--torch-threads", type=int, default=0,
@@ -279,6 +307,12 @@ def main(argv=None):
                                  f"v{old['obs_version']} ({old['obs_dim']} values), this env builds "
                                  f"v{env_config['obs_version']} ({obs_dim}). Pre-D052 checkpoints do not "
                                  f"resume under the D052 contract — start a fresh run")
+            why = rc.action_map_mismatch(old, env_config)
+            if why:
+                envs.close()
+                raise SystemExit(f"cannot resume {rp}: its actions mean something else here ({why}). "
+                                 f"A pre-D064 checkpoint trained on the uncut map: pass --hip-clamp none "
+                                 f"to continue it, or start a fresh run")
             if old.get("robot_fingerprint") and old["robot_fingerprint"] != env_config["robot_fingerprint"]:
                 print(f"WARNING: resuming a checkpoint trained on robot {old['robot_fingerprint']} "
                       f"against robot {env_config['robot_fingerprint']}")

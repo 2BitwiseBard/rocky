@@ -105,8 +105,11 @@ def test_fall_during_gesture_ends_in_fallen():
     run(pg, 1.0)
     assert pg.gesture_phase == "run"
     # D063: 65 N (was 60). The tumble is chaotic: on the D063 model (+27.5 g of fork cheeks) 60 N
-    # tips it to 129 deg and it rolls back upright; 62-70 N all land it upside down (164 deg)
-    pg.do("push 65 0 0.4")
+    # tips it to 129 deg and it rolls back upright; 62-70 N all land it upside down (164 deg).
+    # 9q review: 62 N. With the belly the band is narrow and the keel rolls it back above it: on
+    # deae868522cc 60-65 N land it at 164.8 deg (55-58 and 66-80 tip it to 150-155 and it rolls
+    # back), on c3e82f13b671 (the shell relief, -0.2 g) 60-64 N; 62 is the middle of both
+    pg.do("push 62 0 0.4")
     states = set()
     run(pg, 3.0, lambda p: states.add(p.sup.state))
     assert "FALLEN" in states

@@ -1,11 +1,11 @@
 {
  "masses_g": {
-  "torso": 1555.2,
+  "torso": 1555.0,
   "coxa": 83.9,
   "femur": 42.7,
   "tibia": 131.0,
   "hand": 38.6,
-  "robot": 2843.2
+  "robot": 2843.0
  },
  "stall_nm": {
   "ST3215": 2.94,

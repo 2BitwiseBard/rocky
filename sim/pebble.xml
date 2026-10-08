@@ -16,7 +16,7 @@
     <body name="torso" pos="0 0 0.1194">
       <freejoint/>
       <!-- the torso's mass, CoM and inertia: sim/mass_budget.json (mass_audit's pose table); the geoms below carry none -->
-      <inertial pos="-0.00221 -0.00463 -0.00317" mass="1.5552" fullinertia="4.727840e-03 5.546485e-03 6.802222e-03 -9.472400e-05 -1.577160e-04 -2.393050e-04"/>
+      <inertial pos="-0.00221 -0.00463 -0.00318" mass="1.5550" fullinertia="4.726674e-03 5.545323e-03 6.800853e-03 -9.472200e-05 -1.576910e-04 -2.392530e-04"/>
       <geom name="belly_tub" type="box" size="0.098700 0.027400 0.018700" pos="0.001200 -0.020000 -0.036700" mass="0" friction="0.8 0.005 0.0001" rgba="0.45 0.36 0.60 1"/>
       <geom name="belly_shelf" type="box" size="0.055075 0.026050 0.022200" pos="-0.001125 0.038250 -0.032200" mass="0" friction="0.8 0.005 0.0001" rgba="0.50 0.44 0.66 1"/>
       <geom name="belly_shelf_post0" type="cylinder" size="0.007000 0.014650" pos="-0.050000 0.034000 -0.024650" mass="0" friction="0.8 0.005 0.0001" rgba="0.50 0.44 0.66 1"/>

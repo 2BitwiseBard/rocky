@@ -90,7 +90,10 @@ def env_for(contract, condition="nominal", servo=None, reward=None, seed=0):
                       rate_limit_rad_s=rate, servo=servo_mode, randomize=randomize,
                       ema_alpha=contract.get("ema_alpha", 1.0),
                       obs_version=contract["obs_version"],
-                      hip_clamp=contract.get("hip_floor_deg"), hip_clamp_legs=contract.get("hip_floor_legs"))
+                      hip_clamp=contract.get("hip_floor_deg"), hip_clamp_legs=contract.get("hip_floor_legs"),
+                      # review 9q: the drop stream it trained on (no key = the pre-9q draws, which could
+                      # start a leg inside the belly), so an old checkpoint's seeds replay
+                      drop_clear_of_belly=bool(contract.get("drop_clear_of_belly", False)))
 
 
 def _planted_q0():

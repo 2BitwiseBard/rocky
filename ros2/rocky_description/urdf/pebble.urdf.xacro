@@ -4,7 +4,7 @@
   <material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>
 
   <link name="base_link">
-    <inertial><origin xyz="-0.002210 -0.004630 -0.003170"/><mass value="1.5552"/><inertia ixx="4.727840e-03" ixy="-9.472400e-05" ixz="-1.577160e-04" iyy="5.546485e-03" iyz="-2.393050e-04" izz="6.802222e-03"/></inertial>
+    <inertial><origin xyz="-0.002210 -0.004630 -0.003180"/><mass value="1.5550"/><inertia ixx="4.726674e-03" ixy="-9.472200e-05" ixz="-1.576910e-04" iyy="5.545323e-03" iyz="-2.392530e-04" izz="6.800853e-03"/></inertial>
     <visual><origin xyz="0 0 0.018"/>
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry>
       <material name="pebble"/></visual>

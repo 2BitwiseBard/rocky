@@ -82,13 +82,18 @@ at reach 0. At reach 1 nothing is drawn or redrawn and the rng draws are
 the default env's, so the episode is the default env's episode for that
 seed. curriculum=None (every evaluation) is reach 1.
 
-Honesty: the sim's torso is two stacked cylinders over a belly of two boxes
-(D064: the keel tub and the hub shelf, with the torso's real CoM and inertia
-from sim/mass_budget.json). The real Pebble has a domed rock shell and a
-chamfered tub; the exact rolling behaviour WILL differ. What transfers
-is the strategy class (which legs to sweep, when to push), not the timing.
-The domain randomiser's base copies (rl_common.DomainRandomizer._base_*) are
-read from this compiled model, so every episode starts from the belly's mass.
+Honesty: the sim's torso is two stacked cylinders over a massless belly of two
+boxes and three post cylinders (D064: the keel tub, the hub shelf's plate and
+its posts), and the torso's real CoM and inertia from sim/mass_budget.json on
+its <inertial>. The real Pebble has a domed rock shell and a chamfered tub;
+the exact rolling behaviour WILL differ. What transfers is the strategy class
+(which legs to sweep, when to push), not the timing. The domain randomiser's
+base copies (rl_common.DomainRandomizer._base_*) are read from this compiled
+model, so every episode starts from the budget's mass and inertia.
+
+Drop poses (review 9q): a joint draw that starts a leg inside the belly is
+drawn again (drop_clear_of_belly, recorded in config(); 3.7 % of the uniform
+draws did, max 18.8 mm).
 """
 from __future__ import annotations
 import os
@@ -137,6 +142,7 @@ CURRICULA = ("side-back",)                      # B34
 CURRICULUM_RAMP = (0.15, 0.75)                  # reach 0 -> 1 between these fractions of the run
 SIDE_MAX_DEG = 110.0                            # side-back: a landing past this is "on its back"
 MAX_DROPS = 20                                  # drops before a curriculum reset keeps what it got
+MAX_Q0_DRAWS = 100                              # drop_clear_of_belly: joint draws per drop (3.7 % land in it)
 
 
 def curriculum_reach(progress, ramp=CURRICULUM_RAMP):
@@ -231,7 +237,7 @@ class RecoverEnv(gym.Env if gym else object):
                  obs_version=rc.OBS_VERSIONS["recover"], obs_noise=None,
                  ep_seconds=EP_SECONDS, thermal=True, thermal_heat0=(0.0, 0.0),
                  curriculum=None, curriculum_ramp=CURRICULUM_RAMP, hip_clamp="params",
-                 hip_clamp_legs=None, **_):
+                 hip_clamp_legs=None, drop_clear_of_belly=True, **_):
         """servo: off | nominal | random (see rl_common.servo_params).
         obs_noise: None = follow `randomize`. ema_alpha 1.0 = no filter.
         obs_version 1 + ema_alpha 1.0 + servo 'off' + rate 5.0 = the pre-D052 env.
@@ -242,7 +248,14 @@ class RecoverEnv(gym.Env if gym else object):
         1-4) in the action map — 'params' (-51.05, every new run), None (the uncut map of
         the pre-D064 checkpoints: eval_recover.env_for passes what the contract says), or
         degrees. ReflexSupervisor clamps the same legs to the same floor in FALLEN /
-        RIGHTED, so a policy trained here commands nothing the supervisor would cut."""
+        RIGHTED, so a policy trained here commands nothing the supervisor would cut.
+        drop_clear_of_belly (review 9q): a drop's joint draw that puts a leg inside a belly geom
+        (rl_common.belly_contacts on the drop pose, before the landing) is drawn again. The
+        uniform draw over the full range put 3.7 % of drops inside the keel tub or the shelf
+        (2000 draws, max 18.8 mm, leg 0 in the shelf too), and MuJoCo lands those with a
+        penetration impulse. True for every new run; False is the pre-9q drop stream
+        (eval_recover.env_for passes it for a contract without the key, so old seeds replay).
+        A drop that needs no redraw consumes the rng exactly as before."""
         assert reward in REWARDS, reward
         assert curriculum in (None,) + CURRICULA, curriculum
         self.hip_floor_deg, self.hip_floor_legs = hip_floor(hip_clamp, hip_clamp_legs)
@@ -271,6 +284,9 @@ class RecoverEnv(gym.Env if gym else object):
         self.max_steps = int(round(self.ep_seconds / CTRL_DT))
         self._jadr, self._vadr = rc.joint_addrs(self.model)
         self._foot_gid = rc.foot_geoms(self.model)
+        self.drop_clear_of_belly = bool(drop_clear_of_belly)
+        self._belly = rc.belly_geoms(self.model)
+        self._body_leg = rc.leg_of_body(self.model)
         self.obs_builder = rc.make_recover_obs(obs_version, self.model, self.torso,
                                                self._jadr, self._vadr, self._foot_gid)
         self.obs_version = self.obs_builder.version
@@ -295,6 +311,8 @@ class RecoverEnv(gym.Env if gym else object):
         self.last_mode = ""
         self.last_land_tilt_deg = None                           # the landed tilt of this episode's drop
         self.last_drops = 0                                     # drops it took (> 1 only under the curriculum)
+        self.last_q0_redraws = 0                                # joint draws the last drop threw away (belly)
+        self.last_drop_qpos = None                              # the last drop's starting qpos (before landing)
         self.last_delta = np.zeros(15)
 
     # ------------------------------------------------------------------ contract
@@ -308,6 +326,7 @@ class RecoverEnv(gym.Env if gym else object):
                               "; the hip of hip_floor_legs mapped over [hip_floor_deg, Q_HI] (D064)"),
                     q_lo=[float(x) for x in Q_LO[:3]], q_hi=[float(x) for x in Q_HI[:3]],
                     hip_floor_deg=self.hip_floor_deg, hip_floor_legs=list(self.hip_floor_legs),
+                    drop_clear_of_belly=self.drop_clear_of_belly,
                     ctrl_dt=CTRL_DT, ep_seconds=self.ep_seconds,
                     rate_limit_rad_s=self.rate_limit_rad_s, ema_alpha=self.ema_alpha,
                     servo=self.servo_mode,
@@ -447,6 +466,20 @@ class RecoverEnv(gym.Env if gym else object):
         self.data.qpos[0:3] = [0, 0, 0.16]
         self.data.qpos[3:7] = _quat_from_axis_angle(ax, ang)
         self.data.qpos[self._jadr] = q0
+        self.last_q0_redraws = 0
+        if self.drop_clear_of_belly and self._belly:
+            # positions only (mj_fwdPosition: kinematics + collision, no warmstart touched), so a
+            # draw that is kept lands exactly as the pre-9q env landed it
+            mujoco.mj_fwdPosition(self.model, self.data)
+            while rc.belly_contacts(self.model, self.data, self._belly, self._body_leg):
+                self.last_q0_redraws += 1
+                if self.last_q0_redraws > MAX_Q0_DRAWS:
+                    raise RuntimeError(f"no joint draw clear of the belly in {MAX_Q0_DRAWS}: the belly geoms "
+                                       "or the joint range changed")
+                q0 = self.rng.uniform(Q_LO, Q_HI)
+                self.data.qpos[self._jadr] = q0
+                mujoco.mj_fwdPosition(self.model, self.data)
+        self.last_drop_qpos = self.data.qpos.copy()
         self.data.ctrl[:15] = q0 + self._q_offset
         self.data.ctrl[15:20] = 0.0
         mujoco.mj_forward(self.model, self.data)

@@ -158,8 +158,8 @@ def q_ok(q, guard_deg: float = GUARD_DEG) -> bool:
 # B138 (D064): the torso's mass AND CoM come from sim/mass_budget.json through rocky_model,
 # the numbers build_mjcf writes as the torso's <inertial>. Before D064 this read the mass
 # alone and put the CoM where the two cylinders do (z 24.5), ~27 mm above the real layout.
-_FALLBACK_G = dict(torso=1350.0, coxa=140.0, femur=30.0, tibia=170.0)   # = build_mjcf's fallback
-_FALLBACK_COM = (0.0, 0.0, 0.75 * 18.0 + 0.25 * 44.0)                   # its two weighted cylinders
+_FALLBACK_G = dict(rm.FALLBACK_MASS_G)            # build_mjcf's and generate_urdf's fallback too
+_FALLBACK_COM = rm.FALLBACK_TORSO_COM_MM           # its two weighted cylinders
 
 
 def _mass_budget() -> dict:

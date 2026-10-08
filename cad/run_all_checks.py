@@ -16,7 +16,8 @@ sense" after any params.yaml or interface change.
 Parallel notes: modules are already independent subprocesses, so they run
 N-at-a-time (N = cpu count, min 2, or --jobs N). Each module only writes its OWN exports
 — no shared files, no races. Results print in completion order; the summary
-is the same either way. ~150 s wall on a laptop (part_hand is the long pole).
+is the same either way. ~7 min wall on the workstation, 2026-10-07 (part_bay, ~360 s, is the
+long pole; TIMEOUT_S is per module).
 
 The servo model is checked first against the reference STEP (servo_st3215:
 cad/ref/STS3215_03a.step); servo_mount and part_port_coupon are the only
@@ -86,7 +87,10 @@ def run_one(m):
     return (m, ok, time.time() - t0, tail)
 
 
-POST = ["check_printability"]     # runs AFTER every module has exported (D038)
+# run AFTER every module has exported: check_printability (D038); check_sim_mirror (review 9q) holds
+# sim/mass_audit's pose table and gait/rocky_model's belly to the part modules and the exported
+# bay_tub / hub_shelf, so CI's cad job fails before its pipeline diff regenerates with stale mirrors
+POST = ["check_printability", "check_sim_mirror"]
 # in order, each may read the ones before it: gen_drawings reads print_estimate.json (the
 # leg batch, the grams in the title block); gen_print_pack reads print_estimate.json, the
 # drawings and fem/fem_results.json (B110: so --fem runs before all of these)

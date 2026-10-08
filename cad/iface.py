@@ -433,7 +433,9 @@ def bay_tub_extent():
     2026-10-07; the sim's belly does not have them either): the I3 latch boss + the door's ear,
     x -97.5..-85.5, y down to -64.45, z -55.4..-39.65; two pilasters Ø9.6 at (+-70, -50.6), z
     -49.5..-20; the keeper, x -83..-80.5, y up to 8.6; the north wall's return over the lid, up
-    to z -17.0. A keep-out against the tub near those needs part_bay's solid, not this box."""
+    to z -17.0; the riser clip, x 55.5..62.8, y up to 13.29 (BAY_TUB_OUTSIDE is the table, and
+    check_sim_mirror holds the exported bay_tub to it). A keep-out against the tub near those needs
+    part_bay's solid, not this box."""
     bs = IF["battery_sled"]
     xi0 = bs["bay_door_x"] + bs["door_t"]
     xi1 = xi0 + bs["bay_l"]
@@ -443,6 +445,21 @@ def bay_tub_extent():
     return {"x": (bs["bay_door_x"], xi1 + bs["bay_wall"]), "x_in": (xi0, xi1),
             "y": (yc - wi - bs["bay_wall"], yc + wi + bs["bay_wall"]), "y_in": (yc - wi, yc + wi),
             "z": (zi0 - bs["bay_floor"], bs["bay_top_z"]), "z_in": (zi0, zi1)}
+
+
+# Where the exported bay_tub stands outside bay_tub_extent()'s box, the only places it may (body
+# frame, (lo, hi) per axis, mm; measured on the 9q tub's STL vertices, 2026-10-08, the docstring's
+# prose ranges kept where they were wider). The sim's belly box does not have them either:
+# cad/check_sim_mirror.py fails when the tub grows anywhere else, so a new protrusion is a
+# decision (model it in rocky_model.belly_boxes, or list it here), not a silent gap in the sim
+BAY_TUB_OUTSIDE = {
+    "the I3 latch boss + the door's ear": ((-97.5, -85.5), (-64.45, -47.4), (-55.4, -39.65)),
+    "the -x pilaster": ((-74.8, -65.2), (-55.4, -45.8), (-49.5, -20.0)),
+    "the +x pilaster": ((65.2, 74.8), (-55.4, -45.8), (-49.5, -20.0)),
+    "the keeper": ((-83.0, -80.5), (7.4, 8.6), (-43.0, -29.0)),
+    "the north wall's return over the lid": (None, (4.7, 7.4), (-18.0, -17.0)),   # x: the tub's own
+    "the riser clip": ((55.5, 62.8), (7.4, 13.29), (-50.56, -38.0)),
+}
 
 
 # ====================================================================== I3

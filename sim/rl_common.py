@@ -595,6 +595,23 @@ def env_note(model):
                 mujoco=mujoco.__version__, params_rev=rm.params_rev())
 
 
+def action_map_mismatch(old, new):
+    """Why a recover checkpoint's actions would MEAN something else in this env, or None.
+    old: checkpoint_contract(ck); new: the env's config(). D064 maps the hip of the clamped legs
+    over [hip_floor_deg, Q_HI]: a checkpoint without the key trained on the uncut map (floor None),
+    so resuming it under the 'params' floor silently re-scales every hip action (review 9q). The
+    floor is compared, and the leg set when there is a floor."""
+    if old.get("env") != "recover" or new.get("env") != "recover":
+        return None
+    fo, fn = old.get("hip_floor_deg"), new.get("hip_floor_deg")
+    if (fo is None) != (fn is None) or (fo is not None and abs(float(fo) - float(fn)) > 1e-9):
+        return f"hip floor {fo} (checkpoint) vs {fn} (this env)"
+    if fo is not None and [int(i) for i in old.get("hip_floor_legs") or ()] != \
+            [int(i) for i in new.get("hip_floor_legs") or ()]:
+        return f"hip floor legs {old.get('hip_floor_legs')} (checkpoint) vs {new.get('hip_floor_legs')} (this env)"
+    return None
+
+
 def checkpoint_contract(ck, env_hint=None):
     """What a checkpoint (the dict torch.load returns) says about the env it
     trained in. D052 checkpoints carry env_config (the env's own config());
