@@ -1,42 +1,42 @@
 {
  "0": {
   "base": {
-   "force": 16,
-   "skid_mm": 163
+   "force": 25,
+   "skid_mm": 1078
   },
   "v2": {
-   "force": 16,
-   "skid_mm": 162
+   "force": 25,
+   "skid_mm": 1106
   }
  },
  "90": {
   "base": {
-   "force": 16,
-   "skid_mm": 100
+   "force": 25,
+   "skid_mm": 969
   },
   "v2": {
-   "force": 16,
-   "skid_mm": 100
+   "force": 25,
+   "skid_mm": 849
   }
  },
  "180": {
   "base": {
-   "force": 12,
-   "skid_mm": 26
+   "force": 38,
+   "skid_mm": 4462
   },
   "v2": {
-   "force": 12,
-   "skid_mm": 28
+   "force": 25,
+   "skid_mm": 1218
   }
  },
  "270": {
   "base": {
-   "force": 16,
-   "skid_mm": 192
+   "force": 25,
+   "skid_mm": 1106
   },
   "v2": {
-   "force": 16,
-   "skid_mm": 188
+   "force": 25,
+   "skid_mm": 1059
   }
  }
 }

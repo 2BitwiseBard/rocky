@@ -83,12 +83,12 @@
  "coxa_yaw_base": {
   "scale": 0.75,
   "bbox_mm": [
-   72.45,
+   72.5,
    44.0,
    58.5
   ],
   "extents_mm": [
-   72.45,
+   72.5,
    58.5,
    44.0
   ],
@@ -109,13 +109,13 @@
     "axis": "Z"
    },
    {
-    "dia_mm": 4.3,
+    "dia_mm": 5.0,
     "count": 2,
     "axis": "Z"
    },
    {
-    "dia_mm": 5.0,
-    "count": 2,
+    "dia_mm": 6.4,
+    "count": 1,
     "axis": "Z"
    }
   ],
@@ -131,7 +131,7 @@
    "Weight",
    "copyright"
   ],
-  "step_sha": "fae5980b24660b05",
+  "step_sha": "046e78f32d4fac60",
   "sheet_rev": "3a4d0718e42cf763"
  },
  "femur_link": {

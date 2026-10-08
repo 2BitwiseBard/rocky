@@ -1,4 +1,4 @@
-"""D053 — the robot's shape as data (docs/ROBOT_AS_DATA.md step 1).
+"""D053 — the robot's shape as data (docs/DESIGN_CHANGE_GUIDE.md §9 step 1).
 
 rocky_model.robot() builds the robot description from params `robot:`. These
 tests pin it to what the code assumed before D053 (five legs at 90 + 72 i, a
@@ -38,7 +38,7 @@ def _live():
 
 
 def _with_ankle(P, solver="numeric", redundancy="foot_pitch"):
-    """The ROBOT_AS_DATA §2.3 fixture: a 4th pitch joint on the tibia."""
+    """The DESIGN_CHANGE_GUIDE §5 ankle fixture: a 4th pitch joint on the tibia."""
     ch = P["robot"]["leg"]["chain"]
     ch.append({"name": "ankle", "axis": [0, -1, 0], "offset_mm": [100.0, 0, 0], "link": "tarsus"})
     P["robot"]["leg"]["foot"] = {"offset_mm": [35.0, 0, 0]}

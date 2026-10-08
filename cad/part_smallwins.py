@@ -1,7 +1,7 @@
 """Design-backlog small wins — cheap parts that make bench life better.
 
-  belly_skid       : sacrificial under-deck skid rail (pair) — rubble scrapes
-                     this, not the harness. Bolts to the deck M3 grid.
+  (belly_skid RETIRED 2026-10-07, B2: the keel tub's 2.4 floor is the skid, part_bay;
+   there was never a place for it: every grid line ran inside the bay)
   trim_cup (+lid)  : ballast cup for CoM trimming: holds a stack of M3
                      washers at any deck grid point. Measured mass, no glue.
   imu_grommet      : TPU top-hat isolator for the BNO085 on the avionics
@@ -31,16 +31,6 @@ FIT = PR["clearance_fit"]
 
 JIG_BASE_TOP = 6.0
 LEG_Z0_IN_JIG = 130.0 + 4.0 + JIG_BASE_TOP     # leg-frame z=0 in jig coords
-
-
-def belly_skid():
-    L = 120
-    sk = Pos(0, 0, -4) * Box(L, 9, 8)
-    sk = fillet(sk.edges().group_by(Axis.Z)[0], 3.5)      # rounded scraping face
-    for sx in (-40, 0, 40):
-        sk -= Pos(sx, 0, -2) * Cylinder(PR["screw_m3_clear"] / 2, 14)
-        sk -= Pos(sx, 0, -6.5) * Cylinder(6.4 / 2, 3.4)   # head recess (upside)
-    return sk
 
 
 def trim_cup():
@@ -114,7 +104,7 @@ def whisker_shoe():
 
 
 if __name__ == "__main__":
-    parts = dict(belly_skid=belly_skid(), trim_cup=trim_cup(),
+    parts = dict(trim_cup=trim_cup(),
                  trim_cup_lid=trim_cup_lid(), imu_grommet=imu_grommet(),
                  calib_gauge_hip=calib_gauge_hip(),
                  calib_gauge_knee=calib_gauge_knee(),

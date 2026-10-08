@@ -30,8 +30,8 @@ Anatomy (body frame, deck TOP at z = -4 per the frozen conventions):
   * attachment (I3): each sector foot carries ONE quarter-turn latch
     insert pocket (az +27.5, r 74.5) and ONE magnet pocket (az -25.5,
     r 76) — every web joint pairs neighbour A's latch with neighbour B's
-    magnet (D030); deck v0.4 carries the washer recesses and the latch
-    strikes. The latch is a bayonet (B87): its rotor hangs through the
+    magnet (D030); the deck (v0.5, part_deck.DECK_HOLES) carries the washer
+    recesses and the latch strikes. The latch is a bayonet (B87): its rotor hangs through the
     deck's strike and is turned from UNDER the deck.
   * top hatch: rocky cap, plug matches the seat outline with print
     clearance, five magnet pairs (one per sector, az 0 — the only pattern
@@ -39,7 +39,9 @@ Anatomy (body frame, deck TOP at z = -4 per the frozen conventions):
     boss at the seat ledge that stands 7.3 into the opening (B88).
 
 Checks (run this file): fork-swing keep-out, port-knob keep-out, coxa
-plate slab, deck slab — all must intersect at 0.00 mm^3; the seam pair;
+plate slab, deck slab — all must intersect at 0.00 mm^3; the docked
+coxa_yaw_base + yaw servo themselves at 0 mm^3 and the base FIT away
+(review 9q: the cup's back wall cut 42.8 into every sector); the seam pair;
 an I6 shoe + knob on every bar (B83); the cap seated with its magnets,
 every hatch pocket walled (B88); the latch cartridge in its pad (B87);
 bed-fit report.
@@ -65,6 +67,13 @@ TIERS = [(-9.0, 16.0, 112.0, 4.5, 11, 0.0),
          (16.0, 30.0, 100.0, 5.0, 22, 36.0),
          (30.0, 42.0, 88.0, 5.0, 33, 12.0),
          (42.0, 52.0, 74.0, 4.0, 44, 24.0)]
+# The leg arch's inboard face (body x at station az 0). The docked coxa_yaw_base's cup back wall
+# (part_coxa x_back_out -38.5 = body r 71.5, |y| <= BACK_HALF_W 9.5, z 0..45.2) stood 0.5 inside it:
+# 42.80 mm^3 into every sector at z 33.45..42, the tier-3 ceiling's inner skin, on main as well, and no
+# keep-out held the real base (review 9q). The arch keeps x 72: moved in to 71.2 whole, its |y| <= 40
+# profile would also cut the latch pad and the feet at deck level. A relief over the cup back's width
+# (cup_back_relief) takes the sector FIT off that face instead, and keepouts() holds the real base.
+ARCH_X0 = 72.0
 HATCH_R = 46.0
 HATCH_SEED = 55
 HATCH_SEAT_Z = 49.6              # the rebate floor the cap's plug sits on (plug from 49.7)
@@ -158,6 +167,19 @@ def _az_wedge(az0_deg, az1_deg, z0=-15.0, z1=90.0, R=400.0):
     return bp.part
 
 
+def cup_back_relief():
+    """The sector's relief over the docked cup's back wall (station az 0, body frame): FIT off its
+    back face (x), its sides (|y|) and its top (z), from the wall's foot to past ARCH_X0."""
+    from servo_mount import cup_extents
+    from part_coxa import BACK_HALF_W
+    from leg_frame import yaw_z
+    e = cup_extents()
+    x0 = 110.0 + e["x_back_out"] - FIT                          # 71.2
+    z1 = yaw_z(e["z_lo_out"]) + FIT                              # 45.5: the cup's top (leg z 45.2)
+    hw = BACK_HALF_W + FIT
+    return Pos((x0 + ARCH_X0 + 1.0) / 2, 0, (z1 - FIT) / 2) * Box(ARCH_X0 + 1.0 - x0, 2 * hw, z1 + FIT)
+
+
 def _mother():
     """The full 360-deg carapace with az-0-station features (the wedge cut
     at +/-36 deg then yields one sector; all five are this same solid)."""
@@ -225,13 +247,14 @@ def _mother():
 
     # ---- leg arch (station az 0): through tiers 1-3 + the skirt
     with BuildPart() as arch:
-        with BuildSketch(Plane.YZ.offset(72.0)):
+        with BuildSketch(Plane.YZ.offset(ARCH_X0)):
             with BuildLine():
                 Polyline((-40, -9.5), (40, -9.5), (40, 30), (22, 46),
                          (-22, 46), (-40, 30), close=True)
             make_face()
-        extrude(amount=135.0 - 72.0)
+        extrude(amount=135.0 - ARCH_X0)
     body -= arch.part
+    body -= cup_back_relief()                         # review 9q: FIT off the docked cup's back wall
 
     # ---- B9 vent gills: 3 angled slots per side through the tier-1 wall
     # (session 8, D038 audit: the 22° tilt swings a gill ±1.7° across its
@@ -265,6 +288,7 @@ def _mother():
         _ring(18.6, 28.2, t2[2], t2[3], t2[4], t2[5], dr=-WALL - 2.0)
     body += backing
     body -= arch.part
+    body -= cup_back_relief()
     # LED feed notch through the tier-2 wall into the cavity (az 33 web)
     # session 8 (D038): was az 33 — an 8 mm notch there reaches az 35.5,
     # 0.8 mm short of the 36° seam plane (one perimeter, with the seam
@@ -373,12 +397,17 @@ def keepouts():
     # cheeks (D063) reach r 29.5 and its hip cup r 41. Measured directly, the
     # fork yawed -40..40 vs this sector: 0.00 mm^3, min gap 15.89 at yaw 40
     ko["fork_swing"] = Pos(110, 0, 28) * Cylinder(28, 48)
-    # leg-port knobs (dia 12 at leg x -41, y +/-17) + dowel tops: columns
-    # to z 13 over leg-local x -49..-22 -> body r 61..88, y +/-25
+    # leg-port knobs (dia 12 at leg x -41, y +/-17): columns to z 13 over
+    # leg-local x -49..-22 -> body r 61..88, y +/-25. It was sized for the D020
+    # dowel tops too (z 8 over the deck); since 2026-10-07 the seat posts sit
+    # inside the plate's sockets (top 1 under the plate top) and the plate's
+    # spine rib (x -46..-38, |y| <= 8, z 0..6) is inside this box
     ko["port_hardware"] = Pos(74.5, 0, 6.5) * Box(27, 50, 13)
     # coxa base plate slab: Box(66, 44, 4) leg x -46..20 (+ cantilever to
-    # the fork zone), y +/-22 (+2.5 margin), z -4..0 (+0.5)
-    ko["coxa_plate"] = Pos(97.0, 0, -2.0) * Box(70, 49, 5.0)
+    # the fork zone), y +/-22 (+2.5 margin), z -4..0 (+0.5). Since 2026-10-07
+    # the plate runs inboard to the hook's stem (leg x -49.55, |y| <= 18), so
+    # the slab starts at leg x -50 (was -48); the sector is 0.000 mm^3 clear of it
+    ko["coxa_plate"] = Pos(96.0, 0, -2.0) * Box(72, 49, 5.0)
     # the leg harness route (part_coxa.harness_path): deck cutout -> up beside
     # the yaw cup -> over the top to the yaw plugs, 11 x 11
     from part_coxa import harness_solid
@@ -387,7 +416,22 @@ def keepouts():
     # keep-out top 0.1 below the seating plane so contact is allowed
     ko["deck_slab"] = Pos(0, 0, DECK_TOP - 4.1) * \
         extrude(RegularPolygon(100.2, 5), 4.0)
+    ko.update(real_keepouts())
     return ko
+
+
+# the keep-outs that are the real parts, not proxies: gated at 0 mm^3 (REAL_GATE), not < 0.5.
+# Review 9q: none of the proxies above held the cup's back wall at r 71.5, z 33..45, so the docked
+# base cut 42.80 mm^3 into every sector and this check passed
+REAL_GATE = 1e-6
+
+
+def real_keepouts():
+    """The docked coxa_yaw_base and its yaw servo at this sector's station (az 0, r 110), as
+    part_coxa builds them."""
+    from part_coxa import coxa_yaw_base, yaw_servo_placed
+    return {"coxa_yaw_base": Pos(110.0, 0, 0) * coxa_yaw_base(),
+            "yaw_servo": Pos(110.0, 0, 0) * yaw_servo_placed()}
 
 
 def _vol(s):
@@ -495,13 +539,20 @@ if __name__ == "__main__":
     export(sector, "shell_sector")
     export(cap, "shell_cap")
     ok = True
+    real = real_keepouts()
     for name, solid in keepouts().items():
         inter = sector & solid
         v = 0.0 if inter is None else inter.volume
-        good = v < 0.5
+        good = v <= REAL_GATE if name in real else v < 0.5
         ok &= good
         print(f"  keep-out {name:14s}: {v:8.2f} mm^3  "
-              f"{'CLEAR' if good else '*** CLASH ***'}")
+              f"{'CLEAR' if good else '*** CLASH ***'}"
+              + ("  (the real part, gated at 0)" if name in real else ""))
+    # the relief's own margin: the sector's nearest point to the docked base
+    gap = sector.distance_to(real["coxa_yaw_base"])
+    ok &= gap >= FIT - 0.01
+    print(f"  sector to the docked coxa_yaw_base: {gap:.2f} mm (cup_back_relief, FIT {FIT}) "
+          f"{'CLEAR' if gap >= FIT - 0.01 else '*** TOO CLOSE ***'}")
     # ---- seam joint verification: neighbor pair must not interfere, and
     # the tongue must actually land INSIDE the neighbor's groove
     nb = Rot(0, 0, 72) * shell_sector()

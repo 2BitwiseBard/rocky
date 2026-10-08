@@ -58,6 +58,7 @@ testpaths = ["driver/tests", "harness", "gait", "sim/tests"]
 [tool.ruff]
 line-length = 110
 target-version = "py312"          # what CI runs (setup-python 3.12)
+extend-exclude = [".claude"]      # agent worktrees (.gitignore'd repo copies) are not this tree
 
 [tool.ruff.lint]
 # pyflakes + syntax errors: unused / undefined names, dead assignments. F403/F405: the CAD

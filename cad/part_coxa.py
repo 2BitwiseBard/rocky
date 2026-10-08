@@ -51,7 +51,7 @@ asserts the path clear of every part at every yaw.
 """
 from build123d import *
 from common import params, export
-from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W
+from iface import CABLE_CUTOUT_X, CABLE_CUTOUT_W, PLATE_X0, leg_port_socket_walls
 from servo_st3215 import servo_body, plug_envelope, horn_slot_cutter, horn_screw_angles, spec, z_levels
 from servo_mount import servo_cup, cup_extents, cup_screw_columns, FRONT_X, T as CUP_T
 from leg_frame import (YAW_TF, HIP_TF, Z_HIP, HUB_Z0, HUB_Z1, ZC_YAW,
@@ -95,13 +95,27 @@ NOTCH_X = -9.5                        # upper hub cut flat here on the -X side: 
 NOTCH_HALF_W = 10.3
 BACK_HALF_W = 9.5                     # base cup back wall width: I1 thumbscrew heads at |y| >= 11
 REAR_TRIM_X = -33.9                   # nothing wider than BACK_HALF_W behind this (thumbscrew heads end at x -34)
+# The I1 spine rib (2026-10-07, decision 15, B119): in stance the ground on the leg's foot lifts the plate's
+# outboard end, the plate pivots on its inboard pads and the two thumbscrews (x -41) hold
+# the whole peel moment, 4629 N mm in the design case (3 legs x 3, mu 0.5). Across the bare
+# 4 mm plate at the screw line that was 47.4 MPa, SF 0.74 (J/j3, measured on the solid).
+# A rib on the plate's centre line, plate top to 6 up, from the plate's inboard edge to
+# the cup's back wall, takes it to 15.0 MPa, SF 2.33; part_coxa's __main__ re-measures it.
+I1_RIB_X0 = PLATE_X0                  # the plate's inboard edge (-46): inboard of it the leg-4 Pi corner overhangs
+I1_RIB_HALF_W = 8.0                   # |y| <= 8: 3 mm inside the thumbscrew knobs (|y| >= 11)
+I1_RIB_H = 6.0                        # z 0..6 over the plate top; under the cup's floor rails (6.8)
+I1_PLATE_W = 44.0                     # the plate's y +-22 edges: the seat sockets' mouths leave 1.5 / 1.20 to them
 
 _e = cup_extents()
 
 # leg harness route (see harness_path): -Y side, because the hip cup and the
 # hip servo's plugs sweep the +Y side at yaw +40. x -24..-13: the front face
-# is the fork's lower-hub radius (never inside the hub at any yaw) and the
-# rear face leaves 1.85 mm of plate round the dowel bore at (-28, -19).
+# is the fork's lower-hub radius (never inside the hub at any yaw). Its rear
+# face is no longer bound by the port: since 2026-10-07 the nearest I1 feature
+# is the -y seat socket at (-32, -17.3), whose Ø6.4 mouth ends at x -28.8, 4.8
+# behind it (the D020 dowel bore at (-28, -19) left 1.85). The spine rib runs
+# to x -38.0, fused 0.5 into the cup's back wall (outer face x -38.5), and ends
+# 3.5 behind the channel's first leg (x -34.5).
 HARNESS_W = CABLE_CUTOUT_W                   # 11: the XT30 + JST-XH-5 pair's clear section
 HARNESS_X1 = -HUB_D / 2                      # -13
 HARNESS_X0 = HARNESS_X1 - HARNESS_W          # -24
@@ -147,9 +161,16 @@ def yaw_servo_placed(clearance=0.0):
     return YAW_TF * servo_body(P, clearance)
 
 
+def i1_rib():
+    """The I1 spine rib (B119): plate top to I1_RIB_H, x I1_RIB_X0 to the cup's back wall (fused 0.5 into it)."""
+    return _box(I1_RIB_X0, _e["x_back_out"] + 0.5, -I1_RIB_HALF_W, I1_RIB_HALF_W, -0.01, I1_RIB_H)
+
+
 def coxa_yaw_base():
     from iface import leg_port_plate_features
-    plate = Pos((-46 + 20) / 2, 0, -2) * Box(66, 44, 4)
+    # x PLATE_X0..20: iface's plate extension runs inboard of PLATE_X0 to the hook's stem,
+    # so the plate's inboard edge is that one constant, not a literal here
+    plate = Pos((PLATE_X0 + 20) / 2, 0, -2) * Box(20 - PLATE_X0, I1_PLATE_W, 4)
     for hx, hy in [(15, 17), (15, -17)]:                     # spare pair only
         plate -= Pos(hx, hy, -2) * Cylinder(PR["screw_m3_clear"] / 2, 6)
     plate = leg_port_plate_features(plate, plate_top_z=0.0, plate_bot_z=-4.0)
@@ -160,6 +181,7 @@ def coxa_yaw_base():
     fill = _box(_e["x_back_out"], FRONT_X, -_e["y_out"], _e["y_out"], 0.0, z_rail_bot + 0.01)
     fill += _box(_e["x_back_out"], FRONT_X, -_e["y_top_rail"], _e["y_top_rail"], 0.0, z_plateau_floor)
     base = plate + cup + fill
+    base += i1_rib()                                         # B119
     # the I1 thumbscrew heads (|y| >= 11, x <= -35) own the space behind REAR_TRIM_X
     for sy in (1, -1):
         base -= _box(-60, REAR_TRIM_X, min(sy * BACK_HALF_W, sy * 30), max(sy * BACK_HALF_W, sy * 30), 0.0, 60)
@@ -251,6 +273,21 @@ def _v(x):
     return 0.0 if x is None else x.volume
 
 
+I1_PEEL_X = IF["thumbscrew_xy"][0][0]   # -41: the thumbscrew line
+I1_PEEL_M = 4629.0                      # the stance design moment there (N mm, J/j3: V 26.76 N
+                                        # at x 75 + H 13.38 N at 114 up, 3 legs x 3, mu 0.5)
+
+
+def plate_section(base, x, dx=0.02):
+    """The base's bending section at x (a dx slab of the real solid): (area mm^2, centroid z,
+    second moment about its horizontal centroidal axis mm^4, z min, z max)."""
+    sl = base & Pos(x, 0, 0) * Box(dx, 200, 200)
+    a = sl.volume / dx
+    i = sl.matrix_of_inertia[1][1] / dx - a * dx * dx / 12        # about y, through the centroid
+    bb = sl.bounding_box()
+    return a, sl.center(CenterOf.MASS).Z, i, bb.min.Z, bb.max.Z
+
+
 if __name__ == "__main__":
     import sys
     base = coxa_yaw_base()
@@ -287,6 +324,23 @@ if __name__ == "__main__":
     check("base x yaw plug keep-out", _v(base & (YAW_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")
     harness = harness_solid()
     check("base x leg harness path", _v(base & harness), lambda v: v < 1, "CLEAR", "BLOCKED")
+    # I1 spine rib (B119): it must leave the channel whole (the channel is cut last, so a
+    # rib in its way would be notched silently), and lift the plate at the screw line
+    check("I1 spine rib x leg harness path (before the channel is cut)", _v(i1_rib() & harness),
+          lambda v: v < 1e-3, "CLEAR", "IN THE CHANNEL")
+    a, zc, i, z0, z1 = plate_section(base, I1_PEEL_X)
+    sig = I1_PEEL_M * max(z1 - zc, zc - z0) / i
+    fem = P["fem"]
+    sf = fem[fem["material"]]["strength_xy_mpa"] / sig
+    ok = sf >= fem["sf_target"]
+    print(f"I1 plate + rib at the screw line x {I1_PEEL_X:.0f}: A {a:.1f} mm^2, I {i:.0f} mm^4, z {z0:.1f}..{z1:.1f}; "
+          f"{I1_PEEL_M:.0f} N mm -> {sig:.1f} MPa, SF {sf:.2f} ({'OK' if ok else 'WEAK'}: bare plate 47.4, SF 0.74)")
+    if not ok: fails.append("I1 plate section at the screw line")
+    # the seat sockets' mouth walls to the plate's y edges: a NOTE, not a failure. 1.20 at the vee
+    # is the proven seat_fit-0 value (I1_DOCK_OPTIONS 7); filing seat_fit takes it straight off
+    wc, wv = leg_port_socket_walls(I1_PLATE_W / 2, PR["seat_fit"])
+    print(f"I1 seat socket mouths to the plate's y edges (seat_fit {PR['seat_fit']}): cone {wc:.2f}, vee {wv:.2f}"
+          + (" NOTE: under 1.20; I1_DOCK_OPTIONS 7: mouth 0.2 or the seats at |y| 17.1" if wv < 1.2 - 1e-6 else ""))
     worst = max(_v((Rot(0, 0, yaw) * (fork + hip_s)) & harness) for yaw in range(-40, 41, 10))
     check("leg harness path x (fork + hip servo) over yaw -40..40", worst, lambda v: v < 1, "CLEAR", "BLOCKED")
     check("fork x hip plug keep-out", _v(fork & (HIP_TF * plug_envelope(P))), lambda v: v < 1, "CLEAR", "BLOCKS PLUGS")

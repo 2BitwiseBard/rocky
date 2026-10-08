@@ -17,9 +17,12 @@ from the CAD itself. Writes PNGs to cad/out/assembly/:
   leg_on_deck.png           body_deck with one coxa_yaw_base docked on
                             station 0 (leg 0, north, the one-dot port), the
                             pose part_deck.py checks
-  body_interior.png         the deck with the star-board bracket and the
-                            avionics tray on its rails (the battery sled is
-                            left out: nothing places it in the body frame yet)
+  body_interior.png         option A from below (2026-10-07), the robot
+                            turned over on the bench: the deck, the hub
+                            shelf with its face-down boards and the keel
+                            tub (bay_tub + bay_lid + bay_door) that hang
+                            under it; the avionics tray on its rails on the
+                            deck's other side shows through as a tint
 
     python3 gen_assembly_views.py              (from cad/, ~1 min)
     python3 gen_assembly_views.py leg_03 sea_exploded    (named images; 'leg' = the steps)
@@ -39,7 +42,8 @@ averaged down; matplotlib (Agg) adds the titles, arrows and labels. One
 camera per family: every leg picture looks from LEG_CAM, and steps 1-7 share
 one frame, so flipping through them the leg does not move (step 8 and the
 finished leg zoom out for the tube, the harness picture for its deck patch);
-the two deck pictures share BODY_CAM. Byte-stable: no timestamps, fixed size
+leg_on_deck looks from BODY_CAM (above), body_interior from UNDER_CAM (below:
+since option A the body's parts hang under the deck). Byte-stable: no timestamps, fixed size
 and dpi, the PNG Software tag dropped, so an unchanged model rewrites
 identical files. ~3 s a picture at 1200 x 1000, ~1.2 GB peak.
 """
@@ -498,43 +502,55 @@ def leg_on_deck():
     a = to_px(frame, (0, R_STATION + 14, 0))                        # the port plate, outboard
     return save(render([(deck, DECK), (base, MOVE)], frame), "leg_on_deck",
                 "Leg port I1: a coxa base on the deck",
-                "Leg 0 (station 0, north, one dot). Tilt 15°, lip through the slot, slide "
-                "inboard to hook, plug the leg drop, pivot onto the dowels; 2 thumbscrews.",
+                "Leg 0 (north, one dot), its carapace sector off. Hook at 7-10°, radially; "
+                "plug the leg drop, lower onto the cones; 2 thumbscrews.",
                 labels=[("coxa_yaw_base", a, (a[0] - 220, a[1] + 50))],
                 legend=[(MOVE, "coxa_yaw_base"), (DECK, "body_deck")])
 
 
+UNDER_CAM = (-60, 34)           # the robot turned over (about x): from the north-east, below it
+
+
 def body_interior():
-    from part_deck import T as DECK_T
-    from part_busboard import busboard_bracket, BRACKET_XY
-    from part_avionics import avionics_tray, tray_rail, TRAY_XY, RAIL_POSE_X, T as TRAY_T
-    deck = mesh(_deck())                                              # z 0 .. 6, as modelled
-    bracket = mesh(Pos(*BRACKET_XY, DECK_T) * busboard_bracket())     # part_busboard.layout_audit's pose
-    # part_avionics poses a rail in the tray frame with its underside at
-    # z (T - 1) - 5.4: that is the deck top, so the tray sits 3.4 above it
-    rail_z = (TRAY_T - 1.0) - 5.4
-    tray_tf = Pos(TRAY_XY[0], TRAY_XY[1], DECK_T - rail_z)
-    tray = mesh(tray_tf * avionics_tray())
-    rails = np.concatenate([mesh(tray_tf * Pos(sx * RAIL_POSE_X, 0, rail_z) * Rot(0, 0, sx * 90)
-                                 * tray_rail()) for sx in (1, -1)])
-    note = ("Not shown: battery_sled + sled_rail (no bay part exists to carry them yet) and the "
-            "five coxa bases. At this assumed tray position (part_avionics.TRAY_XY) the tray and "
-            "its rails run into the bases at stations 2 and 3 (B51).")
-    items = [(deck, DECK), (bracket, NEW), (tray, MOVE), (rails, SERVO)]
-    frame = fit(camera(*BODY_CAM), np.concatenate([t.reshape(-1, 3) for t, _ in items]),
-                draw_box(notes=note_lines(note)))
-    top = DECK_T - rail_z + TRAY_T                                    # tray plate top
-    lab = [("avionics_tray", (30, -45, top), (60, 290)),
-           ("tray_rail × 2", (TRAY_XY[0] + RAIL_POSE_X + 5, TRAY_XY[1] + 12, DECK_T + 6), (60, 720)),
-           ("busboard_bracket", (BRACKET_XY[0] - 20, BRACKET_XY[1] + 22, DECK_T + 3), (880, 790))]
+    """Option A (the owner's picks, 2026-10-07): the robot turned over on the bench, its belly up.
+    Everything is posed in the BODY frame (deck z -10 .. -4) by its own module, then turned over
+    about x (`turn`): part_busboard.hub_shelf + its five boards (three face-down under the
+    plate, now on top), part_bay's tub, lid and door, and part_avionics.tray_assembly (the tray
+    turned 180 at (0, 0) on its rails, its latch boss, the Pi) under the deck, drawn as the x-ray
+    tint where the deck hides it."""
+    import part_bay as PBY
+    from part_avionics import tray_assembly
+    from part_busboard import hub_shelf, board_box, SHELF_BOARDS
+    turn = Rot(180, 0, 0)                                             # (x, y, z) -> (x, -y, -z)
+    deck = mesh(turn * Pos(0, 0, -10) * _deck())                      # part_deck's pose, z -10 .. -4
+    shelf = mesh(turn * hub_shelf())
+    boards = np.concatenate([mesh(turn * board_box(n, halo=False)) for n in SHELF_BOARDS])
+    tub = mesh(turn * PBY.bay_tub())
+    lid = mesh(turn * PBY.bay_lid())
+    door = mesh(turn * PBY.bay_door())
+    ta = tray_assembly()
+    tray = np.concatenate([mesh(turn * s) for s in [ta["tray"], ta["boss"], ta["pi"]] + ta["rails"]])
+    note = ("Turned over about its east-west axis, so north is toward you. Not shown: the coxa bases "
+            "and the legs; the battery sled rides inside the tub. The 14 AWG feed leaves the NE nose "
+            "chamfer, runs under leg 4's drop and rises in the clip to the 12 V node (B133).")
+    items = [(deck, DECK), (shelf, NEW), (boards, SERVO), (lid, GREY), (tub, MOVE), (door, MOVE)]
+    pts = np.concatenate([t.reshape(-1, 3) for t, _ in items + [(tray, ORANGE)]])
+    frame = fit(camera(*UNDER_CAM), pts, draw_box(notes=note_lines(note)))
+    t_ext = PBY.EXT
+    xn = t_ext["x"][1] - PBY.CHAMF / 2
+    lab = [("bay_tub (its floor)", (0.0, -t_ext["y"][0] - 10, -t_ext["z"][0]), (780, 240)),
+           ("bay_door", (t_ext["x"][0] + 1.0, 10.0, -t_ext["z"][0]), (40, 260)),
+           ("hub_shelf + boards", (-45.0, -20.0, 39.3), (40, 760)),
+           ("riser clip", (PBY.CLIP_XY[0], -PBY.CLIP_XY[1] - 3, -PBY.CLIP_Z[0] - 3), (930, 420)),
+           ("14 AWG exit", (xn, -(t_ext["y"][1] - PBY.CHAMF / 2), -PBY.AWG_Z), (1000, 520))]
     lab = [(t, to_px(frame, p), at, "left") for t, p, at in lab]
-    return save(render(items, frame),
-                "body_interior", "Body interior on the deck",
-                "Star-board bracket on deck grid holes (0, 20) + (0, 40); the avionics tray at "
-                "its assumed (0, -38) on its two rails, bulkhead facing south.",
+    return save(render(items, frame, xray=(tray, ORANGE)),
+                "body_interior", "The body from below (option A)",
+                "The keel tub east-west (door -x, nose +x) and the hub shelf north of it hang "
+                "from the deck; the tray on top shows through it.",
                 labels=lab, note=note,
-                legend=[(MOVE, "avionics_tray"), (SERVO, "tray_rail"), (NEW, "busboard_bracket"),
-                        (DECK, "body_deck")])
+                legend=[(MOVE, "bay_tub + bay_door"), (GREY, "bay_lid"), (NEW, "hub_shelf"),
+                        (SERVO, "hub boards"), (DECK, "body_deck"), (ORANGE, "tray (x-ray)")])
 
 
 # --------------------------------------------------------------------------

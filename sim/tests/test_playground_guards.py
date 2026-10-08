@@ -105,8 +105,11 @@ def test_fall_during_gesture_ends_in_fallen():
     run(pg, 1.0)
     assert pg.gesture_phase == "run"
     # D063: 65 N (was 60). The tumble is chaotic: on the D063 model (+27.5 g of fork cheeks) 60 N
-    # tips it to 129 deg and it rolls back upright; 62-70 N all land it upside down (164 deg)
-    pg.do("push 65 0 0.4")
+    # tips it to 129 deg and it rolls back upright; 62-70 N all land it upside down (164 deg).
+    # 9q review: 62 N. With the belly the band is narrow and the keel rolls it back above it: on
+    # deae868522cc 60-65 N land it at 164.8 deg (55-58 and 66-80 tip it to 150-155 and it rolls
+    # back), on c3e82f13b671 (the shell relief, -0.2 g) 60-64 N; 62 is the middle of both
+    pg.do("push 62 0 0.4")
     states = set()
     run(pg, 3.0, lambda p: states.add(p.sup.state))
     assert "FALLEN" in states
@@ -212,7 +215,9 @@ _LIP = ("KNOWN GAP (review round 3, 2026-09-24): a leading foot lands on the edg
         "8 fall, none after a fire: 15 @ 14-15, 25 @ 9-10, 35 / 45 @ 10-11 (35 and 45 are "
         "the same run: both are fitted to 34.2 mm/s). Slew off, the D063 gait alone: 7, "
         "before and after. Careful walk (unchanged by the fix): 6, at 15 @ 15-16, "
-        "25 @ 10-11, 35 / 45 @ 9. None of these fires the void guard")
+        "25 @ 10-11, 35 / 45 @ 9. None of these fires the void guard. D064 (the belly in the sim): "
+        "the five below now tip onto the keel tub at the edge and fire 1.1-1.3 s later at 20-22 deg; "
+        "a tip, not a stop")
 
 
 def _approach(speed, approach_deg, seconds=20.0):
@@ -241,10 +246,18 @@ def _approach(speed, approach_deg, seconds=20.0):
     return pg.sup.fall_count > 0 or zmin < 0.24, t_fire, t_hold, tilt
 
 
+TIPPED_DEG = 10.0      # tilt after the fire that counts as a tip (a guard that caught it: < 3, D063)
+
+
 def _approach_falls(speed, approach_deg, seconds=20.0):
-    """True when the approach falls or never fires the void guard."""
-    fell, t_fire, _h, _t = _approach(speed, approach_deg, seconds)
-    return fell or t_fire is None
+    """True when the approach falls, never fires the void guard, or fires it only after the
+    robot tipped. D064: with the keel tub modelled, a robot that tips over the lip comes to
+    rest on the tub across the edge (torso 0.243-0.245 m: the 0.24 floor no longer sees it,
+    no FALLEN), and its probe then runs out: in all five cases below the tub met the
+    platform 1.1-1.3 s before the void fired, at 20-22 deg. The tip came first, so that is
+    the same gap, counted by its tilt."""
+    fell, t_fire, _h, tilt = _approach(speed, approach_deg, seconds)
+    return fell or t_fire is None or tilt > TIPPED_DEG
 
 
 @pytest.mark.parametrize("speed,approach_deg", [
@@ -258,7 +271,8 @@ def test_void_guard_lip_band_known_gap(speed, approach_deg):
     them. Strict xfail: when a fix lands these must start passing. D063 moved
     the band (the D052 cases 45 @ 13, 25 @ 15, 45 @ 12.5 / 14, 35 @ 20 now stop);
     these are the re-measured falls with the hold's faster seek. None of them
-    fires the void guard: the robot tips before the probe runs out."""
+    fires the void guard before the robot tips (D064: it now hangs on the keel tub
+    at the edge and fires late, see _approach_falls)."""
     assert not _approach_falls(speed, approach_deg)
 
 

@@ -72,7 +72,8 @@ PARTS = {
     "fit_ladder": ("PLA", "flat, as exported", "none", "3 walls / 25%, 0.2 mm",
                    "B28, blocking. Elephant-foot compensation ~0.15 mm, sliced like the parts. "
                    "Rows A-E: see the GO / NO-GO table on the print-order page. Numbers go to "
-                   "NOTES_INBOX.md, then params.yaml (print:), then regenerate (D032)."),
+                   "NOTES_INBOX.md, then params.yaml (print:), then regenerate (D032). The I1 seat "
+                   "fit is not on the ladder: the port coupon plates test it."),
     # batch 1: D047 joint coupons + the blank
     "servo_blank": ("PLA", "bottom DOWN (rims on the bed, horn up)", "none", "2 walls / 15%",
                     "D047 v0.3 ST3215 stand-in, measured from the STEP. Glue a blank_idler into "
@@ -116,8 +117,9 @@ PARTS = {
                       "An M3 x 16 hex head (A-19) presses into the 5.6 A/F hex pocket and must not "
                       "turn (note if it needs persuasion); the whole head sits in the 2.1 pocket, "
                       "0.1 below the top (B82). A round socket head spins in it. The same knob is "
-                      "the I1 port's thumbscrew (10 for the robot, 2 here: the port coupon's, then "
-                      "the bench leg's) and the I6 shoe's set knob (B83)."),
+                      "the I1 port's thumbscrew (10 for the robot: 2 in batch 0, the port coupons', "
+                      "then the bench leg's; 8 in batch 3, on hold with the four bases) and the I6 "
+                      "shoe's set knob (B83)."),
     "dovetail_male_coupon": ("PLA", "as exported", "none", PLA_DEFAULT,
                              "I6, with dovetail_shoe: the undercut male (B83: the 8 neck at the "
                              "root, the 12 face out). The shoe slides along the 24 mm segment with "
@@ -145,12 +147,17 @@ PARTS = {
     "tool_scoop": ("PLA", "as exported", "YES (the audit finds supported islands)", "3 walls / 25%",
                    "I2 tool socket, as tool_hook."),
     # batch 2: one leg
-    "coxa_yaw_base": ("PETG", "plate DOWN (the I1 hook lip on the bed)",
-                      "YES under the whole plate: the hook lip holds it off the bed. The harness "
+    "coxa_yaw_base": ("PETG", "plate DOWN (the I1 L on the bed)",
+                      "YES under the whole plate: the L holds it off the bed. A support "
+                      "BLOCKER in both seat sockets (no support inside a socket: its cone flank "
+                      "and bridged roof print clean, I1_DOCK_OPTIONS 6.3). The pads (x < -46) and "
+                      "the 0.2 relief outboard of them sit on the support interface. The harness "
                       "channel's roof bridges 11 mm",
                       "5 walls / 40%",
                       "D047: I1 plate + servo cup (yaw servo shaft-down), D059 harness channel on "
-                      "-Y. 4 rim self-tappers hold the servo (2 from above, 2 from under the plate)."),
+                      "-Y. 4 rim self-tappers hold the servo (2 from above, 2 from under the plate). "
+                      "Clean up only the pads: the 0.2 relief outboard of x -46 is drawn so the face "
+                      "does not bear (decision 15)."),
     "coxa_fork": ("PETG", "lower hub DOWN, upright as assembled",
                   "YES in three places: under the upper plate (z ~41), the hip cup's lower wall "
                   "(z ~44) and its upper side wall over the hip servo (z ~72.5); widths: the "
@@ -170,7 +177,9 @@ PARTS = {
                       "Idler-side plate; D062: 8 mm rails + a deck over the bridge (B74). Pockets "
                       "ride the hip + knee idlers; the notch is the cable-plug side. Fastens to "
                       "the bridge bosses with 4x M3 x 12 (A-18)."),
-    "tibia_knee_carrier": ("PETG", "cup floor DOWN", "YES under the tube boss", "5 walls / 40%",
+    "tibia_knee_carrier": ("PETG", "as exported: the tube boss on the bed, the cup above it",
+                           "YES under the cup where it steps out past the boss (the audit's "
+                           "cantilever)", "5 walls / 40%",
                            "D047: knee servo cup + tube clamp. The pinch-bolt slit prints as-is; "
                            "M3 x 10 pinch bolt (A-11)."),
     "tibia_sea_outer": ("PETG", "tube socket DOWN", "none", "4 walls / 35%",
@@ -180,34 +189,102 @@ PARTS = {
                          "Keys slide in the keyways with a light wiggle: sand if tight."),
     # batch 3: the body
     "body_deck": ("PETG or PLA", "flat", "none", "4 walls / 30% gyroid",
-                  "The biggest part: brim ON, dry filament, watch the first-layer corners. Print "
-                  "it after B27 (deck_t 4 vs 6 unified), B28, B51 and the bay (B84), and after the "
-                  "port coupons dock cleanly: each of them changes holes in the deck. Today's deck "
-                  "has holes only for the star-board bracket."),
+                  "The biggest part: brim ON, dry filament, watch the first-layer corners. Deck "
+                  "v0.5 cuts the body layout's 21-hole table (part_deck.DECK_HOLES): the tray "
+                  "tabs and tub hangers (the two north tab holes are Ø2.8: their M3 x 10 threads "
+                  "into the deck, do not drill them out), the hub shelf's three blind post holes from below, the "
+                  "(0, 50) trunk slot, the tray's latch strike at (0, -43). Print it after B27 "
+                  "(deck_t 4 vs 6 unified), B28 and once the port coupons dock cleanly: each of "
+                  "them changes holes in the deck."),
     "port_coupon_deck": ("PLA", "as exported", "none", PLA_DEFAULT,
-                         "I1, with port_coupon_plate: tilt 15°, lip through the slot, slide "
-                         "inboard to hook, pivot flat onto the dowels. Binds: note which step."),
-    "port_coupon_plate": ("PLA", "as exported", "none (the audit reports a cantilever: check the "
-                          "slicer preview)", PLA_DEFAULT,
-                          "The leg half of the I1 port coupon."),
-    "busboard_bracket": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                         "The star board: print once the electronics exist (WIRING_HARNESS.md)."),
+                         "I1 seats (decision 15), with the four plate patches: hold the plate at "
+                         "7-10° and bring the L in radially through the 6.2 slot, lower it onto "
+                         "the two cones; it must centre itself. Binds at the slot: print the 6.6 "
+                         "slot (fit ladder row D)."),
+    "port_coupon_plate_relief46": ("PLA", "plate DOWN, as exported (the L on the bed, as "
+                                   "coxa_yaw_base)",
+                                   "YES under the whole plate (the L holds it 9.3 off the bed), with "
+                                   "a support blocker in both seat sockets, as coxa_yaw_base: the "
+                                   "coupon tests that print. The pads and the 0.2 relief sit on the "
+                                   "support interface", PLA_DEFAULT,
+                                   "The leg half, underside relieved outboard of x -46 (the "
+                                   "repo's seat_relief_x0), sockets at fit 0. Dock this one first. "
+                                   "Finger-tight: no rock, no x / y play (< 0.05 on a dial), a 0.2 "
+                                   "feeler stays out from under the pads."),
+    "port_coupon_plate_relief42": ("PLA", "plate DOWN, as exported (as relief46)",
+                                   "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                   "The designer's variant, relieved outboard of x -42: pads to "
+                                   "x -42. Dock both and keep the one that sits without rock."),
+    "port_coupon_plate_fit10": ("PLA", "plate DOWN, as exported (as relief46)",
+                                "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                "relief46 with both seat sockets 0.1 bigger radially: the "
+                                "seat-fit test. Try it if relief46 perches on its cones (light "
+                                "under the pads). Its vee mouth leaves 1.1 of plate to the -y "
+                                "edge (see fit20)."),
+    "port_coupon_plate_fit20": ("PLA", "plate DOWN, as exported (as relief46)",
+                                "YES, as relief46 (support blocker in both sockets)", PLA_DEFAULT,
+                                "relief46 with the sockets 0.2 bigger: the last seat-fit step. "
+                                "The smallest of relief46 / fit10 / fit20 that sits flat is "
+                                "print.seat_fit. Its vee socket's mouth leaves 1.0 of plate to "
+                                "the -y edge (1.2 at fit 0): if fit 0.2 wins, apply "
+                                "I1_DOCK_OPTIONS 7 (mouth 0.2 or the seats at |y| 17.1) before "
+                                "any coxa_yaw_base."),
+    "hub_shelf": ("PLA or PETG", "as exported (the plate's underside on the bed, the posts up)",
+                  "none", PLA_DEFAULT,
+                  "Option A's harness hub under the deck (picks 1, 9, 14; it replaces the "
+                  "star-board bracket). Boards on first: the 40 x 30 star and the 30.5 x 30.5 "
+                  "PDB up on their standoffs (8x M3 x 6), the bus adapter face-down on four "
+                  "Ø5 x 2.5 spacers (4x M2.5 x 8 from below), the buck and the UBEC face-down "
+                  "under zip ties. Then up to the deck: 3x M3 x 30 from below through the posts "
+                  "into the deck's blind holes. Service = the robot off the stand (B134)."),
     "avionics_tray": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                      "A bench carrier for the electronics: Pi 5 standoffs on 58 x 49, 11 tall "
-                      "(B89; M2.5 x 6 or x 8), the IMU on four imu_grommets on its own pattern "
-                      "(B90; M2.5 x 10 + nut). As drawn, tray + rails fit nowhere between the "
-                      "legs (B51), and the bus adapter, buck and UBEC have no place under the Pi "
-                      "(B108): keep them beside the tray."),
+                      "The Pi 5 (standoffs on 58 x 49, 11 tall, B89; M2.5 x 6 or x 8) and the IMU "
+                      "on four imu_grommets (B90; M2.5 x 10 + nut), nothing else (pick 14: the "
+                      "boards are on the hub shelf). It sits at (0, 0) turned 180 on its two rails "
+                      "(B51), three lugs a side under the windowed lips. Glue tray_latch_boss "
+                      "under the tongue. Out: the carapace off first (the boss meets sector 2's "
+                      "latch pad from slide 14; lifted, the Pi meets sectors 3 and 4, the cap and "
+                      "by lift 42 sector 1), the robot off the stand and the sled out (the strike's "
+                      "driver column runs through both), the I3 latch to OPEN, slide 16 south "
+                      "(the deck strike's slot stops it at 16.5), then lift (part_avionics)."),
+    "tray_latch_boss": ("PLA or PETG", "as exported (underside down)", "none", PLA_DEFAULT,
+                        "Glued under avionics_tray's tongue (the tray prints plate-down, so a "
+                        "boss there would float): it brings the tongue's I3 cartridge down onto "
+                        "the deck top, where the (0, -43) strike bites. The Ø14.3 pocket keeps 1.6 "
+                        "of wall (LATCH_WALL, four perimeters) all round, in the boss and in the "
+                        "tongue, its south end included (part_avionics gates it)."),
+    "imu_grommet": ("TPU (PLA placeholder)", "as exported", "none", "slicer TPU profile",
+                    "Four, under the BNO085 on the tray's raised seats (B90): each into its Ø4.8 "
+                    "hole, the bottom flange in the Ø9 recess. M2.5 x 10 (B-21) from above with a "
+                    "DIN 934 nut under each: the Ø2.7 bore does not thread."),
     "tray_rail": ("PLA or PETG", "as exported", "none", PLA_DEFAULT,
-                  "The avionics tray's rails. Waits for B51: as drawn, tray + rails fit nowhere "
-                  "between the legs. Do not print it for the robot yet."),
+                  "The avionics tray's two rails, on the deck's inboard tab holes (+-40, -20 / 0 "
+                  "/ 20) with M3 ISO 7380 button heads (a socket head does not fit under the "
+                  "plate); the four at (+-40, -20 / 0) are also the tub's hanger screws."),
     "battery_sled": ("PETG", "as exported", "none (check the preview for the audit's overhang)",
                      PLA_DEFAULT,
-                     "Waits for the bay (B84): nothing carries the sled yet. Then size it from the "
-                     "pack you bought (B72)."),
-    "sled_rail": ("PETG", "as exported", "none", PLA_DEFAULT,
-                  "The battery sled's floor rails (the sled rides on top). Waits for the bay "
-                  "(B84)."),
+                     "Rides the two rails printed into bay_tub's floor; its glued XT60E-M stands "
+                     "8.0 proud of the nose and mates the tub's floating carrier. Size it from the "
+                     "pack you bought (B72): no strap (pick 8 b), a 2 mm foam pad under the lid."),
+    "bay_tub": ("PETG", "as exported (open top up, the floor on the bed)",
+                "YES under the XT60 carrier only (an island 2.9 over the floor until its webs "
+                "print; through the open top). The latch boss stands on the bed, the pilasters "
+                "on 45° wedges, the north return is a 1.2 step at the top",
+                PLA_DEFAULT,
+                "The keel tub (I5, B84): the sled's rails, the floating XT60 carrier on four "
+                "1.2 x 1.2 flexure webs (pick 4) and the loop key's pocket above it in the "
+                "nose (pick 3), the door's I3 strike in the south boss (pick 12), the stand's "
+                "x-stop hole, the 14 AWG exit through the NE nose chamfer and the clip for its "
+                "riser (B133). Needs a FEMALE XT60 in the carrier."),
+    "bay_lid": ("PETG", "as exported (the roof down, the bosses up)", "none", PLA_DEFAULT,
+                "The tub's roof: six hanger bosses up to the deck (M3 heat-set inserts, M3 x 16 "
+                "from the deck top), two insert bosses over the pilasters (M3 x 10 from below), "
+                "the leg 2 / 3 loom tie bars beside the (+-40, 0) bosses. The tub goes on 1.6 "
+                "north of its place, rises to the lid, slides south under the north return."),
+    "bay_door": ("PETG", "on its outer face, as exported", "none", PLA_DEFAULT,
+                 "The tub's -x door: a spigot in the opening, the boss that presses the sled's "
+                 "tail lip 0.5, the I3 cartridge (glue it flush in the south ear) and a snap tab "
+                 "at its north edge. Push the tab's free end out to release it."),
     # deferred: bench jig + calibration gauges
     "jig_base": ("PLA", "flat", "none", "3 walls / 20%, 0.3 mm", "Bench jig base."),
     "jig_column": ("PLA", "on its back, spine down", "YES", "3 walls / 20%, 0.3 mm",
@@ -218,21 +295,27 @@ PARTS = {
                          "Used by the bench runbook's calibration."),
     # deferred: the stand
     "stand_base": ("PLA", "as exported", "none", "2 walls / 15%, 0.3 mm",
-                   "With stand_crown: the 47 mm deck cradle."),
+                   "With stand_crown: the 89.4 mm tub cradle (deck bottom over the bench)."),
     "stand_section": ("PLA", "as exported", "none", "2 walls / 15%, 0.3 mm",
-                      "Stacks on the printed I6 spigots, +80 mm each; two free the leg's full "
-                      "reach below the deck."),
+                      "Stacks on the printed I6 spigots, +80 mm each (169.4 / 249.4); two free "
+                      "the leg's full reach below the deck (153.3 to the foot point, 183.5 with "
+                      "the B95 hand)."),
     "stand_crown": ("PLA", "as exported", "YES from the bed inside the skirt (they pull out of "
-                    "the open bottom)", "2 walls / 15%, 0.3 mm",
-                    "The top plate spans the hollow skirt."),
+                    "the open bottom) and under the floor's two south corners outside the skirt "
+                    "(878 mm²)", "2 walls / 15%, 0.3 mm",
+                    "The U-cradle (B85): it holds the robot by its keel tub and touches nothing "
+                    "else, so the carapace stays on. Lower the tub between the walls (2 mm "
+                    "lead-ins), door end -x, the floor's hole onto the pin at (0, -20). Print it "
+                    "after part_bay: without the tub nothing rests on it."),
     # deferred: the carapace
     "shell_sector": ("PLA or PETG", "as exported", "YES on the outside overhangs; the cavity's "
                      "45° terraces need nothing", "3 walls / 12% gyroid, 0.25 mm, brim",
                      "Five of them + shell_cap. Each foot takes one latch cartridge (B87, glued "
                      "into its pad from the foot side), locked from under the deck with a flat "
                      "screwdriver. Prove the latch on frame_coupon first; until then do not carry "
-                     "the robot by the shell. The station-162 latch sits over the battery bay's "
-                     "footprint: the bay must leave that column open (B84)."),
+                     "the robot by the shell. The station-162 and -306 latches sit over the keel "
+                     "tub: it leaves a Ø6 driver column through its floor and lid under each "
+                     "(B126); turn them with the sled out."),
     "shell_cap": ("PLA or PETG", "as exported", "none", "3 walls / 12% gyroid, 0.25 mm, brim",
                   "The carapace's hatch cap: five 6 x 3 magnet pockets in its plug at r 42.5, "
                   "each over the seat magnet in one sector's boss (B88; B-19, poles per "
@@ -250,46 +333,76 @@ PARTS = {
                      "A sock over the closed hand's cone tip: waits for the hand."),
 }
 
+# Parts on hold (docs/PRINT_PLAN.md's hold box): part -> what to do with it.
+# Batch 2 prints one coxa_yaw_base for the bench leg; a batch's `hold` lists
+# the copies that wait (ON HOLD in its list, left out of its "without" sum).
+HOLD = {"coxa_yaw_base": "On its real I1 support (the inboard pads, the two seats, the two "
+                         "thumbscrews in tension) the servo-stall push-up on the foot fails it "
+                         "(B119, B139). Print ONE, for the bench leg (batch 2), not five: the "
+                         "other four and their 8 thumb_knob_m3 wait for the owner's fix (an "
+                         "outboard hold-down, a deeper rib, a thicker plate, or screw preload as a "
+                         "design load) and a passing re-run. Nothing else is on hold."}
+HOLD_TAG = "<font color='#c62828'><b>ON HOLD (B139)</b></font>"
+
 # The batches in print order. key = the print_estimate.json batch (its parts
 # and quantities are used as-is), extra = parts the estimate leaves out,
-# material = a batch-wide override (batch 1 is all PLA).
+# material = a batch-wide override (batch 1 is all PLA), hold = parts of the
+# batch that wait for HOLD.
 BATCHES = [
-    dict(key="Batch 0 fit ladder", title="Batch 0: measure the printer (B28, blocking)",
-         intro="One fit ladder answers every clearance in params.print. Nothing else prints "
-               "until it is measured and filed."),
+    dict(key="Batch 0 fit ladder", title="Batch 0: the printer and the port (B28, B117; the "
+                                         "first print)",
+         extra=[("port_coupon_deck", 1), ("port_coupon_plate_relief46", 1),
+                ("port_coupon_plate_relief42", 1), ("port_coupon_plate_fit10", 1),
+                ("port_coupon_plate_fit20", 1), ("thumb_knob_m3", 2)],
+         intro="Two questions before anything else: what fits this printer prints (one fit "
+               "ladder answers every clearance in params.print) and whether a leg docks on its "
+               "seats (decision 15: the port coupons, which print their sockets the way "
+               "coxa_yaw_base does, so they test that print too). Nothing else prints until both "
+               "are measured and filed: the GO / NO-GO table is on the print-order page. The "
+               "2 knobs become the bench leg's thumbscrews. The port coupons (29 g, 1.6 h by the "
+               "estimator's formula) and the knobs are not in the estimate."),
     dict(key="Batch 1 coupons + blank", title="Batch 1: four joint coupons + one blank (PLA)",
          material="PLA",
          intro="Before any full leg part. Each coupon is a boolean clip of the production solid "
                "(part_leg_coupons.py), so a coupon that fits proves the part it came from. The "
                "fit criteria are on the print-order page."),
     dict(key=None, title="Interface coupons (PLA, with batch 1; not in the estimate)",
-         extra=[("latch_housing", 1), ("latch_rotor", 1), ("thumb_knob_m3", 2),
+         extra=[("latch_housing", 1), ("latch_rotor", 1),
                 ("dovetail_male_coupon", 1), ("dovetail_shoe", 1), ("shell_sector_demo", 1),
                 ("frame_coupon", 1), ("tool_hook", 1), ("tool_scoop", 1)],
          intro="The standards the body, panels and tools attach by (D020, INTERFACES.md). D063 "
-               "redrew all but the tools (latch cartridge, frame_coupon and demo B87, knob B82, "
-               "I6 male and shoe B83): print those from the current tree. An earlier "
-               "tool_hook / tool_scoop still counts."),
+               "redrew all but the tools (latch cartridge, frame_coupon and demo B87, I6 male and "
+               "shoe B83; the shoe's knob is one of batch 0's, B82): print those from the "
+               "current tree. An earlier tool_hook / tool_scoop still counts."),
     dict(key="Batch 2 one leg", title="Batch 2: one leg, after batch 1 passes",
-         intro="PETG for the structure, PLA for the three blanks. Assemble in the order below; "
+         intro="PETG for the structure, PLA for the three blanks, and ONE coxa_yaw_base: the "
+               "other four are on hold (B139, its sheet below). Assemble in the order below; "
                "check_assembly.py asserts the final fits and the paths of steps 1, 2 and 7 "
                "(step 1's slide-on since D063, B80)."),
     dict(key="Batch 3 body", title="Batch 3: the body",
-         extra=[("port_coupon_deck", 1), ("port_coupon_plate", 1), ("thumb_knob_m3", 8)],
-         intro="The deck after B27, B28, B51 and the bay (B84), and after the port coupons dock "
-               "cleanly; the star board once the electronics exist; the avionics tray only as a "
-               "bench carrier (B51). tray_rail waits for B51, battery_sled and sled_rail for the "
-               "bay (B84), though the estimate still prices them. 8 more thumb_knob_m3, 2 per "
-               "coxa_yaw_base. The port coupons and the 8 knobs are not in the estimate."),
+         extra=[("thumb_knob_m3", 8), ("latch_housing", 2), ("latch_rotor", 2),
+                ("imu_grommet", 4)],
+         hold=("coxa_yaw_base", "thumb_knob_m3"),
+         intro="Option A (the owner's picks, 2026-10-07). The deck v0.5 after B27 and once batch "
+               "0 is filed; the hub shelf under it once the electronics exist; the avionics tray "
+               "on its rails with tray_latch_boss glued under its tongue (it slides 16 south at "
+               "OPEN, the strike's slot stops it, then lifts; the carapace comes off first) and "
+               "the IMU on its four grommets; the keel tub (bay_tub + bay_lid + bay_door) and "
+               "the battery sled that rides in it, once the pack and the female XT60 are in hand "
+               "and calipered; two latch cartridges, the tray's and the door's. ON HOLD (B139): "
+               "the 4 coxa_yaw_base and their 8 thumb_knob_m3 (2 a base). The knobs, the "
+               "cartridges and the grommets are not in the estimate."),
     dict(key="Deferred: four more legs", title="Deferred: four more legs (servos in hand)",
-         intro="4 x batch 2 without the blanks and without coxa_yaw_base (batch 3 prints those)."),
+         intro="4 x batch 2 without the blanks and without coxa_yaw_base (batch 3 lists those, "
+               "on hold: B139)."),
     dict(key="Deferred: bench jig", title="Deferred: bench jig + calibration gauges",
          extra=[("calib_gauge_hip", 1), ("calib_gauge_knee", 1)],
          intro="Wait until servos are in hand. 0.3 mm layers for the jig. The gauges are not in "
                "the estimate."),
     dict(key="Deferred: stand", title="Deferred: the stand (print last)",
-         intro="0.3 mm, 2 walls, 15%. stand_base + stand_crown alone are the deck cradle; each "
-               "stand_section raises it 80 mm."),
+         intro="0.3 mm, 2 walls, 15%. stand_base + stand_crown alone are the tub cradle (deck "
+               "bottom 89.4 over the bench); each stand_section raises it 80 mm. Print it after "
+               "the keel tub: the cradle holds the robot by it."),
     dict(key="Deferred: carapace", title="Deferred: the carapace (print last)",
          intro="0.25 mm, 3 walls, 12% gyroid, brim."),
     dict(key=None, title="The hand (a later tool, B25; not in the estimate)",
@@ -310,6 +423,16 @@ def _load_json(path, default):
             return json.load(f)
     except (OSError, ValueError):
         return default
+
+
+def held_split(b, est):
+    """(held rows, held g, held min, rest g, rest min) of a batch's estimate:
+    the rows its `hold` names, and the sum of the others."""
+    rows = est.get(b["key"], {}).get("parts", []) if b["key"] is not None else []
+    held = [p for p in rows if p["part"] in b.get("hold", ())]
+    rest = [p for p in rows if p["part"] not in b.get("hold", ())]
+    return (held, sum(p["est_g"] for p in held), sum(p["est_min"] for p in held),
+            sum(p["est_g"] for p in rest), sum(p["est_min"] for p in rest))
 
 
 # ---------------------------------------------------------------------------
@@ -449,12 +572,18 @@ def cover(meta, est, fem):
         e = est[b["key"]]
         n = sum(p["qty"] for p in e["parts"])
         rows.append([b["key"], f"{len(e['parts'])} ({n})", f"{e['total_g']}", f"{e['total_h']}"])
+        held, hg, hm, _, _ = held_split(b, est)
+        if held:
+            names = ", ".join(f"{p['part']} x {p['qty']}" for p in held)
+            rows.append([f"&nbsp;&nbsp;&nbsp;of it {HOLD_TAG}: {names}", "", f"{hg:.0f}",
+                         f"{hm / 60:.1f}"])
         tg += e["total_g"]
         th += e["total_h"]
     rows.append(["<b>whole plan</b>", "", f"<b>{tg:.0f}</b>", f"<b>{th:.1f}</b>"])
     s.append(table(rows, [3.3 * inch, 1.6 * inch, 1.2 * inch, 1.2 * inch]))
-    s.append(Paragraph("Not in the estimate: the interface coupons, the port coupons, the "
-                       "calibration gauges and the hand set.", SMALL))
+    s.append(Paragraph("Not in the estimate: the port coupons (29 g, 1.6 h by the estimator's "
+                       "formula), the interface coupons, the knobs, the latch cartridges, the IMU "
+                       "grommets, the calibration gauges and the hand set.", SMALL))
     s += [Spacer(1, 8), Paragraph("Strength (out/fem/fem_results.json, D061)", H3)]
     if fem:
         rows = [["part", "verdict", "SF", "governing case", "held / loaded"]]
@@ -484,7 +613,6 @@ def contents(pages):
 
 
 def print_order(fem):
-    femur = next((r for r in (fem or {}).get("results", []) if r["part"] == "femur"), None)
     s = [Paragraph("Print order + checklist", H2),
          Paragraph("From docs/PRINT_PLAN.md. Print leg parts only from the current tree: every leg "
                    "part from before D047 was modelled around the wrong servo envelope. Log every "
@@ -492,39 +620,54 @@ def print_order(fem):
                    BODY), Spacer(1, 4)]
     steps = [
         "Calibrate the printer (PID, first layer, flow) on the filament you will use.",
-        "<b>Batch 0</b>: the fit ladder (PLA, 0.2 mm, 3 walls, 25%). Measure rows A-E, file them "
-        "in NOTES_INBOX.md, then params.yaml (print:), regenerate. GO / NO-GO below.",
+        "<b>Batch 0, the first print</b>: the fit ladder (PLA, 0.2 mm, 3 walls, 25%) and the port "
+        "coupons (port_coupon_deck + the four plates, relief46 first) with 2 thumb_knob_m3, all "
+        "PLA. Measure ladder rows A-E and dock the plates; file the numbers in NOTES_INBOX.md, "
+        "then params.yaml (print:), regenerate. GO / NO-GO below.",
         "<b>Batch 1</b>: servo_blank + blank_idler, the four D047 coupons (cup, yaw hub, hip hub, "
         "idler) + 1 horn_coupler, all PLA. Also the interface coupons. Check the fit criteria "
         "below BEFORE any full leg part.",
-        "<b>Batch 2</b>: one leg in PETG (+ 3 PLA blanks) after batch 1 passes. Assemble in the "
-        "order on the batch 2 page.",
-        "<b>Batch 3</b>: the deck (after B27, B28, B51 and the bay B84, and once the port "
-        "coupons dock), 4 more coxa_yaw_base + 8 thumb_knob_m3, the star board once the "
-        "electronics exist. The tray rails and the battery parts wait (B51, B84).",
+        "<b>Batch 2</b>: one leg in PETG (+ 3 PLA blanks) with ONE coxa_yaw_base, after batch 1 "
+        "passes. Assemble in the order on the batch 2 page.",
+        "<b>Batch 3</b>: the deck v0.5 (after B27, once batch 0 is filed), the keel tub + the "
+        "sled (the pack and the XT60s in hand), the tray on its rails, the hub shelf once the "
+        "electronics exist. " + HOLD_TAG + ": the 4 more coxa_yaw_base and their 8 "
+        "thumb_knob_m3.",
         "<b>Deferred</b>, servos in hand: four more legs, the bench jig + calibration gauges. "
         "<b>Print last</b>: the stand and the carapace. The hand is a later tool (B25).",
     ]
     s.append(table([["[ ]", f"{i}. {t}"] for i, t in enumerate(steps, 1)],
                    [0.35 * inch, 6.95 * inch], header=False))
-    if femur is not None and femur["verdict"] != "PASS":
-        c = VERDICT_COLOUR.get(femur["verdict"], "#000000")
+    for r in (fem or {}).get("results", []):
+        if r["verdict"] == "PASS":
+            continue
+        c = VERDICT_COLOUR.get(r["verdict"], "#000000")
         s += [Spacer(1, 4), Paragraph(
-            f"<font color='{c}'><b>Strength: the femur {femur['verdict']}S at SF "
-            f"{femur['sf']:.2f}</b></font> (case {femur['governing']}, B74). Print it for fit, "
-            "expect it to twist, and do not run a leg hard on it until a re-run passes.", BODY)]
+            f"<font color='{c}'><b>Strength: {r['part']} {r['verdict']}S at SF {r['sf']:.2f}"
+            f"</b></font> (case {r['governing']}, {FEM_CASES.get(r['governing'], '')}). "
+            + HOLD.get(r["part"], "Print it for fit and do not run a leg hard on it until a "
+                                  "re-run passes."), BODY)]
     s += [Paragraph("Batch 0 GO / NO-GO (D032: before params are regenerated, bores only)", H3),
           table([["measurement", "result", "action"],
                  ["Row A (Ø4 bores)", "4.30 slides, 4.20 binds", "the printer matches params: GO"],
                  ["", "only 4.40 / 4.50 slides", "holes print small: slicer XY hole compensation "
                   "+0.05...+0.10 mm, GO, file the numbers"],
                  ["", "4.15 / 4.20 already slides", "true to CAD or roomy: GO and note it"],
-                 ["Row D (slots)", "the lip passes 4.2", "GO"],
-                 ["", "only 4.6 passes", "file it; regenerate with hook_slot_w 4.6 before the deck"],
+                 ["Row D (slots)", "the L passes 6.2 at 7-10°, radial", "GO"],
+                 ["", "only 6.6 passes", "file it; regenerate with hook_slot_w 6.6 before the deck"],
+                 ["", "5.8 passes too", "GO, note it (6.2 keeps the proven 0.40 margin)"],
+                 ["Seat fit (port coupon plates relief46 / fit10 / fit20)",
+                  "relief46 sits on the cones: no rock, no light under the pads", "GO: "
+                  "print.seat_fit stays 0"],
+                 ["", "only fit10 or fit20 sits flat", "file 0.1 / 0.2 as print.seat_fit, "
+                  "regenerate before any coxa_yaw_base"],
+                 ["", "all three rock, or play > 0.15", "the seats fail: fall back to the "
+                  "'minimal' port (I1_DOCK_OPTIONS 3), owner call"],
                  ["Row E (Ø2 pins)", "snug at 2.10", "loose at 2.00: glue the pins. Binds at "
                   "2.20: ream the finger pin holes with a 2 mm drill"],
-                 ["Port coupons", "dock without force", "binds at the dowels: note which step. "
-                  "Slop after the pivot: note it, proceed (the thumbscrews close it)"]],
+                 ["Port coupons", "relief46 and relief42 dock, centre on the cones",
+                  "binds at the slot: print the 6.6 slot. Note which of the two sits without "
+                  "rock; the seat fit is the row above"]],
                 [1.25 * inch, 1.75 * inch, 4.3 * inch]),
           Paragraph("Rows B (M3 tap 2.5-2.9) and C (heat-set 4.4-4.8) need screws and inserts from "
                     "the bench kit (bom/BOM.csv A-09 to A-13).", SMALL),
@@ -609,8 +752,10 @@ def fem_block(r):
            f"held: {r.get('held', '')}<br/>loaded: {r.get('loaded', '')}")
     if r["part"] == "femur":
         txt += "<br/>femur_link + femur_plate_b analysed as one part."
-    if r["verdict"] == "FAIL":
-        txt += "<br/><b>Print it for fit; do not run a leg hard on it (B74).</b>"
+    if r["part"] in HOLD and r["verdict"] != "PASS":
+        txt += f"<br/>{HOLD_TAG}: <b>{HOLD[r['part']]}</b>"
+    elif r["verdict"] == "FAIL":
+        txt += "<br/><b>Print it for fit; do not run a leg hard on it until a re-run passes.</b>"
     left = Paragraph(txt, CELL)
     png = os.path.join(FEM, f"{r['part']}.png")
     right = Image(png, width=3.3 * inch, height=1.65 * inch) if os.path.exists(png) else \
@@ -661,12 +806,18 @@ def batch_section(b, est, audit, fem_by_part, drawings, seen, pages, known):
                            "print_estimate.py.", BODY))
     if b["key"] in est:
         e = est[b["key"]]
-        s.append(Paragraph(f"Estimate: <b>{e['total_g']} g, {e['total_h']} h</b>.", BODY))
+        line = f"Estimate: <b>{e['total_g']} g, {e['total_h']} h</b>"
+        held, _, _, rg, rm = held_split(b, est)
+        if held:
+            names = ", ".join(f"{p['part']} x {p['qty']}" for p in held)
+            line += f"; without the held {names}: <b>{rg:.0f} g, {rm / 60:.1f} h</b>"
+        s.append(Paragraph(line + ".", BODY))
     rows = [["[ ]", "part", "qty", "material", "pose", "supports", "g", "min", "sheet"]]
     for part, qty, g, mins in parts:
         mat, pose, sup, _, _ = part_info(part, b)
         where = f"p. {known.get('part:' + part, '?')}" if part in seen else "below"
-        rows.append(["[ ]", part, qty, mat, pose, sup, "" if g is None else g,
+        name = f"{part}<br/>{HOLD_TAG}" if part in b.get("hold", ()) else part
+        rows.append(["[ ]", name, qty, mat, pose, sup, "" if g is None else g,
                      "" if mins is None else mins, where])
     s.append(table(rows, [w * inch for w in (0.3, 1.2, 0.35, 0.75, 1.45, 1.8, 0.45, 0.4, 0.6)]))
     if b["key"] == LEG_BATCH:
@@ -778,7 +929,8 @@ def main():
         if found == known:
             break
         known = found
-    missing = [p for p, *_ in batch_parts(BATCHES[3], est)
+    leg = next(b for b in BATCHES if b["key"] == LEG_BATCH)
+    missing = [p for p, *_ in batch_parts(leg, est)
                if not os.path.exists(os.path.join(DRAW, f"{p}.pdf"))]
     pdf = merge_drawings(pdf, found)
     with open(PDF, "wb") as f:

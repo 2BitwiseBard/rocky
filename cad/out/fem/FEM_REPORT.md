@@ -17,7 +17,7 @@ Stance (leg frame, mm): hip (45.0, 61.0), knee (123.8, 7.9), foot (75.0, -118.0)
 
 | part | verdict | SF | case | governs | peak util (raw) | deflection (mm) | mesh |
 |---|---|---|---|---|---|---|---|
-| coxa_yaw_base | **PASS** | 2.93 | V | layers | 0.39 at (-14.0, 5.5, 0.0) | 0.150 | 19050 el |
+| coxa_yaw_base | **FAIL** | 1.10 | V | von Mises | 1.04 at (-33.1, -16.1, -1.4) | 2.294 | 19613 el |
 | coxa_fork | **PASS** | 2.47 | R- | layers | 0.50 at (2.0, 16.6, 7.3) | 1.763 | 23667 el |
 | femur | **PASS** | 2.18 | L- | von Mises | 0.66 at (52.0, 35.6, -11.0) | 1.058 | 43446 el |
 | tibia_knee_carrier | **PASS** | 3.92 | L- | layers | 0.36 at (139.2, 9.4, 35.6) | 0.068 | 12468 el |
@@ -29,15 +29,15 @@ SF is the 99.9th-percentile utilisation over surface nodes more than 1.5 mm from
 
 ![coxa_yaw_base](coxa_yaw_base.png)
 
-Held: deck (plate underside) (5335 nodes). Loaded: yaw servo case in the cup (3985 nodes). Build direction (part frame): (0.0, 0.0, 1.0).
+Held: the docked I1 support (B118): the inboard pads (x <= seat_relief_x0, over the deck), the two seat flanks, the two thumbscrew heads in tension; V: pads + screws (the seats lift), R-: seats + screws (the pads lift), L+/L-: the pressing side's pads, both seats, the lifting side's screw (599 nodes). Loaded: yaw servo case in the cup (3990 nodes). Build direction (part frame): (0.0, 0.0, 1.0).
 
 | case | F (N) | M (N.mm) | von Mises p99.9 | layer tension p99.9 | SF | deflection |
 |---|---|---|---|---|---|---|
-| V | (0.0, 0.0, 60.29) | (0.0, -4521.8, 0.0) | 6.88 | 6.82 | 2.93 | 0.150 |
-| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 2.10 | 2.08 | 9.62 | 0.046 |
-| R- | (-16.42, 0.0, 0.0) | (0.0, 2365.1, 0.0) | 2.10 | 1.74 | 11.49 | 0.046 |
-| L+ | (0.0, 39.2, 0.0) | (5644.8, -0.0, 2940.0) | 5.43 | 2.90 | 6.45 | 0.099 |
-| L- | (0.0, -39.2, 0.0) | (-5644.8, -0.0, -2940.0) | 5.43 | 5.07 | 3.95 | 0.099 |
+| V | (0.0, 0.0, 60.29) | (0.0, -4521.8, 0.0) | 30.44 | 16.90 | 1.10 | 2.294 |
+| R+ | (16.42, 0.0, 0.0) | (0.0, -2365.1, 0.0) | 4.65 | 3.48 | 5.75 | 0.284 |
+| R- | (-16.42, 0.0, 0.0) | (0.0, 2365.1, 0.0) | 4.91 | 4.07 | 4.90 | 0.310 |
+| L+ | (0.0, 39.2, 0.0) | (5644.8, -0.0, 2940.0) | 11.27 | 8.09 | 2.41 | 0.226 |
+| L- | (0.0, -39.2, 0.0) | (-5644.8, -0.0, -2940.0) | 9.58 | 8.32 | 2.40 | 0.205 |
 
 ## coxa_fork
 

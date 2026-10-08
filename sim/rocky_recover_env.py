@@ -14,7 +14,11 @@ robot's, end to end, and every stage is in the loop the policy trains on:
     -> EMA filter, alpha 0.4 at 50 Hz (B30 jitter: a first-order filter the
        policy KNOWS about — its state is in the obs — instead of a smoother
        bolted on after training, which would be a different controller)
-    -> mapped into the params joint range (yaw +-40, hip -70..90, knee -150..-20)
+    -> mapped into the params joint range (yaw +-40, hip -70..90, knee -150..-20);
+       D064 (pick 13): legs 1-4's hip over [-51.05, 90] instead — the righter's
+       hip floor, the same one ReflexSupervisor holds in FALLEN / RIGHTED, so
+       the policy cannot fold a leg under the keel tub on command (B130). Older
+       checkpoints replay with the uncut map their contract records
     -> command clamp, rate_limit_rad_s (default 4.0 = params 'free' speed for
        NEW runs; v1-v3 checkpoints trained at 5.0, above the servo's 4.7
        no-load — flagged 'exceeds servo' wherever they are listed)
@@ -78,10 +82,18 @@ at reach 0. At reach 1 nothing is drawn or redrawn and the rng draws are
 the default env's, so the episode is the default env's episode for that
 seed. curriculum=None (every evaluation) is reach 1.
 
-Honesty: the sim's torso is two stacked cylinders — flat-ish top and
-bottom. The real Pebble has a domed rock shell and a belly with skids and
-a battery door; the exact rolling behaviour WILL differ. What transfers
-is the strategy class (which legs to sweep, when to push), not the timing.
+Honesty: the sim's torso is two stacked cylinders over a massless belly of two
+boxes and three post cylinders (D064: the keel tub, the hub shelf's plate and
+its posts), and the torso's real CoM and inertia from sim/mass_budget.json on
+its <inertial>. The real Pebble has a domed rock shell and a chamfered tub;
+the exact rolling behaviour WILL differ. What transfers is the strategy class
+(which legs to sweep, when to push), not the timing. The domain randomiser's
+base copies (rl_common.DomainRandomizer._base_*) are read from this compiled
+model, so every episode starts from the budget's mass and inertia.
+
+Drop poses (review 9q): a joint draw that starts a leg inside the belly is
+drawn again (drop_clear_of_belly, recorded in config(); 3.7 % of the uniform
+draws did, max 18.8 mm).
 """
 from __future__ import annotations
 import os
@@ -130,6 +142,7 @@ CURRICULA = ("side-back",)                      # B34
 CURRICULUM_RAMP = (0.15, 0.75)                  # reach 0 -> 1 between these fractions of the run
 SIDE_MAX_DEG = 110.0                            # side-back: a landing past this is "on its back"
 MAX_DROPS = 20                                  # drops before a curriculum reset keeps what it got
+MAX_Q0_DRAWS = 100                              # drop_clear_of_belly: joint draws per drop (3.7 % land in it)
 
 
 def curriculum_reach(progress, ramp=CURRICULUM_RAMP):
@@ -179,12 +192,41 @@ def _quat_from_axis_angle(axis, ang):
     return np.concatenate([[np.cos(ang / 2)], axis * np.sin(ang / 2)])
 
 
-def action_to_q(a):
-    return Q_LO + (np.asarray(a, float) + 1) / 2 * (Q_HI - Q_LO)
+def action_to_q(a, lo=None, hi=None):
+    """a in [-1, 1] -> absolute joint targets over [lo, hi] (default: the params joint range)."""
+    lo = Q_LO if lo is None else lo
+    hi = Q_HI if hi is None else hi
+    return lo + (np.asarray(a, float) + 1) / 2 * (hi - lo)
 
 
-def q_to_action(q):
-    return np.clip(2 * (np.asarray(q, float) - Q_LO) / (Q_HI - Q_LO) - 1, -1, 1)
+def q_to_action(q, lo=None, hi=None):
+    lo = Q_LO if lo is None else lo
+    hi = Q_HI if hi is None else hi
+    return np.clip(2 * (np.asarray(q, float) - lo) / (hi - lo) - 1, -1, 1)
+
+
+def hip_floor(hip_clamp="params", legs=None):
+    """The righter's hip floor (D064, pick 13) as the env and PolicyRighter use it:
+    (floor_deg or None, legs tuple). hip_clamp 'params' = rocky_model.righter_hip_min_deg()
+    (-51.05, legs 1-4), None = no floor (the pre-D064 map every older checkpoint trained on),
+    or a number in degrees."""
+    import rocky_model as rm
+    legs = rm.righter_clamp_legs() if legs is None else tuple(int(i) for i in legs)
+    if hip_clamp == "params":
+        hip_clamp = rm.righter_hip_min_deg()
+    return (None if hip_clamp is None else float(hip_clamp)), legs
+
+
+def action_range(floor_deg=None, legs=()):
+    """(lo, hi) (15,) rad: the params joint range with the hip of each leg in `legs` raised to
+    floor_deg — the policy's [-1, 1] spans [floor, 90] there ("action range remapped", PREP_REPORT_2
+    s2 (d)): no dead band of actions that all clip to the floor, and a policy trained on it can
+    command nothing the supervisor's FALLEN / RIGHTED clamp would cut."""
+    lo = Q_LO.copy()
+    if floor_deg is not None:
+        for i in legs:
+            lo[3 * i + 1] = max(lo[3 * i + 1], np.deg2rad(floor_deg))
+    return lo, Q_HI.copy()
 
 
 class RecoverEnv(gym.Env if gym else object):
@@ -194,15 +236,30 @@ class RecoverEnv(gym.Env if gym else object):
                  rate_limit_rad_s=SERVO_SAFE_RAD_S, servo="random", ema_alpha=rc.EMA_ALPHA,
                  obs_version=rc.OBS_VERSIONS["recover"], obs_noise=None,
                  ep_seconds=EP_SECONDS, thermal=True, thermal_heat0=(0.0, 0.0),
-                 curriculum=None, curriculum_ramp=CURRICULUM_RAMP, **_):
+                 curriculum=None, curriculum_ramp=CURRICULUM_RAMP, hip_clamp="params",
+                 hip_clamp_legs=None, drop_clear_of_belly=True, **_):
         """servo: off | nominal | random (see rl_common.servo_params).
         obs_noise: None = follow `randomize`. ema_alpha 1.0 = no filter.
         obs_version 1 + ema_alpha 1.0 + servo 'off' + rate 5.0 = the pre-D052 env.
         thermal / thermal_heat0: rl_common.ThermalProxy, as in rocky_env.PebbleEnv.
         curriculum: None or 'side-back' (B34, module doc); it starts at progress
-        0 and the trainer moves it with set_curriculum()."""
+        0 and the trainer moves it with set_curriculum().
+        hip_clamp (D064, pick 13): the righter's hip floor on legs hip_clamp_legs (default
+        1-4) in the action map — 'params' (-51.05, every new run), None (the uncut map of
+        the pre-D064 checkpoints: eval_recover.env_for passes what the contract says), or
+        degrees. ReflexSupervisor clamps the same legs to the same floor in FALLEN /
+        RIGHTED, so a policy trained here commands nothing the supervisor would cut.
+        drop_clear_of_belly (review 9q): a drop's joint draw that puts a leg inside a belly geom
+        (rl_common.belly_contacts on the drop pose, before the landing) is drawn again. The
+        uniform draw over the full range put 3.7 % of drops inside the keel tub or the shelf
+        (2000 draws, max 18.8 mm, leg 0 in the shelf too), and MuJoCo lands those with a
+        penetration impulse. True for every new run; False is the pre-9q drop stream
+        (eval_recover.env_for passes it for a contract without the key, so old seeds replay).
+        A drop that needs no redraw consumes the rng exactly as before."""
         assert reward in REWARDS, reward
         assert curriculum in (None,) + CURRICULA, curriculum
+        self.hip_floor_deg, self.hip_floor_legs = hip_floor(hip_clamp, hip_clamp_legs)
+        self.q_lo, self.q_hi = action_range(self.hip_floor_deg, self.hip_floor_legs)
         self.curriculum = curriculum
         self.curriculum_ramp = (float(curriculum_ramp[0]), float(curriculum_ramp[1]))
         self.curriculum_progress = 0.0 if curriculum else 1.0
@@ -227,6 +284,9 @@ class RecoverEnv(gym.Env if gym else object):
         self.max_steps = int(round(self.ep_seconds / CTRL_DT))
         self._jadr, self._vadr = rc.joint_addrs(self.model)
         self._foot_gid = rc.foot_geoms(self.model)
+        self.drop_clear_of_belly = bool(drop_clear_of_belly)
+        self._belly = rc.belly_geoms(self.model)
+        self._body_leg = rc.leg_of_body(self.model)
         self.obs_builder = rc.make_recover_obs(obs_version, self.model, self.torso,
                                                self._jadr, self._vadr, self._foot_gid)
         self.obs_version = self.obs_builder.version
@@ -251,6 +311,8 @@ class RecoverEnv(gym.Env if gym else object):
         self.last_mode = ""
         self.last_land_tilt_deg = None                           # the landed tilt of this episode's drop
         self.last_drops = 0                                     # drops it took (> 1 only under the curriculum)
+        self.last_q0_redraws = 0                                # joint draws the last drop threw away (belly)
+        self.last_drop_qpos = None                              # the last drop's starting qpos (before landing)
         self.last_delta = np.zeros(15)
 
     # ------------------------------------------------------------------ contract
@@ -259,8 +321,12 @@ class RecoverEnv(gym.Env if gym else object):
         key = ("recover", self.obs_version)
         return dict(env="recover", obs_version=self.obs_version, obs_dim=self.obs_builder.dim,
                     obs_names=list(rc.OBS_NAMES[key]), act_dim=15,
-                    action="q = Q_LO + (ema(a)+1)/2 (Q_HI-Q_LO), rate-clamped, absolute targets",
+                    action="q = Q_LO + (ema(a)+1)/2 (Q_HI-Q_LO), rate-clamped, absolute targets"
+                           + ("" if self.hip_floor_deg is None else
+                              "; the hip of hip_floor_legs mapped over [hip_floor_deg, Q_HI] (D064)"),
                     q_lo=[float(x) for x in Q_LO[:3]], q_hi=[float(x) for x in Q_HI[:3]],
+                    hip_floor_deg=self.hip_floor_deg, hip_floor_legs=list(self.hip_floor_legs),
+                    drop_clear_of_belly=self.drop_clear_of_belly,
                     ctrl_dt=CTRL_DT, ep_seconds=self.ep_seconds,
                     rate_limit_rad_s=self.rate_limit_rad_s, ema_alpha=self.ema_alpha,
                     servo=self.servo_mode,
@@ -362,14 +428,16 @@ class RecoverEnv(gym.Env if gym else object):
         self.last_drops = drop
         self.obs_builder.reset(rng=self.rng, noise=self.obs_noise, q_offset=self._q_offset)
         if self.obs_version == 1:
-            # the pre-D052 reset exactly: the servos keep the drop pose target
-            self._target = q0.copy()
-            self._a_f = q_to_action(q0)
+            # the pre-D052 reset exactly: the servos keep the drop pose target (a D064 hip floor,
+            # if one is set, lifts it like any righter command)
+            self._target = q0.copy() if self.hip_floor_deg is None else np.clip(q0, self.q_lo, self.q_hi)
+            self._a_f = q_to_action(self._target, self.q_lo, self.q_hi)
         else:
             # D052: the servos adopt the pose they landed in (what the righter
-            # does on the robot: read present positions, start from there)
-            self._target = np.clip(self.obs_builder.encoder(self.data), Q_LO, Q_HI)
-            self._a_f = q_to_action(self._target)
+            # does on the robot: read present positions, start from there); D064: inside the
+            # action range, so a hip that landed below the floor is commanded up to it
+            self._target = np.clip(self.obs_builder.encoder(self.data), self.q_lo, self.q_hi)
+            self._a_f = q_to_action(self._target, self.q_lo, self.q_hi)
         self.servo.reset(self._target)
         self.data.ctrl[:15] = self._target + self._q_offset
         self._prev_action = self._a_f.copy()
@@ -398,6 +466,20 @@ class RecoverEnv(gym.Env if gym else object):
         self.data.qpos[0:3] = [0, 0, 0.16]
         self.data.qpos[3:7] = _quat_from_axis_angle(ax, ang)
         self.data.qpos[self._jadr] = q0
+        self.last_q0_redraws = 0
+        if self.drop_clear_of_belly and self._belly:
+            # positions only (mj_fwdPosition: kinematics + collision, no warmstart touched), so a
+            # draw that is kept lands exactly as the pre-9q env landed it
+            mujoco.mj_fwdPosition(self.model, self.data)
+            while rc.belly_contacts(self.model, self.data, self._belly, self._body_leg):
+                self.last_q0_redraws += 1
+                if self.last_q0_redraws > MAX_Q0_DRAWS:
+                    raise RuntimeError(f"no joint draw clear of the belly in {MAX_Q0_DRAWS}: the belly geoms "
+                                       "or the joint range changed")
+                q0 = self.rng.uniform(Q_LO, Q_HI)
+                self.data.qpos[self._jadr] = q0
+                mujoco.mj_fwdPosition(self.model, self.data)
+        self.last_drop_qpos = self.data.qpos.copy()
         self.data.ctrl[:15] = q0 + self._q_offset
         self.data.ctrl[15:20] = 0.0
         mujoco.mj_forward(self.model, self.data)
@@ -408,7 +490,7 @@ class RecoverEnv(gym.Env if gym else object):
     def step(self, action):
         action = np.clip(np.asarray(action, dtype=np.float64), -1, 1)
         self._a_f = self.ema_alpha * action + (1.0 - self.ema_alpha) * self._a_f
-        want = action_to_q(self._a_f)
+        want = action_to_q(self._a_f, self.q_lo, self.q_hi)
         delta = np.clip(want - self._target, -self.rate_limit, self.rate_limit)
         self._target = self._target + delta
         self.last_delta = delta

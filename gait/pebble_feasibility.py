@@ -38,12 +38,16 @@ What a Report judges (every threshold comes from gait/rocky_model.py):
   SUPPORT      kind="static": fewer than 3 feet on the ground at a sample.
   MARGIN       kind="static": the CoM (torso + every segment, masses from
                sim/mass_budget.json laid out exactly as sim/build_mjcf.py
-               does) closer than 10 mm to the support-polygon edge (FAIL) /
+               does; the torso at the budget's CoM since D064, B138) closer
+               than 10 mm to the support-polygon edge (FAIL) /
                25 mm (warning). The old body-origin proxy is kept as a
                second column: it ignores the raised arm's own mass, which is
                what let two adjacent arms author a -57 mm pose.
   SELF_CONTACT with a MuJoCo model: robot-on-robot penetration > 1 mm with
-               the body lifted clear of the floor (every 3rd sample).
+               the body lifted clear of the floor (every 3rd sample). D064:
+               a leg inside the belly (the keel tub, the hub shelf) counts,
+               the pair naming belly_tub / belly_shelf[_post<k>] (legs 1-4 folded with
+               hip -70..-45 and knee -130..-90 toward the tub, B97).
   THERMAL      warning: a joint spends > 30 % of the samples above 0.6x its
                speed class limit (sustained speed = sustained current).
   THERMAL_LOAD from a MuJoCo PLAYBACK (judge_load(rep, load_rms); sim/
@@ -77,8 +81,8 @@ Pure numpy + rocky_model; MuJoCo only if a model is passed.
 """
 from __future__ import annotations
 
-import json
 import os
+import warnings
 from dataclasses import dataclass, field
 from itertools import combinations
 
@@ -151,9 +155,32 @@ def q_ok(q, guard_deg: float = GUARD_DEG) -> bool:
 
 
 # ------------------------------------------------------------------ mass model
+# B138 (D064): the torso's mass AND CoM come from sim/mass_budget.json through rocky_model,
+# the numbers build_mjcf writes as the torso's <inertial>. Before D064 this read the mass
+# alone and put the CoM where the two cylinders do (z 24.5), ~27 mm above the real layout.
+_FALLBACK_G = dict(rm.FALLBACK_MASS_G)            # build_mjcf's and generate_urdf's fallback too
+_FALLBACK_COM = rm.FALLBACK_TORSO_COM_MM           # its two weighted cylinders
+
+
 def _mass_budget() -> dict:
-    with open(os.path.join(HERE, "..", "sim", "mass_budget.json")) as f:
-        return json.load(f)
+    mb = rm.mass_budget()
+    if mb is None:
+        warnings.warn("pebble_feasibility: sim/mass_budget.json is missing: the CoM model uses the "
+                      "pre-D039 masses and the cylinders' torso CoM (z 24.5) — run sim/mass_audit.py",
+                      stacklevel=2)
+        return dict(_FALLBACK_G)
+    return mb
+
+
+def _torso_com(mb) -> np.ndarray:
+    ti = rm.torso_inertial()
+    if ti is None:
+        if "torso_com_mm" not in mb:
+            warnings.warn("pebble_feasibility: the mass budget has no torso_com_mm (pre-D064): the "
+                          "torso CoM is the two cylinders' (0, 0, 24.5), as build_mjcf's fallback",
+                          stacklevel=2)
+        return np.array(mb.get("torso_com_mm", _FALLBACK_COM), float)
+    return np.array(ti["com_mm"], float)
 
 
 _MB = _mass_budget()
@@ -167,7 +194,7 @@ M_SHIN = 0.7 * M_TIBIA - 2 * M_PRONG           # build_mjcf: shin capsule (D052)
 R_C = rm.foot_contact_radius_mm()
 M_LEG = M_COXA + M_FEMUR + M_TIBIA
 M_TOTAL = M_TORSO + N_LEGS * M_LEG
-TORSO_COM = np.array([0.0, 0.0, 0.75 * 18.0 + 0.25 * 44.0])   # two torso cylinders (build_mjcf)
+TORSO_COM = _torso_com(_MB)                    # mm, body frame: the MJCF torso's <inertial> pos
 _COXA_BOX = np.array([20.0, 0.0, 30.0])        # coxa box centre, coxa frame
 _ST = np.deg2rad(STATION_DEG)
 
@@ -373,7 +400,14 @@ def planted_q(g=None, offset=(0.0, 0.0, 0.0)) -> np.ndarray:
 
 # ------------------------------------------------------------------ self contact
 class _SelfContact:
-    """Robot-on-robot penetration with the body hung 1 m in the air."""
+    """Robot-on-robot penetration with the body hung 1 m in the air.
+
+    D064 (pick 13, B97): the torso carries the belly (belly_tub, belly_shelf + its three
+    belly_shelf_post<k> columns), so a leg folded under the keel is a SELF_CONTACT like any
+    other, named by the belly GEOM instead of
+    'torso' (a cylinder hit stays 'torso'). One code, not a new BELLY_CONTACT: every gate that
+    already refuses SELF_CONTACT (the gesture audit, the cockpit studio, keyframe saves through
+    check_spec) now refuses the belly with no change of its own; the name says which it was."""
 
     def __init__(self, model):
         import mujoco
@@ -381,6 +415,12 @@ class _SelfContact:
         self.m = model
         self.d = mujoco.MjData(model)
         self.torso = model.body("torso").id
+        self.belly = {}
+        for name in rm.belly_geom_names():
+            try:
+                self.belly[int(model.geom(name).id)] = name
+            except KeyError:                         # a pre-D064 model: no belly geoms
+                pass
         self.jadr = np.array([[model.joint(f"{n}{i}").qposadr[0] for n in JOINTS]
                               for i in range(N_LEGS)])
         try:
@@ -403,7 +443,9 @@ class _SelfContact:
         for c in d.contact[:d.ncon]:
             b1, b2 = self.m.geom_bodyid[c.geom1], self.m.geom_bodyid[c.geom2]
             if self.root[b1] == rt and self.root[b2] == rt and c.dist < -SELF_PEN_MM / 1000:
-                out.append((self.m.body(b1).name, self.m.body(b2).name, -c.dist * 1000))
+                n1 = self.belly.get(int(c.geom1)) or self.m.body(b1).name
+                n2 = self.belly.get(int(c.geom2)) or self.m.body(b2).name
+                out.append((n1, n2, -c.dist * 1000))
         return out
 
 
@@ -802,8 +844,11 @@ def _lines(rep, V) -> list:
             out.append(f"  {tag} THERMAL:{where} {100 * vi['frac']:.0f}% of the time above "
                        f"{THERMAL_FRAC:.1f}x its speed limit")
         elif c == "SELF_CONTACT":
+            belly = [p for p in vi["pair"] if str(p).startswith("belly_")]
             out.append(f"  {tag} SELF_CONTACT: {vi['pair'][0]} x {vi['pair'][1]} {vi['pen_mm']:.1f} mm "
-                       f"at t={vi['t']:.2f}s")
+                       f"at t={vi['t']:.2f}s"
+                       + (f" (the belly: a leg folded into the {'keel tub' if belly[0] == 'belly_tub' else 'hub shelf'}"
+                          f", B97)" if belly else ""))
         elif c in ("REACH", "LOOP_WRAP", "SPEC"):
             out.append(f"  {tag} {c}: {vi.get('msg', '')}")
         elif c in ("SLIP", "SLIP_WARN"):

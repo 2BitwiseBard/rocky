@@ -59,6 +59,24 @@ RIGHTED  — joint-space smoothstep ramp from wherever the righter left the
            far away — D052), hold
            right_hold_s, then NORMAL with the gait clock intact. This is
            exactly eval_recover.py's hybrid handoff, made a state.
+D064 righter hip clamp (pick 13, B130): in FALLEN the hip COMMAND of legs
+           righter_clamp_legs (1-4; leg 0 never reaches the keel tub) is held
+           at >= righter_hip_min_deg (params -51.05), whatever produced it (the
+           righter or the hold pose), and the RIGHTED ramp starts from that
+           clamped pose; the planted stance sits above the clamp (hip -34 at
+           h 118, asserted once), so the whole ramp does. Measured by the
+           2026-10-01 prep (PREP_REPORT_2 s2, its belly + a 1467 g torso, the
+           clamp cutting the supervisor's output): the unclamped righter
+           folded legs under the keel in 12/200 drops (max 3.06 mm); clamped,
+           0/200 with the righting outcome unchanged. Here the RIGHTED ramp
+           starts FROM the clamped pose (smoother, and its stretch is measured
+           from there), so re-measure on this model (audit_righter, 200
+           seeds). It is a command clamp, not a stop: an
+           impact still back-drives the measured hip past it (to -72 in the
+           prep's runs); the tub stays clear because of the poses the legs
+           take. NEVER in NORMAL / PLANT / BRACE / RECOVER or under a probe: a
+           hip floor there switches off the cliff void guard (its ceiling is
+           -47.91 at h 118, B129). righter_hip_min_deg=False switches it off.
 Arming   — reflex ignores the first arm_after seconds (startup transients).
 
 D052 options (a caller that passes none of them gets the plain supervisor):
@@ -151,7 +169,8 @@ class ReflexSupervisor:
                  righter=None, fall_tilt_deg=60.0, fall_confirm_s=1.0,
                  handoff_tilt_deg=25.0, handoff_h=0.09, handoff_hold_s=0.5,
                  right_ramp_s=None, right_hold_s=0.5, fallen_max_s=None,
-                 stall_s=None, stall_tilt_deg=None,
+                 stall_s=None, stall_tilt_deg=None, righter_hip_min_deg=None,
+                 righter_clamp_legs=None,
                  trip_escalate_n=3, trip_escalate_s=5.0, cmd_accel=None, slew=True):
         # D052: a None kwarg comes from params.yaml `reflex:` (rocky_model.
         # reflex_defaults()); anything passed wins, so every existing caller
@@ -164,6 +183,14 @@ class ReflexSupervisor:
         fallen_max_s = d["fallen_max_s"] if fallen_max_s is None else fallen_max_s
         stall_s = d["stall_s"] if stall_s is None else stall_s
         stall_tilt_deg = d["stall_tilt_deg"] if stall_tilt_deg is None else stall_tilt_deg
+        # D064 (pick 13, B130): params reflex: carries the righter's hip clamp, and every
+        # reflex: key is a kwarg here (eval_recover passes **reflex_defaults()). None = params,
+        # False = off (an A/B against the pre-D064 supervisor). See the module docstring
+        righter_hip_min_deg = d.get("righter_hip_min_deg") if righter_hip_min_deg is None \
+            else righter_hip_min_deg
+        if righter_hip_min_deg is False:
+            righter_hip_min_deg = None
+        righter_clamp_legs = _rm.righter_clamp_legs() if righter_clamp_legs is None else righter_clamp_legs
         self.g = gait
         # D063 (B76 fix 1): every velocity reaches the gait through the slew;
         # slew=False passes commands straight through (the pre-D063 behaviour)
@@ -215,6 +242,10 @@ class ReflexSupervisor:
         # mode no checkpoint solves) 5/5 in the demo, the policy never does.
         self.stall_s = stall_s
         self.stall_tilt = stall_tilt_deg
+        self.righter_hip_min_deg = None if righter_hip_min_deg is None else float(righter_hip_min_deg)
+        self.righter_clamp_legs = tuple(int(i) for i in righter_clamp_legs)
+        self._hip_min = None if self.righter_hip_min_deg is None else np.deg2rad(self.righter_hip_min_deg)
+        self.righter_clamped = 0                 # FALLEN ticks whose command the clamp raised
         self._fallen_best = None
         self._fallen_best_t = None
         self.fall_count = 0
@@ -248,7 +279,26 @@ class ReflexSupervisor:
         if self._q_planted is None:
             self._q_planted = np.array(
                 [leg_ik(body_to_leg(i, self.g.p_nom[i])) for i in range(N_LEGS)])
+            if self._hip_min is not None:
+                # the RIGHTED ramp runs from the clamped FALLEN pose to this one: with both ends
+                # above the clamp, every point of the smoothstep is (D064)
+                legs = list(self.righter_clamp_legs)
+                assert (self._q_planted[legs, 1] >= self._hip_min - 1e-9).all(), (
+                    f"the planted stance's hips {np.degrees(self._q_planted[legs, 1]).round(2)} sit below "
+                    f"righter_hip_min_deg {self.righter_hip_min_deg}: the RIGHTED ramp would leave the clamp")
         return self._q_planted
+
+    def _righter_clamp(self, q):
+        """FALLEN only (D064, pick 13): the hip commands of righter_clamp_legs >= the clamp. A
+        command clamp: it does not stop a back-driven hip (module docstring)."""
+        if self._hip_min is None:
+            return q
+        legs = list(self.righter_clamp_legs)
+        if (q[legs, 1] < self._hip_min).any():
+            q = q.copy()
+            q[legs, 1] = np.maximum(q[legs, 1], self._hip_min)
+            self.righter_clamped += 1
+        return q
 
     def _enter_fallen(self, t):
         self.fall_count += 1
@@ -274,6 +324,8 @@ class ReflexSupervisor:
             q = self._last_q if self._last_q is not None else self._planted_q()
         else:
             q = np.asarray(q, float).reshape(N_LEGS, 3)
+        # D064: the hip clamp on legs 1-4, before anything stores q (the ramp's start pose)
+        q = self._righter_clamp(np.asarray(q, float).reshape(N_LEGS, 3))
         hok = _handoff_fn() if (q_meas is not None and contacts is not None) else None
         if hok is not None and tilt_deg is not None:
             upright = bool(hok(tilt_deg, contacts, q_meas))

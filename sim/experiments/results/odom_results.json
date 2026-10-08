@@ -1,29 +1,29 @@
 [
  {
   "scene": "flat_straight",
-  "dist_m": 0.849,
-  "drift_end_mm": 38.1,
-  "drift_pct": 4.49,
-  "rms_mm": 18.9,
-  "naive_end_mm": 55.7,
-  "yaw_err_deg": 5.75
+  "dist_m": 0.648,
+  "drift_end_mm": 31.2,
+  "drift_pct": 4.82,
+  "rms_mm": 16.3,
+  "naive_end_mm": 34.0,
+  "yaw_err_deg": 5.78
  },
  {
   "scene": "flat_turny",
-  "dist_m": 0.798,
-  "drift_end_mm": 40.1,
-  "drift_pct": 5.02,
-  "rms_mm": 18.0,
-  "naive_end_mm": 331.7,
-  "yaw_err_deg": 6.44
+  "dist_m": 0.382,
+  "drift_end_mm": 19.1,
+  "drift_pct": 4.99,
+  "rms_mm": 11.2,
+  "naive_end_mm": 35.5,
+  "yaw_err_deg": 6.49
  },
  {
   "scene": "rubble20_walk",
-  "dist_m": 0.963,
-  "drift_end_mm": 77.6,
-  "drift_pct": 8.06,
-  "rms_mm": 41.0,
-  "naive_end_mm": 332.2,
-  "yaw_err_deg": 6.84
+  "dist_m": 0.701,
+  "drift_end_mm": 43.2,
+  "drift_pct": 6.17,
+  "rms_mm": 22.1,
+  "naive_end_mm": 257.3,
+  "yaw_err_deg": 6.73
  }
 ]

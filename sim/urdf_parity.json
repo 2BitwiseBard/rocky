@@ -168,8 +168,8 @@
   "tol_mm": 0.5
  },
  "mass": {
-  "urdf_kg": 2.7278,
-  "mjcf_kg": 2.7277
+  "urdf_kg": 2.843,
+  "mjcf_kg": 2.843
  },
  "foot_sphere": {
   "r_mm": 6.5,
@@ -184,6 +184,16 @@
    0.0
   ],
   "ok": true
+ },
+ "torso_inertial": {
+  "mass_g_diff": 0.0,
+  "com_mm_diff": 0.0,
+  "inertia_rel_diff": 0.0,
+  "mjcf_com_mm": [
+   -2.21,
+   -4.63,
+   -3.18
+  ]
  },
  "limits": {
   "joints": 20,

@@ -7,8 +7,9 @@ Two flat prints, no calipers needed (all interfaces are our own):
                 foot-target arcs where the gait's stance circle lands, and a
                 bolt pattern for the column.
   jig_column  : vertical C-column + top deck-proxy plate carrying the FULL
-                leg port: dowel posts, heat-set pockets, hook catch bar,
-                cable cutout — printed lying on its back, bolts to the base.
+                leg port: the two seat posts, heat-set pockets, hook
+                through-slot, cable cutout — printed lying on its back,
+                bolts to the base.
 
 Deck-proxy top sits 130 mm above the floor -> commanding body_height 118
 puts the foot 12 mm above the floor; body_height 130 touches down. The
@@ -31,7 +32,8 @@ COL_T = 6.0
 BASE_L, BASE_W = 220.0, 140.0
 # frame: yaw axis at (0,0); leg reaches +x over the base; column behind (-x)
 BASE_X0, BASE_X1 = -78.0, 142.0
-COL_X = -58.0             # column front face x (clear of the I1 hook slot @ -48)
+COL_X = -58.0             # column front face x (clear of the I1 hook slot, x -50.1..-43.9,
+                          # and the docked hook's foot, x >= -52.5)
 
 
 def jig_base():
@@ -129,10 +131,24 @@ if __name__ == "__main__":
         bad.append("base and column clash")
     print(f"base x column interference: {v:.1f} mm^3 "
           f"({'OK' if v < 1 else 'CLASH'})")
-    # port sanity: dowel posts + catch present at the right stations
-    from iface import IF
+    # port sanity: a coxa base docks on the jig's port as on the deck (same iface code;
+    # check_dock proves the path onto the deck, so the jig only needs the docked pose)
+    from iface import IF, seat_posts_symdiff
+    from part_coxa import coxa_yaw_base
     lp = IF["leg_port"]
-    print(f"leg port on jig: dowels at {lp['dowel_xy']}, "
-          f"thumbscrews at {lp['thumbscrew_xy']} — same params the deck uses")
+    # the column's OWN seat posts must be iface's (a docked overlap of 0 cannot see missing posts)
+    sd, _ = seat_posts_symdiff(c, DECK_H)
+    if sd >= 0.01:
+        bad.append("the jig column's seat posts are not iface's")
+    print(f"jig column seat posts vs leg_port_seats: symmetric difference {sd:.4f} mm^3 "
+          f"({'OK' if sd < 0.01 else 'POSTS MISSING / WRONG'})")
+    docked = Pos(0, 0, DECK_H + 4.0) * coxa_yaw_base()       # plate underside (leg z -4) on the proxy top
+    v = docked & c
+    v = 0.0 if v is None else v.volume
+    if v >= 0.01:
+        bad.append("a coxa base does not dock on the jig")
+    print(f"leg port on jig: seats at {lp['seat_xy']}, thumbscrews at {lp['thumbscrew_xy']}, "
+          f"hook slot x {lp['hook_slot_x']} w {lp['hook_slot_w']} — same params the deck uses; "
+          f"docked coxa_yaw_base x column {v:.3f} mm^3 ({'OK' if v < 0.01 else 'CLASH'})")
     print(f"part_bench_jig checks: {'CLEAN' if not bad else 'FAIL — ' + '; '.join(bad)}")
     raise SystemExit(1 if bad else 0)

@@ -66,7 +66,9 @@ FILL = {
     # calibration + interface coupons
     "fit_ladder": 0.55, "latch_housing": 0.85, "latch_rotor": 0.9,
     "thumb_knob_m3": 0.7, "dovetail_male_coupon": 0.7, "dovetail_shoe": 0.6,
-    "coupler_recess_demo": 0.6, "port_coupon_deck": 0.55, "port_coupon_plate": 0.6,
+    "coupler_recess_demo": 0.6, "port_coupon_deck": 0.55,
+    "port_coupon_plate_relief46": 0.6, "port_coupon_plate_relief42": 0.6,
+    "port_coupon_plate_fit10": 0.6, "port_coupon_plate_fit20": 0.6,
     # hand + SEA + tools
     "hand_hub": 0.6, "hand_cam": 0.75, "hand_finger": 0.8,
     "tibia_sea_slider": 0.8, "tibia_sea_outer": 0.8,
@@ -78,10 +80,21 @@ FILL = {
     "coupon_cup": 0.7, "coupon_yaw_hub": 0.7, "coupon_hip_hub": 0.7, "coupon_idler": 0.7,
     # body
     "body_deck": 0.5, "avionics_tray": 0.5, "tray_rail": 0.6, "battery_sled": 0.5,
-    "sled_rail": 0.6, "belly_door": 0.5, "busboard_bracket": 0.6,
+    "tray_latch_boss": 0.6,     # 30 x 23 x 5.1 round the latch pocket: small, mostly perimeter
+    "hub_shelf": 0.7,    # 2026-10-07 (part_busboard, retires busboard_bracket): a 3 mm plate, mostly
+                         # top/bottom skin, + three Ø8 posts and the board standoffs
+    # the keel tub (part_bay, B84), weighted by feature at 0.4 nozzle / 0.2 layers / 4 top +
+    # 4 bottom / 25 % infill: its 2.4 walls are 6 perimeters (1.0, ~34 of its 71 cm^3), the
+    # 2.4 floor 1.6 solid + 0.8 infill (0.75, ~26), the rails solid, the latch boss and the
+    # carrier mostly infill (0.45-0.6, ~5): 0.87 -> 0.85. The lid: a 2.0 plate (0.85) + Ø8
+    # bosses (~1.0). The door: a 3 mm plate (0.65) + its 6 mm ear: 0.7. The proposal's 56 g
+    # "at fill 0.5" for tub + door counted a part that is nearly all wall as half infill
+    "bay_tub": 0.85, "bay_lid": 0.85, "bay_door": 0.7,
     "shell_sector": 0.6, "shell_cap": 0.6,
     # bench
-    "stand_base": 0.4, "stand_section": 0.4, "stand_crown": 0.4,
+    "stand_base": 0.4, "stand_section": 0.4,
+    "stand_crown": 0.5,   # B85 cradle: 3 mm walls + a 3 mm relieved plate are mostly perimeter at the
+                          # plan's 2 walls / 15 % (the old crown's arms were 8 mm spars)
     "jig_base": 0.4, "jig_column": 0.4,
 }
 
@@ -100,16 +113,22 @@ PLATES = {
     "Batch 2 one leg": [("coxa_yaw_base", 1, 0.2)] + [(n, q, 0.2) for n, q in _ONE_LEG] + [
         ("servo_blank", 3, 0.2), ("blank_idler", 3, 0.2),
     ],
-    # tray_rail waits for B51, battery_sled + sled_rail for the bay (B84); they stay priced
-    # here as the batch's budget. The 8 thumb_knob_m3 of this batch are not priced.
+    # option A (2026-10-07): the deck v0.5, the hub shelf under it (part_busboard), the tray at
+    # its measured home (B51 built: (0, 0) turned 180 on two rails, tray_latch_boss glued under
+    # its tongue; at OPEN it slides 16 south in the deck's slotted strike, then lifts), the keel
+    # tub as part_bay's three parts (B84; sled_rail, dock_block and belly_door retired into
+    # them) and the sled. The 8 thumb_knob_m3 of this batch are not priced.
     "Batch 3 body": [
         ("body_deck", 1, 0.2), ("coxa_yaw_base", 4, 0.2),
-        ("busboard_bracket", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
-        ("battery_sled", 1, 0.2), ("sled_rail", 2, 0.2),
+        ("hub_shelf", 1, 0.2), ("avionics_tray", 1, 0.2), ("tray_rail", 2, 0.2),
+        ("tray_latch_boss", 1, 0.2),
+        ("battery_sled", 1, 0.2), ("bay_tub", 1, 0.2), ("bay_lid", 1, 0.2), ("bay_door", 1, 0.2),
     ],
     "Deferred: four more legs": [(n, 4 * q, 0.2) for n, q in _ONE_LEG],
     "Deferred: bench jig": [("jig_base", 1, 0.3), ("jig_column", 1, 0.3)],
-    "Deferred: stand": [    # two sections free the leg's full 172 mm reach (part_stand)
+    "Deferred: stand": [    # the U-cradle holds the robot by its tub (B85): deck bottom 89.4 / 169.4 /
+                            # 249.4 over the bench; two sections free the leg's reach, 153.3 to the
+                            # foot point, 183.5 with the B95 hand (part_stand). Print it after part_bay
         ("stand_base", 1, 0.3), ("stand_section", 2, 0.3), ("stand_crown", 1, 0.3),
     ],
     "Deferred: carapace": [("shell_sector", 5, 0.25), ("shell_cap", 1, 0.25)],

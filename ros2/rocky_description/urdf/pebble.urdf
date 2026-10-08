@@ -4,7 +4,7 @@
   <material name="pebble"><color rgba="0.55 0.42 0.75 1"/></material>
 
   <link name="base_link">
-    <inertial><origin xyz="0.000000 0.000000 0.024500"/><mass value="1.4398"/><inertia ixx="4.058e-03" ixy="0" ixz="0" iyy="4.058e-03" iyz="0" izz="7.600e-03"/></inertial>
+    <inertial><origin xyz="-0.002210 -0.004630 -0.003180"/><mass value="1.5550"/><inertia ixx="4.726687e-03" ixy="-9.472300e-05" ixz="-1.576910e-04" iyy="5.545358e-03" iyz="-2.392510e-04" izz="6.800901e-03"/></inertial>
     <visual><origin xyz="0 0 0.018"/>
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry>
       <material name="pebble"/></visual>
@@ -15,6 +15,31 @@
       <geometry><cylinder radius="0.1100" length="0.024"/></geometry></collision>
     <collision><origin xyz="0 0 0.044"/>
       <geometry><cylinder radius="0.0770" length="0.028"/></geometry></collision>
+    <visual name="belly_tub"><origin xyz="0.001200 -0.020000 -0.036700"/>
+      <geometry><box size="0.197400 0.054800 0.037400"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_tub"><origin xyz="0.001200 -0.020000 -0.036700"/>
+      <geometry><box size="0.197400 0.054800 0.037400"/></geometry></collision>
+    <visual name="belly_shelf"><origin xyz="-0.001125 0.038250 -0.032200"/>
+      <geometry><box size="0.110150 0.052100 0.044400"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_shelf"><origin xyz="-0.001125 0.038250 -0.032200"/>
+      <geometry><box size="0.110150 0.052100 0.044400"/></geometry></collision>
+    <visual name="belly_shelf_post0"><origin xyz="-0.050000 0.034000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_shelf_post0"><origin xyz="-0.050000 0.034000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry></collision>
+    <visual name="belly_shelf_post1"><origin xyz="0.050000 0.034000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_shelf_post1"><origin xyz="0.050000 0.034000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry></collision>
+    <visual name="belly_shelf_post2"><origin xyz="0.026000 0.064000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry>
+      <material name="pebble"/></visual>
+    <collision name="belly_shelf_post2"><origin xyz="0.026000 0.064000 -0.024650"/>
+      <geometry><cylinder radius="0.007000" length="0.029300"/></geometry></collision>
   </link>
 
   

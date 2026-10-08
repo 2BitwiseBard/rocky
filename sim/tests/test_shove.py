@@ -37,14 +37,19 @@ def test_wrench_is_force_at_com_plus_rim_torque():
     F, tau = data.xfrc_applied[torso, :3], data.xfrc_applied[torso, 3:]
     assert F == pytest.approx([30.0, 0.0, 0.0])
     # +x push above the CoM tips the top toward +x: a rotation about +y
-    # (r x F with r = (0, 0, lever) and F = (30, 0, 0) is (0, 30 lever, 0))
-    lever = (data.xpos[torso][2] + LEVER_Z) - data.xipos[torso][2]
+    # (r x F with r = (rx, ry, lever) and F = (30, 0, 0) is (0, 30 lever, -30 ry)). D064: the
+    # torso's CoM sits off the axis (the budget's x, y), so the on-axis rim push also yaws it a
+    # little; with the pre-D064 cylinders rx = ry = 0 and tau was (0, 30 lever, 0)
+    R = data.xmat[torso].reshape(3, 3)
+    r = data.xpos[torso] + R @ np.array([0.0, 0.0, LEVER_Z]) - data.xipos[torso]
+    lever = r[2]
+    assert tau == pytest.approx(np.cross(r, F), rel=1e-6, abs=1e-12)
     assert tau[1] == pytest.approx(30.0 * lever, rel=1e-6)
-    assert tau[0] == pytest.approx(0.0, abs=1e-9) and tau[2] == pytest.approx(0.0, abs=1e-9)
+    assert tau[0] == pytest.approx(0.0, abs=1e-9) and tau[2] == pytest.approx(-30.0 * r[1], abs=1e-9)
     assert lever > 0.03                                        # the rim is above the CoM
     assert sh.apply(model, data, torso, 1.5) is False          # over, and zeroed again
     assert np.all(data.xfrc_applied[torso] == 0)
-    assert 0.8 < bodyweights(25.0, model) < 1.1               # 2.67 kg robot
+    assert 0.8 < bodyweights(25.0, model) < 1.1               # a ~2.8 kg robot
 
 
 def test_describe_mentions_units():

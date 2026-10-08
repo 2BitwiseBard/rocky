@@ -7,7 +7,8 @@ then verifies:
   2. FK parity: for N random in-range configurations, every foot lands at the
      same body-frame position in both models AND matches the gait engine's
      closed-form leg_fk (the third witness)
-  3. mass budget: total mass agrees
+  3. mass budget: total mass agrees; 3b (D064) the torso's own inertial: the
+     URDF base_link's mass, CoM and full tensor = the MJCF torso's <inertial>
   4. actuator limits (D052 amendment): every URDF <limit effort> equals the
      MJCF actuator forcerange (both = the servo's PEAK / stall torque) and
      every URDF velocity equals the servo's no-load speed
@@ -139,6 +140,30 @@ def main():
     print(f"total mass: urdf {mass_u:.3f} kg vs mjcf {mass_m:.3f} kg")
     if abs(mass_u - mass_m) > 0.02:
         fails.append(f"mass mismatch {mass_u:.3f} vs {mass_m:.3f}")
+
+    # -- 3b. the torso's own inertial (D064): base_link = the MJCF torso's <inertial> --------
+    # (the import fuses base_link into world, so compare the declared XML with the compiled MJCF)
+    bl = [ln for ln in ET.parse(URDF).getroot().iter("link") if ln.get("name") == "base_link"][0]
+    ie = bl.find("inertial")
+    t = m_m.body("torso").id
+    com_u = np.array([float(v) for v in ie.find("origin").get("xyz").split()])
+    a = {k: float(ie.find("inertia").get(k)) for k in ("ixx", "iyy", "izz", "ixy", "ixz", "iyz")}
+    I_u = np.array([[a["ixx"], a["ixy"], a["ixz"]], [a["ixy"], a["iyy"], a["iyz"]],
+                    [a["ixz"], a["iyz"], a["izz"]]])
+    Rq = np.zeros(9)
+    mujoco.mju_quat2Mat(Rq, m_m.body_iquat[t])
+    Rq = Rq.reshape(3, 3)
+    I_m = Rq @ np.diag(m_m.body_inertia[t]) @ Rq.T
+    d_com = float(np.linalg.norm(com_u - m_m.body_ipos[t])) * 1000
+    d_I = float(np.abs(I_u - I_m).max() / np.abs(I_m).max())
+    d_m = abs(float(ie.find("mass").get("value")) - float(m_m.body_mass[t])) * 1000
+    report["torso_inertial"] = dict(mass_g_diff=round(d_m, 3), com_mm_diff=round(d_com, 4),
+                                    inertia_rel_diff=round(d_I, 6),
+                                    mjcf_com_mm=[round(float(v) * 1000, 2) for v in m_m.body_ipos[t]])
+    print(f"torso inertial: URDF base_link vs MJCF torso mass {d_m:.2f} g, CoM {d_com:.4f} mm, "
+          f"inertia {d_I:.2e} (rel) apart; MJCF CoM {np.round(m_m.body_ipos[t] * 1000, 2)} mm")
+    if d_m > 0.5 or d_com > 0.01 or d_I > 1e-3:
+        fails.append(f"torso inertial mismatch: mass {d_m:.2f} g, CoM {d_com:.3f} mm, inertia {d_I:.2e}")
 
     # -- 4. effort / velocity vs the MJCF actuators (D052 amendment) ------
     sys.path.insert(0, os.path.join(HERE, "..", "gait"))

@@ -1,10 +1,10 @@
 {
  "tag": "control",
- "tilt_max": 25.019217354317988,
- "margin_min_work": NaN,
- "coxa_max": 0.5273473908140395,
+ "tilt_max": 25.002331468385144,
+ "margin_min_work": -103.96791628001246,
+ "coxa_max": 1.0630301176463923,
  "fell_at": [
-  7.22,
-  "arms_up"
+  8.342,
+  "work"
  ]
 }

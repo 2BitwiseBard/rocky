@@ -162,15 +162,67 @@ def part_specs(P):
 
     specs = {}
 
-    # coxa_yaw_base: deck holds the plate underside, the yaw servo pushes the cup
+    # coxa_yaw_base: docked on the I1 seats (2026-10-07, decision 15, B118). Until the D064
+    # integration this case pinned the WHOLE underside, the 0.2-relieved face outboard of
+    # seat_relief_x0 included, which the deck never touches. What really holds the plate:
+    #   pads   the unrelieved underside inboard of seat_relief_x0 (-46) where there is deck
+    #          under it (|y| >= the hook slot's 12.3): it bears DOWN (compression);
+    #   seats  the two sockets' flanks on the deck's 30 deg cone posts (the cone at seat_xy[0],
+    #          the vee at seat_xy[1] only along its x-locating strip): down + sideways;
+    #   screws the two thumbscrew heads (Ø thumbscrew_head_d) on the plate top round their
+    #          bores: they hold the plate DOWN (tension), nothing else.
+    # A pin holds both ways, so each case is held only by what bears in it (rigid-body
+    # statics about the plate, M' about the support line = M + dz F_x): V and R+ lift the
+    # outboard end (M' -6994 / -1872 N mm about the screws / the underside): the plate rocks
+    # on the pads against the screws, the seats LIFT in V (R+ keeps them: its push is
+    # horizontal); R- presses the outboard end (M' +1901 about the seats): the pads lift, the
+    # seats and the screws hold; L+ / L- roll it (M_x +-5645): the pads on the pressing side,
+    # both seats, the screw on the lifting side.
     yaw_local = lambda p: np.c_[p[:, 0], -p[:, 1], lf.Z_YAW_TOP - p[:, 2]]
     ref = np.array([0.0, 0.0, lf.ZC_YAW])
+    from iface import HOOK_HALF_W
+    lp = P["interfaces"]["leg_port"]
+    ZB, ZT = -4.0, 0.0                    # the plate's underside (= the deck top) and its top
+    ta = math.tan(math.radians(lp["seat_half_angle"]))
+    r_seat = lambda z: lp["seat_r"] + P["print"]["seat_fit"] - (z - ZB) * ta   # the socket's flank
+    z_flank = (ZB + lp["seat_mouth"] + lp["seat_relief"], ZB + lp["seat_h"])     # mouth relief .. post tip
+    GS = 0.5                              # the flank's skin: one clmin
+    (cx, cy), (vx, vy) = lp["seat_xy"]
+    slack = lp["seat_vee_slack"]
+
+    def side(p, sy):
+        return np.ones(len(p), bool) if sy == 0 else (np.sign(p[:, 1]) == sy)
+
+    def pads(p, sy=0):
+        return ((np.abs(p[:, 2] - ZB) <= 0.1) & (p[:, 0] <= lp["seat_relief_x0"] + 1e-6)
+                & (np.abs(p[:, 1]) >= HOOK_HALF_W) & side(p, sy))
+
+    def seats(p):
+        inz = (p[:, 2] >= z_flank[0]) & (p[:, 2] <= z_flank[1])
+        cone = np.abs(np.hypot(p[:, 0] - cx, p[:, 1] - cy) - r_seat(p[:, 2])) <= GS
+        vee = (np.abs(np.abs(p[:, 0] - vx) - r_seat(p[:, 2])) <= GS) & (np.abs(p[:, 1] - vy) <= slack + GS)
+        return inz & (cone | vee)
+
+    def screws(p, sy=0):
+        m = np.zeros(len(p), bool)
+        for tx, ty in lp["thumbscrew_xy"]:
+            r = np.hypot(p[:, 0] - tx, p[:, 1] - ty)
+            m |= (p[:, 2] >= ZT - 0.1) & (r >= 3.7 / 2) & (r <= lp["thumbscrew_head_d"] / 2) & (np.sign(ty) == sy if sy else True)
+        return m
     specs["coxa_yaw_base"] = dict(
         solid=pc.coxa_yaw_base,
-        held=lambda p: p[:, 2] <= -4.0 + 0.35,
-        loaded=lambda p: servo_case(p, yaw_local, S, Z, G) & (p[:, 2] > -4.0 + 0.35),
+        held=lambda p: pads(p) | seats(p) | screws(p),
+        held_cases={"V": lambda p: pads(p) | screws(p),
+                    "R-": lambda p: seats(p) | screws(p),
+                    "L+": lambda p: pads(p, -1) | seats(p) | screws(p, 1),
+                    "L-": lambda p: pads(p, 1) | seats(p) | screws(p, -1)},
+        loaded=lambda p: servo_case(p, yaw_local, S, Z, G) & (p[:, 2] > ZB + 0.35),
         ref=ref, loads=from_foot(foot_leg, np.eye(3), ref),
-        held_what="deck (plate underside)", loaded_what="yaw servo case in the cup")
+        held_what="the docked I1 support (B118): the inboard pads (x <= seat_relief_x0, over the deck), "
+                  "the two seat flanks, the two thumbscrew heads in tension; V: pads + screws (the seats "
+                  "lift), R-: seats + screws (the pads lift), L+/L-: the pressing side's pads, both seats, "
+                  "the lifting side's screw",
+        loaded_what="yaw servo case in the cup")
 
     # coxa_fork: the yaw servo holds it where it bears (D063): the Ø20 horn face clamped on the
     # FLAT hub top (B81: there is no horn pocket) + the idler in its pocket, whose mouth side

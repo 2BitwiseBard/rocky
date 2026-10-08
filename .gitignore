@@ -17,6 +17,8 @@ bench/calibration.yaml
 .mcp.json
 rocky.env
 .claude/settings.local.json
+# agent worktrees (full repo copies): never committed (ruff excludes .claude too)
+.claude/worktrees/
 
 # --- OS noise ---
 .DS_Store

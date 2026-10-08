@@ -2,8 +2,8 @@
 
 The developer reference for Pebble's MuJoCo simulation: how the model is
 built, the control stack it runs, the playground, the cockpit's internals,
-the MCP / language-model loop, worlds, the environment, and what each number
-is worth. Elsewhere:
+the MCP / language-model loop, worlds, the environment, what each number is
+worth, and the sensing that is not built yet (§9). Elsewhere:
 
 - using the cockpit: [COCKPIT_GUIDE.md](COCKPIT_GUIDE.md) (also in the page
   under **?**);
@@ -16,13 +16,13 @@ is worth. Elsewhere:
 
 Commands run from the repo root with the repo venv (`.venv/bin/python`);
 `MUJOCO_GL=egl` (or `osmesa`) renders offscreen, `glfw` opens a window. The
-outputs quoted were re-checked on 2026-09-26, robot fingerprint
-`7d376178fe27`; after D063 (`87215110e9c4`, side cheeks on the coxa
-fork, +5.5 g per leg) and its new swing and command slew, `run_sim`, the
-shove envelope, the torque and gesture audits, `recover1` and the lip-band
-scan were re-run on 2026-09-28 (the shove envelope and the lip band again
-on 2026-09-29, after the fixes below) and the numbers below are those
-(D062's `1f953c89f979` had its own re-run the day before).
+outputs quoted were re-run on 2026-10-07 on `deae868522cc`, D064's belly
+model, against D063's `87215110e9c4` (BUILD_LOG 9q: every experiment the
+docs quote, old against new, with a third tree whose belly does not collide
+to separate the belly from the mass). The current fingerprint `965f4f70e5d1`
+is the 9q review's shell relief (`c3e82f13b671`, 0.2 g lighter) plus the
+deck's north tray-tab holes back to Ø2.8 (+0.02 g, B155); `run_sim`, the
+torque audit and the test suites were re-run on both.
 
 ## 1. How it works
 
@@ -32,8 +32,19 @@ circumradius 110 mm, hip axis height, the servo and joint identity, the
 `robot:` description) and `sim/mass_budget.json` (link masses summed from the
 CAD tree's STL volumes by `sim/mass_audit.py`, D039). Five identical legs at
 72° stations, three hinge joints each (yaw, hip, knee), a claw per leg, a
-foot sphere per leg, and a torso of two stacked cylinders: 2.728 kg compiled,
-equal to the budget. The URDF in `ros2/` is generated from the same inputs,
+foot sphere per leg, and the torso. Since D064 the torso's mass, CoM and
+inertia are an explicit `<inertial>` from the budget (1555.0 g at (−2.21,
+−4.63, −3.18) mm: `mass_audit`'s pose table, every torso part weighed from
+its STL and posed in the body frame), its two cylinders carry no mass, and
+under the deck hangs a massless **belly** the floor and the legs can touch,
+from `rocky_model.belly_boxes()` / `belly_posts()` (params and the part
+modules; `cad/check_sim_mirror.py` holds them to the exported parts):
+`belly_tub`, the keel tub's box (x −97.5…99.9, y −47.4…7.4, z −55.4…−18.0
+mm); `belly_shelf`, the hub shelf's plate box (x −56.2…53.95, y 12.2…64.3,
+z −54.4…−10); and its three Ø14 posts `belly_shelf_post0..2` at (−50, 34),
+(50, 34), (26, 64), z −39.3…−10. The tub's real protrusions (the latch boss
+and door ear, the pilasters, the riser clip) are not in the sim (B142). 2.843 kg
+compiled, equal to the budget. The URDF in `ros2/` is generated from the same inputs,
 and `sim/check_urdf_parity.py` proves the two agree (20 joints, FK within
 0.05 mm over 60 random configurations, identical mass, foot sphere and
 actuator limits). CI regenerates both and fails on any diff.
@@ -69,13 +80,19 @@ ask for 7.4 rad/s and turn 50 % further than the servo could; D052's first
 cut clipped at 1.911 N·m, which capped every joint at 3.05 rad/s, and D052a
 made the clip the peak and moved the continuous budget into the thermal
 model. `sim/model_fingerprint.py` hashes the robot (not the world):
-`87215110e9c4` since D063's coxa-fork side cheeks (+5.5 g per leg; the
-deck, shell and tray changes +5.1 g on the torso; robot 2727.7 g),
-`1f953c89f979` after D062's femur deck + 8 mm rails (+7.6 g per leg, robot
-2694.6 g), `7d376178fe27` after D059's CAD change (torso 1448.9 → 1435.2 g),
-`ceb63a1254c3` for the D052a model before it, `5a32f772ca99` for the
-1.911 N·m clip (`4debe4e83893`, the peak clip with the old claw damping,
-was never trained on). Every RL checkpoint records the fingerprint it was trained on.
+`965f4f70e5d1` since the deck's north tray-tab holes went back to Ø2.8 (B155,
++0.02 g of deck: the torso still 1555.0 g, its inertia moved in the 8th
+decimal); `c3e82f13b671` for the 9q shell relief (torso 1555.2 → 1555.0 g,
+robot 2843.0 g); `deae868522cc` for D064's body layout (the belly geoms and the
+torso `<inertial>`: torso 1439.8 g at z 24.5 → 1555.2 g at (−2.21, −4.63,
+−3.17), robot 2727.7 → 2843.2 g; `c10b970d2bb2` was its provisional
+budget); `87215110e9c4` for D063's coxa-fork side cheeks (+5.5 g per leg;
+robot 2727.7 g), `1f953c89f979` after D062's femur deck + 8 mm rails
+(+7.6 g per leg, robot 2694.6 g), `7d376178fe27` after D059's CAD change
+(torso 1448.9 → 1435.2 g), `ceb63a1254c3` for the D052a model before it,
+`5a32f772ca99` for the 1.911 N·m clip (`4debe4e83893`, the peak clip with
+the old claw damping, was never trained on). Every RL checkpoint records the
+fingerprint it was trained on.
 
 **The control stack is the real one.** The sim has no controller of its own.
 It imports `gait/pebble_gait.py` (closed-form IK, the five-phase `WaveGait`
@@ -97,12 +114,14 @@ same modules to real servos. Two D052 pieces sit in front of them:
   tick, and a stop is never eased.
 - **`gait/pebble_feasibility.py`** checks a motion before it runs: guarded
   joint limits, peak speed per class (loaded / free / hard), steps at entry,
-  exit and phase boundaries, ≥ 3 feet down, the CoM margin (from the MJCF's
-  own segment masses; it matches MuJoCo to 0.0002 mm), slip and
-  self-contact. Code gestures, keyframe files, the studio, gait presets and
+  exit and phase boundaries, ≥ 3 feet down, the CoM margin (the MJCF's own
+  segment masses, and since D064 the torso's mass and CoM from the budget,
+  B138: 38.5 mm at the envelope, 41.4 on D063's centred torso), slip and
+  self-contact (a leg inside the belly is a `SELF_CONTACT` naming the belly
+  geom). Code gestures, keyframe files, the studio, gait presets and
   the brain's `compose_gesture` all go through it; `sim/audit_gestures.py`
-  runs it plus a physics pass over everything (19 rows, 0 FAIL on
-  2026-09-28).
+  runs it plus a physics pass over everything (19 rows, 0 FAIL, 0
+  self-contact samples, on `deae868522cc`).
 
 The playground's always-on guards (§3) wrap both, for every command source.
 
@@ -132,13 +151,15 @@ geom has `priority="1"`, so the world's friction is what a foot contact gets
 (the icy floor really is 0.35; before D052 the feet's own μ won); ramps and
 stairs have a far side unless `"far": "drop"`; random courses keep every
 object ≥ 0.3 m from the spawn. What the lidar sees in each preset:
-[PLACES.md](PLACES.md) §3.
+[PLACES.md](PLACES.md) "Weak spots".
 
 **What the numbers are worth (the honesty box).** Masses are from CAD; the
 servo identity is datasheet stall and no-load plus a guessed thermal
 fraction; friction, the foot-switch forces and every observation-noise level
-are guesses; link CoMs and inertias are primitive shapes, the SEA spring is
-rigid, and there is no gear backlash or battery sag (B33). The servo realism layer (50 Hz
+are guesses; the leg links' CoMs and inertias are primitive shapes (the
+torso's come from the CAD pose table since D064, but its belly is two boxes
+and three posts, not the tub's chamfers), the SEA spring is rigid, and there
+is no gear backlash or battery sag (B33). The servo realism layer (50 Hz
 hold, 20 ms latency, 4096-count goals) is on by default in the playground and
 cockpit. The sim is excellent for logic (does the reflex trip, does the
 gesture reach, does a gait tweak break a joint limit or a speed budget) and
@@ -156,15 +177,20 @@ MUJOCO_GL=egl .venv/bin/python sim/run_sim.py         # headless walk, strafe an
 
 `run_sim.py` writes its video and contact sheet to `sim/out/run_sim/`
 (`--out DIR` elsewhere; `--out sim` regenerates the committed
-`sim/pebble_sim.mp4` on purpose). Expected on `87215110e9c4`:
+`sim/pebble_sim.mp4` on purpose). Expected on `deae868522cc`,
+`c3e82f13b671` and `965f4f70e5d1`:
 
 ```
-body height: mean 117.1 mm (target ~118, rigid ideal servos), std 0.19 mm, min 116.8
-tilt: mean 0.26 deg, max 0.41 deg
+body height: mean 117.1 mm (target ~118, rigid ideal servos), std 0.19 mm, min 116.7
+tilt: mean 0.27 deg, max 0.42 deg
 walk +X displacement: 189 mm (commanded ~198 mm at the budgeted 34.2 mm/s; asked 45), lateral drift 0 mm
-turn in place: 41.8 deg at the budgeted 0.185 rad/s (commanded ~40 deg; asked 0.6 rad/s)
+turn in place: 41.7 deg at the budgeted 0.185 rad/s (commanded ~40 deg; asked 0.6 rad/s)
 fell over: no
 ```
+
+D063's model gave min 116.8, tilt 0.26 / 0.41, turn 41.8°; the run is
+identical with the belly switched off (the belly never touches in a walk),
+so the change is the mass and CoM.
 
 The walk asks 45 mm/s for 6 s and the budget fits it to 34.2 (D062, before
 the soft-landing swing: 247 mm and 55.4° at 45.5 mm/s / 0.246 rad/s). The
@@ -286,6 +312,19 @@ the policy never meets `handoff_ok` by itself and the 3 s stall ramp does the
 standing. Comparing righters live, the `rl` / `righter` commands,
 `set reflex.stall_s` and the training curves: RL_GUIDE §6.
 
+**The righter's hip clamp (D064, pick 13).** In FALLEN the hip *command* of
+legs 1–4 is held at ≥ −51.05° (`reflex.righter_hip_min_deg` and
+`reflex.righter_clamp_legs` in params, applied in
+`gait/pebble_reflex.py` `ReflexSupervisor`), whatever produced it, and the
+RIGHTED ramp starts from that clamped pose, so no righter folds a leg under
+the keel tub. It is a command clamp, not a stop (an impact still back-drives
+the measured hip past it), and never in NORMAL, PLANT, BRACE or RECOVER or
+under a probe, where a hip floor would switch off the void guard (B129).
+Leg 0 is out by the pick: with `recover1` it touches the shelf plate in 2 of
+200 shove-demo falls (at most 1.40 mm, hip −67.4°); a leg-0 floor of −62.5°
+gives 0/200 with every outcome identical (B141, not applied). Over 200
+seeds the clamp clips 41 % of FALLEN ticks.
+
 **HUD (viewer window).** A marker above the torso shows the reflex state
 (green NORMAL, yellow PLANT, orange BRACE, blue RECOVER, red FALLEN, purple
 RIGHTED) and an arrow shows the velocity command (length = 2 s of travel; a
@@ -403,59 +442,38 @@ brain. `ROCKY_STOP_FIRST=0` sends stop lines to the model (the brain bench
 does, to measure it). The operator's view: COCKPIT_GUIDE "Driving".
 
 **Goto (D052).** `goto(x, y)` walks toward the target at the gait's envelope
-speed and ends as one of: `arrived`; `cliff` (the always-on void guard found a
-planted foot with no floor under 30 mm of probe, backed off and
-safe-stopped); `blocked` (a reactive layer reads the lidar at 8 Hz, and a
-return within ±30° of the travel heading closer than 0.35 m from the torso
-centre triggers a detour: first 45° off the target heading toward the clearer
-side, then a 90° sidestep to the same side, each until the robot-wide corridor
-toward the target has been clear for 0.8 s, 15.5 s at most (D063: 0.45 m
-at goto's speed plus the ease-in, `cockpit.GOTO_DETOUR_S`; 8 s before);
-blocked a third time, the goto stops with the obstacle's bearing and range;
-a goto refused at the start, by a void in that direction, a latched
-safe-stop or held locomotion, is also `blocked`, with a detail); `stuck`
-(3 s without 2 cm of progress: something below the lidar plane, which is
-~0.18 m up, so boxes, curbs, rubble and steps are invisible to it; during
-a detour, 2 cm farther from where the detour began (D063: while the
-detour reset the clock, a sidestep into a 14 cm box beside a wall pushed
-on for 16.6 s, to `blocked`; now `stuck` after 6.0 s));
-`timeout` (55 s since D063: the 1.5 m reach
-1.2 times over at 34.2 mm/s plus the 2.36 s ease-in,
-`harness.capabilities.goto_cap_s`, the number the goto text quotes; 40 s
-before. B116, 2026-09-30: once a goto has entered a detour its cap is 87 s,
-`cockpit.GOTO_DETOUR_CAP_S` = `goto_detour_cap_s`, the same derivation with
-the reach grown by both detours' 0.45 m, and it stays 87 s after the detour
-ends; the cap ends a goto even mid-detour, so a goto answers by its cap +
-1.5 s, 88.5 s at most (before, a detour still running at the 55 s cap
-finished first: up to 87.5 s)). A target farther than 3 m is an
-argument error. Measured 2026-09-24
-(flat floor, from the origin, servo realism on): 0.45 m away → arrived in
-12.2 s; a 0.8 m wall at x = 0.6 → blocked at 0.27 m after both detours
-(16 s); a 0.25 m-wide wall → also blocked (the sidestep made only ~25 mm/s:
-the reactive layer is not a planner); an 8 cm box → stuck after 3 s; the
-cliff world → cliff at x = 0.19. Measured 2026-09-29 (D063, the same way):
-1.2 m → arrived in 37.0 s, 1.5 m → 46.1 s, 2.0 m → timeout after 1.77 m (the
-40 s cap had stopped a 1.5 m goto at 1.275 m); head-on at a 0.25 m-wide wall
-or box at x = 0.6, the sidestep now clears it (~31 mm/s sideways) when the
-target is 0.6 m or more behind it (0.35 m behind: blocked), but the detour
-costs ~20 s, so a 1.2 or 1.5 m goto around it runs out of time on the way
-(1.14–1.16 m / 1.27 m walked). Measured over 200 such gotos (B116,
-2026-09-30): a detour costs 11.0–32.0 s up to 1.5 m, and at the 55 s cap 15
-of 16 detour gotos of 1.0 m, 38 of 84 of 1.2 m and 0 of 84 of 1.5 m arrived.
-On the 87 s detour cap (shipped the same day; `--verify` re-ran all 214
-scenarios on it, 214/214 as derived) 16 / 78 / 80 arrive, every other one
-ends `blocked` or `stuck` by itself, the latest arrival up to 1.5 m comes at
-75.0 s, and 2.0 m arrives 15 of 16 times (the latest at 85.7 s); a 2.9 m goto
-that sidestepped a wall at 0.45 m times out at 87.0 s, 68 s after its detour
-ended. `go_back_to` re-aims a leg that still runs out of time (COCKPIT_GUIDE
-"Memory and awareness"): a ball 2.0 m away behind that wall or box → back at
-it in 72.6 s / 72.1 s, two legs, the first arriving on the detour cap at
-56.5 s / 56.1 s (before B116 it timed out at 55 s and was re-aimed: 72.5 s /
-71.9 s); 53.2 s with nothing in the way. Where the call lands in the gait
-cycle moves the first leg by a few seconds: three runs behind the wall
-(review, the same day) arrived at 56.5 / 56.6 / 53.0 s and were back at the
-ball in 72.6 / 72.7 / 69.0 s; with that leg held to 55 s it timed out twice
-(72.5 s, re-aimed) and arrived once (53.0 s).
+speed and ends as one of:
+
+- `arrived`;
+- `cliff`: the always-on void guard found a planted foot with no floor under
+  30 mm of probe, backed off and safe-stopped;
+- `blocked`: a reactive layer reads the lidar at 8 Hz, and a return within
+  ±30° of the travel heading closer than 0.35 m from the torso centre
+  triggers a detour, first 45° off the target heading toward the clearer
+  side, then a 90° sidestep to the same side, each until the robot-wide
+  corridor toward the target has been clear for 0.8 s, 15.5 s at most
+  (`cockpit.GOTO_DETOUR_S`, D063); blocked a third time, the goto stops with
+  the obstacle's bearing and range. A goto refused at the start (a void in
+  that direction, a latched safe-stop, held locomotion) is also `blocked`;
+- `stuck`: 3 s without 2 cm of progress (something below the lidar plane,
+  ~0.18 m up, so boxes, curbs, rubble and steps are invisible to it); during
+  a detour, 2 cm farther from where the detour began (D063);
+- `timeout`: 55 s (`harness.capabilities.goto_cap_s`: the 1.5 m reach 1.2
+  times over at 34.2 mm/s plus the 2.36 s ease-in); once a goto has entered a
+  detour its cap is 87 s (`goto_detour_cap_s`, the reach grown by both
+  detours' 0.45 m, B116), and the cap ends a goto even mid-detour, so a goto
+  answers within 88.5 s. A target farther than 3 m is an argument error.
+
+Measured on D063 (flat floor, servo realism on): 1.2 m arrives in 37.0 s,
+1.5 m in 46.1 s; head-on at a 0.25 m-wide wall or box at x = 0.6 the
+sidestep clears it (~31 mm/s sideways) when the target is 0.6 m or more
+behind it; a detour costs 11.0–32.0 s up to 1.5 m. Over 200 such gotos on the
+87 s detour cap (B116, 2026-09-30) 16 of 16 at 1.0 m, 78 of 84 at 1.2 m and 80
+of 84 at 1.5 m arrive, every other one ends `blocked` or `stuck` by itself,
+and 2.0 m arrives 15 of 16 times (the latest at 85.7 s); on `deae868522cc`
+the 46-scenario quick set ends the same way. `go_back_to` re-aims a leg that
+still runs out of time (COCKPIT_GUIDE "Memory and awareness"): a ball 2.0 m
+away behind that wall → back at it in about 72 s, two legs.
 
 **Move (D055).** `move(forward_m, left_m=0)` is a relative move in the
 robot's frame, in metres. It reads the pose when the call starts and runs an
@@ -603,9 +621,9 @@ rules and every cut); this is what the code does.
 The one-off experiments live in `sim/experiments/`, each asking one question
 and printing a verdict: [sim/experiments/README.md](../sim/experiments/README.md)
 has the table (what each measures, the decision it backs, how to run it, the
-current result from the 2026-09-26 rerun, five rows re-run on 2026-09-30 for
-B111 / B112, and the pre-D052 record). Run them
-from the repo root:
+current result, re-run on `deae868522cc` on 2026-10-07 unless the row says
+otherwise, and the earlier records back to pre-D052). Run them from the repo
+root:
 
 ```bash
 MUJOCO_GL=egl .venv/bin/python sim/experiments/run_cliff.py
@@ -781,8 +799,8 @@ carries its own copy. The robot's shape is data too (D053): the `robot:`
 block is validated by `rocky_model.robot()`, and
 `.venv/bin/python gait/rocky_model.py` prints the spec with its topology hash
 (`7f066d9bd8c0`). What is not wired yet (a 4th joint or a 6th leg validates
-but does not run) is [ROBOT_AS_DATA.md](ROBOT_AS_DATA.md) steps 2–10, backlog
-B36.
+but does not run) is [DESIGN_CHANGE_GUIDE.md](DESIGN_CHANGE_GUIDE.md) §9,
+steps 2–10, backlog B36.
 
 ## 7. Environment
 
@@ -828,32 +846,31 @@ Hardware and the onboard loop:
 The model (B33, D052a):
 
 - **The shove envelope** (`sim/shove_envelope.py`, rim half-sine, 0.4 s; BW on
-  the 2.728 kg torso subtree), 2026-09-29 on `87215110e9c4` (D063), 5 N grid:
+  the 2.843 kg torso subtree), 2026-10-07 on `deae868522cc` (D064), 5 N grid:
   standing 30 / 35 / 35 / 30 / 30 / 30 N at 0 / 60 / 120 / 180 / 240 / 300°
-  (min 1.12 BW, 7.6 N·s; mean 1.18 BW), the same forces as D062; walking at
-  a steady 34.2 mm/s (the ask fitted by `scenes.walk_ask()`, shoved at 5.0 s,
-  1.64 s after the slew's 2.36 s ease-in; the script refuses an unsettled
-  command) 30 N in every direction (min and mean 1.12 BW, 7.6 N·s; at 35 N
-  the 180 / 240 / 300° shoves tip past 60° and come back upright, which the
-  criterion counts as falls). That is one gait phase: over 5 phases × 6
-  directions (2026-09-30, B103) the walking minimum is 25 N (0.93 BW), mean
-  30.2 N. D062, walking a steady 45: 35 / 25 / 20 / 35 /
-  30 / 30 N (min 20 N, 0.76 BW). On a 1 N grid (D062, `1f953c89f979`, not
-  re-run) the standing floor is 30 N (1.13 BW, 7.6 N·s) at
-  0° and 180° (29 N on `7d376178fe27`: the heavier femurs help a little), 31 N
-  (1.17 BW) at 240° / 300° and 37 N (1.40 BW) at 60° / 120°; walking 24 N
-  (0.91 BW) at 120°, 25 N at 60° (the D062 5 N record says 20 N at 120°; the
-  two disagree, and the JSON is the record). More torque
-  makes Pebble slightly *easier* to tip: D052's 1.911 N·m clip tipped 2–3 N
-  later, its clipped legs yielding into a slide (D052a). The sliding limit
-  for a CoM push is about 21 N (0.8 × mass × g; ~31 N at μ 1.2).
-  Neither number is calibrated. The rectangular CoM pulse of the push
+  (min 1.08 BW, 7.6 N·s; mean 1.14 BW), the same forces as D063 on a 4.2 %
+  heavier robot; walking at a steady 34.2 mm/s (the ask fitted by
+  `scenes.walk_ask()`, shoved at 5.0 s, 1.64 s after the slew's 2.36 s
+  ease-in; the script refuses an unsettled command) 30 / 30 / 35 / 30 / 30 /
+  35 N (min 1.08 BW, mean 1.14; D063: 30 N in every direction, the lower CoM
+  holds 120° and 300° 5 N longer). That is one gait phase: over 5 phases × 6
+  directions the walking minimum is 25 N (0.90 BW), mean 31.2 N (D063: 0.93
+  BW, 30.2 N, B103). On a 1 N grid standing is 32 / 37 / 37 / 31 / 33 / 34 N
+  (floor 31 N = 1.11 BW at 180°; D063 30 / 38 / 38 / 30 / 32 / 32) and
+  walking 33 / 33 / 35 / 34 / 32 / 35 N (floor 32 N = 1.15 BW at 240°; D063
+  32 / 31 / 33 / 34 / 30 / 33). Every one is identical with the belly
+  switched off: the mass and CoM, not the keel. More torque makes Pebble
+  slightly *easier* to tip: D052's 1.911 N·m clip tipped 2–3 N later, its
+  clipped legs yielding into a slide (D052a). The sliding limit for a CoM
+  push is about 22 N (0.8 × mass × g; ~33 N at μ 1.2). Neither number is
+  calibrated. The rectangular CoM pulse of the push
   experiments (`run_push*.py`) survives only for the record (D017 / D025).
 - Tracking lag p95 is 12.9–14.8° on the gait rows of `audit_gestures` (14 of
   19 rows warn TRACK; warn at 10°, fail at 20°; 16.5–18.5° before D063's
   soft-landing swing): the sim is close to saying the gait asks more than the
   servo follows. `manip_adjacent` warns
-  `MARGIN_WARN` (a 17.4 mm CoM margin against the 25 mm warn line).
+  `MARGIN_WARN` (a 19.4 mm CoM margin against the 25 mm warn line; 17.4 on
+  D063).
 - **Heat** (the rest of the honesty box's guesses are in §1): the RL envs
   derate a hot joint; the playground and cockpit only account it
   (`guard_status()['thermal']`, the `servo heat` chip, sim → robot refused
@@ -875,45 +892,57 @@ The model (B33, D052a):
 
 Behaviour:
 
-- **The void guard still falls in a narrow band of approach angles** (D052a).
-  The touchdown gate fixed most of the 10–20° misses, but a 1° grid (walk
-  15/25/35/45 × −30…60°, 364 approaches, the slew on; walk 35 and 45 are
-  both budgeted to 34.2, so they are one run) still has 8 falls on the D063
-  model (15 at 14–15°, 25 at 9–10°, 35 and 45 at 10–11°), none of which fires
-  the void guard; with the slew off, 7; the careful walk 6 (15 at 15–16°, 25
-  at 10–11°, 35 / 45 at 9°). Before the hold probe below it was 11, three of
-  them firing the guard and tipping while backing off. D052a's 310-approach
-  grid had 7 with the late gate (45 mm/s at 12.5–14.5°, 25 at 15–16°, 35 at
-  20–21°, 15 at 17.5°) and 9 with the careful walk, at other angles
-  (14–20°). A leading foot lands on the edge's lip and gives way while the
-  next leg swings, before any touchdown the gate could hold on. The foot
-  switch cannot see this: a foot sphere centred 0–9 mm past the edge sits on
-  the corner, closes its switch, then slides off. Pinned as a strict xfail
-  (`test_void_guard_lip_band_known_gap`); a look-ahead ToF is B33 (c).
-  Tried and rejected (D052a): re-seeking a planted foot whose switch opens
-  while another leg swings (it closes the band, but the switch flicker at
-  every handoff and on stairs, rough ground and ice ratcheted the probes
-  into false voids: 18–27 holds and a void on flat ground); the same gated
-  on a ≥ 1.5° tilt rise plus a tilt-confirmed void during holds (terrain
-  clean, but 7 → 7 falls late, 9 → 8 careful); `GATE_TICKS` 5 or 6.
-  **The hold probe (D063, `PROBE_HOLD_LEAD_MM` 7):** in the three that fell
-  after firing, the gate held the gait on the leg over the void while the
-  leg it had put back down stood on the lip; at the 3.5 mm lead the 30 mm
-  probe took ~0.75 s, the lip foot slid off first and the void fired 0.90 s
-  into the hold with the robot already tipping. A late foot held by the gate
-  now seeks at once with a 7 mm lead (the verdict still needs the real foot
+- **The void guard's lip band: the robot no longer falls, it hangs on the
+  keel** (D052a, D064). The touchdown gate fixed most of the 10–20° misses,
+  but a 1° grid (walk 15/25/35/45 × −30…60°, 364 approaches, the slew on;
+  walk 35 and 45 are both budgeted to 34.2, so they are one run) still has 8
+  approaches at the same angles as on D063 (15 at 14–15°, 25 at 9–10°, 35 and
+  45 at 10–11°) where a leading foot lands on the edge's lip and gives way
+  while the next leg swings, before any touchdown the gate could hold on (a
+  foot sphere centred 0–9 mm past the edge sits on the corner, closes its
+  switch, then slides off). On D063 those 8 fell. On `deae868522cc` the
+  robot tips 20–24° onto `belly_tub` at the edge and hangs there (torso
+  0.243–0.245 m), the void fires 0.27–1.3 s after the tub lands, and it is
+  still hung 3 s later: 0/364 falls by the D063 criterion (FALLEN or torso
+  < 0.24 m), 8/364 tips (> 10°, the test's `TIPPED_DEG`); with the
+  0.5°-offset grid added, 0 falls and 16 tips in 724 (17 falls on D063).
+  With the belly switched off the same 16 approaches fall again: the keel
+  catches the robot. After a
+  fired guard nothing tips any more (1 on D063; 15 at 15.5° now stops, with
+  or without the belly, so that is the mass); the worst safe tilt after a
+  fire is 5.7°. Whether the real keel catches on a table edge or slides off
+  is unmeasured. Still pinned as a strict xfail
+  (`test_void_guard_lip_band_known_gap`, a tip counts as a fall); a
+  look-ahead ToF is B33 (c). Not re-run on D064: with the slew off 7 falls,
+  the careful walk 6 (15 at 15–16°, 25 at 10–11°, 35 / 45 at 9°), all on
+  D063. Tried and rejected (D052a): re-seeking a planted foot whose switch
+  opens while another leg swings (it closes the band, but the switch flicker
+  at every handoff and on stairs, rough ground and ice ratcheted the probes
+  into false voids); the same gated on a ≥ 1.5° tilt rise; `GATE_TICKS` 5
+  or 6.
+  **The hold probe (D063, `PROBE_HOLD_LEAD_MM` 7):** a late foot held by the
+  gate seeks at once with a 7 mm lead (the verdict still needs the real foot
   26.5 mm down), and stops seeking if the body tilts 1° more than its lowest
   tilt in the hold (`PROBE_HOLD_ROLL_DEG`: on rough ground a shin on a bump
-  rolled the body to 7° and made a false void). The void now fires 0.56 s
-  into the hold, tilt after ≤ 1.6°. Not in the careful walk (7 falls with it,
-  6 without). Terrain A/B, 90 walks (rubble, stairs, obstacle course, rough
-  20 / 30 mm, ±30°, 25 / 45 mm/s): 0 falls and 0 false voids before and
-  after, progress +1.1 %, but 7 walks tilt 1–2° more (worst 7.3°) and 3
-  probe 25 mm or deeper; a foot that finds ground in a hold may preload up
-  to 7 mm. Pinned by `test_a_fired_void_guard_backs_off_without_tipping`.
-  Outside the band the guard stops with room to spare (D052a, not re-run on
-  D063: walk 45 at 0–45°, max torso x 166–230 mm on the 0.35 m platform, 0
-  falls), and the retreat backs off 39–59 mm at walk 45 (14–28 mm at walk 25).
+  rolled the body to 7° and made a false void). Before it, three approaches
+  fired the guard 0.90 s into the hold and tipped while backing off; with it
+  the void fires 0.56 s into the hold, tilt after ≤ 1.6°. Not in the careful
+  walk. Terrain A/B on D063, 90 walks (rubble, stairs, obstacle course,
+  rough 20 / 30 mm): 0 falls and 0 false voids before and after, but 7 walks
+  tilt 1–2° more (worst 7.3°) and a foot that finds ground in a hold may
+  preload up to 7 mm. Pinned by
+  `test_a_fired_void_guard_backs_off_without_tipping`. Outside the band the
+  guard stops with room to spare (walk 45 at 0–45°, max torso x 164–225 mm
+  on the 0.35 m platform, 0 falls), and the retreat backs off 39–59 mm at
+  walk 45 (14–28 mm at walk 25).
+- **`run_cliff.py`'s control no longer walks off** (D064): the guard-less
+  control hangs on the tub at 22.1° from 8.78 s (torso 239 mm), and the
+  script's fall test (tilt > 50° or the torso below the platform) cannot see
+  a robot hung on its keel, so the verdict reads `CLIFF DETECTION
+  INCONCLUSIVE` (exit 0) where it read PASS. With the belly off the control
+  falls at 9.04 s and the verdict is PASS. The detector itself still stops
+  213.3 mm short. The script needs the guard tests' tip criterion (B140). `run_cliff_safestop.py` passes: margin 228.9 mm, the leading foot
+  46.2 mm short of the edge.
 - The careful walk cuts the old 72-approach sweep from 6 falls to 1 but walks
   17 % slower on every surface (flat 0.625 → 0.521 m in 15 s); whether it
   becomes the default is open. Even the default gate costs 2.6–4 % of
@@ -923,12 +952,78 @@ Behaviour:
   reads its private `_last_t`; `gait/pebble_reflex.py` has no API for it yet,
   so the Pi's loop (B35) cannot reuse it as is.
 - On its back with **no** righter, the supervisor loops FALLEN → RIGHTED →
-  FALLEN every stall period (3 s) and never stands.
+  FALLEN every stall period (3 s) and almost never stands (back landings
+  3 of 65 over 200 seeds).
 - The probe constants (settle 0.12 of the stance, 3.5 mm lead, 7 mm in a
   hold) are tuned to this sim's actuator and need bench values.
-- Every RL checkpoint on disk except `recover6_d052` (obs v2, the first B34
-  retrain: 0/20 hardware handoff, negative) is pre-D052 (`legacy obs`); the
-  walkers have no speed envelope on the D052 servo and are zeroed; no righter
-  earns a handoff by itself on the D052 model, while the supervised system
-  stands 20/20 against 11/20 with no righter (RL_GUIDE §4; rerun 2026-09-26,
-  again on D062 and D063).
+- Every RL checkpoint is legacy on the D064 model (the four pre-D052 ones by
+  their observation, `recover6_d052` and `recover7_d063_curriculum` by their
+  fingerprint and their uncut hip map); the walkers have no speed envelope on
+  the D052 servo and are zeroed; no righter earns a handoff under the
+  supervisor, while the supervised system with `recover1` stands 20/20
+  against 11/20 with no righter, and 198/200 against 104/200 over 200 seeds
+  (197 / 87 on D063: the lower CoM helps most with no righter). RL_GUIDE §4.
+
+## 9. Not built yet: perception on the robot
+
+Everything above runs on clean MuJoCo sensors; on the robot no sensor is
+wired yet (B35). The plan, short (the full plan as of 2026-09-30:
+[archive/PERCEPTION_PLAN_2026-09-30.md](archive/PERCEPTION_PLAN_2026-09-30.md)):
+
+- **Layers.** L0 proprioception on the Pi (servo position, load and
+  temperature over the 50 Hz bus, the SEA foot switches, a 100 Hz IMU; the
+  legged-odometry EKF, D026); L1 the local bubble on the Pi at 10–20 Hz (the
+  cliff detector, the foot probe, later sonar or ToF pods); L2 the geometric
+  map on the Pi plus a server (a 360° 2D lidar, the odometry prior, a Wi-Fi
+  RSSI prior; in the sim ICP SLAM-lite, D027); L3 semantics and memory on the
+  server at 0.2–1 Hz (`look`, `find_object`, the scene memory, places).
+- **Reflex arbitration**, fastest wins: E-stop (the XT60 loop key) > the
+  thermal SafetyMonitor > push-reflex BRACE > the cliff VOID halt > the
+  stuck-watchdog retry > the gait command. A VOID while the watchdog is in a
+  retry stage feeds the watchdog (terrain data on rubble); otherwise it halts
+  (`perception/cliff.py`).
+- **Robot = reflexes, server = cortex.** The Pi runs everything real-time
+  (gait, reflexes, EKF, SLAM-lite, chord-speak) and sends JPEG keyframes on
+  demand, the scan, the pose and the events to a server that runs the vision
+  model and the brain; annotations and goals come back, latency-tolerant.
+  Nothing safety-critical depends on the link: with it down the robot keeps
+  L0 and L1 (walk, avoid, patrol). The bottom of the brain stack needs no
+  model (`harness/intent.py`; `harness/local_brain.py` rehearses the loop
+  offline).
+- **Sensor hardware** (rows in [bom/BOM.csv](../bom/BOM.csv), pins in
+  [WIRING_HARNESS.md](WIRING_HARNESS.md)): a BNO085 IMU on SPI (C-01; not
+  I²C, whose Pi controller mishandles its clock stretching, and not UART-RVC,
+  which reports no angular rates, and the brace trip and the EKF need them);
+  an LDRobot D500 lidar (C-02, phase C: 54.0 × 46.3 × 35.0 mm VERIFY, 45 g,
+  0.03–12 m, 10 Hz, UART 230400 through its USB adapter, seated on the cap,
+  B12; the sim keeps 360 rays at 8 Hz over 0.12–6 m until B46 gives it a
+  `sensing.lidar` block); a Pi Camera Module 3 Wide (C-04: 120° diagonal,
+  fixed behind a gill slot in a shell sector, B16; the sim eye is fovy 70°
+  until B45 makes it the real lens); each leg's SEA switch on its own Pi
+  GPIO; optional audio (a USB mic and a MAX98357A amp; the ReSpeaker 2-Mics
+  HAT would fight the amp for the one I²S, the IMU for SPI0, and take the
+  header).
+- **Sensor pods** on the I6 dovetail ring (a printed shoe, the sensor, a
+  JST-SH pigtail to the avionics bulkhead; any of the ring's stations):
+  sonar × 5 (US-100, a 360° skirt, X-09), enviro (BME688), PIR (AM312),
+  thermal (AMG8833, not in the BOM), whiskers (`whisker_shoe` in
+  `cad/part_smallwins.py`, the only pod with CAD), a downward ToF
+  (VL53L4CD: it sees an edge before a foot does, B33 c, B40, X-02). None has
+  a driver or a sim model.
+- **I²C.** The native bus carries only the TCA9548A mux (0x70) and the
+  INA228 (0x40) if fitted (B47). Anything sampled slower than 10 Hz lives
+  behind the mux (BME688 0x76, AMG8833 0x69, an OLED 0x3C, the ToF
+  sensors), brought to the tray bulkhead's Qwiic port; 400 kHz.
+- **Data contracts, frozen in code:** `perception/legged_odom.py` →
+  `/pebble/odom`; `sim/laserscan_spec.json` → `/pebble/scan`;
+  `rocky_msgs/ContactState`, `rocky_msgs/ServoHealth`;
+  `perception/wifi_rssi_logger.py` JSONL v1.
+- **What unblocks what:** servos, IMU and foot switches on the Pi (B35) →
+  the EKF on hardware; the D500 and its cap mount (B12, B46) → slam_toolbox
+  and place signatures on real scans; the camera, the gill bracket (B16) and
+  B45 → `look`, `find_object` and places on the robot; sonar or ToF pods →
+  the L1 look-ahead (the foot-probe guard works without them).
+- **Behaviours planned** beyond the sim's patrol, `find_object` and place
+  changes: frontier exploration with a chord summary, follow-me, the dock
+  ritual (B14), dead-reckoning tricks, deliveries in the scoop (an I2 tool),
+  people greeted by their own chord motif (B39), the question game.

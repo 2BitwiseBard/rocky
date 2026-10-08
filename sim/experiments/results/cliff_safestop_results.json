@@ -3,7 +3,7 @@
   "mode": "hardstop",
   "retreat_cycles": 1.6,
   "fell": false,
-  "body_overhang_mm": -159.8,
+  "body_overhang_mm": -160.0,
   "voids": [
    [
     6.18,
@@ -63,16 +63,16 @@
    ]
   ],
   "halt_s": 9.38,
-  "stop_margin_mm": 213.5,
+  "stop_margin_mm": 213.3,
   "end": {
    "feet_in_contact": 5,
-   "foot_margin_mm": 34.5
+   "foot_margin_mm": 34.2
   },
   "post_halt": {
    "contact_breaks": 0,
    "mean_speed_mms": 0.7,
    "still_speed_mms": 0.0,
-   "max_tilt_deg": 0.41
+   "max_tilt_deg": 0.44
   },
   "supervisor_states": null,
   "transitions": null
@@ -81,7 +81,7 @@
   "mode": "safestop",
   "retreat_cycles": 1.6,
   "fell": false,
-  "body_overhang_mm": -166.9,
+  "body_overhang_mm": -167.9,
   "voids": [
    [
     6.32,
@@ -105,7 +105,7 @@
    ]
   ],
   "halt_s": 9.52,
-  "stop_margin_mm": 228.8,
+  "stop_margin_mm": 228.9,
   "end": {
    "feet_in_contact": 5,
    "foot_margin_mm": 46.2
@@ -152,7 +152,7 @@
    },
    "on_the_deck": {
     "ok": true,
-    "measured": "5/5 feet down, leading foot 34.5 mm short of the edge"
+    "measured": "5/5 feet down, leading foot 34.2 mm short of the edge"
    },
    "planted": {
     "ok": true,

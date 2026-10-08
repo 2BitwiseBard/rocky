@@ -4,12 +4,12 @@
    {
     "part": "fit_ladder",
     "qty": 1,
-    "solid_cm3": 39.3,
-    "est_g": 26.8,
-    "est_min": 86
+    "solid_cm3": 38.7,
+    "est_g": 26.4,
+    "est_min": 85
    }
   ],
-  "total_g": 27,
+  "total_g": 26,
   "total_h": 1.4
  },
  "Batch 1 coupons + blank": {
@@ -72,9 +72,9 @@
    {
     "part": "coxa_yaw_base",
     "qty": 1,
-    "solid_cm3": 21.2,
-    "est_g": 14.5,
-    "est_min": 46
+    "solid_cm3": 21.7,
+    "est_g": 14.8,
+    "est_min": 47
    },
    {
     "part": "coxa_fork",
@@ -155,48 +155,69 @@
    {
     "part": "coxa_yaw_base",
     "qty": 4,
-    "solid_cm3": 21.2,
-    "est_g": 57.9,
-    "est_min": 185
+    "solid_cm3": 21.7,
+    "est_g": 59.3,
+    "est_min": 190
    },
    {
-    "part": "busboard_bracket",
+    "part": "hub_shelf",
     "qty": 1,
-    "solid_cm3": 5.1,
-    "est_g": 3.8,
-    "est_min": 12
+    "solid_cm3": 18.7,
+    "est_g": 16.2,
+    "est_min": 52
    },
    {
     "part": "avionics_tray",
     "qty": 1,
-    "solid_cm3": 23.7,
-    "est_g": 14.7,
-    "est_min": 47
+    "solid_cm3": 23.4,
+    "est_g": 14.5,
+    "est_min": 46
    },
    {
     "part": "tray_rail",
     "qty": 2,
-    "solid_cm3": 4.3,
-    "est_g": 6.3,
-    "est_min": 20
+    "solid_cm3": 5.1,
+    "est_g": 7.6,
+    "est_min": 24
+   },
+   {
+    "part": "tray_latch_boss",
+    "qty": 1,
+    "solid_cm3": 2.7,
+    "est_g": 2.0,
+    "est_min": 7
    },
    {
     "part": "battery_sled",
     "qty": 1,
-    "solid_cm3": 26.5,
-    "est_g": 16.4,
-    "est_min": 52
+    "solid_cm3": 26.7,
+    "est_g": 16.6,
+    "est_min": 53
    },
    {
-    "part": "sled_rail",
-    "qty": 2,
-    "solid_cm3": 3.2,
-    "est_g": 4.8,
-    "est_min": 15
+    "part": "bay_tub",
+    "qty": 1,
+    "solid_cm3": 71.1,
+    "est_g": 74.9,
+    "est_min": 240
+   },
+   {
+    "part": "bay_lid",
+    "qty": 1,
+    "solid_cm3": 22.6,
+    "est_g": 23.8,
+    "est_min": 76
+   },
+   {
+    "part": "bay_door",
+    "qty": 1,
+    "solid_cm3": 7.5,
+    "est_g": 6.5,
+    "est_min": 21
    }
   ],
-  "total_g": 184,
-  "total_h": 9.8
+  "total_g": 301,
+  "total_h": 16.1
  },
  "Deferred: four more legs": {
   "parts": [
@@ -265,9 +286,9 @@
    {
     "part": "jig_column",
     "qty": 1,
-    "solid_cm3": 149.9,
-    "est_g": 74.4,
-    "est_min": 164
+    "solid_cm3": 149.5,
+    "est_g": 74.1,
+    "est_min": 163
    }
   ],
   "total_g": 162,
@@ -292,22 +313,22 @@
    {
     "part": "stand_crown",
     "qty": 1,
-    "solid_cm3": 106.9,
-    "est_g": 53.0,
-    "est_min": 117
+    "solid_cm3": 102.5,
+    "est_g": 63.5,
+    "est_min": 140
    }
   ],
-  "total_g": 221,
-  "total_h": 8.1
+  "total_g": 232,
+  "total_h": 8.5
  },
  "Deferred: carapace": {
   "parts": [
    {
     "part": "shell_sector",
     "qty": 5,
-    "solid_cm3": 25.4,
-    "est_g": 94.4,
-    "est_min": 302
+    "solid_cm3": 25.3,
+    "est_g": 94.2,
+    "est_min": 301
    },
    {
     "part": "shell_cap",
@@ -317,7 +338,7 @@
     "est_min": 186
    }
   ],
-  "total_g": 153,
+  "total_g": 152,
   "total_h": 8.1
  }
 }

@@ -26,7 +26,7 @@ instantaneous cap. The MJCF forcerange / URDF effort are stall_nm(); the
 sustained budget is enforced where time matters (rl_common.ThermalProxy,
 pebble_feasibility THERMAL_LOAD), not by clipping every step.
 
-D053 (2026-09-24, docs/ROBOT_AS_DATA.md step 1): the robot's SHAPE is data
+D053 (2026-09-24, docs/DESIGN_CHANGE_GUIDE.md §9 step 1): the robot's SHAPE is data
 too. `robot()` builds a frozen RobotSpec from params `robot:` (legs, the
 per-leg joint chain, foot, tool, IK solver) and links it to the ranges in
 `joints.pos_deg` and the ids in `bus:`; `validate()` refuses a spec the rest
@@ -242,8 +242,162 @@ def gait_defaults() -> dict:
 
 
 def reflex_defaults() -> dict:
-    """ReflexSupervisor kwargs seeded from today's values (gyro_trip, stall_s, ...)."""
-    return {k: float(v) for k, v in _p()["reflex"].items()}
+    """ReflexSupervisor kwargs seeded from today's values (gyro_trip, stall_s, ...).
+    A list-valued key (a leg set) comes back as a tuple, every other one as a float."""
+    return {k: (tuple(v) if isinstance(v, (list, tuple)) else float(v))
+            for k, v in _p()["reflex"].items()}
+
+
+# D064 (pick 13, B130): the righter's hip clamp. Leg 0 is not in the set: it never reaches
+# the keel tub inside its soft limits (BODY_LAYOUT_PROPOSAL correction 8; the tub runs
+# east-west at y -20, south of leg 0's station). params reflex.righter_clamp_legs names the
+# set, the one copy (review 9q: a literal (1, 2, 3, 4) here was a silent second default).
+
+
+def righter_hip_min_deg() -> float | None:
+    """params reflex.righter_hip_min_deg (-51.05): the floor on the righter's hip COMMANDS
+    for righter_clamp_legs(), in FALLEN / RIGHTED only (ReflexSupervisor) and in the
+    recover env's action map (RecoverEnv: the same floor, so training and the supervisor
+    agree). Not a servo limit or a joint range: NORMAL / BRACE keep -70 (B129). None when
+    params has no such key (the pre-D064 robot)."""
+    v = _p().get("reflex", {}).get("righter_hip_min_deg")
+    return None if v is None else float(v)
+
+
+def righter_clamp_legs() -> tuple:
+    """The legs the righter's hip clamp applies to: params reflex.righter_clamp_legs (1-4).
+    () when params has no clamp at all (the pre-D064 robot); a clamp with no leg set is an
+    error, not a guess."""
+    v = _p().get("reflex", {}).get("righter_clamp_legs")
+    if v is None:
+        if righter_hip_min_deg() is not None:
+            raise ValueError("params reflex.righter_hip_min_deg is set but reflex.righter_clamp_legs is "
+                             "missing: name the legs the righter's hip clamp applies to")
+        return ()
+    return tuple(int(i) for i in v)
+
+
+# ------------------------------------------------------------------ the belly (D064)
+# Option A's under-deck volumes (picks 1, 2, 8, 14) as two boxes and the shelf's three post
+# columns in the BODY frame (mm, z = leg z, deck -10..-4): the sim's contact geoms (build_mjcf),
+# the URDF's collisions
+# (generate_urdf) and the feasibility checker's SELF_CONTACT all read these. The CAD side is
+# cad/iface.bay_tub_extent(): the sim cannot import it (build123d), so the SAME sums are
+# written out here and sim/tests/test_belly.py re-derives both from params.
+DECK_BOT_Z_MM = -10.0          # the deck's underside: the CAD cuts a 6 deck (B27 OPEN: params
+                               # body.deck_t 4.0 is unread), deck top -4 (iface.DECK_BOT_Z)
+
+
+def shelf_pad_r_mm() -> float:
+    """The radius of the hub shelf's pad round each post: params hub_shelf.pad_d / 2 (7), the
+    key part_busboard draws the plate's pads from (review 9q: this was post_d / 2 + a literal 3,
+    while the part drew a literal Ø14, so a post_d change moved only the sim's columns)."""
+    return float(_p()["interfaces"]["hub_shelf"]["pad_d"]) / 2
+
+
+def bay_tub_extent_mm() -> dict:
+    """The keel tub's outer box, {'x', 'y', 'z'} (lo, hi) mm, body frame: x from the door's
+    outer face bay_door_x to bay_door_x + door_t + bay_l + bay_wall (the nose moves with
+    bay_l, pick 4), y bay_centre[1] -+ (bay_w / 2 + bay_wall), z from bay_top_z down roof +
+    bay_h + floor. At bay_l 192: x -97.5..99.9, y -47.4..7.4, z -55.4..-18.0. A box: the nose
+    chamfers (nose_chamfer) and the tub's protrusions are part_bay's and NOT in the sim (the
+    latch boss + door ear x -97.5..-85.5 to y -64.45, z -55.4..-39.65; the pilasters Ø9.6 at
+    (+-70, -50.6), z -49.5..-20; the keeper to y 8.6; the north return to z -17.0; the riser
+    clip x 55.5..62.8, y 7.4..13.29, z -50.56..-38)."""
+    bs = _p()["interfaces"]["battery_sled"]
+    x0 = float(bs["bay_door_x"])
+    x1 = x0 + float(bs["door_t"]) + float(bs["bay_l"]) + float(bs["bay_wall"])
+    yc, hw = float(bs["bay_centre"][1]), float(bs["bay_w"]) / 2 + float(bs["bay_wall"])
+    z1 = float(bs["bay_top_z"])
+    z0 = z1 - float(bs["bay_roof"]) - float(bs["bay_h"]) - float(bs["bay_floor"])
+    return {"x": (x0, x1), "y": (yc - hw, yc + hw), "z": (z0, z1)}
+
+
+def hub_shelf_extent_mm() -> dict:
+    """The hub shelf's ENVELOPE (its hull), {'x', 'y', 'z'} (lo, hi) mm, body frame: the
+    axis-aligned hull of params hub_shelf x / y (the plate and the five boards with their plug
+    halos, as packed) and the square round each post's pad (Ø params hub_shelf.pad_d, 14, at
+    the posts' xy), from bottom_z (the face-down adapter's pins) up to the deck's underside
+    (the posts hang from it; the star's top is -13.9). Today: x -57..57, y 12.2..71, z
+    -54.4..-10. A bound for checks (mass_audit's centroid gate), NOT the sim's geoms since the
+    D064 integration: belly_boxes() + belly_posts() carry the plate and the three post columns."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    r = shelf_pad_r_mm()
+    xs = [float(v) for v in hs["x"]] + [float(p[0]) + s * r for p in hs["posts"] for s in (-1, 1)]
+    ys = [float(v) for v in hs["y"]] + [float(p[1]) + s * r for p in hs["posts"] for s in (-1, 1)]
+    return {"x": (min(xs), max(xs)), "y": (min(ys), max(ys)),
+            "z": (float(hs["bottom_z"]), DECK_BOT_Z_MM)}
+
+
+def belly_boxes() -> dict:
+    """{'belly_tub': ((x0, x1), (y0, y1), (z0, z1)), 'belly_shelf': (...)} mm, body frame:
+    the BOX geoms the MJCF hangs on the torso (massless: the torso's <inertial> carries the
+    mass) and the names pebble_feasibility reports a belly SELF_CONTACT under. belly_shelf is
+    the shelf's PLATE box: params hub_shelf x / y (the plate + the boards as packed) from
+    bottom_z to the deck's underside. Until the D064 integration it was hub_shelf_extent_mm()'s
+    hull, grown north to y 71 by the (26, 64) pad: leg 0 touched that hull's north face (x
+    -30..-24, y 70-71) in 20/20 recover1 falls, where nothing of the real shelf is (the plate
+    ends at y 64.3). The pads stand past the plate as belly_posts()."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    e = bay_tub_extent_mm()
+    return {"belly_tub": (e["x"], e["y"], e["z"]),
+            "belly_shelf": (tuple(float(v) for v in hs["x"]), tuple(float(v) for v in hs["y"]),
+                            (float(hs["bottom_z"]), DECK_BOT_Z_MM))}
+
+
+def belly_posts() -> dict:
+    """{'belly_shelf_post<k>': ((x, y), r, (z0, z1))} mm, body frame: the hub shelf's three
+    posts with their pads as vertical cylinders (the MJCF's / URDF's cylinder geoms), Ø params
+    hub_shelf.pad_d (14) at params hub_shelf.posts, from the plate's underside
+    (plate_top_z - plate_t) to the deck's underside. A Ø14 column over the whole height bounds
+    the part (its Ø8 posts stand on Ø14 pads, part_busboard). The names start 'belly_shelf' so
+    every report that says 'hub shelf' for belly_shelf says it for them too."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    r = shelf_pad_r_mm()
+    z0 = float(hs["plate_top_z"]) - float(hs["plate_t"])
+    return {f"belly_shelf_post{k}": ((float(p[0]), float(p[1])), r, (z0, DECK_BOT_Z_MM))
+            for k, p in enumerate(hs["posts"])}
+
+
+def belly_geom_names() -> tuple:
+    """Every belly geom's name (the boxes, then the post cylinders): what the sim's contact
+    reports (rl_common.belly_geoms, pebble_feasibility) look up."""
+    return tuple(belly_boxes()) + tuple(belly_posts())
+
+
+# ------------------------------------------------------------------ the torso's mass (D039, D064)
+# The pre-D039 estimate (the budget D015 sized the servos on), g: what build_mjcf, generate_urdf
+# and pebble_feasibility fall back to when sim/mass_budget.json is missing, one copy (review 9q:
+# three hand copies). Each of them WARNS when it uses it.
+FALLBACK_MASS_G = {"torso": 1350.0, "coxa": 140.0, "femur": 30.0, "tibia": 170.0}
+# the torso CoM that fallback's two weighted cylinders give (build_mjcf: 0.75 of the mass at z 18,
+# 0.25 at z 44): z 24.5
+FALLBACK_TORSO_COM_MM = (0.0, 0.0, 0.75 * 18.0 + 0.25 * 44.0)
+MASS_BUDGET_PATH = os.path.normpath(os.path.join(_HERE, "..", "sim", "mass_budget.json"))
+
+
+def mass_budget(path: str | None = None) -> dict | None:
+    """sim/mass_budget.json (sim/mass_audit.py writes it from the CAD tree), or None when it
+    is missing. A fresh dict: callers may mutate it."""
+    p = path or MASS_BUDGET_PATH
+    if not os.path.exists(p):
+        return None
+    with open(p) as f:
+        return json.load(f)
+
+
+def torso_inertial(path: str | None = None) -> dict | None:
+    """The torso's mass distribution from the budget (D064): {'mass_g', 'com_mm' (x, y, z) body
+    frame, 'inertia' (ixx, iyy, izz, ixy, ixz, iyz) kg m^2 about the CoM in body axes (MuJoCo's
+    fullinertia order), 'provisional' (bool: mass_audit --allow-missing filled a part that has
+    no STL yet)}. None for a budget that predates it (mass only) or no budget at all: the
+    MJCF then falls back to the two weighted cylinders (CoM z 24.5)."""
+    mb = mass_budget(path)
+    if not mb or "torso_com_mm" not in mb or "torso_inertia" not in mb:
+        return None
+    return {"mass_g": float(mb["torso"]), "com_mm": tuple(float(v) for v in mb["torso_com_mm"]),
+            "inertia": tuple(float(v) for v in mb["torso_inertia"]),
+            "provisional": bool(mb.get("provisional", False))}
 
 
 def foot_switch() -> tuple[float, float]:
@@ -338,7 +492,7 @@ def joint_to_id(leg: int, joint: str) -> int:
 
 
 # ------------------------------------------------------------------ robot description (D053)
-# docs/ROBOT_AS_DATA.md. The robot's shape (how many legs, where, which joints
+# docs/DESIGN_CHANGE_GUIDE.md §9. The robot's shape (how many legs, where, which joints
 # in which order, which servo drives each, which id it answers to) as ONE
 # frozen object built from params. Pure Python on purpose — the driver
 # imports this module; the numpy kinematics come later (leg_kin, step 6).
@@ -410,7 +564,7 @@ class RobotSpec:
         names = {L.joint_names for L in self.legs}
         if len(dofs) != 1 or len(names) != 1:
             raise RobotSpecError(f"legs differ ({sorted(dofs)} DOF, chains {sorted(names)}): "
-                                 "(N, dof) consumers need identical legs until ROBOT_AS_DATA step 10")
+                                 "(N, dof) consumers need identical legs until DESIGN_CHANGE_GUIDE §9 step 10")
         return dofs.pop()
 
     def leg_joint_names(self, leg: int = 0) -> tuple:
@@ -552,7 +706,7 @@ def _vec3(v, what: str, errors: list) -> tuple | None:
 
 
 def _is_yaw_2r(chain: list, foot: tuple) -> bool:
-    """The shape pebble_gait.leg_ik is exact for (docs/ROBOT_AS_DATA.md §3.2):
+    """The shape pebble_gait.leg_ik is exact for (docs/DESIGN_CHANGE_GUIDE.md §9, step 6 and the risks):
     3 joints; joint 0 about +z at the origin; joints 1, 2 about the same +-y axis;
     every offset and the foot in the y = 0 plane; the knee and the foot along +x
     of their parent. Chosen by SHAPE, never by joint name."""
@@ -599,7 +753,7 @@ def _resolve(P: dict):
         if not uniform and not legs_b.get("allow_asymmetric", False):
             errors.append("robot.legs.station_deg is not evenly spaced CCW (360/count apart): the wave gait's "
                           "phase order, manip_adjacent's lean math and the CAD sectors assume symmetry — set "
-                          "allow_asymmetric: true only after auditing them (ROBOT_AS_DATA §8)")
+                          "allow_asymmetric: true only after auditing them (DESIGN_CHANGE_GUIDE §9, risks)")
     else:
         first = float(legs_b.get("first_station_deg", 90.0))
         stations = tuple(first + i * 360.0 / n for i in range(n)) if n > 0 else ()
@@ -666,7 +820,7 @@ def _resolve(P: dict):
     # -- overrides: nothing honours them yet
     if R.get("overrides"):
         errors.append("robot.overrides is not empty, but no consumer honours per-leg / per-joint servos yet "
-                      "(ROBOT_AS_DATA step 10): refusing rather than silently ignoring it")
+                      "(DESIGN_CHANGE_GUIDE §9 step 10): refusing rather than silently ignoring it")
 
     # -- bus map
     leg_ids = bus.get("leg_ids") or []
@@ -696,7 +850,7 @@ def _resolve(P: dict):
             continue
         cad = acts[s].get("cad")
         if cad is None:
-            warns.append(f"actuators.{s} has no `cad:` key (ROBOT_AS_DATA step 2): nothing checks that CAD "
+            warns.append(f"actuators.{s} has no `cad:` key (DESIGN_CHANGE_GUIDE §9 step 2): nothing checks that CAD "
                          "builds this servo's case")
         elif s in {c["servo"] for c in chain} and cad != "servo_st3215":
             warns.append(f"actuators.{s}.cad is {cad!r} but the leg CAD is still hard-keyed to servo_st3215 "
@@ -788,7 +942,7 @@ def actuator_order(spec: RobotSpec | None = None) -> list:
 def id_table(path: str | None = None) -> list:
     """Every servo on the bus, sorted by id: IdRow(sid, leg, joint, servo,
     protocol, counts, sweep_deg, limits_deg). The one table the driver, the
-    bridge and the mock will build from (ROBOT_AS_DATA step 3/10)."""
+    bridge and the mock will build from (DESIGN_CHANGE_GUIDE §9 steps 3 and 10)."""
     return robot(path).id_rows(params(path))
 
 

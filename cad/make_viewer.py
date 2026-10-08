@@ -75,10 +75,14 @@ PARTS_MECH = [
     ("servo_st3215_dummy", "ST3215 servo (ref)", [0.32, 0.32, 0.38]),
 ]
 PARTS_S45 = [
-    ("body_deck", "Deck v0.4", [0.49, 0.36, 0.75]),
+    ("body_deck", "Deck v0.5", [0.49, 0.36, 0.75]),
     ("battery_sled", "Battery sled (I5)", [0.61, 0.48, 0.83]),
+    ("bay_tub", "Keel tub (I5)", [0.55, 0.44, 0.79]),
+    ("bay_lid", "Tub lid", [0.66, 0.52, 0.84]),
+    ("bay_door", "Tub door", [0.76, 0.68, 0.88]),
     ("avionics_tray", "Avionics tray (I4)", [0.70, 0.62, 0.86]),
-    ("busboard_bracket", "Bus star-board bracket", [0.55, 0.44, 0.79]),
+    ("tray_latch_boss", "Tray latch boss (glued under the tongue)", [0.76, 0.68, 0.88]),
+    ("hub_shelf", "Hub shelf (under the deck)", [0.55, 0.44, 0.79]),
     ("shell_sector", "Carapace sector", [0.66, 0.52, 0.84]),
     ("shell_cap", "Hatch cap", [0.76, 0.68, 0.88]),
     ("tube_clip", "Tube clip", [0.61, 0.48, 0.83]),
@@ -86,9 +90,15 @@ PARTS_S45 = [
 ]
 parts_items = parts_row(PARTS_MECH)
 parts45_items = parts_row(PARTS_S45, start_x=-260)
+# the body row grew by the keel tub's three parts, the tray's latch boss and the hub shelf
+# (2026-10-07): aim the camera at its middle and back it off so the whole row fits
+_W45 = sum(float(bbox(n)[1][0] - bbox(n)[0][0]) for n, _, _ in PARTS_S45) + 28 * (len(PARTS_S45) - 1)
+PARTS45_TARGET = [round(-260 + _W45 / 2), 0, 0]
+PARTS45_RADIUS = max(520, round(0.62 * _W45))
 
 # bench & field: stand STACKED (base 0..35, section seats at 35, crown at
-# 115 -> deck-bottom 127 config), dock beside it, tools + clips in front
+# 115 -> the U-cradle's floor at 124, the robot's deck bottom at 169.4 in this
+# config, part_stand), dock beside it, tools + clips in front
 bench_items = [
     dict(label="Stand base", color=[0.49, 0.36, 0.75],
          data=b64("stand_base"), offset=[0, 0, 0]),
@@ -188,10 +198,11 @@ MODES = [
          hint="The leg chain and hand printables. Every part regenerates from "
               "params.yaml; run_all_checks.py verifies the whole tree.",
          items=parts_items),
-    dict(id="parts45", label="Parts: body & electronics", target=[20, 0, 0], radius=520,
+    dict(id="parts45", label="Parts: body & electronics", target=PARTS45_TARGET, radius=PARTS45_RADIUS,
          grid_z=-60,
-         hint="Deck v0.4 (leg ports + shell strikes), battery sled, avionics "
-              "tray, star-board bracket, carapace prints, harness clips.",
+         hint="Deck v0.5 (leg ports, shell strikes, the body-layout holes), battery "
+              "sled, the keel tub (tub, lid, door), avionics tray, the hub shelf, "
+              "carapace prints, harness clips.",
          items=parts45_items),
 ]
 

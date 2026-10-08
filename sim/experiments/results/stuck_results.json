@@ -5,10 +5,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 311,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 7.7,
+  "disp_x": 446,
+  "crossed": true,
+  "t_cross": 30.7,
+  "tilt_max": 7.9,
   "fell": false,
   "stuck_events": []
  },
@@ -18,10 +18,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 553,
+  "disp_x": 460,
   "crossed": true,
-  "t_cross": 22.4,
-  "tilt_max": 7.8,
+  "t_cross": 27.2,
+  "tilt_max": 8.2,
   "fell": false,
   "stuck_events": [
    [
@@ -29,11 +29,19 @@
     "STUCK -> high-step"
    ],
    [
-    19.5,
+    18.5,
     "recovered -> nominal"
    ],
    [
-    28.5,
+    22.5,
+    "STUCK -> high-step"
+   ],
+   [
+    30.01,
+    "recovered -> nominal"
+   ],
+   [
+    32.01,
     "STUCK -> high-step"
    ]
   ]
@@ -44,10 +52,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 484,
+  "disp_x": 516,
   "crossed": true,
-  "t_cross": 25.1,
-  "tilt_max": 5.3,
+  "t_cross": 23.1,
+  "tilt_max": 5.2,
   "fell": false,
   "stuck_events": []
  },
@@ -57,10 +65,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 506,
+  "disp_x": 500,
   "crossed": true,
-  "t_cross": 23.1,
-  "tilt_max": 7.9,
+  "t_cross": 23.2,
+  "tilt_max": 8.0,
   "fell": false,
   "stuck_events": [
    [
@@ -72,15 +80,15 @@
     "recovered -> nominal"
    ],
    [
-    20.5,
+    20.0,
     "STUCK -> high-step"
    ],
    [
-    28.01,
+    27.51,
     "recovered -> nominal"
    ],
    [
-    30.51,
+    28.51,
     "STUCK -> high-step"
    ]
   ]
@@ -94,7 +102,7 @@
   "disp_x": 362,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 4.9,
+  "tilt_max": 4.3,
   "fell": false,
   "stuck_events": []
  },
@@ -104,10 +112,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 545,
+  "disp_x": 509,
   "crossed": true,
-  "t_cross": 22.0,
-  "tilt_max": 7.4,
+  "t_cross": 20.7,
+  "tilt_max": 8.3,
   "fell": false,
   "stuck_events": [
    [
@@ -115,16 +123,16 @@
     "STUCK -> high-step"
    ],
    [
-    19.5,
-    "STUCK -> higher+clear"
-   ],
-   [
-    30.01,
+    20.5,
     "recovered -> nominal"
    ],
    [
-    31.51,
+    24.0,
     "STUCK -> high-step"
+   ],
+   [
+    27.51,
+    "STUCK -> higher+clear"
    ]
   ]
  },
@@ -134,10 +142,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 422,
+  "disp_x": 513,
   "crossed": true,
-  "t_cross": 21.1,
-  "tilt_max": 6.5,
+  "t_cross": 23.8,
+  "tilt_max": 8.4,
   "fell": false,
   "stuck_events": []
  },
@@ -149,8 +157,8 @@
   "t_walk_s": 32.9,
   "disp_x": 496,
   "crossed": true,
-  "t_cross": 22.7,
-  "tilt_max": 8.0,
+  "t_cross": 22.3,
+  "tilt_max": 7.9,
   "fell": false,
   "stuck_events": [
    [
@@ -185,10 +193,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 296,
+  "disp_x": 295,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 6.1,
+  "tilt_max": 6.0,
   "fell": false,
   "stuck_events": []
  },
@@ -201,7 +209,7 @@
   "disp_x": 499,
   "crossed": true,
   "t_cross": 26.6,
-  "tilt_max": 9.1,
+  "tilt_max": 9.0,
   "fell": false,
   "stuck_events": [
    [
@@ -228,10 +236,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 458,
+  "disp_x": 461,
   "crossed": true,
-  "t_cross": 27.2,
-  "tilt_max": 2.3,
+  "t_cross": 27.8,
+  "tilt_max": 2.8,
   "fell": false,
   "stuck_events": []
  },
@@ -241,10 +249,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 431,
+  "disp_x": 508,
   "crossed": true,
-  "t_cross": 27.4,
-  "tilt_max": 9.6,
+  "t_cross": 23.4,
+  "tilt_max": 9.0,
   "fell": false,
   "stuck_events": [
    [
@@ -252,20 +260,20 @@
     "STUCK -> high-step"
    ],
    [
-    10.5,
-    "STUCK -> higher+clear"
-   ],
-   [
-    21.0,
+    14.0,
     "recovered -> nominal"
    ],
    [
-    22.5,
+    20.5,
     "STUCK -> high-step"
    ],
    [
-    30.01,
-    "STUCK -> higher+clear"
+    28.01,
+    "recovered -> nominal"
+   ],
+   [
+    29.01,
+    "STUCK -> high-step"
    ]
   ]
  },
@@ -275,10 +283,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 409,
-  "crossed": true,
-  "t_cross": 21.2,
-  "tilt_max": 8.0,
+  "disp_x": 365,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 3.9,
   "fell": false,
   "stuck_events": []
  },
@@ -288,10 +296,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 536,
+  "disp_x": 501,
   "crossed": true,
-  "t_cross": 21.1,
-  "tilt_max": 7.4,
+  "t_cross": 20.9,
+  "tilt_max": 7.8,
   "fell": false,
   "stuck_events": [
    [
@@ -299,11 +307,19 @@
     "STUCK -> high-step"
    ],
    [
-    22.0,
+    21.0,
     "recovered -> nominal"
    ],
    [
-    28.0,
+    24.0,
+    "STUCK -> high-step"
+   ],
+   [
+    31.51,
+    "recovered -> nominal"
+   ],
+   [
+    32.51,
     "STUCK -> high-step"
    ]
   ]
@@ -314,10 +330,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 310,
+  "disp_x": 364,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 8.0,
+  "tilt_max": 7.3,
   "fell": false,
   "stuck_events": []
  },
@@ -327,10 +343,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 481,
+  "disp_x": 532,
   "crossed": true,
-  "t_cross": 26.3,
-  "tilt_max": 10.0,
+  "t_cross": 25.6,
+  "tilt_max": 8.0,
   "fell": false,
   "stuck_events": [
    [
@@ -342,12 +358,16 @@
     "recovered -> nominal"
    ],
    [
-    19.5,
+    20.5,
     "STUCK -> high-step"
    ],
    [
-    23.01,
-    "STUCK -> higher+clear"
+    28.01,
+    "recovered -> nominal"
+   ],
+   [
+    32.01,
+    "STUCK -> high-step"
    ]
   ]
  },
@@ -357,10 +377,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 201,
+  "disp_x": 202,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 7.8,
+  "tilt_max": 7.4,
   "fell": false,
   "stuck_events": []
  },
@@ -370,10 +390,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 324,
+  "disp_x": 294,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 10.5,
+  "tilt_max": 12.3,
   "fell": false,
   "stuck_events": [
    [
@@ -393,7 +413,7 @@
     "STUCK -> high-step"
    ],
    [
-    30.51,
+    30.01,
     "STUCK -> higher+clear"
    ]
   ]
@@ -404,9 +424,9 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 396,
+  "disp_x": 481,
   "crossed": true,
-  "t_cross": 27.7,
+  "t_cross": 25.0,
   "tilt_max": 2.1,
   "fell": false,
   "stuck_events": []
@@ -417,10 +437,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 406,
+  "disp_x": 448,
   "crossed": true,
-  "t_cross": 31.5,
-  "tilt_max": 8.5,
+  "t_cross": 29.5,
+  "tilt_max": 8.3,
   "fell": false,
   "stuck_events": [
    [
@@ -436,12 +456,12 @@
     "STUCK -> high-step"
    ],
    [
-    19.51,
-    "STUCK -> higher+clear"
+    23.51,
+    "recovered -> nominal"
    ],
    [
-    30.01,
-    "recovered -> nominal"
+    25.51,
+    "STUCK -> high-step"
    ]
   ]
  },
@@ -451,10 +471,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 345,
+  "disp_x": 307,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.8,
+  "tilt_max": 2.5,
   "fell": false,
   "stuck_events": []
  },
@@ -464,18 +484,18 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 419,
+  "disp_x": 464,
   "crossed": true,
-  "t_cross": 31.2,
-  "tilt_max": 8.7,
+  "t_cross": 27.9,
+  "tilt_max": 8.3,
   "fell": false,
   "stuck_events": [
    [
-    6.5,
+    7.0,
     "STUCK -> high-step"
    ],
    [
-    14.0,
+    14.5,
     "recovered -> nominal"
    ],
    [
@@ -483,12 +503,8 @@
     "STUCK -> high-step"
    ],
    [
-    21.01,
+    22.51,
     "STUCK -> higher+clear"
-   ],
-   [
-    31.51,
-    "recovered -> nominal"
    ]
   ]
  },
@@ -511,10 +527,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 352,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 9.6,
+  "disp_x": 378,
+  "crossed": true,
+  "t_cross": 31.3,
+  "tilt_max": 9.4,
   "fell": false,
   "stuck_events": [
    [
@@ -530,12 +546,12 @@
     "STUCK -> retreat"
    ],
    [
-    23.01,
-    "STUCK -> retreat"
+    30.01,
+    "recovered -> nominal"
    ],
    [
-    26.51,
-    "STUCK -> retreat"
+    32.51,
+    "STUCK -> high-step"
    ]
   ]
  },
@@ -545,10 +561,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 114,
+  "disp_x": 115,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 3.7,
+  "tilt_max": 3.6,
   "fell": false,
   "stuck_events": []
  },
@@ -558,10 +574,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 161,
+  "disp_x": 189,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 8.3,
+  "tilt_max": 8.2,
   "fell": false,
   "stuck_events": [
    [
@@ -583,10 +599,6 @@
    [
     24.51,
     "STUCK -> retreat"
-   ],
-   [
-    31.01,
-    "STUCK -> retreat"
    ]
   ]
  },
@@ -598,8 +610,8 @@
   "t_walk_s": 32.9,
   "disp_x": 485,
   "crossed": true,
-  "t_cross": 26.1,
-  "tilt_max": 3.8,
+  "t_cross": 25.0,
+  "tilt_max": 2.1,
   "fell": false,
   "stuck_events": []
  },
@@ -609,10 +621,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 381,
+  "disp_x": 256,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 12.6,
+  "tilt_max": 9.2,
   "fell": false,
   "stuck_events": [
    [
@@ -620,20 +632,28 @@
     "STUCK -> high-step"
    ],
    [
-    10.5,
-    "STUCK -> higher+clear"
-   ],
-   [
-    21.0,
+    14.0,
     "recovered -> nominal"
    ],
    [
-    23.5,
+    16.0,
     "STUCK -> high-step"
    ],
    [
-    28.51,
+    19.51,
     "STUCK -> higher+clear"
+   ],
+   [
+    23.51,
+    "STUCK -> retreat"
+   ],
+   [
+    27.01,
+    "STUCK -> retreat"
+   ],
+   [
+    30.51,
+    "STUCK -> retreat"
    ]
   ]
  },
@@ -643,7 +663,7 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 306,
+  "disp_x": 304,
   "crossed": false,
   "t_cross": null,
   "tilt_max": 1.9,
@@ -656,10 +676,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 419,
+  "disp_x": 430,
   "crossed": true,
-  "t_cross": 31.2,
-  "tilt_max": 11.6,
+  "t_cross": 30.5,
+  "tilt_max": 11.9,
   "fell": false,
   "stuck_events": [
    [
@@ -689,7 +709,7 @@
   "disp_x": 272,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.4,
+  "tilt_max": 2.3,
   "fell": false,
   "stuck_events": []
  },
@@ -699,7 +719,7 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 197,
+  "disp_x": 196,
   "crossed": false,
   "t_cross": null,
   "tilt_max": 6.0,

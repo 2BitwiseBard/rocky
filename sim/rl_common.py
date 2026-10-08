@@ -540,6 +540,44 @@ class DomainRandomizer:
         m.opt.gravity[:] = draws["gravity"]
 
 
+def belly_geoms(model):
+    """{geom id: name} of the torso's belly geoms (D064: rocky_model.belly_geom_names, the keel
+    tub, the hub shelf's plate box and its three post cylinders); {} on a model without them."""
+    out = {}
+    for name in rm.belly_geom_names():
+        try:
+            out[int(model.geom(name).id)] = name
+        except KeyError:
+            pass
+    return out
+
+
+def leg_of_body(model, n_legs=N_LEGS):
+    """{body id: leg index} for every body of a leg's chain (coxa, femur, tibia, the claw)."""
+    out = {}
+    for i in range(n_legs):
+        for stem in ("coxa", "femur", "tibia", "clawb"):
+            try:
+                out[int(model.body(f"{stem}{i}").id)] = i
+            except KeyError:
+                pass
+    return out
+
+
+def belly_contacts(model, data, belly, body_leg):
+    """[(belly geom name, leg, penetration mm)] of every leg geom inside a belly box right now
+    (belly = belly_geoms(model), body_leg = leg_of_body(model)). Read-only."""
+    out = []
+    for c in data.contact[:data.ncon]:
+        g1, g2 = int(c.geom1), int(c.geom2)
+        if g1 in belly or g2 in belly:
+            b, other = (g1, g2) if g1 in belly else (g2, g1)
+            leg = body_leg.get(int(model.geom_bodyid[other]))
+            if leg is not None and c.dist < 0:
+                out.append((belly[b], leg, -float(c.dist) * 1000.0))
+    return out
+
+
 def refresh_constants(model, data):
     """Recompute mass-derived constants (subtree masses, invweights) after DR
     changed masses; mj_setConst uses `data` as scratch, so call it BEFORE the
@@ -555,6 +593,23 @@ def env_note(model):
     from model_fingerprint import robot_fingerprint, fingerprint_note
     return dict(robot_fingerprint=robot_fingerprint(model), fingerprint_note=fingerprint_note(model),
                 mujoco=mujoco.__version__, params_rev=rm.params_rev())
+
+
+def action_map_mismatch(old, new):
+    """Why a recover checkpoint's actions would MEAN something else in this env, or None.
+    old: checkpoint_contract(ck); new: the env's config(). D064 maps the hip of the clamped legs
+    over [hip_floor_deg, Q_HI]: a checkpoint without the key trained on the uncut map (floor None),
+    so resuming it under the 'params' floor silently re-scales every hip action (review 9q). The
+    floor is compared, and the leg set when there is a floor."""
+    if old.get("env") != "recover" or new.get("env") != "recover":
+        return None
+    fo, fn = old.get("hip_floor_deg"), new.get("hip_floor_deg")
+    if (fo is None) != (fn is None) or (fo is not None and abs(float(fo) - float(fn)) > 1e-9):
+        return f"hip floor {fo} (checkpoint) vs {fn} (this env)"
+    if fo is not None and [int(i) for i in old.get("hip_floor_legs") or ()] != \
+            [int(i) for i in new.get("hip_floor_legs") or ()]:
+        return f"hip floor legs {old.get('hip_floor_legs')} (checkpoint) vs {new.get('hip_floor_legs')} (this env)"
+    return None
 
 
 def checkpoint_contract(ck, env_hint=None):

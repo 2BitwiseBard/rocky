@@ -16,13 +16,16 @@ sense" after any params.yaml or interface change.
 Parallel notes: modules are already independent subprocesses, so they run
 N-at-a-time (N = cpu count, min 2, or --jobs N). Each module only writes its OWN exports
 — no shared files, no races. Results print in completion order; the summary
-is the same either way. ~150 s wall on a laptop (part_hand is the long pole).
+is the same either way. ~7 min wall on the workstation, 2026-10-07 (part_bay, ~360 s, is the
+long pole; TIMEOUT_S is per module).
 
 The servo model is checked first against the reference STEP (servo_st3215:
 cad/ref/STS3215_03a.step); servo_mount and part_port_coupon are the only
 writers of servo_cup / port_coupon_* that check_printability audits;
-leg_assembly writes the posed dry-fit exports the viewer shows; and
-check_interference sweeps the yaw stage with the real servo solids.
+leg_assembly writes the posed dry-fit exports the viewer shows;
+check_interference sweeps the yaw stage with the real servo solids; and
+check_dock moves a coxa base onto the deck along stored dock paths (planar +
+3D replay) and checks the docked seats (B117: the D020 port could not dock).
 
 --derived (after a clean tree) rebuilds the outputs nothing checks but
 people look at, in this order: pentapod_preview (full-robot meshes + render),
@@ -58,12 +61,13 @@ from concurrent.futures import ThreadPoolExecutor
 MODULES = [
     "servo_st3215", "servo_mount", "part_port_coupon",
     "part_coxa", "part_femur", "part_tibia", "part_hand", "part_deck",
-    "part_panel", "part_battery", "part_avionics", "part_bench_jig",
+    "part_panel", "part_battery", "part_bay", "part_avionics", "part_bench_jig",
     "part_coupler", "part_footpad", "part_fit_ladder", "part_smallwins",
     "part_shell", "part_busboard", "part_stand", "part_tools",
     "part_clips", "part_dock", "part_servo_blank",
     "part_leg_coupons", "check_assembly",        # D046: joint coupons + joint suite
     "leg_assembly", "check_interference",
+    "check_dock",                                # 2026-10-07: the I1 dock path + docked seats
 ]
 TIMEOUT_S = 900
 
@@ -83,7 +87,10 @@ def run_one(m):
     return (m, ok, time.time() - t0, tail)
 
 
-POST = ["check_printability"]     # runs AFTER every module has exported (D038)
+# run AFTER every module has exported: check_printability (D038); check_sim_mirror (review 9q) holds
+# sim/mass_audit's pose table and gait/rocky_model's belly to the part modules and the exported
+# bay_tub / hub_shelf, so CI's cad job fails before its pipeline diff regenerates with stale mirrors
+POST = ["check_printability", "check_sim_mirror"]
 # in order, each may read the ones before it: gen_drawings reads print_estimate.json (the
 # leg batch, the grams in the title block); gen_print_pack reads print_estimate.json, the
 # drawings and fem/fem_results.json (B110: so --fem runs before all of these)
