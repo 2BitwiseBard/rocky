@@ -1,0 +1,60 @@
+=== eval-recover recover8_d064 
+checkpoint runs/recover8_d064/latest.pt @ 11,999,232 steps | env recover obs v2 (57) | reward v2 | rate limit 4.0 rad/s | ema 0.4 | trained servo random | robot fingerprint match | [D052 contract]
+[nominal (servo nominal)] policy     stood-after-handoff 0/20  pure-RL success 0/20  mean return  620.2  end tilt median  18.8°  best tilt median   6.8°  end height median 123.0 mm
+[nominal (servo nominal)] hold-pose  stood-after-handoff 1/20  pure-RL success 1/20  mean return  264.5  end tilt median  24.7°  best tilt median  17.1°  end height median  89.5 mm
+[nominal (servo nominal)] random     stood-after-handoff 0/20  pure-RL success 0/20  mean return  228.7  end tilt median   2.1°  best tilt median   0.0°  end height median  57.1 mm
+    back   : 0/6 stood, end tilt median  18.8°
+    side   : 0/7 stood, end tilt median  17.5°
+    tumble : 0/7 stood, end tilt median  19.5°
+=== eval-recover recover8_d064 --randomize
+checkpoint runs/recover8_d064/latest.pt @ 11,999,232 steps | env recover obs v2 (57) | reward v2 | rate limit 4.0 rad/s | ema 0.4 | trained servo random | robot fingerprint match | [D052 contract]
+[nominal (servo nominal)] policy     stood-after-handoff 0/20  pure-RL success 0/20  mean return  620.2  end tilt median  18.8°  best tilt median   6.8°  end height median 123.0 mm
+[nominal (servo nominal)] hold-pose  stood-after-handoff 1/20  pure-RL success 1/20  mean return  264.5  end tilt median  24.7°  best tilt median  17.1°  end height median  89.5 mm
+[nominal (servo nominal)] random     stood-after-handoff 0/20  pure-RL success 0/20  mean return  228.7  end tilt median   2.1°  best tilt median   0.0°  end height median  57.1 mm
+    back   : 0/6 stood, end tilt median  18.8°
+    side   : 0/7 stood, end tilt median  17.5°
+    tumble : 0/7 stood, end tilt median  19.5°
+[random (servo random, DR + obs noise)] policy     stood-after-handoff 12/20  pure-RL success 12/20  mean return  432.7  end tilt median   2.7°  best tilt median   8.7°  end height median 117.2 mm
+    back   : 5/9 stood, end tilt median   2.8°
+    side   : 7/9 stood, end tilt median   2.6°
+    tumble : 0/2 stood, end tilt median  15.7°
+=== eval-recover recover8_d064 --supervisor
+checkpoint runs/recover8_d064/latest.pt @ 11,999,232 steps | env recover obs v2 (57) | reward v2 | rate limit 4.0 rad/s | ema 0.4 | trained servo random | robot fingerprint match | [D052 contract]
+[nominal (servo nominal)] SUPERVISOR 14 s, policy    : stood 20/20  FALLEN declared 8/20  exits: handoff 0 stall 8 deadline 0  t_stood median 0.53 s
+    back: 6/6  side: 7/7  tumble: 7/7
+    D064: FALLEN/RIGHTED hip command min (legs 1-4) -51.05 deg, 75.9 % of FALLEN ticks clamped; belly contacts in 0/20 falls (max 0.00 mm, legs [], states [])
+[nominal (servo nominal)] SUPERVISOR 14 s, no-righter: stood 12/20  FALLEN declared 8/20  exits: handoff 0 stall 8 deadline 0  t_stood median 0.45 s
+    back: 0/6  side: 6/7  tumble: 6/7
+    D064: FALLEN/RIGHTED hip command min (legs 1-4) -33.99 deg, 0.0 % of FALLEN ticks clamped; belly contacts in 0/20 falls (max 0.00 mm, legs [], states [])
+=== eval-recover recover1 --supervisor (baseline, same model)
+[nominal (servo off)] SUPERVISOR 14 s, policy    : stood 20/20  FALLEN declared 9/20  exits: handoff 0 stall 9 deadline 0  t_stood median 0.46 s
+    back: 6/6  side: 7/7  tumble: 7/7
+    D064: FALLEN/RIGHTED hip command min (legs 1-4) -51.05 deg, 45.6 % of FALLEN ticks clamped; belly contacts in 2/20 falls (max 2.53 mm, legs [1, 4], states ['NORMAL'])
+[nominal (servo off)] SUPERVISOR 14 s, no-righter: stood 11/20  FALLEN declared 9/20  exits: handoff 0 stall 9 deadline 0  t_stood median 0.40 s
+    back: 0/6  side: 5/7  tumble: 6/7
+    D064: FALLEN/RIGHTED hip command min (legs 1-4) -33.99 deg, 0.0 % of FALLEN ticks clamped; belly contacts in 2/20 falls (max 2.53 mm, legs [1, 4], states ['NORMAL'])
+=== audit_righter 200 seeds
+  righter = PolicyRighter(ckpt, model, data, torso, fids)
+  probe = PolicyRighter(ck, model, mujoco.MjData(model), 0, [])
+shove 40 N peak half-sine x 0.4 s at the rim, 5 seeds
+checkpoint                         rate  fell  upright  by-policy  t_right  pinned  rev/s  |move|  track  ctrl rev/s  qvel flip/s  servo
+runs/recover8_d064/latest.pt        4.0   5/5   5/5     0/5       4.7    0.31    2.5   1.59°   4.8°        2.5          3.4  nominal   landed at tilt [180, 180, 180, 178, 180]°, FALLEN entries [1, 1, 1, 1, 1], ramp reasons ['stall', 'stall', 'stall', 'stall', 'stall']
+                                   D064: FALLEN/RIGHTED hip command min (legs 1-4) -51.05 deg; belly contact steps [0, 0, 0, 0, 0], max 0.00 mm (none)
+runs/recover5_v3_warm/latest.pt     3.0   5/5   5/5     0/5       5.2    0.55    3.9   1.97°   5.0°        4.6          3.9  nominal   landed at tilt [180, 180, 180, 178, 180]°, FALLEN entries [1, 1, 1, 1, 1], ramp reasons ['stall', 'stall', 'stall', 'stall', 'stall']
+                                   D064: FALLEN/RIGHTED hip command min (legs 1-4) -51.05 deg; belly contact steps [0, 0, 0, 0, 0], max 0.00 mm (none)
+=== dashboard
+run                env      rew  rate obs servo        steps  return   len   ent  flags                      eval / note
+_d052_launcher_smoke gait     v1    5.0  v1 off            128     nan   nan   6.3  legacy obs, unbudgeted cmd, unslewed cmd 
+_recover8_d064_aborted_10min_launch recover  v2    4.0  v2 random      32,768   332.0   300   6.3                             
+cmd_sample3        gait     v1         v1 off      6,999,040   224.1   400   1.6  legacy obs, unbudgeted cmd, unslewed cmd walk under full DR: same conclusion (pre-D052)
+recover1           recover  v1    5.0  v1 off      1,999,872   354.2   300  17.8  legacy obs, exceeds servo  stood 4/20 legacy, 0/20 handoff_ok; system 20/20 vs 11/20 no-righter — SHIPPED
+recover5_v3_warm   recover  v3    3.0  v1 off      4,999,168   483.4   262  13.8  legacy obs                 stood 3/20 legacy, 0/20 hw; system 20/20 — smoothest yet: 55 % pinned, 3.6 rev/s (D048)
+recover6_d052      recover  v2    4.0  v2 random   2,998,272   267.9   295   8.3                             D052 obs v2: 0/20 hw handoff; system 11/20 = no-righter 11/20 — NEGATIVE (B34)
+recover7_d063_curriculum recover  v2    4.0  v2 random  11,999,232   329.5   280  13.8                             B34 side->back curriculum, 12 M on 87215110e9c4: 3/20 hw (side only), system 11/20 = no-righter, 0 handoff exits — NEGATIVE
+recover8_d064      recover  v2    4.0  v2 random  11,999,232   456.4   236  13.8                             
+robust_fwd2        gait     v1         v1 off      2,999,296   228.6   400   1.5  legacy obs, unbudgeted cmd, unslewed cmd D052: 245 mm vs bare gait 320 (servo on: 236 vs 298) — loses (D031)
+smoke_recover7_d063 recover  v2    4.0  v2 random       8,192   261.7   300   6.3                             
+smoke_recover7_sps recover  v2    4.0  v2 random      40,960   184.2   300   6.2                             
+smoke_recover8_d064 recover  v2    4.0  v2 random      18,432   264.7   300   6.3                             
+wrote /home/bitwisebard/Development/rocky/sim/out/rl_curves.png
+DONE

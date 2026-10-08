@@ -194,10 +194,25 @@ review fixes), c0947bf (the re-run records), and this commit (the docs: `docs/CO
 `docs/BUY_AND_PRINT_ORDER.md` new; the proposal, the 09-22 review, the perception plan and
 sessions 8e–9k archived; ROBOT_AS_DATA and SCALE_UP_NOTES merged into DESIGN_CHANGE_GUIDE §9 / §10).
 
+**Same day, the retrain (B146 → `recover8_d064`, RL_GUIDE §4).** The owner asked for the RL to
+run. Cockpit started on the new model (unit `rocky-cockpit`), then a 20 k-step smoke run, then the
+`recover7` recipe for 12 M steps as unit `rocky-train-recover8` (08:26 → 10:06, ~2.0 k steps/s
+beside the cockpit; final return 456 vs `recover7`'s 330, episode length 236 of 300). The ladder:
+raw policy, nominal servo **0/20** (it stands up tilted ~19° and never settles inside the hand-off
+hold); raw with the randomised servo + DR + noise **12/20** (back 5/9, side 7/9); the system on the
+nominal servo **20/20** (no-righter 12/20), 8 falls, all 8 exits on the stall ramp, **0 belly
+contacts** (`recover1` 2/20); the system with the randomised servo **18/20** (no-righter 8/20), 12
+falls, **3 hand-off exits**, 9 stall — the first hand-offs under the supervisor on the D052
+contract (`recover1` on the same model and servo: 19/20, 0 hand-offs, t_stood 7.88 s vs 5.44).
+Shove audit beside `recover5_v3_warm`: 31 % pinned vs 55 %, 2.5 rev/s vs 3.9, upright 5/5 by the
+ramp either way. Shipped as `righter.default_ckpt()`'s first choice, `recover1` the fallback; the
+bench's real servo latency decides which servo model was right (B34 stays open for the back
+landings and the nominal-servo tilt).
+
 **Next:** the coxa base option round (an outboard hold-down, a deeper rib past the sockets, a
 thicker plate, screw preload as a design load; each with `check_dock` and the FEM, B139); print
-the port coupons, then file `print.seat_fit` and measure an insert's pull-out and the knob preload (B118); the
-righter retrain on the D064 model (B146); `run_cliff`'s tip criterion (B140).
+the port coupons, then file `print.seat_fit` and measure an insert's pull-out and the knob preload
+(B118); `run_cliff`'s tip criterion (B140); the righter's back landings and nominal-servo tilt (B34).
 
 ---
 

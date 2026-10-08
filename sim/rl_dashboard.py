@@ -40,6 +40,10 @@ RESULTS = {
     "recover6_d052": "D052 obs v2: 0/20 hw handoff; system 11/20 = no-righter 11/20 — NEGATIVE (B34)",
     "recover7_d063_curriculum": "B34 side->back curriculum, 12 M on 87215110e9c4: 3/20 hw (side only), system 11/20 "
                                 "= no-righter, 0 handoff exits — NEGATIVE",
+    "recover8_d064": "D064 model (belly, real inertial, hip floor -51.05 legs 1-4, belly-free drops), same recipe, "
+                     "12 M on 965f4f70e5d1: servo random 12/20 raw, system 18/20 with 3 handoff exits of 12 "
+                     "(recover1 0 of 12); servo nominal 0/20 raw (ends tilted ~19 deg), system 20/20 by the ramp, "
+                     "0 belly contacts; shove audit pinned 0.31 vs recover5 0.55 — SHIPPED (first handoffs)",
 }
 
 

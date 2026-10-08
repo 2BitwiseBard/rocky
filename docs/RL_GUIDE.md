@@ -444,6 +444,7 @@ and the supervisor clamps them.
 | `recover5_v3_warm` | recover1 → v3 capped, 3 rad/s | 5 M | 483 | — / 4/20 | 4/20 | stood **1/20** legacy (3/20 on D063) · **0/20** hw · system 20/20 (11/20; the clamp clips 64.8 % of FALLEN ticks) · jitter: 57 % pinned, 3.9 rev/s, 2.01°/tick, ctrl 4.5 rev/s (4.5 on D063, 4.4 before it) · on `5a32…`: servo 0/20, rand 0/20, pure-RL 0/20 | legacy. D048 negative on the handoff (4 < 7) but the smoothest righter so far (pre-D052: 58 % pinned, 7 reversals/s, 2.1°/tick); on D052 its pure-RL 4/20 is gone |
 | `recover6_d052` | recover v2, obs v2, servo random, 4.0 rad/s | 3 M | 268 | — | — | **0/20** hw (end tilt median 9.9° [7.5°]) · system 11/20 = no-righter 11/20 · jitter: 69 % pinned, ctrl 9.3 rev/s; in the shove demo it never stood (0/5, FALLEN re-entered 5–6× each) | B34's first obs-v2 run (CPU, 25 min; nominal eval mean return 421 at training, 423 on the current model): the servo model in the loop, IMU/encoder/switch noise, no torso height. It lowers the end tilt but earns no handoff, and the supervisor does no better with it than without. NEGATIVE; `recover1` stays shipped |
 | `recover7_d063_curriculum` | recover v2, obs v2, servo random, 4.0 rad/s, `--curriculum side-back` | 12 M | 330 | — | — | **5/20** hw (back 0/6, side 4/7, tumble 1/7; mean return 469.5; 3/20 on D063, its own model, 2026-09-30) · rand 6/20 (side 4/9, tumble 2/2; 4/20) · system **11/20 = no-righter 11/20** (back 0/6, side 5/7, tumble 6/7), 9 declared falls: **0 handoff**, 9 stall, 0 deadline exits · jitter (beside `recover5_v3_warm`, 40 N, 5 seeds): 14 % pinned, 2.7 rev/s, 0.82°/tick, ctrl 2.7 rev/s (5 %, 2.1, 0.29, 1.9 on D063; `recover5_v3_warm` 4.5), but it lands on its back every time and never stands (0/5 upright, FALLEN entered 6× each, leg 0 on the shelf in 4 of 5, ≤ 2.12 mm; `recover5_v3_warm` 5/5 upright, by the ramp) · fingerprint mismatch | B34's curriculum run (CPU, unit `rocky-train-recover7`, 10:46 → 12:28, 1.96 k steps/s averaged; `reach` 1 from 9.0 M steps): the `recover6_d052` recipe + side → back (no landing past 110° for the first 1.8 M steps, back landings phased in by 9 M, the full fall mix for the last 3 M = `recover6_d052`'s whole budget). One knob against `recover6_d052` besides the budget (4× longer, so a slower learning-rate anneal) and the robot (D063's `87215110e9c4`, not `ceb63a1254c3`). The first handoffs on the D052 contract, from side landings (and one tumble on D064), but none survives into the supervisor (every declared fall exits on the stall ramp, and the ramp stands no more than with no righter), and the back is still 0. Its 15 log σ sit at the `--log-std-max -0.5` cap by 6 M steps and stay there (entropy 13.69 at 3.6 M, 13.78 = the cap from 6 M; `recover6_d052` ended at −0.80 … −0.94): the D045 inflation, held by the cap. Misses the rung 9 bar on the handoff exit. NEGATIVE; `recover1` stays shipped |
+| **`recover8_d064`** | recover v2, obs v2, servo random, 4.0 rad/s, `--curriculum side-back`, hip floor −51.05 on legs 1–4, belly-free drops (D064 defaults) | 12 M | 456 | — | — | **0/20** hw on the nominal servo (end tilt median 18.8° [6.8°], end height 123 mm: it stands up tilted and never settles inside the hand-off hold; hold-pose 1/20, random 0/20) · **rand 12/20** (back 5/9, side 7/9, tumble 0/2; end tilt median 2.7°) · system nominal **20/20** (no-righter 12/20), 8 declared falls: 0 handoff, 8 stall, 0 deadline, t_stood median 0.53 s, the clamp clips 75.9 % of FALLEN ticks, **belly contacts 0/20** (recover1 2/20) · system with servo random + DR + noise **18/20** (no-righter 8/20), 12 declared falls: **3 handoff**, 9 stall, 0 deadline exits, t_stood median 5.44 s (recover1 on the same model and servo: 19/20, 0 handoff, 12 stall, 7.88 s) · jitter (beside `recover5_v3_warm`, 40 N, 5 seeds, servo nominal): 31 % pinned, 2.5 rev/s, 1.59°/tick, ctrl 2.5 rev/s, track 4.8°, 5/5 upright by the stall ramp (t_right 4.7 s; `recover5_v3_warm` 55 % pinned, 3.9 rev/s, 5.2 s) | The first run on the D064 model `965f4f70e5d1` (unit `rocky-train-recover8`, 2026-10-08 08:26 → 10:06, ~2.0 k steps/s beside a running cockpit; `reach` 1 from 9 M steps; the smoke run `smoke_recover8_d064` first): the `recover7` recipe, nothing else changed but the robot and the D064 defaults. **The first hand-offs under the supervisor** on the D052 contract, with the servo model that carries latency (10–40 ms) and a finite rate: the realistic one. With the latency-free nominal servo it gets up but stands tilted ~19° and the 3 s ramp finishes the job, as for every righter before it; the stall ramp still stands the system 20/20 and the policy no longer touches the belly. Back landings are its weak side (5/9 raw). POSITIVE on the hand-off bar, under the randomised servo only: **SHIPPED** as `righter.default_ckpt()`'s first choice (`recover1` stays as the fallback); the bench's real latency decides which servo model was right |
 
 **What it means.** The PPO infrastructure works and reproduces; the
 learned policies are marginal. Self-righting is a hybrid: the policy does
@@ -465,9 +466,10 @@ no better than no righter (system 11/20; `recover7_d063_curriculum`'s back
 landings 0/6 where `recover1`'s are 6/6). The v3
 runs showed the trade: the smoothness cost halves the staircase but costs
 handoffs at this budget. With the servo in the loop the staircase mostly
-disappears. `recover1` stays the
-installed righter because it has been through the demos, not because it
-wins anything on D052.
+disappears. `recover8_d064` (2026-10-08, §4) is the installed righter: the
+first to earn hand-offs under the supervisor, 3 of 12 falls with the
+latency-carrying servo model (none with the latency-free one, where the stall
+ramp still stands the system 20/20). `recover1` is the fallback.
 
 ## 5. The experiment ladder
 
@@ -477,12 +479,14 @@ In order, each teaching one thing:
    `recover6_d052`, 3 M steps, negative (§4), then B34's side → back
    curriculum (§1) as `recover7_d063_curriculum` (12 M steps, 2026-09-30),
    negative too: 3/20 hw from side landings, 0 `handoff` exits under the
-   supervisor, back 0/6 (§4). **The next one is the first on the D064 model**
-   (B146: the belly, the real torso inertial, the hip floor, belly-free drops: all
-   defaults, so a fresh run needs no new flag); a suggested name is
-   `recover8_d064` (`./rocky.sh train-recover recover8_d064 --curriculum
-   side-back --total-steps 12000000`, the `recover7` recipe, or v3 at 10 M
-   steps), then `thermal_heat0` warm starts. Then the first obs-v2 walker:
+   supervisor, back 0/6 (§4). **Done on the D064 model as `recover8_d064`**
+   (2026-10-08: `./rocky.sh train-recover recover8_d064 --curriculum
+   side-back --total-steps 12000000`, the `recover7` recipe with the D064
+   defaults: the belly, the real torso inertial, the hip floor, belly-free
+   drops): the first hand-offs under the supervisor, with the randomised
+   servo (§4), shipped. Next for the righter: the back landings (5/9 raw),
+   and why the nominal servo leaves it tilted ~19° (a longer hold, or train
+   with latency 0 in the range); then `thermal_heat0` warm starts. Then the first obs-v2 walker:
    `./rocky.sh train-walk walk1` (budgeted and slewed commands, rim
    shoves) and `eval-walk walk1`; every walker on disk is zeroed by the
    D052 envelope. The gait env slews the command since B34 (§1).

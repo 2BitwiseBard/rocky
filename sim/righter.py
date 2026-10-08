@@ -52,9 +52,13 @@ def foot_contacts(model, data, fids):
 
 
 def default_ckpt():
-    """The shipped righter: sim/runs/recover1 (D045), None when it is absent.
-    Add a newer run here only when an eval says it earned the handoff."""
-    for name in ("recover1",):
+    """The shipped righter: sim/runs/recover8_d064 (2026-10-08, the first policy trained on the
+    D064 model: belly, real torso inertial, hip floor), recover1 (D045) when it is absent. Add a
+    newer run here only when an eval says it earned the handoff: recover8 did, 3 handoff exits in
+    12 falls under the supervisor with the randomised servo (latency 10-40 ms, the realistic one;
+    recover1 0 in 12), 12/20 raw, 0 belly contacts, pinned 0.31 vs recover5's 0.55; under the
+    nominal (latency-free) servo it ends tilted and the 3 s stall ramp still stands it 20/20."""
+    for name in ("recover8_d064", "recover1"):
         p = os.path.join(HERE, "runs", name, "latest.pt")
         if os.path.exists(p):
             return p
