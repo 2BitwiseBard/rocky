@@ -1,11 +1,11 @@
 {
  "masses_g": {
-  "torso": 1527.6,
+  "torso": 1555.2,
   "coxa": 83.9,
   "femur": 42.7,
   "tibia": 131.0,
   "hand": 38.6,
-  "robot": 2815.6
+  "robot": 2843.2
  },
  "stall_nm": {
   "ST3215": 2.94,
@@ -17,8 +17,8 @@
    "note": "nominal stance, W/5 per foot",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.166,
-    "knee": 0.269
+    "hip": 0.167,
+    "knee": 0.272
    },
    "margin_pct": {
     "yaw": {
@@ -26,12 +26,12 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 5.6,
+     "ST3215": 5.7,
      "STS3250": 3.4
     },
     "knee": {
-     "ST3215": 9.1,
-     "STS3250": 5.5
+     "ST3215": 9.3,
+     "STS3250": 5.6
     }
    }
   },
@@ -40,8 +40,8 @@
    "note": "wave-gait stance share, W/4",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.207,
-    "knee": 0.337
+    "hip": 0.209,
+    "knee": 0.34
    },
    "margin_pct": {
     "yaw": {
@@ -49,11 +49,11 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 7.0,
-     "STS3250": 4.2
+     "ST3215": 7.1,
+     "STS3250": 4.3
     },
     "knee": {
-     "ST3215": 11.5,
+     "ST3215": 11.6,
      "STS3250": 6.9
     }
    }
@@ -63,8 +63,8 @@
    "note": "two legs raised, W/3 per planted foot",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.276,
-    "knee": 0.449
+    "hip": 0.279,
+    "knee": 0.453
    },
    "margin_pct": {
     "yaw": {
@@ -72,11 +72,11 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 9.4,
-     "STS3250": 5.6
+     "ST3215": 9.5,
+     "STS3250": 5.7
     },
     "knee": {
-     "ST3215": 15.3,
+     "ST3215": 15.4,
      "STS3250": 9.2
     }
    }
@@ -132,8 +132,8 @@
    "note": "crouched geometry, W/2 through one leg",
    "tau": {
     "yaw": 0.0,
-    "hip": 0.224,
-    "knee": 1.442
+    "hip": 0.227,
+    "knee": 1.456
    },
    "margin_pct": {
     "yaw": {
@@ -141,12 +141,12 @@
      "STS3250": 0.0
     },
     "hip": {
-     "ST3215": 7.6,
+     "ST3215": 7.7,
      "STS3250": 4.6
     },
     "knee": {
-     "ST3215": 49.0,
-     "STS3250": 29.4
+     "ST3215": 49.5,
+     "STS3250": 29.7
     }
    }
   }
@@ -161,10 +161,10 @@
    "st3250": "OK"
   },
   "knee": {
-   "tau_nm": 1.442,
+   "tau_nm": 1.456,
    "case": "selfright_push",
-   "st3215_pct": 49.0,
-   "st3250_pct": 29.4,
+   "st3215_pct": 49.5,
+   "st3250_pct": 29.7,
    "st3215": "WARM",
    "st3250": "OK"
   }

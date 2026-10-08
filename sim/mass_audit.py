@@ -66,11 +66,17 @@ OUT = os.path.join(CAD, "out")
 DECK_TOP_Z = rm.DECK_BOT_Z_MM + 6.0   # -4: the 6 deck (B27) from -10; part_deck models it 0..6
 TRAY_GAP_DRAWN = 3.4                   # part_avionics: the rails' channel holds the tray plate 3.4
                                        # over the deck top as drawn; + tray_lift (params) since D064
+TRAY_REST_DROP = 0.3                   # part_avionics.TRAY_Z = SEAT_Z - FIT: the tray RESTS with its
+                                       # lugs on the channel floor (plate 5.1 over the deck top, its
+                                       # gravity pose and its latched one), 0.3 under the centred 5.4
+TONGUE_Y = float(AT["plate_l"]) / 2 + 8.0   # part_avionics.TONGUE_Y 43: the latch axis (tray frame);
+                                            # tray_latch_boss is exported in the tongue's frame
 TRAY_T = float(AT["plate_t"])
 RAIL_POSE_X = float(AT["plate_w"]) / 2 + 5.3   # part_avionics.RAIL_POSE_X: rail block centre off
                                                # the tray centre (0.3 clearance + the 10 block / 2)
 PI_BOARD_DX = 10.0                     # part_avionics: the Pi's centre off its hole pattern, USB end
-SLED_RAIL_H = 2.25                     # params bay_h note: tub floor -> the integral rail 2.25 -> sled
+SLED_RAIL_H = 2.10                     # part_bay.SLED_Z0 - floor: part_battery's 4.0 rail into the
+                                       # sled's 1.9 groove, the rest lift part_bay measures (was 2.25)
 SLED_T = 3.0                           # part_battery.SLED_T: the sled floor the pack sits on
 YAW_HUB_Z1 = 1.3 + 6.0                 # cad/leg_frame: fork lower hub 1.3 over the plate, 6 thick
 STATIONS = rm.stations_deg()
@@ -106,6 +112,8 @@ LIDAR_BOX = (54.0, 46.3, 35.0)                 # D500 (STL-19P datasheet, VERIFY
 # lid ~20, shelf ~25); the poses are the params boxes. PROVISIONAL: never final numbers.
 PROVISIONAL_G = {"bay_tub": 52.0, "bay_door": 4.0, "bay_lid": 20.0, "hub_shelf": 25.0}
 NEW_BODY_FRAME_PARTS = tuple(PROVISIONAL_G)    # the audit checks each centroid lands in its params box
+# the material each prints in (cad/gen_print_pack.py PARTS): the bay parts are PETG, the shelf PLA
+NEW_PART_RHO = {"bay_tub": PETG, "bay_door": PETG, "bay_lid": PETG, "hub_shelf": PLA}
 
 
 def _ry(deg):
@@ -279,13 +287,22 @@ def torso_items(allow_missing=False):
     items.append(stl_item("shell_cap", "shell_cap", PETG, [tf()], note="body frame"))
     cap_top = stl_bounds(os.path.join(OUT, "shell_cap.stl"))[1][2]
 
-    # the avionics tray (I4, pick 7 / 11): tray_xy, turned tray_rot_deg, tray_lift over the drawn 3.4
+    # the avionics tray (I4, pick 7 / 11): tray_xy, turned tray_rot_deg, tray_lift over the drawn
+    # 3.4, resting (part_avionics.TRAY_Z: the lugs on the channel floor, 0.3 under the centred pose)
     tx, ty = (float(v) for v in AT["tray_xy"])
     Rt = rz(float(AT["tray_rot_deg"]))
-    tz0 = DECK_TOP_Z + TRAY_GAP_DRAWN + float(AT["tray_lift"])
+    tz0 = DECK_TOP_Z + TRAY_GAP_DRAWN + float(AT["tray_lift"]) - TRAY_REST_DROP
     tray = tf(Rt, (tx, ty, tz0))
     items.append(stl_item("avionics_tray", "avionics_tray", PLA, [tray],
                           note=f"({tx:g}, {ty:g}) rot {AT['tray_rot_deg']:g}, plate z {tz0:.1f}"))
+    # its I3 boss, glued under the tongue (exported in part_avionics.tongue_tf()'s frame: on the
+    # latch axis, z 0 its underside = the deck top with the tray resting)
+    boss_h = tz0 - DECK_TOP_Z                              # part_avionics.BOSS_H = TRAY_Z
+    by_ = sorted((Rt @ np.array([0.0, yy, 0.0]))[1] + ty for yy in (28.0, TONGUE_Y + 8.0))
+    items.append(stl_item("tray_latch_boss", "tray_latch_boss", PLA,
+                          [compose(tray, tf(t=(0.0, TONGUE_Y, -boss_h)))],
+                          expect=((tx - 15.0, tx + 15.0), tuple(by_), (DECK_TOP_Z, tz0)),
+                          note=f"under the tongue, z {DECK_TOP_Z:g}..{tz0:.1f}"))
     rails = [compose(tf(Rt, (tx, ty, DECK_TOP_Z)), tf(rz(a), rz(a) @ np.array([RAIL_POSE_X, 0, 0])))
              for a in (0.0, 180.0)]
     rails = [compose(r, tf(rz(90.0))) for r in rails]      # the block's length along the rails
@@ -339,7 +356,7 @@ def torso_items(allow_missing=False):
     for stem in NEW_BODY_FRAME_PARTS:
         try:
             R, t = NEW_PART_POSE[stem]
-            items.append(stl_item(stem, stem, PLA, [tf(R, t)], expect=expect[stem],
+            items.append(stl_item(stem, stem, NEW_PART_RHO[stem], [tf(R, t)], expect=expect[stem],
                                   note="body frame" if R is None else "print frame -> body (DOOR_PRINT)"))
         except MissingSTL:
             if not allow_missing:

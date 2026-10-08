@@ -46,7 +46,7 @@ What a Report judges (every threshold comes from gait/rocky_model.py):
   SELF_CONTACT with a MuJoCo model: robot-on-robot penetration > 1 mm with
                the body lifted clear of the floor (every 3rd sample). D064:
                a leg inside the belly (the keel tub, the hub shelf) counts,
-               the pair naming belly_tub / belly_shelf (legs 1-4 folded with
+               the pair naming belly_tub / belly_shelf[_post<k>] (legs 1-4 folded with
                hip -70..-45 and knee -130..-90 toward the tub, B97).
   THERMAL      warning: a joint spends > 30 % of the samples above 0.6x its
                speed class limit (sustained speed = sustained current).
@@ -402,8 +402,9 @@ def planted_q(g=None, offset=(0.0, 0.0, 0.0)) -> np.ndarray:
 class _SelfContact:
     """Robot-on-robot penetration with the body hung 1 m in the air.
 
-    D064 (pick 13, B97): the torso carries the belly (belly_tub, belly_shelf), so a leg folded
-    under the keel is a SELF_CONTACT like any other, named by the belly GEOM instead of
+    D064 (pick 13, B97): the torso carries the belly (belly_tub, belly_shelf + its three
+    belly_shelf_post<k> columns), so a leg folded under the keel is a SELF_CONTACT like any
+    other, named by the belly GEOM instead of
     'torso' (a cylinder hit stays 'torso'). One code, not a new BELLY_CONTACT: every gate that
     already refuses SELF_CONTACT (the gesture audit, the cockpit studio, keyframe saves through
     check_spec) now refuses the belly with no change of its own; the name says which it was."""
@@ -415,7 +416,7 @@ class _SelfContact:
         self.d = mujoco.MjData(model)
         self.torso = model.body("torso").id
         self.belly = {}
-        for name in rm.belly_boxes():
+        for name in rm.belly_geom_names():
             try:
                 self.belly[int(model.geom(name).id)] = name
             except KeyError:                         # a pre-D064 model: no belly geoms

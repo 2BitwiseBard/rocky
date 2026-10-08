@@ -96,16 +96,15 @@ STAR_POST_D, NODE_POST_D = 6.4, 6.4           # 1.8 of wall round the Ø2.8 tap:
                                               # from its edges, the PDB's 2.75: the boss stands 0.2 /
                                               # 0.45 past the board's edge, under it
 M25_TAP = 2.05                                # M2.5 thread-forming, as part_avionics' Pi standoffs
-ADAPTER_HOLES = (37.0, 28.0)                  # Waveshare Bus Servo Adapter (A): Ø2.5 on 37 x 28
-                                              # (part_avionics' BOARDS comment; not in BOARDS: B108).
-                                              # To import from BOARDS once it carries holes / cap_l
+ADAPTER_HOLES = BOARDS["bus_adapter"]["holes"]  # Waveshare Bus Servo Adapter (A): Ø2.5 on 37 x 28
+                                              # (part_avionics.BOARDS is the one copy, B108)
 SPACER_D = 5.0                                # bought round nylon spacer, ID >= 2.6, 2.5 long
 TIE_W = 3.6                                   # part_avionics' 3.6 mm zip tie (TIE_T thick)
 TIE_SLOT = (TIE_W + 2 * FIT, TIE_T + 2 * FIT)  # 4.2 along the band's width x 1.8
 GROOVE_D = TIE_T + 0.2                        # the buck's tie sunk under the star's header tails
-BUCK_CAP_L = 10.0                             # its 1000 uF can (Ø10 x 16) lying beside the D24V50F5
-                                              # (ESTIMATE, the part bought): 17.8 + 10 = 27.8. To
-                                              # import from BOARDS once it carries holes / cap_l
+BUCK_CAP_L = BOARDS["buck_5v"]["cap_l"]      # its 1000 uF can (Ø10 x 16) lying beside the D24V50F5
+                                              # (ESTIMATE, the part bought): 17.8 + 10 = 27.8, from
+                                              # part_avionics.BOARDS
 # the adapter's H2 (UART, pick 14): where it sits on the board is not in the repo (no STEP; the
 # prep's 30.42 'headroom' is the Pi's GPIO header on the tray, q_usb/s4_other.py). Face-down, a
 # STRAIGHT 2.54 Dupont on a vertical header hangs header base + housing under the component face

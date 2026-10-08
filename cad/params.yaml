@@ -12,10 +12,11 @@ meta:
   params_rev: D064       # bump when a physics-relevant number changes (sim/model_fingerprint notes it).
                          # D064 (2026-10-07, the owner's body-layout picks): the keel tub, the hub
                          # shelf and the righter's hip clamp enter params, and the model: build_mjcf
-                         # carries the belly (belly_tub + belly_shelf, rocky_model.belly_boxes) and
-                         # the torso's <inertial> from sim/mass_budget.json (mass_audit's pose
-                         # table), so the robot hash moved off 87215110e9c4 (c10b970d2bb2 on the
-                         # provisional budget; final once mass_audit weighs the four new STLs)
+                         # carries the belly (belly_tub + the shelf's plate box belly_shelf + its three
+                         # Ø14 post columns, rocky_model.belly_boxes / belly_posts) and the torso's
+                         # <inertial> from sim/mass_budget.json (mass_audit's pose table, every part
+                         # weighed from its STL), so the robot hash moved 87215110e9c4 -> deae868522cc
+                         # (c10b970d2bb2 was the provisional budget on the shelf's hull box)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -114,11 +115,12 @@ reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults(
   righter_clamp_legs: [1, 2, 3, 4]   # pick 13: the legs righter_hip_min_deg applies to (rocky_model.
                          # righter_clamp_legs reads it; this is its default). Leg 0 is out by the pick,
                          # and with recover1 it touched the sim's shelf HULL in 20/20 falls (max 2.93,
-                         # at y 70-71 where the real plate ends at 64.3): that hull over-states the
-                         # shelf (one box from bottom_z, grown north by the (26, 64) post pad) and is
-                         # being replaced by the plate box + the pad columns. Re-measure leg 0 there
-                         # before widening the set (its zero-margin hip: -57.55 on the hull, -62.5
-                         # on plate + pad)
+                         # at y 70-71 where the real plate ends at 64.3): that hull over-stated the
+                         # shelf (one box from bottom_z, grown north by the (26, 64) post pad); the
+                         # D064 integration replaced it by the plate box + the three pad columns
+                         # (rocky_model.belly_boxes / belly_posts). Re-measure leg 0 there before
+                         # widening the set (its zero-margin hip: -57.55 on the hull, -62.5 on
+                         # plate + pad)
 
 sensing:
   foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold

@@ -6,6 +6,7 @@ The tub's sums are cad/iface.bay_tub_extent()'s; the sim cannot import it
 values the owner's picks give today.
 """
 import json
+import math
 import os
 import sys
 
@@ -51,33 +52,59 @@ def test_belly_tub_is_the_params_sum():
     assert rm.bay_tub_extent_mm() == {"x": tub[0], "y": tub[1], "z": tub[2]}
 
 
-def test_belly_shelf_is_the_params_envelope_grown_to_the_post_pads():
+def test_belly_shelf_is_the_plate_box_and_the_post_columns():
+    """The D064 integration: the shelf is its PLATE box (params x / y, bottom_z to the deck's
+    underside) and three Ø14 columns at the posts (the pads, plate underside to the deck). The
+    one hull box it replaces (grown north to y 71 by the (26, 64) pad) was where leg 0 touched
+    in 20/20 recover1 falls, x -30..-24, y 70-71: nothing of the real shelf is there."""
     hs = rm.params()["interfaces"]["hub_shelf"]
-    r = hs["post_d"] / 2 + rm.SHELF_PAD_WALL_MM            # the Ø14 pads
-    want_x = (min(hs["x"][0], *[p[0] - r for p in hs["posts"]]), max(hs["x"][1], *[p[0] + r for p in hs["posts"]]))
-    want_y = (min(hs["y"][0], *[p[1] - r for p in hs["posts"]]), max(hs["y"][1], *[p[1] + r for p in hs["posts"]]))
     shelf = rm.belly_boxes()["belly_shelf"]
-    assert flat(shelf) == pytest.approx([*want_x, *want_y, hs["bottom_z"], -10.0])
-    assert flat(shelf) == pytest.approx([-57.0, 57.0, 12.2, 71.0, -54.4, -10.0])
+    assert flat(shelf) == pytest.approx([*hs["x"], *hs["y"], hs["bottom_z"], -10.0])
+    assert flat(shelf) == pytest.approx([-56.2, 53.95, 12.2, 64.3, -54.4, -10.0])
+    r = hs["post_d"] / 2 + rm.SHELF_PAD_WALL_MM            # the Ø14 pads
+    posts = rm.belly_posts()
+    assert list(posts) == [f"belly_shelf_post{k}" for k in range(len(hs["posts"]))]
+    for ((x, y), rr, (z0, z1)), p in zip(posts.values(), hs["posts"]):
+        assert (x, y) == pytest.approx(tuple(p)) and rr == pytest.approx(r) == pytest.approx(7.0)
+        assert (z0, z1) == pytest.approx((hs["plate_top_z"] - hs["plate_t"], -10.0))
+    assert rm.belly_geom_names() == ("belly_tub", "belly_shelf", *posts)
+    # the hull (mass_audit's centroid gate) still bounds every shelf geom, and is what they replace
+    hull = rm.hub_shelf_extent_mm()
+    assert flat((hull["x"], hull["y"], hull["z"])) == pytest.approx([-57.0, 57.0, 12.2, 71.0, -54.4, -10.0])
+    for (x, y), rr, (z0, z1) in posts.values():
+        assert hull["x"][0] <= x - rr and x + rr <= hull["x"][1] + 1e-9
+        assert hull["y"][0] <= y - rr and y + rr <= hull["y"][1] + 1e-9
+    # where leg 0 touched the hull (x -30..-24, y 70-71) is outside every shelf geom now
+    for x in (-30.0, -27.0, -24.0):
+        for y in (70.0, 71.0):
+            assert not (shelf[0][0] <= x <= shelf[0][1] and shelf[1][0] <= y <= shelf[1][1])
+            assert all(math.hypot(x - px, y - py) > rr for (px, py), rr, _ in posts.values())
     # the tub and the shelf do not overlap (the shelf is north of the tub's 7.4)
     assert shelf[1][0] > rm.belly_boxes()["belly_tub"][1][1]
+    assert all(y - rr > rm.belly_boxes()["belly_tub"][1][1] for (_, y), rr, _ in posts.values())
 
 
 def test_mjcf_belly_geoms_are_the_boxes(model):
     t = model.body("torso").id
     floor = model.geom("floor").id
-    for name, spans in rm.belly_boxes().items():
+    geoms = [(n, mujoco.mjtGeom.mjGEOM_BOX, [(a + b) / 2 / 1000 for a, b in spans],
+              [(b - a) / 2 / 1000 for a, b in spans]) for n, spans in rm.belly_boxes().items()]
+    geoms += [(n, mujoco.mjtGeom.mjGEOM_CYLINDER, [x / 1000, y / 1000, (z0 + z1) / 2 / 1000],
+               [r / 1000, (z1 - z0) / 2 / 1000]) for n, ((x, y), r, (z0, z1)) in rm.belly_posts().items()]
+    assert len(geoms) == 5
+    for name, typ, c, h in geoms:
         g = model.geom(name)
         assert model.geom_bodyid[g.id] == t
-        assert model.geom_type[g.id] == mujoco.mjtGeom.mjGEOM_BOX
-        c = [(a + b) / 2 / 1000 for a, b in spans]
-        h = [(b - a) / 2 / 1000 for a, b in spans]
-        assert np.allclose(model.geom_pos[g.id], c, atol=1e-8) and np.allclose(model.geom_size[g.id], h, atol=1e-8)
+        assert model.geom_type[g.id] == typ
+        assert np.allclose(model.geom_pos[g.id], c, atol=1e-8)
+        assert np.allclose(model.geom_size[g.id][:len(h)], h, atol=1e-8)
         assert np.allclose(model.geom_quat[g.id], [1, 0, 0, 0])
         # default contact: it collides with the floor and with the legs
         assert model.geom_contype[g.id] == 1 and model.geom_conaffinity[g.id] == 1
         assert model.geom_condim[g.id] == 3
         assert np.allclose(model.geom_friction[g.id], model.geom_friction[floor])
+    import rl_common as rc
+    assert sorted(rc.belly_geoms(model).values()) == sorted(rm.belly_geom_names())
 
 
 # ------------------------------------------------------------------ the torso's inertial
@@ -126,7 +153,7 @@ def test_belly_clearance_at_stance(model):
     tub = model.geom("belly_tub").id
     clear = (d.geom_xpos[tub][2] - model.geom_size[tub][2]) * 1000
     assert 58.0 < clear < 66.0, clear
-    belly = {model.geom(n).id for n in rm.belly_boxes()}
+    belly = {model.geom(n).id for n in rm.belly_geom_names()}
     assert not [c for c in d.contact[:d.ncon] if c.geom1 in belly or c.geom2 in belly]
 
 

@@ -358,7 +358,8 @@ def test_torso_mass_and_com_come_from_the_budget():
 def test_a_leg_folded_into_the_belly_is_a_self_contact():
     """B97 (D064): the census pose (leg 1 yaw -25, hip -65, knee -100, toward the keel tub) is a
     SELF_CONTACT that names belly_tub; the planted stance is clean; leg 0 folded under the deck
-    reaches the hub shelf (BODY_LAYOUT correction 8), named belly_shelf."""
+    reaches the hub shelf (BODY_LAYOUT correction 8), named belly_shelf (the plate box) or
+    belly_shelf_post<k> (a post column)."""
     mujoco = pytest.importorskip("mujoco")
     m = mujoco.MjModel.from_xml_path(os.path.join(HERE, "..", "sim", "pebble.xml"))
     sc = pf._SelfContact(m)
@@ -376,5 +377,9 @@ def test_a_leg_folded_into_the_belly_is_a_self_contact():
     assert any(set(p["pair"]) == {"belly_tub", "tibia1"} for p in rep.self_contact_pairs)
     assert any("SELF_CONTACT: " in ln and "keel tub" in ln for ln in rep.lines)
     shelf = q.copy()
+    shelf[0] = np.deg2rad([0.0, -70.0, -100.0])
+    assert any(str(n).startswith("belly_shelf") for a, b, _ in sc(shelf) for n in (a, b))
+    # hip -65 met only the old hull's north face (grown to y 71 by the (26, 64) pad, D064
+    # integration): the plate box ends at y 64.3, so that fold is clean now
     shelf[0] = np.deg2rad([0.0, -65.0, -100.0])
-    assert any("belly_shelf" in (a, b) for a, b, _ in sc(shelf))
+    assert not [h for h in sc(shelf) if any(str(n).startswith("belly") for n in h[:2])]

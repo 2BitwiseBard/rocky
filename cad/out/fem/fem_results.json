@@ -3,19 +3,19 @@
  "results": [
   {
    "part": "coxa_yaw_base",
-   "verdict": "PASS",
-   "sf": 2.93,
+   "verdict": "FAIL",
+   "sf": 1.1,
    "governing": "V",
-   "nodes": 36535,
-   "elements": 19050,
-   "held_nodes": 5335,
-   "loaded_nodes": 3985,
+   "nodes": 37436,
+   "elements": 19613,
+   "held_nodes": 599,
+   "loaded_nodes": 3990,
    "build_dir": [
     0.0,
     0.0,
     1.0
    ],
-   "held": "deck (plate underside)",
+   "held": "the docked I1 support (B118): the inboard pads (x <= seat_relief_x0, over the deck), the two seat flanks, the two thumbscrew heads in tension; V: pads + screws (the seats lift), R-: seats + screws (the pads lift), L+/L-: the pressing side's pads, both seats, the lifting side's screw",
    "loaded": "yaw servo case in the cup",
    "cases": [
     {
@@ -30,18 +30,18 @@
       -4521.8,
       0.0
      ],
-     "vm_p999": 6.88,
-     "sn_p999": 6.82,
-     "util_p999": 0.341,
-     "util_peak": 0.385,
+     "vm_p999": 30.44,
+     "sn_p999": 16.9,
+     "util_p999": 0.912,
+     "util_peak": 1.04,
      "peak_at": [
-      -14.0,
-      5.5,
-      0.0
+      -33.1,
+      -16.1,
+      -1.4
      ],
-     "defl_mm": 0.15,
-     "sf": 2.93,
-     "governs": "layers"
+     "defl_mm": 2.294,
+     "sf": 1.1,
+     "governs": "von Mises"
     },
     {
      "case": "R+",
@@ -55,17 +55,17 @@
       -2365.1,
       0.0
      ],
-     "vm_p999": 2.1,
-     "sn_p999": 2.08,
-     "util_p999": 0.104,
-     "util_peak": 0.115,
+     "vm_p999": 4.65,
+     "sn_p999": 3.48,
+     "util_p999": 0.174,
+     "util_peak": 0.241,
      "peak_at": [
-      -14.0,
-      5.5,
+      -29.9,
+      -15.7,
       0.0
      ],
-     "defl_mm": 0.046,
-     "sf": 9.62,
+     "defl_mm": 0.284,
+     "sf": 5.75,
      "governs": "layers"
     },
     {
@@ -80,17 +80,17 @@
       2365.1,
       0.0
      ],
-     "vm_p999": 2.1,
-     "sn_p999": 1.74,
-     "util_p999": 0.087,
-     "util_peak": 0.092,
+     "vm_p999": 4.91,
+     "sn_p999": 4.07,
+     "util_p999": 0.204,
+     "util_peak": 0.34,
      "peak_at": [
       -38.5,
-      8.1,
-      1.4
+      9.5,
+      0.0
      ],
-     "defl_mm": 0.046,
-     "sf": 11.49,
+     "defl_mm": 0.31,
+     "sf": 4.9,
      "governs": "layers"
     },
     {
@@ -105,18 +105,18 @@
       -0.0,
       2940.0
      ],
-     "vm_p999": 5.43,
-     "sn_p999": 2.9,
-     "util_p999": 0.155,
-     "util_peak": 0.165,
+     "vm_p999": 11.27,
+     "sn_p999": 8.09,
+     "util_p999": 0.415,
+     "util_peak": 0.467,
      "peak_at": [
-      -24.0,
-      -10.1,
-      -2.5
+      -29.9,
+      -15.7,
+      0.0
      ],
-     "defl_mm": 0.099,
-     "sf": 6.45,
-     "governs": "von Mises"
+     "defl_mm": 0.226,
+     "sf": 2.41,
+     "governs": "layers"
     },
     {
      "case": "L-",
@@ -130,17 +130,17 @@
       -0.0,
       -2940.0
      ],
-     "vm_p999": 5.43,
-     "sn_p999": 5.07,
-     "util_p999": 0.253,
-     "util_peak": 0.274,
+     "vm_p999": 9.58,
+     "sn_p999": 8.32,
+     "util_p999": 0.416,
+     "util_peak": 0.482,
      "peak_at": [
-      -24.0,
-      -10.1,
-      -2.5
+      -29.9,
+      -15.7,
+      0.0
      ],
-     "defl_mm": 0.099,
-     "sf": 3.95,
+     "defl_mm": 0.205,
+     "sf": 2.4,
      "governs": "layers"
     }
    ]

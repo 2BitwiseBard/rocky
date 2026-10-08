@@ -273,8 +273,9 @@ def righter_clamp_legs() -> tuple:
 
 
 # ------------------------------------------------------------------ the belly (D064)
-# Option A's under-deck volumes (picks 1, 2, 8, 14) as two boxes in the BODY frame (mm, z =
-# leg z, deck -10..-4): the sim's contact geoms (build_mjcf), the URDF's collisions
+# Option A's under-deck volumes (picks 1, 2, 8, 14) as two boxes and the shelf's three post
+# columns in the BODY frame (mm, z = leg z, deck -10..-4): the sim's contact geoms (build_mjcf),
+# the URDF's collisions
 # (generate_urdf) and the feasibility checker's SELF_CONTACT all read these. The CAD side is
 # cad/iface.bay_tub_extent(): the sim cannot import it (build123d), so the SAME sums are
 # written out here and sim/tests/test_belly.py re-derives both from params.
@@ -287,8 +288,11 @@ def bay_tub_extent_mm() -> dict:
     """The keel tub's outer box, {'x', 'y', 'z'} (lo, hi) mm, body frame: x from the door's
     outer face bay_door_x to bay_door_x + door_t + bay_l + bay_wall (the nose moves with
     bay_l, pick 4), y bay_centre[1] -+ (bay_w / 2 + bay_wall), z from bay_top_z down roof +
-    bay_h + floor. At bay_l 194: x -97.5..101.9, y -47.4..7.4, z -55.4..-18.0. A box: the nose
-    chamfers (nose_chamfer), the latch boss and the hanger bosses are part_bay's."""
+    bay_h + floor. At bay_l 192: x -97.5..99.9, y -47.4..7.4, z -55.4..-18.0. A box: the nose
+    chamfers (nose_chamfer) and the tub's protrusions are part_bay's and NOT in the sim (the
+    latch boss + door ear x -97.5..-85.5 to y -64.45, z -55.4..-39.65; the pilasters Ø9.6 at
+    (+-70, -50.6), z -49.5..-20; the keeper to y 8.6; the north return to z -17.0; the riser
+    clip x 55.5..62.8, y 7.4..13.29, z -50.56..-38)."""
     bs = _p()["interfaces"]["battery_sled"]
     x0 = float(bs["bay_door_x"])
     x1 = x0 + float(bs["door_t"]) + float(bs["bay_l"]) + float(bs["bay_wall"])
@@ -299,13 +303,13 @@ def bay_tub_extent_mm() -> dict:
 
 
 def hub_shelf_extent_mm() -> dict:
-    """The hub shelf's envelope, {'x', 'y', 'z'} (lo, hi) mm, body frame. Rule: the
-    axis-aligned hull of params hub_shelf x / y (the plate and the five boards with their
-    plug halos, as packed) and the square round each post's pad (Ø post_d + 2 x
-    SHELF_PAD_WALL_MM = 14 at the posts' xy), from bottom_z (the face-down adapter's pins)
-    up to the deck's underside (the posts hang from it; the star's top is -13.9). Today:
-    x -57..57 (the pads at x +-50 stand past the 53.9 / -56.2 boards), y 12.2..71 (the
-    (26, 64) pad past the UBEC's 64.2), z -54.4..-10."""
+    """The hub shelf's ENVELOPE (its hull), {'x', 'y', 'z'} (lo, hi) mm, body frame: the
+    axis-aligned hull of params hub_shelf x / y (the plate and the five boards with their plug
+    halos, as packed) and the square round each post's pad (Ø post_d + 2 x SHELF_PAD_WALL_MM =
+    14 at the posts' xy), from bottom_z (the face-down adapter's pins) up to the deck's underside
+    (the posts hang from it; the star's top is -13.9). Today: x -57..57, y 12.2..71, z
+    -54.4..-10. A bound for checks (mass_audit's centroid gate), NOT the sim's geoms since the
+    D064 integration: belly_boxes() + belly_posts() carry the plate and the three post columns."""
     hs = _p()["interfaces"]["hub_shelf"]
     r = float(hs["post_d"]) / 2 + SHELF_PAD_WALL_MM
     xs = [float(v) for v in hs["x"]] + [float(p[0]) + s * r for p in hs["posts"] for s in (-1, 1)]
@@ -316,12 +320,38 @@ def hub_shelf_extent_mm() -> dict:
 
 def belly_boxes() -> dict:
     """{'belly_tub': ((x0, x1), (y0, y1), (z0, z1)), 'belly_shelf': (...)} mm, body frame:
-    the geoms the MJCF hangs on the torso (massless: the torso's <inertial> carries the
-    mass) and the names pebble_feasibility reports a belly SELF_CONTACT under."""
-    out = {}
-    for name, e in (("belly_tub", bay_tub_extent_mm()), ("belly_shelf", hub_shelf_extent_mm())):
-        out[name] = (e["x"], e["y"], e["z"])
-    return out
+    the BOX geoms the MJCF hangs on the torso (massless: the torso's <inertial> carries the
+    mass) and the names pebble_feasibility reports a belly SELF_CONTACT under. belly_shelf is
+    the shelf's PLATE box: params hub_shelf x / y (the plate + the boards as packed) from
+    bottom_z to the deck's underside. Until the D064 integration it was hub_shelf_extent_mm()'s
+    hull, grown north to y 71 by the (26, 64) pad: leg 0 touched that hull's north face (x
+    -30..-24, y 70-71) in 20/20 recover1 falls, where nothing of the real shelf is (the plate
+    ends at y 64.3). The pads stand past the plate as belly_posts()."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    e = bay_tub_extent_mm()
+    return {"belly_tub": (e["x"], e["y"], e["z"]),
+            "belly_shelf": (tuple(float(v) for v in hs["x"]), tuple(float(v) for v in hs["y"]),
+                            (float(hs["bottom_z"]), DECK_BOT_Z_MM))}
+
+
+def belly_posts() -> dict:
+    """{'belly_shelf_post<k>': ((x, y), r, (z0, z1))} mm, body frame: the hub shelf's three
+    posts with their pads as vertical cylinders (the MJCF's / URDF's cylinder geoms), Ø post_d
+    + 2 x SHELF_PAD_WALL_MM (14) at params hub_shelf.posts, from the plate's underside
+    (plate_top_z - plate_t) to the deck's underside. A Ø14 column over the whole height bounds
+    the part (its Ø8 posts stand on Ø14 pads, part_busboard). The names start 'belly_shelf' so
+    every report that says 'hub shelf' for belly_shelf says it for them too."""
+    hs = _p()["interfaces"]["hub_shelf"]
+    r = float(hs["post_d"]) / 2 + SHELF_PAD_WALL_MM
+    z0 = float(hs["plate_top_z"]) - float(hs["plate_t"])
+    return {f"belly_shelf_post{k}": ((float(p[0]), float(p[1])), r, (z0, DECK_BOT_Z_MM))
+            for k, p in enumerate(hs["posts"])}
+
+
+def belly_geom_names() -> tuple:
+    """Every belly geom's name (the boxes, then the post cylinders): what the sim's contact
+    reports (rl_common.belly_geoms, pebble_feasibility) look up."""
+    return tuple(belly_boxes()) + tuple(belly_posts())
 
 
 # ------------------------------------------------------------------ the torso's mass (D039, D064)

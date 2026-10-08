@@ -22,7 +22,8 @@ the foot_fix frame (the IK foot point), and the claw prongs are carved out
 of the tibia budget instead of added on top.
 D064: base_link's inertial is the budget's torso (mass, CoM, full tensor:
 the MJCF's <inertial>, from sim/mass_audit's pose table) and it carries the
-belly_tub / belly_shelf boxes (rocky_model.belly_boxes) as collisions.
+belly_tub / belly_shelf boxes (rocky_model.belly_boxes) and the shelf's three
+post cylinders (rocky_model.belly_posts) as collisions.
 
 Run:  python3 generate_urdf.py        (writes urdf/pebble.urdf.xacro + .urdf)
 Verify parity against the MJCF:  python3 ../../sim/check_urdf_parity.py
@@ -113,14 +114,20 @@ def torso_inertial_xml() -> str:
 
 
 def belly_xml() -> str:
-    """The keel tub + hub shelf boxes (rocky_model.belly_boxes, = the MJCF's belly geoms) as
-    base_link visuals + collisions (D064)."""
+    """The keel tub + hub shelf boxes (rocky_model.belly_boxes) and the shelf's three post
+    cylinders (rocky_model.belly_posts), = the MJCF's belly geoms, as base_link visuals +
+    collisions (D064)."""
     out = []
     for name, ((x0, x1), (y0, y1), (z0, z1)) in rm.belly_boxes().items():
         c = [(a + b) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
         s = [(b - a) * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
-        o = f'<origin xyz="{c[0]:.5f} {c[1]:.5f} {c[2]:.5f}"/>'
-        g = f'<geometry><box size="{s[0]:.5f} {s[1]:.5f} {s[2]:.5f}"/></geometry>'
+        o = f'<origin xyz="{c[0]:.6f} {c[1]:.6f} {c[2]:.6f}"/>'         # 1 um, as the MJCF's belly
+        g = f'<geometry><box size="{s[0]:.6f} {s[1]:.6f} {s[2]:.6f}"/></geometry>'
+        out.append(f'    <visual name="{name}">{o}\n      {g}\n      <material name="pebble"/></visual>')
+        out.append(f'    <collision name="{name}">{o}\n      {g}</collision>')
+    for name, ((x, y), r, (z0, z1)) in rm.belly_posts().items():     # URDF cylinders run along z
+        o = f'<origin xyz="{x * MM:.6f} {y * MM:.6f} {(z0 + z1) / 2 * MM:.6f}"/>'
+        g = f'<geometry><cylinder radius="{r * MM:.6f}" length="{(z1 - z0) * MM:.6f}"/></geometry>'
         out.append(f'    <visual name="{name}">{o}\n      {g}\n      <material name="pebble"/></visual>')
         out.append(f'    <collision name="{name}">{o}\n      {g}</collision>')
     return "\n".join(out)

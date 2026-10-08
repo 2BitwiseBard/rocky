@@ -81,6 +81,7 @@ PARTS_S45 = [
     ("bay_lid", "Tub lid", [0.66, 0.52, 0.84]),
     ("bay_door", "Tub door", [0.76, 0.68, 0.88]),
     ("avionics_tray", "Avionics tray (I4)", [0.70, 0.62, 0.86]),
+    ("tray_latch_boss", "Tray latch boss (glued under the tongue)", [0.76, 0.68, 0.88]),
     ("hub_shelf", "Hub shelf (under the deck)", [0.55, 0.44, 0.79]),
     ("shell_sector", "Carapace sector", [0.66, 0.52, 0.84]),
     ("shell_cap", "Hatch cap", [0.76, 0.68, 0.88]),
@@ -89,8 +90,8 @@ PARTS_S45 = [
 ]
 parts_items = parts_row(PARTS_MECH)
 parts45_items = parts_row(PARTS_S45, start_x=-260)
-# the body row grew by the keel tub's three parts and the hub shelf (2026-10-07): aim the camera
-# at its middle and back it off so the whole row fits
+# the body row grew by the keel tub's three parts, the tray's latch boss and the hub shelf
+# (2026-10-07): aim the camera at its middle and back it off so the whole row fits
 _W45 = sum(float(bbox(n)[1][0] - bbox(n)[0][0]) for n, _, _ in PARTS_S45) + 28 * (len(PARTS_S45) - 1)
 PARTS45_TARGET = [round(-260 + _W45 / 2), 0, 0]
 PARTS45_RADIUS = max(520, round(0.62 * _W45))

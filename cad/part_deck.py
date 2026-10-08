@@ -150,8 +150,9 @@ DECK_HOLES = (
       "rotor is worked from below, and that driver column crosses the tub's plan (B126: the tub "
       "leaves it open)")] +
     [(f"grid_{x:+d}_{y:+d}", (float(x), float(y)), "tap", _TAP,
-      "unused grid hole: a trim-cup point" + (" (was the star-board bracket's)" if x == 0 and y > 0
-                                                else ""))
+      "unused grid hole: a trim-cup point" + (" (was the star-board bracket's; the hub shelf "
+                                                "hangs on its own three posts now)"
+                                                if x == 0 and y > 0 else ""))
      for x, y in ((0, 0), (-20, 0), (20, 0), (0, -20), (0, 20), (0, 40))])
 # what the table retired from v0.4's body_deck() (B50, B51, B84, B122): __main__ proves each is
 # solid deck again (outside the table's own cutters), with these v0.4 cutters as the probes

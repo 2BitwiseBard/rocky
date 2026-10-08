@@ -541,10 +541,10 @@ class DomainRandomizer:
 
 
 def belly_geoms(model):
-    """{geom id: name} of the torso's belly boxes (D064: rocky_model.belly_boxes, the keel tub
-    and the hub shelf); {} on a model without them."""
+    """{geom id: name} of the torso's belly geoms (D064: rocky_model.belly_geom_names, the keel
+    tub, the hub shelf's plate box and its three post cylinders); {} on a model without them."""
     out = {}
-    for name in rm.belly_boxes():
+    for name in rm.belly_geom_names():
         try:
             out[int(model.geom(name).id)] = name
         except KeyError:

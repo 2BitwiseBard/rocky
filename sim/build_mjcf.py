@@ -50,11 +50,15 @@ keel tub hangs to z -55.4 (62.6 mm). Now:
     cylinders stay as the carapace's collision hull, mass 0. A budget with no
     CoM (pre-D064) falls back to the cylinders' masses, with a WARNING.
   * two massless boxes, belly_tub and belly_shelf (rocky_model.belly_boxes():
-    the keel tub's outer box and the hub shelf's envelope), right after the
-    free joint, default contact (contype 1, conaffinity 1, condim 3) with the
-    floor's friction. A leg folded under the keel now meets them (the righter's
-    fall path did, B130), the ground meets the tub first, and pebble_feasibility's
-    SELF_CONTACT names them. The nose chamfer (pick 10) is NOT in the box.
+    the keel tub's outer box and the hub shelf's plate box), and three massless
+    cylinders belly_shelf_post0..2 (rocky_model.belly_posts(): the shelf's Ø14
+    post pads), right after the free joint, default contact (contype 1,
+    conaffinity 1, condim 3) with the floor's friction. A leg folded under the
+    keel now meets them (the righter's fall path did, B130), the ground meets the
+    tub first, and pebble_feasibility's SELF_CONTACT names them. The nose chamfer
+    (pick 10) is NOT in the box. The D064 integration replaced the shelf's one
+    hull box (grown north to y 71 by the (26, 64) pad, where leg 0 touched it in
+    20/20 recover1 falls and no real board is) by the plate box + the posts.
 """
 import os, sys
 import numpy as np
@@ -119,6 +123,7 @@ M_SHIN = M_TIBIA * 0.7 - 2 * M_PRONG   # D052: was 0.7 M + 2 prongs on top (+40 
 # D064: the torso's own mass distribution (mass_audit's pose table), None before D064
 TORSO_INERTIAL = rm.torso_inertial() if os.path.exists(_MB) else None
 BELLY_RGBA = {"belly_tub": "0.45 0.36 0.60 1", "belly_shelf": "0.50 0.44 0.66 1"}
+BELLY_POST_RGBA = "0.50 0.44 0.66 1"   # the shelf's posts: the shelf's colour
 
 
 def torso_xml() -> str:
@@ -138,9 +143,14 @@ def torso_xml() -> str:
     for name, ((x0, x1), (y0, y1), (z0, z1)) in rm.belly_boxes().items():
         c = [(a + b) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
         h = [(b - a) / 2 * MM for a, b in ((x0, x1), (y0, y1), (z0, z1))]
-        lines.append(f'<geom name="{name}" type="box" size="{h[0]:.5f} {h[1]:.5f} {h[2]:.5f}" '
-                     f'pos="{c[0]:.5f} {c[1]:.5f} {c[2]:.5f}" mass="0" friction="{FRICTION}" '
+        # 6 decimals (1 um): the shelf's params x (-56.2, 53.95) centre on -1.125 mm, which 5 would round
+        lines.append(f'<geom name="{name}" type="box" size="{h[0]:.6f} {h[1]:.6f} {h[2]:.6f}" '
+                     f'pos="{c[0]:.6f} {c[1]:.6f} {c[2]:.6f}" mass="0" friction="{FRICTION}" '
                      f'rgba="{BELLY_RGBA.get(name, "0.45 0.36 0.60 1")}"/>')
+    for name, ((x, y), r, (z0, z1)) in rm.belly_posts().items():    # MuJoCo cylinders run along z
+        lines.append(f'<geom name="{name}" type="cylinder" size="{r * MM:.6f} {(z1 - z0) / 2 * MM:.6f}" '
+                     f'pos="{x * MM:.6f} {y * MM:.6f} {(z0 + z1) / 2 * MM:.6f}" mass="0" friction="{FRICTION}" '
+                     f'rgba="{BELLY_POST_RGBA}"/>')
     lines.append(f'<geom type="cylinder" size="{RB:.4f} 0.012" pos="0 0 0.018" mass="{m1}" '
                  f'rgba="0.62 0.50 0.82 1"/>')
     lines.append(f'<geom type="cylinder" size="{RB*0.7:.4f} 0.014" pos="0 0 0.044" mass="{m2}" '
@@ -239,7 +249,9 @@ def main():
     if ti is not None:
         print(f"torso <inertial>: {ti['mass_g']:.1f} g at ({', '.join(f'{v:.2f}' for v in ti['com_mm'])}) mm | "
               "belly: " + ", ".join(f"{k} x {a[0]:g}..{a[1]:g} y {b[0]:g}..{b[1]:g} z {c[0]:g}..{c[1]:g}"
-                                    for k, (a, b, c) in rm.belly_boxes().items()))
+                                    for k, (a, b, c) in rm.belly_boxes().items())
+              + ", posts " + ", ".join(f"Ø{2 * r:g} at ({x:g}, {y:g}) z {z0:g}..{z1:g}"
+                                       for (x, y), r, (z0, z1) in rm.belly_posts().values()))
     print("wrote", path, "| masses:", MASS_SOURCE,
           f"torso {M_TORSO:.3f} coxa {M_COXA:.3f} femur {M_FEMUR:.3f} tibia {M_TIBIA:.3f} kg"
           f" | leg servo: forcerange {F_PEAK:.3f} N.m (peak; continuous {F_CONT:.3f} is thermal),"
