@@ -8,7 +8,7 @@
   "disp_x": 331,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 7.6,
+  "tilt_max": 7.8,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -19,7 +19,7 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 111,
+  "disp_x": 112,
   "crossed": false,
   "t_cross": null,
   "tilt_max": 1.9,
@@ -33,10 +33,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 544,
+  "disp_x": 487,
   "crossed": true,
-  "t_cross": 25.0,
-  "tilt_max": 6.7,
+  "t_cross": 24.0,
+  "tilt_max": 7.9,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -50,7 +50,7 @@
   "disp_x": 293,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 7.2,
+  "tilt_max": 7.0,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -61,10 +61,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 289,
-  "crossed": false,
-  "t_cross": null,
-  "tilt_max": 8.6,
+  "disp_x": 492,
+  "crossed": true,
+  "t_cross": 24.9,
+  "tilt_max": 9.7,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -75,10 +75,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 110,
+  "disp_x": 111,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 1.8,
+  "tilt_max": 1.6,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -89,10 +89,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 275,
+  "disp_x": 276,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.6,
+  "tilt_max": 2.7,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -106,7 +106,7 @@
   "disp_x": 290,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 7.9,
+  "tilt_max": 7.8,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -120,7 +120,7 @@
   "disp_x": 172,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 8.5,
+  "tilt_max": 8.1,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -131,10 +131,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 478,
-  "crossed": true,
-  "t_cross": 29.4,
-  "tilt_max": 10.2,
+  "disp_x": 235,
+  "crossed": false,
+  "t_cross": null,
+  "tilt_max": 10.4,
   "fell": false,
   "stuck_events": [
    [
@@ -142,12 +142,20 @@
     "STUCK -> high-step"
    ],
    [
-    13.5,
+    13.0,
     "STUCK -> higher+clear"
    ],
    [
-    26.5,
-    "recovered -> nominal"
+    22.0,
+    "STUCK -> retreat"
+   ],
+   [
+    26.01,
+    "STUCK -> retreat"
+   ],
+   [
+    30.01,
+    "STUCK -> retreat"
    ]
   ],
   "fairing": true
@@ -158,10 +166,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 109,
+  "disp_x": 110,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 1.9,
+  "tilt_max": 1.5,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -172,10 +180,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 283,
+  "disp_x": 397,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 11.4,
+  "tilt_max": 10.8,
   "fell": false,
   "stuck_events": [
    [
@@ -187,20 +195,16 @@
     "STUCK -> higher+clear"
    ],
    [
-    13.5,
-    "STUCK -> retreat"
-   ],
-   [
-    18.01,
-    "STUCK -> retreat"
-   ],
-   [
-    28.51,
+    20.5,
     "recovered -> nominal"
    ],
    [
-    31.51,
+    26.0,
     "STUCK -> high-step"
+   ],
+   [
+    32.51,
+    "STUCK -> higher+clear"
    ]
   ],
   "fairing": true
@@ -211,10 +215,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 301,
+  "disp_x": 274,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 3.4,
+  "tilt_max": 3.6,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -225,10 +229,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 373,
+  "disp_x": 371,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 8.5,
+  "tilt_max": 8.1,
   "fell": false,
   "stuck_events": [
    [
@@ -260,10 +264,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 266,
+  "disp_x": 267,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 4.5,
+  "tilt_max": 4.6,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -274,10 +278,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 292,
+  "disp_x": 265,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 13.3,
+  "tilt_max": 13.2,
   "fell": false,
   "stuck_events": [
    [
@@ -289,15 +293,15 @@
     "STUCK -> higher+clear"
    ],
    [
-    20.5,
+    19.0,
     "STUCK -> retreat"
    ],
    [
-    25.51,
+    27.01,
     "STUCK -> retreat"
    ],
    [
-    29.01,
+    30.51,
     "STUCK -> retreat"
    ]
   ],
@@ -309,10 +313,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 164,
+  "disp_x": 109,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 7.4,
+  "tilt_max": 6.3,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -323,10 +327,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 182,
+  "disp_x": 230,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 11.8,
+  "tilt_max": 11.3,
   "fell": false,
   "stuck_events": [
    [
@@ -342,20 +346,12 @@
     "STUCK -> retreat"
    ],
    [
-    20.51,
-    "STUCK -> retreat"
+    27.51,
+    "recovered -> nominal"
    ],
    [
-    25.01,
-    "STUCK -> retreat"
-   ],
-   [
-    28.51,
-    "STUCK -> retreat"
-   ],
-   [
-    32.01,
-    "STUCK -> retreat"
+    31.01,
+    "STUCK -> high-step"
    ]
   ],
   "fairing": true
@@ -366,10 +362,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 108,
+  "disp_x": 109,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 1.9,
+  "tilt_max": 1.4,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -380,10 +376,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 48,
+  "disp_x": 50,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 5.4,
+  "tilt_max": 5.5,
   "fell": false,
   "stuck_events": [
    [
@@ -423,10 +419,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 117,
+  "disp_x": 118,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 2.3,
+  "tilt_max": 2.2,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -437,10 +433,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 393,
+  "disp_x": 392,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 10.7,
+  "tilt_max": 10.6,
   "fell": false,
   "stuck_events": [
    [
@@ -468,10 +464,10 @@
   "watchdog": false,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 264,
+  "disp_x": 265,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 3.1,
+  "tilt_max": 2.9,
   "fell": false,
   "stuck_events": [],
   "fairing": true
@@ -482,10 +478,10 @@
   "watchdog": true,
   "v_ask_mm_s": 34.2,
   "t_walk_s": 32.9,
-  "disp_x": 343,
+  "disp_x": 255,
   "crossed": false,
   "t_cross": null,
-  "tilt_max": 12.7,
+  "tilt_max": 10.7,
   "fell": false,
   "stuck_events": [
    [
@@ -497,11 +493,19 @@
     "STUCK -> higher+clear"
    ],
    [
-    19.0,
+    21.0,
     "STUCK -> retreat"
    ],
    [
-    23.01,
+    24.51,
+    "STUCK -> retreat"
+   ],
+   [
+    28.01,
+    "STUCK -> retreat"
+   ],
+   [
+    31.51,
     "STUCK -> retreat"
    ]
   ],

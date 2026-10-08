@@ -1,45 +1,73 @@
 {
  "control": {
   "detector": false,
-  "fell": true,
-  "body_overhang_mm": 4.4,
+  "fell": false,
+  "body_overhang_mm": -41.9,
   "voids": [],
   "stop_x_mm": null
  },
  "detector": {
   "detector": true,
   "fell": false,
-  "body_overhang_mm": -170.7,
+  "body_overhang_mm": -160.0,
   "voids": [
    [
-    4.14,
+    6.18,
     2
    ],
    [
-    4.28,
+    6.32,
     2
    ],
    [
-    4.32,
+    6.32,
     4
    ],
    [
-    4.4,
+    6.44,
     2
    ],
    [
-    4.44,
+    6.44,
     4
    ],
    [
-    4.52,
-    2
+    6.56,
+    4
    ],
    [
-    4.56,
+    6.7,
     4
+   ],
+   [
+    6.82,
+    4
+   ],
+   [
+    6.94,
+    4
+   ],
+   [
+    7.06,
+    4
+   ],
+   [
+    7.2,
+    4
+   ],
+   [
+    7.38,
+    1
+   ],
+   [
+    7.46,
+    4
+   ],
+   [
+    7.52,
+    1
    ]
   ],
-  "stop_x_mm": 252.3
+  "stop_x_mm": 213.3
  }
 }
