@@ -8,27 +8,30 @@
                     C-channel opening toward the tray, its top lip windowed for the lugs, its
                     three bolt tabs INBOARD (under the plate).
   tray_latch_boss : the tongue's I3 boss, glued under the tongue (the cartridge's housing
-                    runs through both): the plate stands 5.1 over the deck, and the cartridge's
-                    seating face must be the deck top, where the strike is. A separate print
-                    because the tray prints plate-down (a boss under the plate would float).
+                    runs through both): the plate rests TRAY_Z 5.1 over the deck, and the
+                    cartridge's seating face must be the deck top, where the strike is. A
+                    separate print because the tray prints plate-down (a boss under the plate
+                    would float); its D pocket locates it on the housing, the housing on the tray.
 
 Pose (2026-10-07, decision 11: I4 revised; docs/BODY_LAYOUT_PROPOSAL.md s2 'The tray (B51)'):
 params tray_xy (0, 0) turned tray_rot_deg 180, bulkhead north, tongue south over the deck's
-strike at (0, -43) (part_deck.DECK_HOLES 'tray_strike', rot 180). The rails' channel sits
-tray_lift 2.0 higher than D063 drew it, so the plate stands 5.4 over the deck top (5.1 resting
-on the channel floor) and the M3 button heads on the inboard tabs fit under it. tray_tf() is
-the pose; tray_assembly() returns the posed set for the views.
+strike at (0, -43) (part_deck.DECK_HOLES 'tray_strike', rot 225). The rails' channel sits
+tray_lift 2.0 higher than D063 drew it, so the plate stands 5.4 over the deck top (TRAY_Z 5.1
+resting on the channel floor) and the M3 button heads on the inboard tabs fit under it.
+tray_tf() is the pose; tray_assembly() returns the posed set for the views.
 
 Release (pick 7): the wings are three 10 mm lugs on a 25 pitch, the channel's top lip is
-three 6 mm segments over them, so the tray lifts free after a slide of 8.3 .. 16.7 either way
-(lug_release 16 inside it, FIT from both ends). The slide is SOUTH, toward the tongue: slid
-north the plate covers the deck's (0, 50) trunk slot (707 mm^3). The plate's two corners at
-the tongue end are cut square to stations 234 / 306 (corner_cuts): uncut, they met the coxa
-bases' inboard faces by slide 16, the plate now standing 2 higher (tray_lift). OPEN: the I3
-rotor in a round strike pins the slide (it hangs 5.8 into the deck and rises only 3.8 at
-OPEN), so as cut today the tray does not come out. __main__ measures the fix it needs, a
-strike drawn out along the slide (slotted_strike_proposal: the deck's strike turned 225 and
-the tongue's frame 45, see TONGUE_LATCH_ROT); it is not cut anywhere yet.
+three 6 mm segments over them, so the rails let the tray lift after a slide of 8.3 .. 16.7
+either way (lug_release 16 inside it, FIT from both ends). The release is SOUTH, toward the
+tongue: slid north the plate covers the deck's (0, 50) trunk slot (707 mm^3), and the latch
+lets it go only south. The I3 rotor hangs 5.8 into the deck and rises only 3.8 at OPEN, so in a
+round strike it pinned the slide (2.20 mm^3 at 0.5); the deck's strike is drawn out into a slot
+along the slide (iface.latch_strike slide, DECK_HOLES rot 225 with the tongue's latch frame
+turned TONGUE_LATCH_ROT 45, 2026-10-07): at OPEN the rotor slides out with the tray, the slot's
+end stops it at lug_release + 0.5 inside the lift window, and at LOCKED it holds the slide
+(part_deck.tray_on_deck measures all of it on the deck as cut). The plate's two corners at the
+tongue end are cut square to stations 234 / 306 (corner_cuts): uncut, they met the coxa bases'
+inboard faces by slide 16, the plate now standing 2 higher (tray_lift).
 
 Pick 14: the bus adapter, the 5 V buck and the 6 V UBEC live face-down on the hub shelf
 (part_busboard); the bus adapter runs over the Pi's UART. BOARDS stays here as the envelope
@@ -45,7 +48,7 @@ import os
 import numpy as np
 from build123d import *
 from common import params, export
-from iface import IF, latch_pocket, STATIONS, station_tf, DECK_BOT_Z
+from iface import IF, latch_pocket, STATIONS, station_tf, DECK_BOT_Z, LATCH_ENTRY_DEG
 
 P = params()
 PR = P["print"]
@@ -81,6 +84,12 @@ CH_Z = 5.4 + AT["tray_lift"]                                # 7.4: the channel c
 RAIL_H = CH_Z + CH_H / 2 + RAIL_LIP                         # 10.0 (was 8)
 SEAT_Z = CH_Z - (WING_Z0 + WING_H / 2)                      # 5.4: plate underside over the deck top, lugs centred
 SEAT_REST = SEAT_Z - FIT                                    # 5.1: the lugs resting on the channel floor
+# TRAY_Z: the plate underside over the deck top as the rails carry the tray, the lugs' undersides
+# (tray z WING_Z0) on the channel floor (rail z CH_Z - CH_H / 2). The tray's gravity pose and its
+# latched one: the boss under the tongue is this tall, so the cartridge seats on the deck top
+# (part_deck.tray_on_deck checks TRAY_Z + tongue_latch_tf().Z == 0 and the solids)
+TRAY_Z = (CH_Z - CH_H / 2) - WING_Z0                        # 5.1
+assert abs(TRAY_Z - SEAT_REST) < 1e-9, "the resting pose is the lugs on the channel floor"
 # the tabs: holes on the deck's 20 mm grid columns x +-40 (part_deck.DECK_HOLES tray_tab_* entries,
 # ray-tested in __main__), so 7.3 inboard of the block's axis; under the plate since the turn
 TAB_X, TAB_Y = 40.0, (-20.0, 0.0, 20.0)
@@ -113,14 +122,26 @@ assert 2 * LUG_PITCH + LIP_SEG <= RAIL_L + 1e-9, "the three lip segments must fi
 TONGUE_W, TONGUE_L = 30.0, 16.0
 TONGUE_Y = L / 2 + TONGUE_L / 2                             # 43: the latch axis (tray frame); the deck's
                                                             # strike is at (0, -43) with the tray turned
-BOSS_H = SEAT_REST                                          # 5.1: the tray resting -> the boss on the deck
+BOSS_H = TRAY_Z                                             # 5.1: the tray resting -> the boss on the deck
 BOSS_Y0 = 28.0                                              # the boss runs under the plate to here: 7 of rim
-                                                            # north of the Ø14.3 pocket (the tongue has 0.85)
-# The tongue's latch frame about z, tray frame. 0 = the tray's +x, what part_deck.DECK_HOLES cuts
-# this round ('tray_strike' rot 180 = 0 + tray_rot_deg). 45 is the measured fix for the slide
-# (slotted_strike_proposal): the entry line then runs along the slide. Flip it only together
-# with the deck's strike (rot 225, slotted): deck_hole_audit compares the two
-TONGUE_LATCH_ROT = 0.0
+                                                            # north of the Ø14.3 pocket
+# The pocket (Ø housing_pocket_d on the axis, 7.15) left 0.85 of tongue and boss to the tongue's
+# end at y 51 (check_printability: walls < 1.6, 6.1 mm^2). Both now carry a disc on the axis
+# LATCH_WALL past the pocket: 1.6 all round, check_printability's four perimeters (at 1.2, the
+# cartridge's own keyway wall, it still warned: boss 7.2, tray 8.7 mm^2; at 1.6 both are clean,
+# 2026-10-07). Only the end's middle moves, 0.75 south within |x| 3.54 of the axis; the tongue's
+# corners, where the slide's gap to the coxa bases is, stay. The boss stays a glued print: the
+# tray prints plate-down, and a boss under the tongue would print in the air
+LATCH_WALL = 1.6
+TONGUE_END_R = PL["housing_pocket_d"] / 2 + LATCH_WALL      # 8.75
+TONGUE_END_Y = max(L / 2 + TONGUE_L, TONGUE_Y + TONGUE_END_R)   # 51.75: the tongue's reach (tray +y)
+# The tongue's latch frame about z, tray frame: the entry line (LATCH_ENTRY_DEG from the frame's +x)
+# along the tray's +y, the slide, so the deck's strike is slotted along it and the rotor at OPEN
+# slides out with the tray (iface.latch_strike slide; part_deck.DECK_HOLES 'tray_strike' rot 225 =
+# tray_rot_deg 180 + 45). It was 0 until 2026-10-07, when the round strike pinned the slide (2.20 /
+# 12.15 / 36.18 mm^3 at 0.5 / 1 / 2). Change it only with the deck's strike: deck_hole_audit
+# compares the two (xy and turn) and tray_on_deck measures the slide on the deck as cut
+TONGUE_LATCH_ROT = 90.0 - LATCH_ENTRY_DEG                   # 45
 
 # ---- the Pi 5 -------------------------------------------------------------------------------
 # Mounting (mechanical drawing RP-008347-DS): 85 x 56 board, 4 x Ø2.7 holes 3.5 in from the
@@ -161,14 +182,17 @@ ZIP_X, ZIP_Y = 30.0, (-14.0, 0.0, 14.0)   # weight relief + tie points for the P
 #    (the DC5521 jack; pin headers 9.0, the screw terminal 8.4, the servo ports 5.9) and
 #    through-hole pins 2.0 below it. Held on 2.5 mm standoffs at its own holes (pins + 0.5).
 #  buck_5v: Pololu D24V50F5, BOM B-10. 0.7 x 0.8 x 0.35 in = 17.8 x 20.3 x 8.8 overall
-#    (pololu.com/product/2851). Its 1000 uF capacitor is not modelled: its size is the part
-#    bought's (VERIFY; params hub_shelf.boards takes 27.8 x 20.3 x 10.0 with it, ESTIMATE).
+#    (pololu.com/product/2851). Its 1000 uF capacitor is not in w x l: cap_l is the can (Ø10 x
+#    16) lying beside the board along w, ESTIMATE (the part bought's, VERIFY; params
+#    hub_shelf.boards takes 17.8 + 10 = 27.8 x 20.3 x 10.0 with it).
 #  ubec_6v: Hobbywing UBEC-3A, BOM B-11. 43 x 17 x 7 (hobbywingdirect.com, UBEC-3A specs).
+# holes: the mounting pattern (Ø2.5, w x l centres), where the board has one. The hub shelf
+# (part_busboard) reads holes and cap_l from here (it carried copies: ADAPTER_HOLES, BUCK_CAP_L).
 # TIE_T: a 3.6 mm nylon zip tie over a board's top, ~1.2 thick (guessed, not measured).
 TIE_T = 1.2
 BOARDS = {
-    "bus_adapter": dict(w=42.0, l=33.0, up=1.6 + 11.0, down=2.0, lift=2.5, tie=0.0),
-    "buck_5v": dict(w=17.8, l=20.3, up=8.8, down=0.0, lift=0.0, tie=TIE_T),
+    "bus_adapter": dict(w=42.0, l=33.0, up=1.6 + 11.0, down=2.0, lift=2.5, tie=0.0, holes=(37.0, 28.0)),
+    "buck_5v": dict(w=17.8, l=20.3, up=8.8, down=0.0, lift=0.0, tie=TIE_T, cap_l=10.0),
     "ubec_6v": dict(w=43.0, l=17.0, up=7.0, down=0.0, lift=0.0, tie=TIE_T),
 }
 
@@ -213,27 +237,25 @@ def rail_tf(side):
     return base if side > 0 else Rot(0, 0, 180) * base
 
 
+# the two rails' tray-local poses (the +x block, then its half-turn copy): part_deck.tray_on_deck
+# reads the tab bores off tray_rail() and poses them with these
+RAIL_POSES = [rail_tf(1), rail_tf(-1)]
+
+
+def tongue_tf():
+    """The tongue's frame, tray frame and tray-aligned: on the latch axis, z 0 on the boss's
+    underside (on the deck top with the tray resting, TRAY_Z under the plate). tray_latch_boss is
+    modelled in it."""
+    return Pos(0, TONGUE_Y, -BOSS_H)
+
+
 def tongue_latch_tf(rot=None):
-    """The tongue's latch frame, tray frame: z 0 on the boss's underside (the cartridge's seating
-    face; on the deck top with the tray resting), +z up, +x the tray's +x turned TONGUE_LATCH_ROT
-    (0). Turned with the tray (tray_rot_deg 180) its +x is body -x: part_deck.DECK_HOLES cuts the
-    tray strike 'rot 180', the same convention (part_deck.deck_hole_audit checks the xy and the
-    direction). rot overrides TONGUE_LATCH_ROT (the slotted-strike measurement)."""
-    return Pos(0, TONGUE_Y, -BOSS_H) * Rot(0, 0, TONGUE_LATCH_ROT if rot is None else rot)
-
-
-def slotted_strike_proposal(frame_t=6.0):
-    """PROPOSAL, cut nowhere (for iface.latch_strike + part_deck): the I3 strike with its bore
-    drawn out along the entry line (+LATCH_ENTRY_DEG in the strike frame), through, LATCH_SHAFT_D
-    + 2 FIT wide, so a rotor at OPEN slides out with the tray. With the tongue's frame turned 45
-    (the entry line along the tray's +y, the slide) the slot runs from the bore toward the slide,
-    the leading lug in it and the trailing one back along its own entry slot. Its end stops the
-    leading lug's tip at a slide of LUG_RELEASE + 0.5, inside the lift window: the slot is the
-    release's stop. At LOCKED the lugs lie square to it, under the land."""
-    from iface import latch_strike, LATCH_SHAFT_D, LATCH_ENTRY_DEG, LUG_R
-    ln = LUG_RELEASE + 0.5 + LUG_R
-    slot = Rot(0, 0, LATCH_ENTRY_DEG) * Pos(ln / 2, 0, -frame_t / 2) * Box(ln, LATCH_SHAFT_D + 2 * FIT, frame_t + 2)
-    return latch_strike(frame_t) + slot
+    """The tongue's latch frame, tray frame: tongue_tf() (z 0 the cartridge's seating face, +z up)
+    with +x the tray's +x turned TONGUE_LATCH_ROT (45), so the entry line runs along the tray's +y,
+    the slide. Turned with the tray (tray_rot_deg 180) its +x is body 225 deg and the entry line
+    body south: part_deck.DECK_HOLES cuts the tray strike 'rot 225', slotted south, the same
+    convention (deck_hole_audit checks the xy and the turn). rot overrides TONGUE_LATCH_ROT."""
+    return tongue_tf() * Rot(0, 0, TONGUE_LATCH_ROT if rot is None else rot)
 
 
 def corner_cuts():
@@ -288,8 +310,10 @@ def avionics_tray():
         for zy in ZIP_Y:
             tray -= Pos(zx, zy, T / 2) * Box(4, 8, T + 2)
     # the latch tongue with the I3 insert pocket (the D of the keyway index, B107), through: the
-    # housing runs down through the tray_latch_boss glued under it to the deck top
+    # housing runs down through the tray_latch_boss glued under it to the deck top. The disc on
+    # its end keeps LATCH_WALL round the pocket (was 0.85 to the end)
     tongue = Pos(0, TONGUE_Y, T / 2) * Box(TONGUE_W, TONGUE_L, T)
+    tongue += Pos(0, TONGUE_Y, T / 2) * Cylinder(TONGUE_END_R, T)
     tray += tongue
     tray -= tongue_latch_tf() * latch_pocket(-1.0, BOSS_H + T + 1.0)
     # rear bulkhead wall + connector cutouts. 2026-10-07: the tray XT30 and the trunk's XH-5 moved
@@ -315,13 +339,15 @@ TRUNK_CUTS = {"XT30": 0, "XH-5": 1}           # the two that drop through the (0
 
 
 def tray_latch_boss():
-    """The tongue's I3 boss, modelled in the latch frame (z 0 = its underside, the cartridge's
-    seating face, on the bed): TONGUE_W wide, from under the plate (BOSS_Y0) to the tongue's end,
-    BOSS_H tall, the housing's D pocket through it on the tongue's index. Glued under the tongue
-    with the housing through both: the D locates the boss on the tray."""
+    """The tongue's I3 boss, modelled in the tongue's frame (tongue_tf: tray-aligned, on the latch
+    axis, z 0 = its underside, the cartridge's seating face, on the bed): TONGUE_W wide, from under
+    the plate (BOSS_Y0) to the tongue's end with the tongue's end disc (LATCH_WALL round the pocket),
+    BOSS_H tall, the housing's D pocket through it turned as the latch frame (TONGUE_LATCH_ROT).
+    Glued under the tongue with the housing through both: the D locates the boss on the tray."""
     y0, y1 = BOSS_Y0 - TONGUE_Y, TONGUE_L / 2
     boss = _box(-TONGUE_W / 2, TONGUE_W / 2, y0, y1, 0.0, BOSS_H)
-    return boss - latch_pocket(-1.0, BOSS_H + 1.0)
+    boss += Pos(0, 0, BOSS_H / 2) * Cylinder(TONGUE_END_R, BOSS_H)
+    return boss - Rot(0, 0, TONGUE_LATCH_ROT) * latch_pocket(-1.0, BOSS_H + 1.0)
 
 
 def tray_rail():
@@ -359,7 +385,7 @@ def tray_footprint():
     return [(0.0, 0.0, W + 2 * RAIL, L),
             ((x0 + x1) / 2, 0.0, x1 - x0, RAIL_L),
             (-(x0 + x1) / 2, 0.0, x1 - x0, RAIL_L),
-            (0.0, s * (BOSS_Y0 + L / 2 + TONGUE_L) / 2, TONGUE_W, L / 2 + TONGUE_L - BOSS_Y0)]
+            (0.0, s * (BOSS_Y0 + TONGUE_END_Y) / 2, TONGUE_W, TONGUE_END_Y - BOSS_Y0)]
 
 
 # ====================================================================== the Pi 5 (B127)
@@ -573,7 +599,7 @@ def tray_assembly(slide=0.0, lift=0.0, rest=False):
     deck; the rest moves with slide / lift). For gen_assembly_views and the layout checks."""
     tf = tray_tf(slide, lift, rest=rest)
     rails = tray_tf(rest=False)
-    return {"tray": tf * avionics_tray(), "boss": tf * tongue_latch_tf() * tray_latch_boss(),
+    return {"tray": tf * avionics_tray(), "boss": tf * tongue_tf() * tray_latch_boss(),
             "pi": tf * pi5_envelope(),
             "rails": [rails * rail_tf(s) * tray_rail() for s in (1, -1)]}
 
@@ -633,7 +659,7 @@ if __name__ == "__main__":
           f"turned {TRAY_ROT:.0f}, plate underside {SEAT_Z:.1f} over the deck top ({SEAT_REST:.1f} resting); "
           f"rails at x +-{RAIL_POSE_X:.1f}, channel centre {CH_Z:.1f} over the deck top (tray_lift "
           f"{AT['tray_lift']:g})")
-    boss_t = tongue_latch_tf() * boss                       # the boss under the tongue, tray frame
+    boss_t = tongue_tf() * boss                             # the boss under the tongue, tray frame
 
     # ---- I4's channels, the lugs and the release (pick 7), tray frame -----------------------------
     rails_t = [rail_tf(s) * rail for s in (1, -1)]
@@ -647,12 +673,19 @@ if __name__ == "__main__":
         drop += 0.05
     need("  ... the tray settles onto the channel floor", drop, lambda q: abs(q - FIT) < 0.06,
          f"RESTS {FIT} DOWN", "OFF", "mm")
-    for d, way in ((LUG_RELEASE, "toward the tongue (body south: the release)"),
-                   (-LUG_RELEASE, "toward the bulkhead (north)")):
+    need(f"  ... so the rails carry the plate underside TRAY_Z {TRAY_Z:.2f} over the deck top (SEAT_Z - the "
+         "settle, measured)", SEAT_Z - drop - TRAY_Z, lambda q: abs(q) < 0.06, "AS NAMED", "OFF", "mm")
+    # the release is SOUTH (toward the tongue): gated. North the rails let it go too (reported), but
+    # the plate then covers the trunk slot and the latch's strike holds it (part_deck.tray_on_deck)
+    for d, way, gate in ((LUG_RELEASE, "toward the tongue (body south: the release)", True),
+                         (-LUG_RELEASE, "toward the bulkhead (north; not the release)", False)):
         path = max(xvol([Pos(0, s, 0) * m for m in movers_t], rails_t) for s in np.linspace(0, d, 9))
         up = max(xvol([Pos(0, d, z) * m for m in movers_t], rails_t) for z in (0.5, 1, 2, 3, 4, 5, 10))
-        need(f"slid {abs(d):.0f} {way} x rails (path, lugs in the channel) / then lifted 0.5..10", max(path, up),
-             lambda q: q < 0.01, "RELEASES", "HELD")
+        msg = f"slid {abs(d):.0f} {way} x rails (path, lugs in the channel) / then lifted 0.5..10"
+        if gate:
+            need(msg, max(path, up), lambda q: q < 0.01, "RELEASES", "HELD")
+        else:
+            print(f"  ({msg}: {max(path, up):.2f} mm^3, {'free' if max(path, up) < 0.01 else 'held'} at the rails)")
     win = [xvol(Pos(0, d, 1.0) * tray, rails_t) for d in (LIFT_WINDOW[0] - 0.2, LIFT_WINDOW[0] + 0.05,
                                                           LIFT_WINDOW[1] - 0.05, LIFT_WINDOW[1] + 0.2)]
     need(f"  ... the lift window is slide {LIFT_WINDOW[0]:.1f}..{LIFT_WINDOW[1]:.1f} (blocked 0.2 outside it); "
@@ -676,21 +709,27 @@ if __name__ == "__main__":
     at_rest = [tray_tf() * s for s in moving_t]
     need("tray + boss + Pi (STEP) + rails x the five docked coxa bases + yaw servos",
          xvol(at_rest + rails_b, fixed), lambda q: q < 0.01, "CLEAR", "CLASH")
-    deck = Pos(0, 0, DECK_BOT_Z) * body_deck()
+    deck_m = body_deck()                                     # the deck's model frame (z 0..6)
+    deck = Pos(0, 0, DECK_BOT_Z) * deck_m
     need("  ... x the deck (body_deck as cut in this tree; rails 0.01 up off its top; the holes: the table, below)",
          xvol(at_rest, deck) + xvol([Pos(0, 0, 0.01) * r for r in rails_b], deck), lambda q: q < 0.01,
          "CLEAR", "CLASH")
     obst = boxed(rails_b, bases, yaws, list(forks.values()))
-    worst, worst_at = 0.0, ""
-    for d in (LUG_RELEASE, -LUG_RELEASE):
-        poses = [(s, 0.0) for s in np.linspace(0, d, 5)] + [(d, z) for z in range(5, 46, 5)]
-        for s, z in poses:
+
+    def release_path(d):
+        worst, worst_at = 0.0, ""
+        for s, z in [(s, 0.0) for s in np.linspace(0, d, 5)] + [(d, z) for z in range(5, 46, 5)]:
             v = xvol([tray_tf(s, z) * q for q in moving_t], obst)
             if v > worst:
                 worst, worst_at = v, f"slide {s:+.0f} lift {z:.0f}"
-    need("the release path (slid +-16 in 4 mm steps, then lifted 5..45) x rails, bases, yaw servos and "
-         "the forks + hip servos at yaw -40..40 (tray + boss + Pi)", worst, lambda q: q < 0.01, "CLEAR",
+        return worst, worst_at
+    worst, worst_at = release_path(LUG_RELEASE)
+    need(f"the release path (slid {LUG_RELEASE:g} south in 4 mm steps, then lifted 5..45) x rails, bases, yaw "
+         "servos and the forks + hip servos at yaw -40..40 (tray + boss + Pi)", worst, lambda q: q < 0.01, "CLEAR",
          f"CLASH at {worst_at}")
+    wn, wn_at = release_path(-LUG_RELEASE)
+    print(f"  (the same path slid {LUG_RELEASE:g} north, not the release: {wn:.2f} mm^3"
+          + (f" at {wn_at})" if wn > 0.01 else ")"))
     # the slide room toward the tongue (bisection on the tray + boss + Pi against the bases and the
     # yaw servos), and the gap to the bases at the release and at the window's far end (corner_cuts)
     ahead = boxed(bases, yaws)
@@ -698,10 +737,19 @@ if __name__ == "__main__":
     for _ in range(14):
         mid = (lo_ + hi_) / 2
         lo_, hi_ = (mid, hi_) if xvol([tray_tf(mid) * q for q in moving_t], ahead) < 1e-4 else (lo_, mid)
+    # the deck's slotted strike stops the slide where the slot's end meets the rotor's leading lug
+    # (DECK_HOLES 'tray_strike' slide; part_deck.tray_on_deck measures the contact on the deck)
+    st = next(e for e in DECK_HOLES if e[2] == "strike")
+    stop = st[3][1]
     gaps = {s: Compound(children=[tray_tf(s) * q for q in moving_t]).distance_to(Compound(children=bases + yaws))
-            for s in (LUG_RELEASE, RELEASE[1])}
+            for s in (LUG_RELEASE, stop, RELEASE[1])}
     print(f"  (slide room toward the tongue before a coxa base or yaw servo: {lo_:.2f} with corner_cuts; the "
           f"gap to them slid {LUG_RELEASE:g}: {gaps[LUG_RELEASE]:.2f}, slid {RELEASE[1]:g}: {gaps[RELEASE[1]]:.2f})")
+    need(f"the strike's slot stops the slide at {stop:g} (DECK_HOLES), past lug_release {LUG_RELEASE:g}, inside the "
+         f"lugs' window {RELEASE[0]:.1f}..{RELEASE[1]:.1f} and short of the slide room {lo_:.2f}: the gap to the "
+         f"coxa bases there", gaps[stop],
+         lambda q: LUG_RELEASE < stop <= RELEASE[1] and stop < lo_ and q >= CORNER_CLEAR - 0.01,
+         "STOPS CLEAR", "STOPS WRONG", "mm")
     rest_c = Compound(children=at_rest + rails_b)
     gmin = min((rest_c.distance_to(forks[(i, a)]), f"leg {i} yaw {a:+d}") for i in range(n_st) for a in (-40, 0, 40))
     print(f"  (closest fork + hip servo to the tray + rails at rest: {gmin[0]:.2f} mm, {gmin[1]})")
@@ -889,64 +937,44 @@ if __name__ == "__main__":
             need("  ... a right-angle plug <= 20 long (overmold <= 14 x 7) fits the lower middle port", worst_f,
                  lambda q: q >= 20.0, "FITS", "NO ROOM", "mm")
 
-    # ---- I3: the tongue's cartridge on the deck's strike (0, -43) ------------------------------
-    from part_panel import latch_seat, latch_engagement, latch_verdict, latch_report
-    from iface import latch_insert_rotor, LATCH_ENTRY_DEG, LATCH_LAND, LATCH_GAP, LATCH_SHAFT_D, LUG_R
+    # ---- I3: the tongue's cartridge on the deck's slotted strike (0, -43) -----------------------
+    from part_panel import latch_seat, latch_engagement, latch_verdict
+    from part_deck import tray_on_deck
+    from iface import LATCH_LAND, LATCH_GAP
     ms = latch_seat(tray.fuse(boss_t), tongue_latch_tf())
     need("latch housing on its index in the tongue + boss x tray + boss", ms["seated"], lambda q: q < 0.01,
          "SEATED", "CLASH")
     need("  ... turned +-10 deg or half a turn", ms["turned"], lambda q: q >= 1.0, "INDEXED", "LOOSE")
-    st = next(e for e in DECK_HOLES if e[2] == "strike")
+    # the pocket's wall: a ring LATCH_WALL (less 0.01) round the Ø housing_pocket_d, through the tongue
+    # and through the boss, must be all plastic (the tongue's end had 0.85 before its end disc)
+    rp, rw = PL["housing_pocket_d"] / 2, LATCH_WALL - 0.01
+    ring = lambda z0, z1: Pos(0, TONGUE_Y, (z0 + z1) / 2) * (Cylinder(rp + rw, z1 - z0) - Cylinder(rp, z1 - z0 + 1))
+    walls = [xvol(ring(0.01, T - 0.01), tray) / ring(0.01, T - 0.01).volume,
+             xvol(ring(-BOSS_H + 0.01, -0.01), boss_t) / ring(-BOSS_H + 0.01, -0.01).volume]
+    need(f"  ... the pocket's wall >= LATCH_WALL {LATCH_WALL:g} all round (a ring round it, fraction plastic: tongue "
+         f"{walls[0]:.4f}, boss {walls[1]:.4f})", min(walls), lambda q: q > 0.9999, "WALLED", "THIN", "")
     strike_tf = Pos(st[1][0], st[1][1], DECK_TOP) * Rot(0, 0, st[3][0])
-    patch = Pos(st[1][0], st[1][1], DECK_BOT_Z + 3) * Box(40, 40, 6) - Pos(0, 0, DECK_BOT_Z) * deck_hole_cutter(st)
     lf = tray_tf(rest=True) * tongue_latch_tf()
     off = (lf.position - strike_tf.position).length
     xa = (lf * Pos(1, 0, 0)).position - lf.position
     ang = abs((np.rad2deg(np.arctan2(xa.Y, xa.X)) - st[3][0] + 180) % 360 - 180)
-    need(f"the boss's seating face on the strike's frame (DECK_HOLES '{st[0]}' rot {st[3][0]:g}: its +x = body "
-         f"-x; the tongue frame's +x = the tray's +x turned {TONGUE_LATCH_ROT:g}, posed {TRAY_ROT:g})", off + ang,
-         lambda q: q < 0.01, "MATCHES", "OFF", "mm + deg")
-    m = latch_engagement(patch, lf)
-    v = latch_verdict(m)
-    need(f"I3 latch, the tray resting, on a deck patch cut with DECK_HOLES' strike: {latch_report(m)}",
-         float(len(v)), lambda q: q == 0, "LATCHES", "FAIL: " + "; ".join(v), "faults")
-    bare = latch_engagement(patch, tray_tf(rest=True) * Pos(0, TONGUE_Y, 0))
+    need(f"the boss's seating face on the strike's frame, 3D (DECK_HOLES '{st[0]}' rot {st[3][0]:g}, slide "
+         f"{st[3][1]:g}; the tongue frame's +x = the tray's +x turned {TONGUE_LATCH_ROT:g}, posed {TRAY_ROT:g}, "
+         f"resting)", off + ang, lambda q: q < 0.01, "MATCHES", "OFF", "mm + deg")
+    # every latch number on the deck as cut, through the tray's own pose: the function part_deck
+    # gates too, so a tray change (TONGUE_LATCH_ROT, TRAY_Z, the boss) fails here, not only there
+    tl = tray_on_deck(deck_m)
+    for name, ok, detail in tl["latch"]:
+        print(f"I3 {name}: {detail} ({'OK' if ok else 'FAIL'})")
+        if not ok:
+            bad.append(f"I3 {name}")
+    for note in tl["notes"]:
+        print(f"  ({note})")
+    bare = latch_engagement(tl["patch"], tl["model_tf"] * tray_tf(rest=True) * tongue_tf() * Pos(0, 0, BOSS_H) *
+                            Rot(0, 0, TONGUE_LATCH_ROT))
     print(f"  (without the boss the seating face is the tongue's underside, {BOSS_H:.2f} over the strike: the "
           f"lugs' tops {BOSS_H - LATCH_LAND - LATCH_GAP:+.2f} over the deck top instead of "
-          f"{-LATCH_LAND - LATCH_GAP:.2f}, "
-          f"short by {BOSS_H:.2f}; verdict {latch_verdict(bare) or 'none'})")
-
-    # the latch vs the release. At OPEN the rotor hangs LATCH_REACH (5.8) into the strike and rises
-    # at most LATCH_LAND + LATCH_GAP (3.8) before its lugs meet the housing, so 2.0 of shaft stays
-    # in the bore: in a round strike it pins the slide. The fix, measured here, not cut anywhere:
-    # slotted_strike_proposal with the tongue's frame turned 45 and the deck's strike turned 225
-    def rotor_at(s, z, rot, phi=0.0):
-        return tray_tf(s, z, rest=True) * tongue_latch_tf(rot) * Rot(0, 0, LATCH_ENTRY_DEG + phi) * latch_insert_rotor()
-    pinned = [vol(rotor_at(s, 0.0, None) & patch) for s in (0.5, 1.0, 2.0)]
-    pushed = vol((tray_tf(0.5, 0.0, rest=True) * tongue_latch_tf() * Pos(0, 0, LATCH_LAND + LATCH_GAP) *
-                  Rot(0, 0, LATCH_ENTRY_DEG) * latch_insert_rotor()) & patch)
-    print(f"the latch vs the release, as cut (round strike): OPEN, the tray slid 0.5 / 1 / 2 toward the tongue: "
-          f"rotor x strike {pinned[0]:.2f} / {pinned[1]:.2f} / {pinned[2]:.2f} mm^3, the rotor pushed up its "
-          f"{LATCH_LAND + LATCH_GAP:.1f} {pushed:.2f} ({'OPEN: THE CARTRIDGE PINS THE SLIDE, the tray does not come '
-          'out; not gated, the fix below needs iface + part_deck' if max(pinned) > 0.01 else 'free'})")
-    sdir = (tray_tf(1.0) * Pos(0, 0, 0)).position - (tray_tf() * Pos(0, 0, 0)).position
-    srot = TRAY_ROT + 45.0
-    spatch = Pos(st[1][0] + 12 * sdir.X, st[1][1] + 12 * sdir.Y, DECK_BOT_Z + 3) * Box(40, 60, 6) - \
-        Pos(st[1][0], st[1][1], DECK_TOP) * Rot(0, 0, srot) * slotted_strike_proposal(6.0)
-    sm = latch_engagement(spatch, tray_tf(rest=True) * tongue_latch_tf(45.0))
-    sv = latch_verdict(sm)
-    s_end = LUG_RELEASE + 0.5
-    s_path = max(vol(rotor_at(s, 0.0, 45.0) & spatch) for s in np.arange(0.0, s_end + 1e-9, 0.5))
-    s_lift = max(vol(rotor_at(LUG_RELEASE, z, 45.0) & spatch) for z in (0.5, 1, 2, 4, 6, 8, 10))
-    s_stop = vol(rotor_at(s_end + 0.5, 0.0, 45.0) & spatch)
-    s_hold = vol(rotor_at(0.5, 0.0, 45.0, 90.0) & spatch)
-    print(f"  PROPOSAL (not gated, cut nowhere): the strike drawn out {s_end + LUG_R:.1f} along the slide, "
-          f"{LATCH_SHAFT_D + 2 * FIT:.1f} wide, through (slotted_strike_proposal), the deck's strike rot "
-          f"{srot:g}, the tongue's frame 45: {'LATCHES' if not sv else 'FAILS: ' + '; '.join(sv)} "
-          f"({latch_report(sm)}); OPEN slid 0..{s_end:g} x strike {s_path:.2f}, then lifted 0.5..10 at "
-          f"{LUG_RELEASE:g} {s_lift:.2f} mm^3; the slot's end stops it at "
-          f"{s_end + 0.5:g} ({s_stop:.2f}); LOCKED, slid 0.5: {s_hold:.2f} mm^3 "
-          f"({'holds the slide' if s_hold > 1 else 'DOES NOT HOLD'})")
+          f"{-LATCH_LAND - LATCH_GAP:.2f}, short by {BOSS_H:.2f}; verdict {latch_verdict(bare) or 'none'})")
 
     # ---- the trunk + the tray XT30 down the deck's (0, 50) slot (B122) --------------------------
     sl = next(e for e in DECK_HOLES if e[0] == "trunk_slot")

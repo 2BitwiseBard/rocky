@@ -39,8 +39,11 @@ build to (21 entries; deck_hole_audit holds the table, __main__ measures it as c
     grommet passed no plug), zip anchors at (+-12, 50);
   * (0, -43): the tray's I3 strike under its tongue (B87's strike; the tray turned 180 puts the
     tongue south; B126: the driver column crosses the tub's plan and the tub leaves it open).
-    Its seating plane is the deck top, as at the sector strikes: the tray's tongue must come
-    down to it (the strike convention at DECK_HOLES; the pre-D064 tongue floats 3.4 over it);
+    Its seating plane is the deck top, as at the sector strikes: the tongue's tray_latch_boss
+    comes down to it (TRAY_Z). Frame 225 and slotted (iface.latch_strike slide): the bore runs
+    on south along the tray's slide into a 6.6 through slot to y -65, so at OPEN the rotor slides
+    out with the tray (in the round strike it pinned the slide) and the slot's end is the
+    tray's stop at lug_release + 0.5 (tray_on_deck measures it on the deck as cut);
   * six grid holes stay Ø2.8, unused (trim-cup points).
   Removed: the four strap slots (+-26, +-22) (B50 closes: pick 8 (b), no strap inside the
   robot, the tub boxes the pack), the (52, -6) grommet and its two zip anchors (the power comes
@@ -62,7 +65,8 @@ import numpy as np
 from build123d import *
 from common import params, export
 from iface import (leg_port_deck_features, leg_port_seats, IF, latch_strike, SHELL_LATCH_AZ,
-                   SHELL_LATCH_R, STATIONS, R_STATION, station_tf, bay_tub_extent)
+                   SHELL_LATCH_R, STATIONS, R_STATION, station_tf, bay_tub_extent, LATCH_ENTRY_DEG,
+                   LATCH_SHAFT_D, LUG_R)
 
 P = params()
 PR = P["print"]
@@ -84,26 +88,35 @@ T = 6.0                                   # B27 OPEN: params body.deck_t (4.0) i
 #     tap          (Ø,)           through, thread-forming: unused grid holes, as before
 #     m3_below     (Ø, depth)     BLIND from the underside, thread-forming: the top skin stays
 #     slot         (w, h, r)      through, w along x, rounded corners r
-#     strike       (frame deg,)   iface.latch_strike(T), cut at strike_tf(): Pos(x, y, T) *
-#                                 Rot(0, 0, deg). THE CONVENTION: that is the panel's own latch
+#     strike       (frame deg,    iface.latch_strike(T, slide), cut at strike_tf(): Pos(x, y, T) *
+#                   slide)        Rot(0, 0, deg). THE CONVENTION: that is the panel's own latch
 #                                 frame posed on the deck (z 0 = the seating plane = the deck top,
 #                                 +x = the strike's +x, the lugs' entry line LATCH_ENTRY_DEG from
 #                                 it). For the tray it is part_avionics.tongue_latch_tf() (tray-
-#                                 local; +x = the tray's +x, z 0 = the tongue's underside, where the
-#                                 housing sits flush) posed by Pos(*tray_xy, 0) * Rot(0, 0,
-#                                 tray_rot_deg): deg = tray_rot_deg (180: the strike's +x is body
-#                                 -x). The strike is two-fold (lugs at 0 and 180), so 0 and 180 cut
-#                                 the same solid here; the angle still names the frame.
+#                                 local; +x = the tray's +x turned TONGUE_LATCH_ROT 45, z 0 = the
+#                                 boss's underside, where the housing sits flush) posed by
+#                                 Pos(*tray_xy, 0) * Rot(0, 0, tray_rot_deg): deg 225, the entry
+#                                 line body south, along the tray's slide. slide > 0 draws the bore
+#                                 out along the entry line into a through slot whose end meets the
+#                                 rotor's leading lug at that slide (the tray's stop; 0: the round
+#                                 strike). Until 2026-10-07 it was round at 180 and the rotor, 5.8
+#                                 into the deck and rising only 3.8 at OPEN, pinned the tray's slide.
 #                                 AND the seating plane must sit ON the deck top, as a sector foot
 #                                 does: the cartridge reaches LATCH_REACH 5.8 below it, the lugs
-#                                 cam under the land 3.2 down. The pre-D064 tray's tongue floats
-#                                 3.4 over the deck (its rails' channel pose), 5.4 with tray_lift,
-#                                 where the latch fails three of its five rules, the cam, the land
-#                                 and the stops (the lugs meet the land at 5 deg; __main__): the
-#                                 tongue needs a boss down to the deck, its underside the seating
-#                                 face. deck_hole_audit checks it once part_avionics names TRAY_Z
-#                                 (the plate underside over the deck top): TRAY_Z +
-#                                 tongue_latch_tf().Z = 0
+#                                 cam under the land 3.2 down. The tray's plate rests TRAY_Z 5.1
+#                                 over the deck (part_avionics: its lugs on the rails' channel
+#                                 floor), so its tongue carries a 5.1 boss (tray_latch_boss) whose
+#                                 underside is the seating face: TRAY_Z + tongue_latch_tf().Z = 0
+#                                 (deck_hole_audit; tray_on_deck measures the latch on the deck)
+# The tray strike's frame and slot (2026-10-07, the tray agent's measured fix, B51): the entry line
+# (deg + LATCH_ENTRY_DEG) along the tray's slide, its +y turned tray_rot_deg (body south), so the
+# bore drawn out along it is the rotor's path at OPEN; the slot's end stops the tray TRAY_STOP_PAST
+# past params lug_release: half of the lugs' last 1.0 to the window's solid end (part_avionics
+# LIFT_WINDOW 8..17), so lifted at lug_release the leading lug is 0.5 short of the slot's end, and
+# at the stop 0.2 inside the lugs' FIT window (RELEASE 8.3..16.7; tray_on_deck measures both)
+TRAY_STOP_PAST = 0.5
+TRAY_STRIKE = (float(IF["avionics_tray"]["tray_rot_deg"]) + 90.0 - LATCH_ENTRY_DEG,     # 225
+               float(IF["avionics_tray"]["lug_release"]) + TRAY_STOP_PAST)              # 16.5
 _HS = IF["hub_shelf"]
 _AT = IF["avionics_tray"]
 _POST = (("m3_below", (PR["screw_m3_tap"], 5.0)) if _HS["post_screw"] == "below"
@@ -129,8 +142,11 @@ DECK_HOLES = (
       "grommet, correction 15: it passes no plug)")] +
     [(f"zip_{sx:+d}_50", (float(sx), 50.0), "zip", _M3, "zip anchor for the trunk (new)")
      for sx in (-12, 12)] +
-    [("tray_strike", (0.0, -43.0), "strike", (float(_AT["tray_rot_deg"]),),
-      "the tray's I3 latch strike: the tongue's frame turned with the tray (tray_rot_deg); its "
+    [("tray_strike", (0.0, -43.0), "strike", TRAY_STRIKE,
+      f"the tray's I3 latch strike: the tongue's latch frame turned with the tray (frame "
+      f"{TRAY_STRIKE[0]:.0f}), the bore drawn out {TRAY_STRIKE[1] + LUG_R:.1f} south along the tray's "
+      f"slide into a {LATCH_SHAFT_D + 2 * PR['clearance_fit']:.1f} through slot, so the rotor at OPEN "
+      f"slides out with the tray and the slot's end is its stop at lug_release + {TRAY_STOP_PAST}; the "
       "rotor is worked from below, and that driver column crosses the tub's plan (B126: the tub "
       "leaves it open)")] +
     [(f"grid_{x:+d}_{y:+d}", (float(x), float(y)), "tap", _TAP,
@@ -150,11 +166,7 @@ DECK_HOLE_EDGE = 2.0                             # table's new holes keep 3.3 fr
 HEAD_D, HEAD_CLEAR = 6.0, 0.5                    # an M3 head + driver from above vs the docked bases
 TUB_BOSS_D = 8.0                                 # the bay_lid's hanger bosses (params bay_roof; part_bay's)
 TAB_HOLE_TOL = 0.05                              # a rail tab hole on its deck hole (a Ø3.4 pair: 0.05 of 0.6)
-TAB_HOLE_INBOARD = 7.3                           # BODY_LAYOUT s2 'The tray (B51)': the inboard tabs' hole
-                                                 # off the rail block's axis (used only on a pre-D064 rail)
-TRAY_PRE_D064_Z = 3.4                            # the pre-D064 tray's plate underside over the deck top:
-                                                 # part_avionics.__main__ poses the rail at z (T - 1) - 5.4
-                                                 # in the tray's frame, the rail's foot on the deck
+SEAT_TOL = 0.01                                  # the tongue's seating plane on the deck top
 
 
 def strike_tf(entry):
@@ -175,7 +187,7 @@ def deck_hole_cutter(entry):
         w, h, r = size
         return Pos(x, y, -1.0) * extrude(RectangleRounded(w, h, r), T + 2)
     if kind == "strike":
-        return strike_tf(entry) * latch_strike(T)
+        return strike_tf(entry) * latch_strike(T, *size[1:])
     raise ValueError(kind)
 
 
@@ -300,9 +312,10 @@ def deck_hole_audit(bases=None, feet=None):
     (`bases`: posed coxa_yaw_base solids in the deck's model frame, or None to skip, 3D); no
     hole under a carapace foot (`feet`: carapace_feet(), or None to skip: an m3_top's head disc
     >= HEAD_CLEAR from the feet's plan, any other hole off it); the strike where the tray's
-    tongue is, in plan, turn and height (ok None: PENDING on the pre-D064 tray); the tray rails'
-    tab holes on the tray_tab holes (tray_on_deck); the posts where params put them; the tub's
-    hangers on its lid. In plan, so a blind hole and an engraving that overlap in plan count as
+    tongue is, in plan, turn and height (part_avionics.TRAY_Z; tray_on_deck(deck) measures the
+    latch itself), and the slotted strike's own margins; the tray rails' tab holes on the
+    tray_tab holes (tray_on_deck); the posts where params put them; the tub's hangers on its
+    lid. In plan, so a blind hole and an engraving that overlap in plan count as
     touching at any depths (until v0.5 it was 3D, and the edge test read a rim solid 4 under
     the deck: it saturated at 4.00)."""
     from shapely.ops import unary_union
@@ -321,7 +334,7 @@ def deck_hole_audit(bases=None, feet=None):
     pent = pentagon_plan()
     feet_p = None if feet is None else unary_union([_filled(_plan(f)) for f in feet])
     worst = {k: (np.inf, "") for k in ("edge", "cut", "table", "port", "head", "col", "feet")}
-    pref, pref_kept = [], []
+    pref, pref_kept, per = [], [], {}
     for name, xy, kind, size, job in DECK_HOLES:
         p = plans[name]
         edge = pent.exterior.distance(p) if p.within(pent) else -p.difference(pent).area
@@ -354,6 +367,7 @@ def deck_hole_audit(bases=None, feet=None):
         for k, v in cand.items():
             if v[0] < worst[k][0]:
                 worst[k] = v
+        per[name] = cand
     out.append((f"every hole >= {DECK_HOLE_EDGE} inside the pentagon (plan)", worst["edge"][0] >= DECK_HOLE_EDGE - 1e-6,
                 f"tightest {worst['edge'][1]} {worst['edge'][0]:.2f}"))
     out.append((f"every hole >= {DECK_HOLE_GAP} from every other cut (the table + the strikes, washers, "
@@ -376,6 +390,21 @@ def deck_hole_audit(bases=None, feet=None):
                     f"the rest off them; part_shell's sectors at the five stations)", worst["feet"][0] > 0,
                     f"tightest {worst['feet'][1]}: {worst['feet'][0] + (HEAD_CLEAR if '(head)' in worst['feet'][1] else 0):.2f} "
                     f"to the feet's plan"))
+    # the tray strike's own margins (slotted 2026-10-07: its plan runs 22 south of (0, -43)), the
+    # same rules as above, read for it alone: the edge, the nearest cut, the nearest unused grid hole,
+    # the I1 sets, its column vs the docked bases, the carapace feet
+    sn = next(e[0] for e in DECK_HOLES if e[2] == "strike")
+    sc, sp = per[sn], plans[sn]
+    grid = min((sp.distance(plans[n]), n) for n in plans if n.startswith("grid_"))
+    sb = sp.bounds
+    out.append((f"the tray strike as slotted (plan x {sb[0]:.2f}..{sb[2]:.2f}, y {sb[1]:.2f}..{sb[3]:.2f}): its own "
+                "margins", sc["edge"][0] >= DECK_HOLE_EDGE - 1e-6 and sc["cut"][0] >= DECK_HOLE_GAP - 1e-6
+                and sc["port"][0] >= DECK_HOLE_GAP - 1e-6 and ("col" not in sc or sc["col"][0] >= HEAD_CLEAR)
+                and ("feet" not in sc or sc["feet"][0] > 0),
+                f"pentagon edge {sc['edge'][0]:.2f}; nearest cut {sc['cut'][1].split(' to ')[-1]} {sc['cut'][0]:.2f}; "
+                f"nearest unused grid hole {grid[1]} {grid[0]:.2f}; I1 sets {sc['port'][0]:.2f}"
+                + (f"; its column to the docked bases {sc['col'][0]:.2f}" if "col" in sc else "")
+                + (f"; the carapace feet {sc['feet'][0]:.2f}" if "feet" in sc else "")))
     # the strike sits under the tongue: the tray's latch frame (part_avionics.tongue_latch_tf,
     # tray-local) posed by params tray_xy / tray_rot_deg, in plan and turn ...
     from part_avionics import tongue_latch_tf
@@ -386,15 +415,13 @@ def deck_hole_audit(bases=None, feet=None):
     d_ang = abs((np.rad2deg(np.arctan2(xd.Y, xd.X)) - st[3][0] + 180) % 360 - 180)
     out.append(("the tray strike under the tongue's latch (params tray pose x part_avionics.tongue_latch_tf)",
                 d_xy < 0.01 and d_ang < 0.01, f"off {d_xy:.3f} mm, {d_ang:.3f} deg"))
-    # ... and in height: the seating plane ON the deck top (the convention above). ok None =
-    # PENDING: the pre-D064 tray, part_avionics' to rebuild this round (it is not a deck fault)
-    import part_avionics as AV
+    # ... and in height: the seating plane ON the deck top (the convention above)
     tr = tray_on_deck()
     sz = tr["seat_z"]
-    ok = (None if not tr["d064"] and not hasattr(AV, "TRAY_Z") else sz is not None and abs(sz) < 0.01)
+    ok = sz is not None and abs(sz) < SEAT_TOL
     out.append(("the tongue's latch seating plane on the deck top (the strike's z 0)", ok,
                 (f"{sz:+.2f} over it" if sz is not None else "unknown") + f": {tr['seat_src']}"
-                + ("; the tongue needs a boss down to the deck (part_avionics)" if ok is not True else "")))
+                + ("" if ok else "; the tongue needs its boss down to the deck (part_avionics)")))
     # the tray rails' tab holes on the table's tray_tab holes (a ray test: each rail bore's axis
     # through a deck hole of the same Ø, TAB_HOLE_TOL apart at most, and one bore per hole)
     tabs = tr["tabs"]
@@ -403,7 +430,7 @@ def deck_hole_audit(bases=None, feet=None):
     hit = [min(np.hypot(tx - hx, ty - hy) for tx, ty in tabs) for hx, hy in table_tabs] if tabs else [np.inf]
     out.append((f"the tray rails' tab holes on the {len(table_tabs)} tray_tab holes (params tray_xy "
                 f"{tuple(_AT['tray_xy'])}, rot {_AT['tray_rot_deg']:.0f})",
-                len(tabs) == len(table_tabs) == 6 and max(miss + hit) <= TAB_HOLE_TOL,
+                tr["d064"] and len(tabs) == len(table_tabs) == 6 and max(miss + hit) <= TAB_HOLE_TOL,
                 f"{tr['tabs_src']}: " + ", ".join(f"({x:+.2f}, {y:+.2f})" for x, y in sorted(tabs))
                 + f"; worst {max(miss + hit):.3f}"))
     posts = [e[1] for e in DECK_HOLES if e[0].startswith("shelf_post")]
@@ -422,55 +449,150 @@ def deck_hole_audit(bases=None, feet=None):
     return out
 
 
-def tray_on_deck():
-    """What the deck's tray strike and tray-tab holes must meet, read off part_avionics and
-    posed by params tray_xy / tray_rot_deg: {'tabs': [(x, y)] body, 'tabs_src', 'd064': is the
-    rail the D064 one, 'seat_z': the tongue's latch seating plane over the deck top (None:
-    not knowable), 'seat_src'}.
+def tray_on_deck(deck=None):
+    """What the deck's tray strike and tray-tab holes meet, read off part_avionics and posed by
+    params tray_xy / tray_rot_deg: {'tabs': [(x, y)] body, 'tabs_src', 'd064': the rail's bores
+    are inboard of its block axis (B51, pick 7), 'seat_z': the tongue's latch seating plane over
+    the deck top as the tray rests (part_avionics.TRAY_Z + tongue_latch_tf()'s z; None when it
+    names no TRAY_Z, which the audit fails), 'seat_src'}.
     Tabs: the vertical Ø screw_m3_clear bores of part_avionics.tray_rail(), posed by
-    part_avionics.RAIL_POSES (the two rails, tray-local) if it names them, else the way its
-    __main__ poses them (the +x block at RAIL_POSE_X turned 90 about z, the -x block its
-    half-turn copy). Bores OUTBOARD of the block axis are the pre-D064 rail (pick 7 and B51
-    turn the tabs inboard, part_avionics' job this round): then the holes are the proposal's,
-    TAB_HOLE_INBOARD off the block axis on the same 20 mm pitch, and the source says so.
-    Seat: part_avionics.TRAY_Z (the plate underside over the deck top) + tongue_latch_tf()'s z
-    if it names TRAY_Z; on the pre-D064 tray TRAY_PRE_D064_Z (it has no tray_lift yet); a D064
-    tray that does not name it leaves the seat unknowable (None), which the audit fails."""
+    part_avionics.RAIL_POSES (the two rails, tray-local).
+    With `deck` (a deck SOLID in the model frame: body_deck()), also the tray's I3 latch on it
+    where the tray really is, every number measured on the real tongue + boss and the deck as cut,
+    as 'latch': [(check, ok, detail)], with 'm' (the numbers), 'patch' (the deck round the strike,
+    the boss and the rotor's whole path, model frame) and 'model_tf' (body -> model):
+      seat    the rails carry the plate at TRAY_Z (its lugs on the channel floor: lowered 0.05
+              they meet it), which puts the boss's underside on the deck top: it bears there
+              (lowered 0.05 it meets the deck) and the latch frame is the strike's, 3D;
+      LOCKED  the housing on its index in the tongue + boss (part_panel.latch_seat) and
+              part_panel.latch_engagement on the deck through the tongue's latch frame, the tray
+              resting (latch_verdict: no faults);
+      OPEN    the rotor + housing posed in the tongue, the tray slid south 0..the slot's stop
+              (0.5 steps), then lifted 0.5..10 at lug_release: 0 mm^3 against the deck;
+      stop    the slide where the rotor first meets the deck (bisection) is the slot's end: the
+              table's slide +-0.02, inside the lugs' lift window (part_avionics.RELEASE) past
+              lug_release, and slid 0.5 past it the leading lug bears on the end;
+      held    LOCKED, slid 0.5 south: the lugs meet the deck (> 1 mm^3);
+      north   (reported, 'notes') OPEN, slid 0.5 north: the bore's round side holds the shaft, so
+              the latch releases the tray south only (north the plate would cover the trunk slot)."""
     import part_avionics as AV
     r = PR["screw_m3_clear"] / 2
     rail = AV.tray_rail()
     loc = sorted({(round(f.axis_of_rotation.position.X, 4), round(f.axis_of_rotation.position.Y, 4))
                   for f in rail.faces().filter_by(GeomType.CYLINDER)
                   if abs(f.radius - r) < 1e-4 and abs(abs(f.axis_of_rotation.direction.Z) - 1) < 1e-9})
-    rails = getattr(AV, "RAIL_POSES", None)
-    pose_src = "part_avionics.RAIL_POSES" if rails is not None else "part_avionics.__main__'s rail pose"
-    if rails is None:
-        rails = [Pos(AV.RAIL_POSE_X, 0, 0) * Rot(0, 0, 90), Rot(0, 0, 180) * Pos(AV.RAIL_POSE_X, 0, 0) * Rot(0, 0, 90)]
-    tray_local = [(rp * Pos(x, y, 0)).position for rp in rails for x, y in loc]
+    tray_local = [(rp * Pos(x, y, 0)).position for rp in AV.RAIL_POSES for x, y in loc]
     tray = Pos(*_AT["tray_xy"], 0) * Rot(0, 0, _AT["tray_rot_deg"])
     d064 = bool(loc) and all(abs(q.X) < AV.RAIL_POSE_X - 1e-6 for q in tray_local)
-    if d064:
-        pts = tray_local
-        src = f"part_avionics.tray_rail()'s {len(loc)} bores x {len(rails)} rails ({pose_src}), inboard of the block axis"
-    else:
-        # the same pitch along the block (a bore's rail-local x is its tray-local y, turned 90)
-        ys = sorted({round(x, 4) for x, _ in loc}) or [-20.0, 0.0, 20.0]
-        pts = [Vector(sx * (AV.RAIL_POSE_X - TAB_HOLE_INBOARD), y, 0) for sx in (1, -1) for y in ys]
-        out_x = max((abs(q.X) for q in tray_local), default=float("nan"))
-        src = (f"the worktree's tray_rail() is pre-D064 (bores at x +-{out_x:.2f}, outboard of the block "
-               f"axis +-{AV.RAIL_POSE_X:.2f}): the proposal's {TAB_HOLE_INBOARD} inboard of it instead")
-    body = [(tray * Pos(q.X, q.Y, 0)).position for q in pts]
+    src = (f"part_avionics.tray_rail()'s {len(loc)} bores x {len(AV.RAIL_POSES)} rails (part_avionics.RAIL_POSES), "
+           + ("inboard of the block axis" if d064 else f"NOT inboard of the block axis x +-{AV.RAIL_POSE_X:.2f}"))
+    body = [(tray * Pos(q.X, q.Y, 0)).position for q in tray_local]
     tz = AV.tongue_latch_tf().position.Z
     if hasattr(AV, "TRAY_Z"):
         seat, seat_src = AV.TRAY_Z + tz, f"part_avionics.TRAY_Z {AV.TRAY_Z:.2f} + tongue_latch_tf z {tz:.2f}"
-    elif not d064:
-        seat = TRAY_PRE_D064_Z + tz
-        seat_src = (f"pre-D064 tray: the plate underside {TRAY_PRE_D064_Z} over the deck (its rails' channel pose; "
-                    f"{TRAY_PRE_D064_Z + _AT['tray_lift']:.1f} once tray_lift is built) + tongue_latch_tf z {tz:.2f}")
     else:
         seat, seat_src = None, "part_avionics names no TRAY_Z (the plate underside over the deck top)"
-    return {"tabs": [(float(q.X), float(q.Y)) for q in body], "tabs_src": src, "d064": d064,
-            "seat_z": seat, "seat_src": seat_src}
+    out = {"tabs": [(float(q.X), float(q.Y)) for q in body], "tabs_src": src, "d064": d064,
+           "seat_z": seat, "seat_src": seat_src}
+    if deck is None:
+        return out
+
+    # ---- the latch on the deck as cut, through the tray's pose ---------------------------------
+    from iface import latch_insert_rotor, latch_insert_housing, latch_housing_tf, DECK_BOT_Z
+    from part_panel import latch_engagement, latch_verdict, latch_report, latch_seat
+    vol = lambda s: 0.0 if s is None else s.volume
+    M = Pos(0, 0, -DECK_BOT_Z)                          # body -> the deck's model frame (top at T)
+    st = next(e for e in DECK_HOLES if e[2] == "strike")
+    stop = st[3][1] if len(st[3]) > 1 else 0.0
+    rotor, housing = latch_insert_rotor(), latch_insert_housing()
+
+    def lf(s=0.0, z=0.0):                               # the tongue's latch frame, the tray resting
+        return M * AV.tray_tf(s, z, rest=True) * AV.tongue_latch_tf()
+
+    def cart(s=0.0, z=0.0, phi=0.0):                    # the rotor (phi from the entry line) + housing
+        f = lf(s, z)
+        return [f * Rot(0, 0, LATCH_ENTRY_DEG + phi) * rotor, f * latch_housing_tf() * housing]
+    boss = M * AV.tray_tf(rest=True) * AV.tongue_tf() * AV.tray_latch_boss()
+    # the patch: the real deck round everything posed below, +3 in plan. The probes' box spans the
+    # rotor's whole path (slide -1 .. stop + 1, lifted 10 at lug_release: it moves along y only) and
+    # the housing's Ø14 holds every turn latch_engagement gives the rotor (its lugs reach 5.5), so
+    # nothing measured comes within 3 of the patch's cut walls
+    probes = cart() + cart(stop + 1.0) + cart(AV.LUG_RELEASE, 10.0) + cart(-1.0) + [boss]
+    pb = Compound(children=probes).bounding_box()
+    patch = deck & (Pos((pb.min.X + pb.max.X) / 2, (pb.min.Y + pb.max.Y) / 2, T / 2) *
+                    Box(pb.size.X + 6.0, pb.size.Y + 6.0, T + 2.0))
+    xv = lambda parts: sum(vol(p & patch) for p in parts)
+    chk, m = [], {}
+
+    # seat: the rails carry the plate at TRAY_Z, the boss's underside on the deck top
+    tray_s = AV.avionics_tray()
+    tray_rest = M * AV.tray_tf(rest=True) * tray_s
+    rails = [M * AV.tray_tf() * rp * AV.tray_rail() for rp in AV.RAIL_POSES]
+    m["plate_z"] = tray_rest.bounding_box().min.Z - T
+    m["rail_z"] = max(abs(rr.bounding_box().min.Z - T) for rr in rails)
+    m["on_floor"] = (sum(vol(tray_rest & rr) for rr in rails),
+                     sum(vol((Pos(0, 0, -0.05) * tray_rest) & rr) for rr in rails))
+    m["boss_z"] = boss.bounding_box().min.Z - T
+    m["boss"] = (vol(boss & patch), vol((Pos(0, 0, -0.05) * boss) & patch))
+    sf = strike_tf(st)
+    xa = (lf() * Pos(1, 0, 0)).position - lf().position
+    m["frame"] = ((lf().position - sf.position).length,
+                  abs((np.rad2deg(np.arctan2(xa.Y, xa.X)) - st[3][0] + 180) % 360 - 180))
+    chk.append(("seat: the rails carry the plate at TRAY_Z, the boss on the deck top",
+                abs(m["plate_z"] - AV.TRAY_Z) < SEAT_TOL and m["rail_z"] < SEAT_TOL and m["on_floor"][0] < 0.01
+                and m["on_floor"][1] > 1.0 and abs(m["boss_z"]) < SEAT_TOL and m["boss"][0] < 0.01
+                and m["boss"][1] > 1.0 and sum(m["frame"]) < SEAT_TOL,
+                f"plate underside {m['plate_z']:.3f} over the deck top (TRAY_Z {AV.TRAY_Z:.2f}), the rails' feet "
+                f"{m['rail_z']:.3f} off it; the tray resting x rails {m['on_floor'][0]:.3f} mm^3, lowered 0.05 "
+                f"{m['on_floor'][1]:.2f} (on the channel floor); the boss's underside {m['boss_z']:+.3f}, x deck "
+                f"{m['boss'][0]:.3f}, lowered 0.05 {m['boss'][1]:.2f} (bears); latch frame to the strike's "
+                f"{m['frame'][0]:.3f} mm, {m['frame'][1]:.3f} deg"))
+
+    # LOCKED: the cartridge in the tongue + boss, then on the deck through the tongue's frame
+    ms = latch_seat(tray_s + AV.tongue_tf() * AV.tray_latch_boss(), AV.tongue_latch_tf())
+    chk.append(("the housing on its index in the tongue + boss", ms["seated"] < 0.01 and ms["turned"] >= 1.0,
+                f"seated {ms['seated']:.2f} mm^3 (play +-{ms['play']:.1f} deg), turned +-10 deg or a half turn "
+                f">= {ms['turned']:.2f}"))
+    lm = latch_engagement(patch, lf())
+    m["locked"] = lm
+    lv = latch_verdict(lm)
+    chk.append((f"LOCKED on the deck's strike (frame {st[3][0]:g}, slide {stop:g}), the tray resting", not lv,
+                latch_report(lm) + ("" if not lv else "; " + "; ".join(lv))))
+
+    # OPEN: the slide south to the stop, then the lift at lug_release
+    slides = np.arange(0.0, stop + 1e-9, 0.5)
+    m["slide"] = max(xv(cart(s)) for s in slides)
+    lifts = (0.5, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0)
+    m["lift"] = max(xv(cart(AV.LUG_RELEASE, z)) for z in lifts)
+    chk.append((f"OPEN: slid south 0..{stop:g} (0.5 steps), then lifted 0.5..10 at lug_release {AV.LUG_RELEASE:g}",
+                stop > 0 and m["slide"] < 0.01 and m["lift"] < 0.01,
+                f"rotor + housing x deck {m['slide']:.3f} / {m['lift']:.3f} mm^3"))
+    # stop: the first contact going south (bisection, the rotor alone: the lugs lead)
+    lo, hi = AV.LUG_RELEASE, stop + 1.0
+    if xv(cart(lo)[:1]) < 1e-3 and xv(cart(hi)[:1]) > 1e-3:
+        for _ in range(16):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if xv(cart(mid)[:1]) < 1e-3 else (lo, mid)
+        m["contact"] = hi
+    else:
+        m["contact"] = None
+    m["past"] = xv(cart(stop + 0.5)[:1])
+    c = m["contact"]
+    chk.append(("stop: the slot's end meets the leading lug", c is not None and abs(c - stop) <= 0.02
+                and AV.LUG_RELEASE < c <= AV.RELEASE[1] and m["past"] > 1.0,
+                (f"first contact at slide {c:.3f}" if c is not None else "no contact found") +
+                f" (the table's {stop:g}; the lugs' lift window {AV.RELEASE[0]:.1f}..{AV.RELEASE[1]:.1f}, "
+                f"lug_release {AV.LUG_RELEASE:g}); slid {stop + 0.5:g}: {m['past']:.2f} mm^3"))
+    # held: LOCKED, the lugs square to the slot under the land
+    m["held"] = xv(cart(0.5, 0.0, 90.0)[:1])
+    chk.append(("held: LOCKED, slid 0.5 south, the lugs meet the deck", m["held"] > 1.0, f"{m['held']:.2f} mm^3"))
+    # north (reported): the bore's round side
+    m["north"] = xv(cart(-0.5)[:1])
+    notes = [f"OPEN, slid 0.5 NORTH instead: rotor x deck {m['north']:.2f} mm^3 ("
+             + ("the strike's round side holds the shaft: the latch lets the tray go south only)"
+                if m["north"] > 0.01 else "free: the latch does not choose the release's side)")]
+    out.update(latch=chk, notes=notes, m=m, patch=patch, model_tf=M)
+    return out
 
 
 def deck_holes_as_cut(deck):
@@ -481,7 +603,7 @@ def deck_holes_as_cut(deck):
     opens at the underside, reaches its depth +-0.05 and leaves T - depth of skin (a pin above it
     meets solid deck). The strike is the latch check's (part_panel.latch_engagement). The
     retired cuts must be solid deck again outside the table's own cutters ((0, -40) lies in the
-    strike's bore)."""
+    strike: since the frame turned 225 wholly, in its bore and the north entry slot)."""
     vol = lambda s: 0.0 if s is None else s.volume
     pin = lambda x, y, z0, z1, r=0.5: Pos(x, y, (z0 + z1) / 2) * Cylinder(r, z1 - z0)
     out = []
@@ -524,7 +646,13 @@ def deck_holes_as_cut(deck):
             out.append((name, ok, f"{at} {kind:6s} {shape} through ({area:.2f} mm^2 open, a Ø1 pin down its axis "
                         f"meets {thru:.4f} mm^3)"))
     table_cut = Compound(children=[deck_hole_cutter(e) for e in DECK_HOLES])
-    ret = [(name, vol((probe - table_cut) - deck)) for name, probe in DECK_RETIRED]
+
+    def left(probe):
+        # (0, -40) now lies wholly in the tray strike (its bore + the north entry slot, frame 225):
+        # nothing of it is outside the table's cutters, an empty shape OCCT cannot subtract from
+        rest = probe - table_cut
+        return 0.0 if rest is None or not rest.solids() else vol(rest - deck)
+    ret = [(name, left(probe)) for name, probe in DECK_RETIRED]
     out.append(("retired", all(v <= 1e-3 for _, v in ret), "v0.4 cutters outside the table's, minus the deck "
                 "(mm^3 of hole left): " + ", ".join(f"{n} {v:.4f}" for n, v in ret)))
     return out
@@ -615,16 +743,22 @@ if __name__ == "__main__":
     for name, ok, detail in deck_hole_audit(bases_model, feet):
         bad += ok is False                        # None = PENDING (another part's to close)
         print(f"  {name}: {'OK' if ok else 'PENDING' if ok is None else 'FAIL'}" + (f" ({detail})" if detail else ""))
-    # the tray's latch where its tongue really is: the cartridge on this strike with the seating
-    # plane at the tongue's height (measured only while that is not the deck top)
-    tr = tray_on_deck()
-    if tr["seat_z"] is not None and abs(tr["seat_z"]) >= 0.01:
-        heights = sorted({round(tr["seat_z"], 2), round(tr["seat_z"] + (0.0 if tr["d064"] else _AT["tray_lift"]), 2)})
-        for h in heights:
-            m = latch_engagement(d, strike_tf(st) * Pos(0, 0, h))
-            print(f"  (the tray's cartridge with its seating plane {h:.1f} over the deck top: "
-                  + ("; ".join(latch_verdict(m)) or "OK") + f"; first contact {m['contact_deg']} deg, LOCKED "
-                  f"{m['bite']:.2f} mm^3, land over the lugs {100 * m['land']:.0f} %)")
+    # the tray's latch where the tray really is (part_avionics' tongue + boss, resting on its
+    # rails): seated, LOCKED, the slide out along the slot, the slot's end as the stop, held
+    print(f"the tray's I3 latch on this deck, through the tray's pose (strike frame {st[3][0]:g}, slot to slide "
+          f"{st[3][1]:g}; tray_on_deck):")
+    tr = tray_on_deck(d)
+    for name, ok, detail in tr["latch"]:
+        bad += not ok
+        print(f"  {name}: {'OK' if ok else 'FAIL'} ({detail})")
+    for note in tr["notes"]:
+        print(f"  ({note})")
+    if tr["seat_z"] is not None and abs(tr["seat_z"]) >= SEAT_TOL:
+        # the cartridge on this strike with the seating plane where the tongue's really is
+        m = latch_engagement(d, strike_tf(st) * Pos(0, 0, tr["seat_z"]))
+        print(f"  (the tray's cartridge with its seating plane {tr['seat_z']:.2f} over the deck top: "
+              + ("; ".join(latch_verdict(m)) or "OK") + f"; first contact {m['contact_deg']} deg, LOCKED "
+              f"{m['bite']:.2f} mm^3, land over the lugs {100 * m['land']:.0f} %)")
 
     # ---- the under-deck keep-outs (iface): the deck, the shelf posts ----
     from iface import body_keepouts, leg_port_hook_envelope, DECK_BOT_Z

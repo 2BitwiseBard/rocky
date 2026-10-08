@@ -399,9 +399,13 @@ def leg_drop_keepout(extra=0.0):
     leg frame: a leg-aligned box 2 x (DROP_HALF + extra) square about (CABLE_CUTOUT_X, 0), from
     the deck bottom (z -10) down DROP_DEPTH + extra; `extra` grows plan and depth, never up
     (above -10 is the deck and its cutout). As the prep's keepouts.drop_keepout: the 10.5 is
-    already the cutout's 5.5 + 5, so extra 5 on top (+-15.5) is the stricter 'drops + 5' the
-    prep measured the tub (0 mm^3) and the shelf (its plate 0.57 off) against. B120's cross
-    arm (7 x 16 on the cutout) sits inside it (2.50); legs 2/3 reach their own box (B136)."""
+    already the cutout's 5.5 + 5, so extra 5 on top (+-15.5) is the stricter 'drops + 5'. The
+    shelf keeps clear of it (its plate 0.57 off); the tub does NOT: the bare params box
+    (bay_tub_extent, bay_l 192) meets drops + 5 by 196.7 mm^3 at legs 1 / 4 and 416.9 at legs
+    2 / 3, and clears drops + 0 by 3.46 (legs 2 / 3; 4.40 at 1 / 4), the band the prep
+    measured, so the tub gates on drops + 0 (part_bay; measured 2026-10-07; the prep's
+    '0 mm^3 against drops + 5' was not this box). B120's cross arm (7 x 16 on the cutout)
+    sits inside it (2.50); legs 2/3 reach their own box (B136)."""
     h, d = DROP_HALF + extra, DROP_DEPTH + extra
     return Pos(CABLE_CUTOUT_X, 0, DECK_BOT_Z - d / 2) * Box(2 * h, 2 * h, d)
 
@@ -423,8 +427,13 @@ def bay_tub_extent():
     (bay_l moves the nose, pick 4); y is centred on bay_centre[1] (the pack's y, the clear band);
     z hangs from bay_top_z (pick 2). A box: the nose's two vertical edges are chamfered
     (nose_chamfer), the latch boss, the hanger bosses and the door's hook tab are part_bay's. The
-    sim's belly takes these same sums from params (it does not import CAD). At bay_l 194: x
-    -97.5..101.9, y -47.4..7.4, z -55.4..-18.0, as BODY_LAYOUT_PROPOSAL s2 measured the tub."""
+    sim's belly takes these same sums from params (it does not import CAD). At bay_l 192 (the
+    XT60 mate sets it; it was 194): x -97.5..99.9, y -47.4..7.4, z -55.4..-18.0.
+    It leaves out what part_bay's tub stands out of this box with (measured by the bay agent,
+    2026-10-07; the sim's belly does not have them either): the I3 latch boss + the door's ear,
+    x -97.5..-85.5, y down to -64.45, z -55.4..-39.65; two pilasters Ø9.6 at (+-70, -50.6), z
+    -49.5..-20; the keeper, x -83..-80.5, y up to 8.6; the north wall's return over the lid, up
+    to z -17.0. A keep-out against the tub near those needs part_bay's solid, not this box."""
     bs = IF["battery_sled"]
     xi0 = bs["bay_door_x"] + bs["door_t"]
     xi1 = xi0 + bs["bay_l"]
@@ -476,8 +485,8 @@ LATCH_KEYWAY_DEG = 135.0
 LATCH_FLAT_R = 6.0                # leaves 2.7 of wall to the Ø6.6 bore at the flat
 # the carapace latch station (D030): each sector's latch pad over the deck's strike.
 # Worked from under the deck, so nothing may hang under a strike: station 162's sits
-# at body (-73.5, -12.3), inside the keel tub's plan (bay_tub_extent: x -97.5..101.9, y
-# -47.4..7.4 at bay_l 194; B84, B100), as do station 306's and the tray's (B126), and the tub must
+# at body (-73.5, -12.3), inside the keel tub's plan (bay_tub_extent: x -97.5..99.9, y
+# -47.4..7.4 at bay_l 192; B84, B100), as do station 306's and the tray's (B126), and the tub must
 # leave those columns open (a Ø5 driver + its hand) or that sector cannot come off
 SHELL_LATCH_AZ, SHELL_LATCH_R = 27.5, 74.5
 
@@ -519,8 +528,9 @@ def latch_housing_tf():
 def latch_pocket(z0, z1):
     """Cutter for a panel's housing pocket (B107), in the latch frame, spanning z0..z1:
     the Ø housing_pocket_d with the index flat, both FIT/2 off the housing's, turned as
-    latch_housing_tf. A panel with no strike yet (the belly door, the tray tongue) takes
-    its own +x as the strike's: draw the strike to match."""
+    latch_housing_tf. The panel's latch frame +x is its strike's: draw the strike to match
+    (the bay door's in the tub, part_bay; the tray tongue's frame turned 45 so the entry line
+    runs along its slide, its deck strike cut at 225 and slotted, part_deck)."""
     pl = IF["panel_latch"]
     gap = (pl["housing_pocket_d"] - pl["housing_d"]) / 2
     return latch_housing_tf() * latch_d_profile(pl["housing_pocket_d"] / 2, LATCH_FLAT_R + gap, z0, z1)
@@ -542,13 +552,25 @@ def latch_insert_rotor():
     return r
 
 
-def latch_strike(frame_t):
+def latch_strike(frame_t, slide=0.0):
     """Cutter for the FRAME side of I3 (deck, coupon): z 0 = the frame's top (the
     seating plane), its underside at -frame_t (>= LATCH_REACH + 0.2). A bore for the
     shaft, two entry slots through the land on the LATCH_ENTRY_DEG line, and an
     underside recess that is the lugs' swept path over the quarter turn (CCW seen
     from above): its ceiling ramps down rotor_cam_rise over 0..LATCH_RAMP_DEG, from
-    LATCH_GAP above the lug tops to LATCH_BITE into them, dwells to 90 and stops."""
+    LATCH_GAP above the lug tops to LATCH_BITE into them, dwells to 90 and stops.
+
+    slide > 0: a panel that leaves its frame SIDEWAYS (the avionics tray, I4: slide 16 then
+    lift, pick 7). At OPEN the rotor still hangs LATCH_REACH (5.8) into the frame and rises
+    only LATCH_LAND + LATCH_GAP (3.8) before its lugs meet the housing, so in the round bore
+    2.0 of shaft pins the slide (the tray: 2.20 / 12.15 / 36.18 mm^3 at 0.5 / 1 / 2,
+    2026-10-07). The bore is drawn out along the entry line (+LATCH_ENTRY_DEG) into a slot
+    through the frame, the bore's width (LATCH_SHAFT_D + 2 FIT), slide + LUG_R from the
+    axis: the leading lug runs in it, the trailing one follows back along its own entry slot,
+    and the slot's square end meets the leading lug's tip at `slide`, the panel's stop. The
+    panel's latch frame must put the entry line along its slide. At LOCKED the lugs lie
+    square to the slot under the land and hold the slide. slide 0 cuts the round strike, the
+    same solid as before the slot existed (the sectors', the bay door's)."""
     # a thinner frame lets the rotor's slot end hang out of it (the deck's 6 is B27 OPEN)
     assert frame_t >= LATCH_REACH + 0.2 - 1e-6, f"I3 strike needs a {LATCH_REACH + 0.2:.1f} frame"
     rise = IF["panel_latch"]["rotor_cam_rise"]
@@ -572,6 +594,11 @@ def latch_strike(frame_t):
             phi = LATCH_RAMP_DEG * k / n
             c = -LATCH_LAND - rise * phi / LATCH_RAMP_DEG
             cut += Rot(0, 0, a + phi) * latch_lug(FIT, ceil_lock - 0.01, c)
+    if slide > 0:
+        # last, so slide 0 runs exactly the round strike's booleans (its BREP is byte-identical)
+        ln = slide + LUG_R
+        cut += Rot(0, 0, LATCH_ENTRY_DEG) * Pos(ln / 2, 0, -frame_t / 2) * \
+            Box(ln, LATCH_SHAFT_D + 2 * FIT, frame_t + 2)
     return cut
 
 
