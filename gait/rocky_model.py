@@ -26,7 +26,7 @@ instantaneous cap. The MJCF forcerange / URDF effort are stall_nm(); the
 sustained budget is enforced where time matters (rl_common.ThermalProxy,
 pebble_feasibility THERMAL_LOAD), not by clipping every step.
 
-D053 (2026-09-24, docs/ROBOT_AS_DATA.md step 1): the robot's SHAPE is data
+D053 (2026-09-24, docs/DESIGN_CHANGE_GUIDE.md §9 step 1): the robot's SHAPE is data
 too. `robot()` builds a frozen RobotSpec from params `robot:` (legs, the
 per-leg joint chain, foot, tool, IK solver) and links it to the ranges in
 `joints.pos_deg` and the ids in `bus:`; `validate()` refuses a spec the rest
@@ -492,7 +492,7 @@ def joint_to_id(leg: int, joint: str) -> int:
 
 
 # ------------------------------------------------------------------ robot description (D053)
-# docs/ROBOT_AS_DATA.md. The robot's shape (how many legs, where, which joints
+# docs/DESIGN_CHANGE_GUIDE.md §9. The robot's shape (how many legs, where, which joints
 # in which order, which servo drives each, which id it answers to) as ONE
 # frozen object built from params. Pure Python on purpose — the driver
 # imports this module; the numpy kinematics come later (leg_kin, step 6).
@@ -564,7 +564,7 @@ class RobotSpec:
         names = {L.joint_names for L in self.legs}
         if len(dofs) != 1 or len(names) != 1:
             raise RobotSpecError(f"legs differ ({sorted(dofs)} DOF, chains {sorted(names)}): "
-                                 "(N, dof) consumers need identical legs until ROBOT_AS_DATA step 10")
+                                 "(N, dof) consumers need identical legs until DESIGN_CHANGE_GUIDE §9 step 10")
         return dofs.pop()
 
     def leg_joint_names(self, leg: int = 0) -> tuple:
@@ -706,7 +706,7 @@ def _vec3(v, what: str, errors: list) -> tuple | None:
 
 
 def _is_yaw_2r(chain: list, foot: tuple) -> bool:
-    """The shape pebble_gait.leg_ik is exact for (docs/ROBOT_AS_DATA.md §3.2):
+    """The shape pebble_gait.leg_ik is exact for (docs/DESIGN_CHANGE_GUIDE.md §9, step 6 and the risks):
     3 joints; joint 0 about +z at the origin; joints 1, 2 about the same +-y axis;
     every offset and the foot in the y = 0 plane; the knee and the foot along +x
     of their parent. Chosen by SHAPE, never by joint name."""
@@ -753,7 +753,7 @@ def _resolve(P: dict):
         if not uniform and not legs_b.get("allow_asymmetric", False):
             errors.append("robot.legs.station_deg is not evenly spaced CCW (360/count apart): the wave gait's "
                           "phase order, manip_adjacent's lean math and the CAD sectors assume symmetry — set "
-                          "allow_asymmetric: true only after auditing them (ROBOT_AS_DATA §8)")
+                          "allow_asymmetric: true only after auditing them (DESIGN_CHANGE_GUIDE §9, risks)")
     else:
         first = float(legs_b.get("first_station_deg", 90.0))
         stations = tuple(first + i * 360.0 / n for i in range(n)) if n > 0 else ()
@@ -820,7 +820,7 @@ def _resolve(P: dict):
     # -- overrides: nothing honours them yet
     if R.get("overrides"):
         errors.append("robot.overrides is not empty, but no consumer honours per-leg / per-joint servos yet "
-                      "(ROBOT_AS_DATA step 10): refusing rather than silently ignoring it")
+                      "(DESIGN_CHANGE_GUIDE §9 step 10): refusing rather than silently ignoring it")
 
     # -- bus map
     leg_ids = bus.get("leg_ids") or []
@@ -850,7 +850,7 @@ def _resolve(P: dict):
             continue
         cad = acts[s].get("cad")
         if cad is None:
-            warns.append(f"actuators.{s} has no `cad:` key (ROBOT_AS_DATA step 2): nothing checks that CAD "
+            warns.append(f"actuators.{s} has no `cad:` key (DESIGN_CHANGE_GUIDE §9 step 2): nothing checks that CAD "
                          "builds this servo's case")
         elif s in {c["servo"] for c in chain} and cad != "servo_st3215":
             warns.append(f"actuators.{s}.cad is {cad!r} but the leg CAD is still hard-keyed to servo_st3215 "
@@ -942,7 +942,7 @@ def actuator_order(spec: RobotSpec | None = None) -> list:
 def id_table(path: str | None = None) -> list:
     """Every servo on the bus, sorted by id: IdRow(sid, leg, joint, servo,
     protocol, counts, sweep_deg, limits_deg). The one table the driver, the
-    bridge and the mock will build from (ROBOT_AS_DATA step 3/10)."""
+    bridge and the mock will build from (DESIGN_CHANGE_GUIDE §9 steps 3 and 10)."""
     return robot(path).id_rows(params(path))
 
 

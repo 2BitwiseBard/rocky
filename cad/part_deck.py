@@ -25,9 +25,13 @@ v0.4 -> v0.5 (D064, 2026-10-07, the owner's body-layout picks: option A, the kee
 the deck + the north hub shelf, the 8 mm layer, the tray at (0, 0) turned 180): body_deck()
 cuts DECK_HOLES, the one table the tray rails, the tub's lid, the hub shelf and the tray latch
 build to (21 entries; deck_hole_audit holds the table, __main__ measures it as cut):
-  * (+-40, -20 / 0 / 20): six v0.4 grid holes opened 2.8 -> 3.4 for the tray rails' tabs,
-    turned inboard (B51: (0, 0) is the only tray pose clear of the five coxa bases); the four
-    south ones also hang the tub (one M3 x 16 through tab + deck into the bay_lid boss's insert);
+  * (+-40, -20 / 0 / 20): six v0.4 grid holes under the tray rails' tabs, turned inboard (B51:
+    (0, 0) is the only tray pose clear of the five coxa bases). The four south ones are opened
+    2.8 -> 3.4: they also hang the tub (one M3 x 16 through tab + deck into the bay_lid boss's
+    insert). The two north ones (+-40, 20) are Ø2.8 thread-forming (B155, 2026-10-08: opened to
+    3.4 for the proposal's shelf hangers, they had nothing to bite once the hangers moved to
+    their own posts, correction 10): an M3 x 10 through the 2.0 tab threads into the deck itself,
+    its tip 2.0 under the deck, 1.90 over the star board at (40, 20) (part_busboard measures it);
   * (+-58, -18): the tub's other two hangers (B84), new;
   * the hub shelf's three posts (+-50, 34), (26, 64): BLIND Ø2.8 from the underside, 5 deep
     under a 1.0 skin. The M3 comes up through the shelf plate and the post: a head on the deck
@@ -76,14 +80,16 @@ T = 6.0                                   # B27 OPEN: params body.deck_t (4.0) i
 # iface's since 2026-10-07, so the deck and the under-deck keep-outs pose a port the same way
 
 # ---- option A's deck holes: the CONTRACT the body layout builds to (2026-10-07) -------------
-# docs/BODY_LAYOUT_PROPOSAL.md s3 'Deck holes (A)' with its corrections 10 (the shelf posts) and
+# docs/archive/BODY_LAYOUT_PROPOSAL_2026-09-28.md s3 'Deck holes (A)' with its corrections 10 (the shelf posts) and
 # 15 (the (0, 50) slot), on the owner's picks (option A, the 8 mm layer, the tray at (0, 0)
 # turned 180 with its tabs inboard, the three boards on the hub shelf). The tray rails, the
 # tub's lid bosses, the shelf's posts and the tray's latch bolt to THESE; body_deck() cuts them
 # (v0.5) and every other part ray-tests against this TABLE, not the solid. Of v0.4's 13 grid
 # holes 6 are reused, 6 stay unused, (0, -40) goes (it overlaps the strike); 9 features are new.
 #   (name, (x, y) body, kind, size, job). kind / size:
-#     m3_top       (Ø,)           through, an M3 driven from the deck top (its head on top)
+#     m3_top       (Ø,)           through, an M3 driven from the deck top (its head on top): Ø
+#                                 screw_m3_clear where it reaches an insert below, Ø screw_m3_tap
+#                                 where it threads into the deck itself (the north tray tabs, B155)
 #     zip          (Ø,)           through, a zip-tie anchor (no head)
 #     tap          (Ø,)           through, thread-forming: unused grid holes, as before
 #     m3_below     (Ø, depth)     BLIND from the underside, thread-forming: the top skin stays
@@ -123,12 +129,20 @@ _POST = (("m3_below", (PR["screw_m3_tap"], 5.0)) if _HS["post_screw"] == "below"
          else ("m3_top", (PR["screw_m3_clear"],)))
 _M3 = (PR["screw_m3_clear"],)
 _TAP = (PR["screw_m3_tap"],)
+# the north tray tabs' screw (B155, BOM B-27): an ISO 7380 M3 x 10 through the rail's 2.0 tab
+# (part_avionics.TAB_T) and 6 of deck, its last 2.0 out under the deck; part_busboard measures
+# that tip against the loaded shelf (1.90 over the star board at (40, 20))
+TAB_TAP_SCREW_L = 10.0
 DECK_HOLES = (
     [(f"tray_tab_tub_{sx:+d}_{sy}", (float(sx), float(sy)), "m3_top", _M3,
       "tray-rail tab + tub hanger: one M3 x 16 through the tab and the deck into the bay_lid "
       "boss's insert (was a 2.8 grid hole)") for sy in (-20, 0) for sx in (-40, 40)] +
-    [(f"tray_tab_{sx:+d}_20", (float(sx), 20.0), "m3_top", _M3,
-      "tray-rail tab (no longer a shelf hanger: correction 10; was a 2.8 grid hole)")
+    # B155: thread-forming, as the grid hole was. The proposal opened it to 3.4 for a shelf
+    # hanger's M3 into a boss insert; correction 10 moved the hangers to their own posts and left
+    # nothing under it (the star board's top is 3.9 under the deck at (40, 20))
+    [(f"tray_tab_{sx:+d}_20", (float(sx), 20.0), "m3_top", _TAP,
+      f"tray-rail tab, M3 x {TAB_TAP_SCREW_L:.0f} thread-forming into the deck (nothing under: the star "
+      "board is 3.9 below; no longer a shelf hanger: correction 10)")
      for sx in (-40, 40)] +
     [(f"tub_hanger_{sx:+d}", (float(sx), -18.0), "m3_top", _M3,
       "tub hanger: M3 x 16 into the bay_lid boss's insert (new)") for sx in (-58, 58)] +
@@ -166,7 +180,8 @@ DECK_HOLE_GAP, DECK_HOLE_GAP_PREF = 2.0, 3.3     # to every other cut / an I1 fe
 DECK_HOLE_EDGE = 2.0                             # table's new holes keep 3.3 from each other
 HEAD_D, HEAD_CLEAR = 6.0, 0.5                    # an M3 head + driver from above vs the docked bases
 TUB_BOSS_D = 8.0                                 # the bay_lid's hanger bosses (params bay_roof; part_bay's)
-TAB_HOLE_TOL = 0.05                              # a rail tab hole on its deck hole (a Ø3.4 pair: 0.05 of 0.6)
+TAB_HOLE_TOL = 0.05                              # a rail tab hole on its deck hole (a Ø3.4 pair: 0.05 of 0.6;
+                                                 # over a north tab's Ø2.8 the M3 has 0.2 a side in the rail)
 SEAT_TOL = 0.01                                  # the tongue's seating plane on the deck top
 
 
@@ -223,8 +238,9 @@ def kept_cuts():
 
 
 def grid_holes():
-    """The 12 holes left of v0.4's 20 mm electronics grid, body xy: the six opened to Ø3.4 for
-    the tray tabs / tub hangers and the six unused Ø2.8 ones. A thin wrapper kept for importers:
+    """The 12 holes left of v0.4's 20 mm electronics grid, body xy: the four opened to Ø3.4 for
+    the tray tabs that hang the tub, the two north tray tabs' Ø2.8 thread-forming ones (B155) and
+    the six unused Ø2.8 ones. A thin wrapper kept for importers:
     DECK_HOLES is the contract (kind, size and job per hole)."""
     return [xy for _, xy, kind, _, _ in DECK_HOLES
             if kind in ("m3_top", "tap") and xy[0] % 20 == 0 and xy[1] % 20 == 0]

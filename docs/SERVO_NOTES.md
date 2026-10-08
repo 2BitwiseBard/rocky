@@ -30,13 +30,15 @@ backlash.
 
 | case (12 V) | yaw | hip | knee | source |
 |---|---|---|---|---|
-| stand on 5 legs (static) | 0 | 5.5 % | 8.9 % | `sim/out/torque_audit.json` |
-| 3-leg stance (static) | 0 | 9.1 % | 14.8 % | same |
-| walk 34.2 mm/s, physics RMS (D063; at 45.5: 3.8 / 6.8 / 11.8 %) | 3.1 % | 6.5 % | 11.5 % | `sim/out/audit_gestures.json` |
-| self-right push (W/2 through one leg) | 0 | 7.4 % | **47.5 %** | `torque_audit.json` |
-| the hottest gesture (`manip_adjacent`), RMS | 4.9 % | 39.7 % | 19.4 % | `audit_gestures.json` |
+| stand on 5 legs (static) | 0 | 5.7 % | 9.3 % | `sim/out/torque_audit.json` |
+| 3-leg stance (static) | 0 | 9.5 % | 15.4 % | same |
+| walk 34.2 mm/s, physics RMS | 3.1 % | 6.8 % | 11.8 % | `sim/out/audit_gestures.json` |
+| self-right push (W/2 through one leg) | 0 | 7.7 % | **49.5 %** (1.46 N·m; WARM, HOT is 50) | `torque_audit.json` |
+| the hottest gesture (`manip_adjacent`), RMS | 5.0 % | 41.3 % | 20.2 % | `audit_gestures.json` |
 
-(Percent of the 2.94 N·m stall. Yaw reads 0 in the static audit because it
+(Percent of the 2.94 N·m stall, on the D064 robot: 2843 g with the keel
+tub and the hub shelf, 2728 g before. The worst hip is 0.48 N·m, 16.3 %,
+holding 100 g in the hand. Yaw reads 0 in the static audit because it
 applies vertical foot forces only.)
 
 - **Speed binds before torque.** The walking envelope (34.2 mm/s since
@@ -52,8 +54,8 @@ applies vertical foot forces only.)
     and the 3.0 rad/s loaded speed budget is derived from it. At the
     datasheet's rated torque it would be about 1.6 rad/s (computed).
   - Every audit number is at 12 V. A 3S pack runs 12.6 V down to the 9.9 V
-    floor; if stall scales with voltage, the knee push is ~51 % of stall at
-    11.1 V and ~58 % at 9.9 V (computed). Only the RL environments
+    floor; if stall scales with voltage, the knee push is ~54 % of stall at
+    11.1 V and ~60 % at 9.9 V (computed). Only the RL environments
     randomise voltage.
   - The firmware's own overload rule is 80 % load for 2 s → output drops
     to 20 % (memory table V3.7, addr 34–36), not the sim's 85 % for 180 s.
@@ -202,7 +204,7 @@ loop under triggered clips ([arXiv 2501.05204](https://arxiv.org/abs/2501.05204)
 |---|---:|---|---|
 | **ST3215 12 V** (baseline) | ~21 | fine for everything the sim asks | stiff position control only |
 | **Feetech HL-3930 / HL-3950** (same body, spline, bus, 9–12.6 V) | ~73 / ~85–110 | a **constant-current mode**: real torque ceilings and soft holds (not back-drivability: still 1:345) | evidence is one datasheet line (no HLS memory table found, units of the torque value undocumented); +15.5–19.5 g each; HL-3930's *rated* torque (8.7 kg·cm) is below the ST3215's; **the driver writes 0 to addr 44 in every goal block, which on an HL servo is goal torque**, so it needs its own register family first (B78) |
-| STS3250 (same body) | ~65–73 | 50 kg·cm, faster, coreless, lowest backlash measured | runs hottest; no current mode; +19.5 g; FEM: with knee-limited loads the coxa base falls from SF 2.93 to ~1.76 (computed) |
+| STS3250 (same body) | ~65–73 | 50 kg·cm, faster, coreless, lowest backlash measured | runs hottest; no current mode; +19.5 g; FEM: the coxa base already FAILS at SF 1.10 on ST3215 stall loads with the real I1 support (D064, the owner's fix pending; it was 2.93 on a whole-underside grip); scaled to these knee loads, ~0.66 (computed) |
 | Dynamixel XM430-W350 | ~310 | mature current-based position control | new CAD, new bus, 15× the price |
 | Brushless quasi-direct drive (CubeMars AK40-10, SteadyWin GIM4305) | ~105–135 | back-drivable, force-controllable joints: the most organic motion there is | 150–190 g each, 24 V class drivers, CAN, a new robot: the full-scale Rocky (D003), not Pebble |
 

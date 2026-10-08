@@ -189,7 +189,7 @@ def actuators_xml():
     """One <position> per rm.actuator_order() entry (D053): leg joints leg-major,
     then the tools — the ctrl[:15] / ctrl[15:20] order every consumer relies on.
     The kp/kv literals stay here per kind until they move into params
-    (docs/ROBOT_AS_DATA.md step 2)."""
+    (docs/DESIGN_CHANGE_GUIDE.md §9 step 2)."""
     tools = set(rm.robot().tool_names())
     out = []
     for name in rm.actuator_order():

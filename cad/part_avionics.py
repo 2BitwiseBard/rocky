@@ -13,7 +13,7 @@
                     separate print because the tray prints plate-down (a boss under the plate
                     would float); its D pocket locates it on the housing, the housing on the tray.
 
-Pose (2026-10-07, decision 11: I4 revised; docs/BODY_LAYOUT_PROPOSAL.md s2 'The tray (B51)'):
+Pose (2026-10-07, decision 11: I4 revised; docs/archive/BODY_LAYOUT_PROPOSAL_2026-09-28.md s2 'The tray (B51)'):
 params tray_xy (0, 0) turned tray_rot_deg 180, bulkhead north, tongue south over the deck's
 strike at (0, -43) (part_deck.DECK_HOLES 'tray_strike', rot 225). The rails' channel sits
 tray_lift 2.0 higher than D063 drew it, so the plate stands 5.4 over the deck top (TRAY_Z 5.1

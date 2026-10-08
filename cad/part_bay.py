@@ -1,7 +1,7 @@
 """The keel tub (I5, option A, B84): bay_tub + bay_lid + bay_door — 2026-10-07.
 
 The battery bay as parts, built to params interfaces.battery_sled and iface.bay_tub_extent()
-(the owner's picks 1-12, docs/BODY_LAYOUT_PROPOSAL.md option A). Body frame throughout (z =
+(the owner's picks 1-12, docs/archive/BODY_LAYOUT_PROPOSAL_2026-09-28.md option A). Body frame throughout (z =
 leg z, deck z -10..-4, +x east, leg 0 north); the tub hangs east-west under the deck at
 y -20, nose (XT60) +x, door -x.
 

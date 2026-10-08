@@ -4,15 +4,15 @@ From the printed parts and the [bill of materials](../bom/BOM.csv) to a robot
 on its bench stand, every servo calibrated, powered from the bench supply and
 ready for its first steps. Nothing has been built from this guide yet, so
 every VERIFY in it is real, and so is every item in [8. Open on the first
-build](#8-open-on-the-first-build). Several of those are design gaps that
-block a print; the guide holds the print where they bite. D063 (2026-09-28)
-fixed the fork, the knob, the I6 shoe, the I3 latch, the hatch magnets, the
-tray's Pi and IMU mounts and the link clip in the CAD ([8.7](#87-fixed-in-d063));
-the body layout (bay, tray, hub) is a proposal for the owner,
-[BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md).
+build](#8-open-on-the-first-build). D064 (2026-10-07) put the owner's body
+layout into the CAD: the leg port docks on two cone seats, the battery rides
+in a keel tub under the deck, the hub boards sit on a shelf north of it, and
+the stand holds the robot by the tub. One part is on hold: `coxa_yaw_base`
+fails the FEM at servo stall (SF 1.10), so print one for the bench leg and
+wait for the fix before the other four ([PRINT_PLAN.md](PRINT_PLAN.md)).
 
 This guide is the order of work; the detail lives in the documents it links:
-[PRINT_PLAN.md](PRINT_PLAN.md) (what to print, poses, supports, criteria),
+[PRINT_PLAN.md](PRINT_PLAN.md) (what to print, poses, supports, go / no-go),
 [bench/BENCH_RUNBOOK.md](../bench/BENCH_RUNBOOK.md) (servo bring-up and bench
 tests), [WIRING_HARNESS.md](WIRING_HARNESS.md) (power tree, bus, star board,
 pin map, cut lengths), [INTERFACES.md](INTERFACES.md) (I1–I6) and
@@ -26,17 +26,17 @@ redraws one).
 
 [The build at a glance](#the-build-at-a-glance) · [Safety](#safety) · [1.
 Before you assemble](#1-before-you-assemble) · [2. The leg](#2-the-leg) · [3.
-The tibia and foot](#3-the-tibia-and-foot) · [4. The body
-frame](#4-the-body-frame) · [5. Wiring](#5-wiring) · [6. Dock the legs and
-power up](#6-dock-the-legs-and-power-up) · [7. The carapace](#7-the-carapace)
-· [8. Open on the first build](#8-open-on-the-first-build)
+The tibia and foot](#3-the-tibia-and-foot) · [4. The body](#4-the-body) · [5.
+Wiring](#5-wiring) · [6. Dock the legs and power
+up](#6-dock-the-legs-and-power-up) · [7. The carapace](#7-the-carapace) · [8.
+Open on the first build](#8-open-on-the-first-build)
 
 ## The build at a glance
 
-1. **Printer and coupons:** fit ladder filed, batch 1 and the port coupon
-   passed, CAD regenerated ([1](#1-before-you-assemble)).
-2. **Leg parts from the current tree only:** a fork from before D063 does
-   not go onto the servo ([2.3](#23-coxa-steps-1-and-2)).
+1. **Printer and port first:** the fit ladder and the port coupons filed, the
+   CAD regenerated ([1.1](#11-batch-0-the-printer-and-the-port)).
+2. **Coupons, then leg parts from the current tree only**
+   ([1.3](#13-batch-1-coupons-and-the-blank)); one `coxa_yaw_base`, not five.
 3. **One leg dry-fitted on the blanks before any servo arrives**, with the
    harness threading tried ([2.2](#22-dry-fit-on-blanks)).
 4. **Servos on the desk:** checked, numbered, smoke-moved
@@ -46,16 +46,15 @@ power up](#6-dock-the-legs-and-power-up) · [7. The carapace](#7-the-carapace)
    jig ([2](#2-the-leg)).
 6. **Tube length and foot**, decided before five tubes are cut
    ([3](#3-the-tibia-and-foot)).
-7. **Four more legs** ([2.11](#211-four-more-legs)); meanwhile the stand, the
-   star board and the tray electronics on the bench.
-8. **The deck only after its layout settles:** B27, B28, B51, the bay
-   ([4.1](#41-when-to-print-the-deck); the measured options are in
-   [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)).
+7. **Four more legs** ([2.11](#211-four-more-legs)); their bases once the
+   FEM hold lifts.
+8. **The body:** the deck, the keel tub with its door and sled, the hub
+   shelf, the tray, then the stand ([4](#4-the-body)).
 9. **Wiring before docking**, every drop tested unplugged ([5](#5-wiring)).
 10. **Power-up on the stand, tethered:** legs docked one at a time, loop key
     out while plugging ([6](#6-dock-the-legs-and-power-up)).
-11. **The pack once the bay exists** ([6.4](#64-the-pack)); **the carapace
-    last** ([7](#7-the-carapace)).
+11. **The pack in its sled** ([6.4](#64-the-pack)); **the carapace last**
+    ([7](#7-the-carapace)).
 
 ## Safety
 
@@ -84,88 +83,113 @@ desk.
 
 ### You need
 
-- **Printed, PLA:** `fit_ladder` (batch 0); `servo_blank`, `blank_idler`,
-  `coupon_cup`, `coupon_yaw_hub`, `coupon_hip_hub`, `coupon_idler`,
-  `horn_coupler` (batch 1); the [interface
-  coupons](PRINT_PLAN.md#interface-coupons-pla-02-mm-with-batch-1) (2 ×
-  `thumb_knob_m3`, the latch, dovetail and panel pairs, `tool_hook`,
-  `tool_scoop`); the port coupons, `port_coupon_deck` + `port_coupon_plate`
-  (PRINT_PLAN has them in batch 0's GO / NO-GO table and in batch 3; print
-  them now). `coupler_recess_demo` is not needed: `coupon_hip_hub` covers
-  it. Print from the current `cad/out/`; pre-D047 leg parts do not fit the
-  servo.
+- **Printed, PLA:** batch 0, `fit_ladder` and the port coupons
+  (`port_coupon_deck`, the four plates `port_coupon_plate_relief46`,
+  `_relief42`, `_fit10`, `_fit20`, and 2 × `thumb_knob_m3`); batch 1,
+  `servo_blank`, `blank_idler`, `coupon_cup`, `coupon_yaw_hub`,
+  `coupon_hip_hub`, `coupon_idler`, `horn_coupler`; the [interface
+  coupons](PRINT_PLAN.md#interface-coupons-pla-02-mm-with-batch-1) (the
+  latch, dovetail and panel pairs, `tool_hook`, `tool_scoop`). Print from the
+  current `cad/out/`; pre-D047 leg parts do not fit the servo.
 - **Servo bring-up:** A-01 4 × ST3215 12 V, A-02 adapter, A-04 bench supply
   (or A-05: fuse its lead, watch the wattmeter), A-07 barrel pigtails; A-03
   optional (12.0 V from the bench supply, never a full 3S pack).
 - **Hardware and tools:** A-08, A-09 M3 × 6, A-10 M3 × 8, A-12 (only for an M2
-  horn), A-13 inserts, A-14 threadlocker + CA; X-11 calipers, X-12 multimeter,
-  X-13 scales, X-14 iron with an insert tip, a Ø2 pin, X-19 dryer for PETG.
-- **Added to the BOM with this guide:** A-19 M3 × 16 hex-head bolts (ISO
-  4017 / DIN 933, 5.5 mm A/F) for the thumbscrews
-  ([1.3](#13-batch-1-coupons-and-the-blank)), the I6 set knobs
-  ([7.3](#73-accessories-i6)) and the trim cup; B-23 cable ties; B-24 the
-  12 V node. B-21's kit carries the IMU's M2.5 × 10 and standard nuts
-  ([4.5](#45-the-avionics-tray-on-the-bench-i4)). **Not in the BOM yet:** a
-  mating JST-SH 3-pin header for the hand's side of the I2 disconnect (B91)
-  and pack straps (B93).
+  horn), A-13 inserts, A-19 M3 × 16 hex-head bolts (ISO 4017 / DIN 933,
+  5.5 mm A/F: the thumbscrews and the I6 set knobs), A-14 threadlocker + CA;
+  X-11 calipers, X-12 multimeter, X-13 scales, X-14 iron with an insert tip,
+  a Ø2 pin, X-19 dryer for PETG. For the port coupons, not in the BOM: a
+  0.2 mm feeler, a dial indicator, and a scale that reads a 300 N pull
+  (about 31 kg).
+- **Not in the BOM yet:** a mating JST-SH 3-pin header for the hand's side of
+  the I2 disconnect (B91).
 - **For the I3 latch:** a flat screwdriver, blade ≤ 5 mm (not a coin).
 
-### 1.1 Batch 0: measure the printer
+### 1.1 Batch 0: the printer and the port
 
 Every clearance in `params.print` is a generic FDM guess until your ladder is
-filed (B28). Its answers move the fits of every mating part.
+filed (B28), and the leg port docks on its seats only in CAD so far
+(decision 15, B117). Both answers move the fits of mating parts, so nothing
+else prints until they are filed.
 
 1. Set `print.bed_mm` to your printer; the bed-fit checks assert it.
-2. Print one `fit_ladder`: PLA, 0.2 mm, 3 walls, 25 %, sliced like the parts,
-   elephant-foot compensation ~0.15 mm. An older printed ladder is fine; on
-   ones from before 2026-08-30 row D's dots hide in the slots (3.8 / 4.2 /
-   4.6, left to right).
-3. Measure each row into `NOTES_INBOX.md`:
+2. Print one `fit_ladder` (PLA, 0.2 mm, 3 walls, 25 %, sliced like the parts,
+   elephant-foot compensation ~0.15 mm) and the port coupons in the poses of
+   [PRINT_PLAN's batch 0](PRINT_PLAN.md#the-port-coupons): the plates L-down,
+   on support, with a support blocker in both seat sockets.
+3. Measure the ladder into `NOTES_INBOX.md`:
 
    | row | find | params key it sets |
    |---|---|---|
    | A | first Ø4 bore the 3.95 peg slides into | `print.clearance_fit` (4.30 bore = 0.30) |
    | B | first hole an M3 (A-09) threads cleanly | `print.screw_m3_tap` (2.8) |
    | C | pocket that holds an insert (A-13) snugly | `print.heatset_m3_d` (4.6) |
-   | D | does the port coupon's lip pass the 4.2 slot | `interfaces.leg_port.hook_slot_w` (4.2) |
+   | D | the slot (5.8 / 6.2 / 6.6) a coupon plate's L passes at 7–10°, brought in radially | `interfaces.leg_port.hook_slot_w` (6.2) |
    | E | snug Ø2 pin hole; which Ø10 socket the tube seats in | pins: `part_hand.py` (2.1, no key); tube = 10 + `clearance_fit` |
 
-   Row E's 6.85 / 6.95 / 7.05 pockets are the obsolete bearing seat.
-4. `clearance_fit` sets every mating printed fit (servo cups, the Ø20.3
-   idler pockets, dowel bores, tube sockets), `screw_m3_tap` every
-   thread-forming hole, `heatset_m3_d` every insert pocket.
-5. File the numbers in `cad/params.yaml` (the purpose in the comment: slide,
+   There is no seat row: the coupon plates test the seat fit. Row E's 6.85 /
+   6.95 / 7.05 pockets are the obsolete bearing seat. A ladder from before
+   2026-10-07 answers A, B, C and E; its row D (3.8 / 4.2 / 4.6) passes no L.
+4. **The port coupons**, the rehearsal the deck and the coxa bases wait for:
+   1. 2 inserts (A-13) in `port_coupon_deck`, flush ([1.2](#12-heat-set-inserts)).
+   2. The thumbscrews: press an A-19 M3 × 16 hex-head bolt (not A-11's socket
+      head) into each `thumb_knob_m3`'s hex pocket from the top, thread out of
+      the bottom. Snug on purpose: the head must not turn in the knob. The
+      whole head sits in the 2.1 mm pocket, 0.1 mm below the knob's top (B82);
+      a round socket head spins in it.
+   3. Clear the plates' support. The sockets must come out clean: smooth cone
+      flanks, a bridged Ø2.5 roof, no support inside. Scrape only the inboard
+      pads; the 0.2 mm relief outboard of x −46 is drawn so that face does
+      not bear.
+   4. `port_coupon_plate_relief46` first: hold it at 7–10°, outboard end up,
+      bring the L in radially and pass it through the 6.2 slot by hand,
+      without force. Lower it onto the two cones: it must centre itself.
+   5. A knob in each hole, finger-tight: the M3 × 16 takes 5.5 of the
+      insert's 5.7 mm. **Not longer than 16:** on the bench a longer screw
+      hits the table before it clamps. Nothing rocks, there is no x or y
+      play (< 0.05 on a dial), and a 0.2 feeler stays out from under the pads.
+   6. Dock `relief42` the same way; note which of the two sits without rock.
+      If relief46 rocks or shows light under its pads, dock `fit10`, then
+      `fit20`: the smallest that sits flat is `print.seat_fit`.
+   7. The rest of the go / no-go: each insert's pull-out (≥ 300 N toward the
+      plate), the knob preload (≥ 285 N), the cone posts, the release test
+      and 20 dock / undock cycles ([PRINT_PLAN](PRINT_PLAN.md#go--no-go)).
+      The knobs go on to the bench leg.
+5. `clearance_fit` sets every mating printed fit (servo cups, the Ø20.3
+   idler pockets, tube sockets), `screw_m3_tap` every thread-forming hole,
+   `heatset_m3_d` every insert pocket, `seat_fit` the seat sockets.
+6. File the numbers in `cad/params.yaml` (the purpose in the comment: slide,
    press, tap), then run `./rocky.sh cad-check` and `./rocky.sh cad-check
    --derived` ([the
    loop](DESIGN_CHANGE_GUIDE.md#0-the-loop-every-change-goes-through)).
-6. Printing before you regenerate is allowed for bores only, by the [GO /
-   NO-GO table](PRINT_PLAN.md#batch-0-measure-the-printer-b28-blocking): 4.30
-   slides and 4.20 binds is GO; only 4.40 / 4.50 slides means slicer XY hole
-   compensation +0.05…+0.10 mm, GO, and file it. If only the 4.6 slot passes
-   row D, regenerate with `hook_slot_w` 4.6 before the deck.
+   Printing before you regenerate is allowed for bores only (the [GO /
+   NO-GO table](PRINT_PLAN.md#go--no-go)). A slot that binds at 6.2 means
+   `hook_slot_w` 6.6 before the deck; seats that rock at every offset mean
+   the "minimal" port, an owner call.
 
 ### 1.2 Heat-set inserts
 
-Every production pocket is `heatset_m3_d` × `heatset_m3_h` (4.6 × 5.7), cut
-from the top face; the ladder's row C has fixed 4.4 / 4.6 / 4.8 holes.
+Every production pocket is `heatset_m3_d` × `heatset_m3_h` (4.6 × 5.7); the
+ladder's row C has fixed 4.4 / 4.6 / 4.8 holes.
 
 | part | inserts | where | when |
 |---|---:|---|---|
 | `fit_ladder` | 3 | row C, one per hole | now |
-| `port_coupon_deck` | 2 | its I1 port | batch 1 |
+| `port_coupon_deck` | 2 | its I1 port | batch 0 |
 | `jig_base`, `jig_column` | 6 + 2 | under the column flange; the column's I1 port | [2.9](#29-calibrate-the-first-leg-on-the-jig) |
 | `body_deck` | 10 | 2 per I1 port, leg-local (−41, ±17) | [4.2](#42-prepare-the-deck) |
+| `bay_lid` | 8 | the six hanger bosses and the two pilaster bosses | [4.3](#43-hang-the-tub) |
 
 1. Insert tip on the iron (X-14); your first inserts go in row C.
 2. Stand the insert on the pocket, press straight down lightly, let the heat
    work. Stop flush or just below: **a proud insert on the deck holds the coxa
-   plate off it**, and plate face on deck face takes the load.
+   plate off it**, and the plate's inboard pads on the deck take the load.
 3. Keep it square: an M3 runs in by hand through the plate's Ø3.7 bore.
 
 ### 1.3 Batch 1: coupons and the blank
 
-Each coupon is a boolean clip of its production part
-(`cad/part_leg_coupons.py`): a coupon that fits proves that part.
+After batch 0 is filed. Each coupon is a boolean clip of its production
+part (`cad/part_leg_coupons.py`): a coupon that fits proves that part.
 
 1. Print batch 1 in the poses of its table in [PRINT_PLAN.md](PRINT_PLAN.md);
    none needs support.
@@ -185,22 +209,7 @@ Each coupon is a boolean clip of its production part
    lobes.
 6. `coupon_idler` drops over the glued idler without rocking; the plug notch
    is clear.
-7. **Port coupon (I1)**, the rehearsal the deck waits for:
-   1. 2 inserts (A-13) in `port_coupon_deck`, flush.
-   2. The thumbscrews: press an A-19 M3 × 16 hex-head bolt (not A-11's socket head)
-      into each `thumb_knob_m3`'s hex pocket from the top, thread out of the
-      bottom. Snug on purpose: the head must not turn in the knob. The whole
-      head sits in the 2.1 mm pocket, 0.1 mm below the knob's top (D063,
-      B82). A round socket head spins in this pocket.
-   3. `port_coupon_plate` at ~15°, lip through the 4.2 mm slot, inboard to
-      hook, pivot flat (both Ø4 dowels in without force). Then a knob in each
-      hole, finger-tight: the M3 × 16 takes 5.5 of the insert's 5.7 mm and
-      stays inside the underside. **Not longer than 16:** on the bench a
-      longer screw hits the table before it clamps.
-   4. Tug in every direction; note what binds. Fix `interfaces.leg_port` or
-      `print.*` and regenerate, not the prints. The deck waits until this
-      docks cleanly. The knobs go on to the bench leg.
-8. **The other interface coupons** gate nothing, but they are the first
+7. **The interface coupons** gate nothing, but they are the first
    prints of the D063 latch and shoe (B87, B83):
    1. **Latch cartridge (I3):** the rotor into `latch_housing`, lugs through
       the two keyways, then a quarter turn off them: it is captive. Push the
@@ -227,7 +236,7 @@ Each coupon is a boolean clip of its production part
       screw wedges it ([7.3](#73-accessories-i6)). Lifted, the shoe holds.
    5. The tool coupons need a printed `tibia_sea_slider`
       ([3.5](#35-the-foot-on-the-i2-tool-socket)).
-9. Every verdict goes in `NOTES_INBOX.md`.
+8. Every verdict goes in `NOTES_INBOX.md`.
 
 The blanks are the dry-fit servos and stay as bench dummies. They have no
 connector housing, so they cannot test the plug keep-outs; three engraved dots
@@ -238,11 +247,12 @@ on each side mark one.
 For batch 2 as it comes off the printer: PETG, dry, supports only where its
 PRINT_PLAN table says, sliced in the poses `check_printability.py` audits.
 
-1. `coxa_yaw_base`: all support out from under the plate; first-layer flare
-   off the hook lip's foot; the plate's underside scraped flat (it bears on
-   the deck). The 11 × 11 harness channel clear end to end (its first stretch
-   is roofed over an 11 mm bridge, plate on support), the Ø4.3 dowel bores
-   (chamfer from below) and Ø3.7 thumbscrew bores clear.
+1. `coxa_yaw_base` (the one for the bench): all support out from under the
+   plate; first-layer flare off the L's foot; the two seat sockets clean (they
+   printed over a blocker, nothing inside). Scrape only the inboard pads
+   (x ≤ −46): the 0.2 mm relief outboard of them is meant not to bear. The
+   11 × 11 harness channel clear end to end (its first stretch is roofed over
+   an 11 mm bridge, plate on support) and the Ø3.7 thumbscrew bores clear.
 2. `coxa_fork` has support in three places: under the upper plate where it
    leaves the web and the side cheeks (z ~41; since D063 the audit's widest
    cantilever, 11.5 mm), under the hip cup's lower wall where it steps out
@@ -314,10 +324,10 @@ on the desk. Center calibration is the opposite: servo built in, on the jig
 ### Check before moving on
 
 - `params.print` holds your ladder's numbers; `cad-check` ran clean.
-- Batch 1 passes and is filed; the port coupon docks without force and both
-  thumbscrews run in.
+- Batch 0 filed: the port coupon docks on its cones without force, the seat
+  fit is chosen and both thumbscrews run in; batch 1 passes and is filed.
 - Blanks slide into every cup without rock; the base's channel is clear, its
-  underside flat; inserts flush and square.
+  pads flat; inserts flush and square.
 - Each servo: 12 V label, metal horn, idler, a unique labelled ID, moved ±15°,
   left torque-off; `horn_screw_m` and `horn_bcd` measured.
 
@@ -333,7 +343,8 @@ load-tested before four more are printed.
 `horn_coupler`, `femur_link` (plate A), `femur_plate_b`, `tibia_knee_carrier`,
 2 × `thumb_knob_m3` (PLA in the print pack; PETG is reasonable, the knob is in
 the clamp load path). The bench leg uses the coupon knobs; batch 3 prints the
-other eight.
+other eight. **One `coxa_yaw_base` only** until its FEM hold lifts (SF 1.10 at
+servo stall, B119, B139): it carries the bench leg, not a walking robot.
 
 **First leg only:** 3 × `servo_blank` + 3 × `blank_idler` (PLA), and the jig:
 `jig_base`, `jig_column`, `calib_gauge_hip`, `calib_gauge_knee`
@@ -355,7 +366,7 @@ other eight.
 | A-15 | Ø10 tube, roll-wrapped | tibia; one long bench tube ([2.6](#26-tube-step-8)) | 1 | 5 | 2 × 500 mm |
 | A-06 | 3-pin lead, 300 mm | entry lead; hip → knee (+1 for a hand on the knee's port) | 2–3 | 10–15 | 24 |
 | — | the servo's own 150 mm lead | yaw → hip | 1 | 5 | 16 |
-| B-13 | XT30U pair | the leg drop | 1 | 5 | 10 ([5.1](#51-power-tree)) |
+| B-13 | XT30U pair | the leg drop | 1 | 5 | 10 ([power tree](WIRING_HARNESS.md#power-tree)) |
 | B-14 | 12 V splitter (DIY) | XT30 → three servo power legs | 1 | 5 | 5, no spare |
 | B-16 | JST-XH kit | the XH-5 drop | 1 | 5 | 1 kit |
 | B-17 | JST-SH 3-pin, 100 mm | half of one: the plug on the leg's hand lead | ½ | 3 | 10 |
@@ -498,7 +509,7 @@ routing](WIRING_HARNESS.md#in-leg-routing).
 
 1. The drop: one XT30 (12 V + GND, 20 AWG) and one JST-XH-5 (1 data, 2 GND, 3
    hand 6 V, 4 foot switch, 5 reserved), mated at the I1 cable cutout (leg x
-   −29) with the plate hooked, not pivoted ([per-leg
+   −29) with the plate hooked, before it goes down onto the cones ([per-leg
    drop](WIRING_HARNESS.md#per-leg-drop-5-ends-at-the-i1-leg-port-connectors)).
 2. The leg side runs up the base's 11 × 11 channel: under the gearbox plateau
    (x −34.5 to −13, z −4 to 7), to −Y under the cup wall, up beside the cup (y
@@ -540,15 +551,15 @@ routing](WIRING_HARNESS.md#in-leg-routing).
 
 ### 2.8 The bench leg's power lead
 
-Build order step 1 ([WIRING_HARNESS](WIRING_HARNESS.md#build-order-phase-b))
-is "dock + fuse + loop key + one XT30 drop → one leg on the jig". The dock
-waits for the bay ([4.3](#43-under-the-deck-nothing-yet)), so the bench supply
-feeds the fuse on a loose XT60 lead. Build it before calibrating.
+There is no tub on the bench yet, so the bench supply feeds the robot's
+fuse and loop key on a loose XT60 lead, with one XT30 drop to the jig
+([WIRING_HARNESS](WIRING_HARNESS.md#build-order-phase-b), step 1). Build it
+before calibrating.
 
 1. This leg's splitter (B-14, [2.7](#27-leg-harness) step 4), and the robot's
-   15 A fuse (B-09) and loop key (B-08), built on the bench as in
-   [5.1](#51-power-tree) step 2, with one XT30 pair (B-13) after the key to
-   the jig's cutout, fed from A-04 on a loose XT60 lead (B-12 XT60H pair).
+   15 A fuse (B-09) and loop key (B-08), built on the bench by the [power
+   tree](WIRING_HARNESS.md#power-tree), with one XT30 pair (B-13) after the
+   key to the jig's cutout, fed from A-04 on a loose XT60 lead (B-12 XT60H pair).
 2. A data lead from the adapter (A-02) to the jig-side XH-5 pins 1–2 (not
    drawn in the repo). **The adapter's servo V+ never enters the XH-5.**
 3. Nothing plugged in: continuity, polarity; supply 12.0 V, ~1.5 A, output
@@ -564,12 +575,12 @@ deck's I1 port: a leg that bolts to the jig bolts to the robot.
    ([1.2](#12-heat-set-inserts)). The column flange down with 6 × A-10 M3 × 8
    (4 mm into the 5.7 mm insert); the base clamped by its end tabs or bolted
    through its four Ø5.4 holes.
-2. **Hang the leg, loop key out:** tilt ~15°, lip through the slot, slide
-   inboard to hook; mate the XT30 and XH-5 at the column's cutout while
-   hooked; pivot flat onto the two dowels. Then a knob with its M3 × 16 in
-   each inboard hole, finger-tight. They only clamp; the dowels and the hook
-   lip take shear and torque
-   ([I1](INTERFACES.md#i1--leg-port-deck--coxa-base-the-flagship)).
+2. **Hang the leg, loop key out:** hold it at 7–10°, outboard end up, bring
+   the L in radially through the jig's 6.2 slot and hook it; mate the XT30
+   and XH-5 at the column's cutout while hooked; lower it onto the two cones,
+   where it centres itself. Then a knob with its M3 × 16 in each inboard hole,
+   finger-tight. The seats take shear and torque; the thumbscrews hold the
+   plate down ([I1](INTERFACES.md#i1--leg-port-deck--coxa-base-the-flagship)).
 3. Jig pose: yaw on the protractor's 0 tick; femur horizontal on
    `calib_gauge_hip`; knee −90° with `calib_gauge_knee`'s rib in the groove at
    x 140 and the tube in its V. **Check both with a set square:** as modelled
@@ -613,8 +624,9 @@ deck's I1 port: a leg that bolts to the jig bolts to the robot.
 
 1. File everything the first leg measured (D032), regenerate, re-run
    `./rocky.sh cad-check`: VERIFY values are measured before printing 5×.
-2. Print 4 × batch 2 without the blanks and `coxa_yaw_base` (batch 3 prints
-   those with their knobs); cut the tubes as
+2. Print 4 × batch 2 without the blanks and without `coxa_yaw_base`: the
+   four bases and their knobs print with batch 3 once the FEM hold lifts
+   ([PRINT_PLAN.md](PRINT_PLAN.md)). Cut the tubes as
    [3.1](#31-decide-the-tube-length-and-the-foot) decides.
 3. IDs, one servo alone on the bus each time. Leg 1 is 4, 5, 6 and the bench
    spare already holds 5: one new servo `--start-from 4` (stop after one), the
@@ -657,10 +669,9 @@ carrier ([2.6](#26-tube-step-8)).
 
 ### 3.1 Decide the tube length and the foot
 
-**The cut length is not computed anywhere in the repo** (A-15; the tibia-stack
-check of [ROBOT_AS_DATA](ROBOT_AS_DATA.md#5-cad-sync-rules) §5.2 is B36 step
-8, not written). From the part modules (femur horizontal, knee −90°, slider at
-its lowest):
+**The cut length is not computed anywhere in the repo** (A-15; the
+tibia-stack check, B36 step 8, is not written). From the part modules (femur
+horizontal, knee −90°, slider at its lowest):
 
 | from | to | mm |
 |---|---|---:|
@@ -785,66 +796,80 @@ waits for the shell; its set-knob locks it since D063 and clears the wires
 - A tool coupon goes on, quarter-turns, holds a tug; the tube length is
   decided and the first cut logged in `BUILD_LOG.md`.
 
-## 4. The body frame
+## 4. The body
 
-The deck, the star-board bracket, the tray on the bench, and the stand.
-Docking is [6](#6-dock-the-legs-and-power-up); the carapace
-[7](#7-the-carapace).
+The deck, the keel tub with its door and the battery sled, the hub shelf, the
+tray and the stand: option A, the owner's picks of 2026-10-07. Docking is
+[6](#6-dock-the-legs-and-power-up); the carapace [7](#7-the-carapace).
+
+![The body from below (option A), the robot turned over: the keel tub east-west (door −x, nose +x) and the hub shelf with its boards north of it hang from the deck; the tray on top shows through as an x-ray tint](../cad/out/assembly/body_interior.png)
 
 ### You need
 
-- Printed (batch 3 and [Deferred](PRINT_PLAN.md#deferred)): `body_deck` once
-  [4.1](#41-when-to-print-the-deck) allows it; four more `coxa_yaw_base`s with
-  8 × `thumb_knob_m3`; `busboard_bracket`; `avionics_tray` as a bench carrier
-  (D063: Pi standoffs 58 × 49, 11 tall); 4 × `imu_grommet` (TPU); `stand_base`,
-  `stand_crown`, 2 × `stand_section`.
-- **Not for the robot yet:** `tray_rail`, `battery_sled`, `sled_rail`,
-  `dock_block`, `belly_skid`; `belly_door` only as a bench demo.
-- BOM: A-13 × 10; A-10 × 2 (bracket), 4 × A-09 or A-10 (board); B-20 steel
-  washers; A-14 CA; B-21 M2.5; A-02, B-10, B-11, C-01; B-03/B-04 once
-  bought (they wait until one leg walks, [5.4](#54-the-pis-operating-system)).
+- **Printed** (batch 3 and the stand in [PRINT_PLAN.md](PRINT_PLAN.md)):
+  `body_deck`; `bay_tub`, `bay_lid`, `bay_door`, `battery_sled`; `hub_shelf`;
+  `avionics_tray` + `tray_latch_boss` + 2 × `tray_rail`; 2 latch cartridges
+  (the tray's and the door's); 4 × `imu_grommet` (TPU); `stand_base`,
+  `stand_crown`, 2 × `stand_section`. Not yet: the four more
+  `coxa_yaw_base`s and their 8 knobs (the FEM hold).
+- **Screws and inserts** ([`bom/BOM.csv`](../bom/BOM.csv)): A-13 × 10 (deck)
+  + 8 (lid); B-27: six M3 × 16 tub hangers, four of them ISO 7380 button heads
+  through the rail tabs, and two M3 × 10 button heads thread-forming into the
+  deck for the rails' north tabs; two
+  M3 × 10 for the tub's pilasters; B-26 three M3 × 30 socket heads for the shelf
+  posts; 8 × M3 × 6 (star board, PDB); 4 × M2.5 × 8 pan heads and B-28 four Ø5 ×
+  2.5 spacers (bus adapter); B-21 M2.5 (Pi, IMU); B-23 3.6 mm ties; B-20
+  steel washers; A-14 CA.
+- **Bought parts:** B-25 the FEMALE XT60 for the tub's carrier (B-12 lists male
+  panel mounts only), B-12's XT60E-M for the sled nose and for the loop key's
+  pocket, B-08 the loop key, B-09 the fuse holder, B-29 the 2 mm foam pad
+  (138 × 44), B-24 the 30.5 × 30.5 PDB, B-18 the star board, A-02, B-10, B-11,
+  C-01, and B-03/B-04 once one leg walks.
+- **Tools:** the iron with an insert tip; X-20 a flat screwdriver, blade ≤ 5 mm,
+  with a shaft of at least 183 mm (200 recommended) for the tub door's latch.
 
 ### 4.1 When to print the deck
 
-Every interior decision cuts holes in `body_deck`: the tray rails, the
-bracket, the power grommet and zip anchors, the bay's under-deck holes, the
-strap slots. **Print it only once these are settled**, or it gets printed
-twice (80 g, 4.3 h):
-
-- the port coupon docks cleanly and the ladder is filed (B28);
-- the deck's thickness is one number (B27), at least 6 mm: the D063 latch
-  strike needs it;
-- tray, rails, bracket and power entry are placed together (B51);
-- the battery bay and the dock block's mounting exist ([8.4](#84-the-body)).
-
-Three measured layouts for the last two, with a recommendation, wait for the
-owner in [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md); none is in the
-CAD yet.
-
-As drawn, the grid carries only the bracket (and optional ballast): no holes
-for tray rails, sled rails or dock block, which `part_deck.py` cuts when B51
-and the bay settle. **Do not drill a printed deck; regenerate it.**
+Once batch 0 is filed ([1.1](#11-batch-0-the-printer-and-the-port)): the
+slot width and the seat fit cut its five ports, `clearance_fit` and
+`screw_m3_tap` its holes. The body layout is settled (D064), so nothing else
+waits. **Do not drill a printed deck; regenerate it** (80 g, 4.3 h a print).
+The CAD cuts it 6 mm thick and v0.5's blind post holes and strikes depend on
+that; params `body.deck_t` still says 4, unread (B27).
 
 ### 4.2 Prepare the deck
 
-190 × 181, flat, brim on, dry filament; the CAD cuts it 6 mm thick.
+190 × 181, flat, brim on, dry filament; 6 mm thick, 9.0 with its cones.
 
-1. Brim off. Clear the five hook slots (4.2 × 24.6, through), five 11 × 11
-   cable cutouts and 13 grid holes (Ø2.8, thread-forming).
-2. **The five I3 latch strikes** (station +27.5°, r 74.5; D063): a Ø6.6
-   bore and two entry slots from the top, a recess underneath that the
-   rotor's lugs turn into. The recess ceiling is the cam, printed as a
-   bridge on the bed side: clear any sag and check the 0.8 mm ramp came out
-   as a slope, not steps (VERIFY, [7.2](#72-the-sectors-and-the-cap)).
-3. The ten printed dowel posts (Ø3.95 × 8) are whole and square.
-4. An insert (A-13) in each of the ten thumbscrew pockets, flush.
-5. **Magnet washers:** glue a B-20 washer into each of the five Ø8 × 1.4
+1. Brim off. Clear the five hook slots (6.2 × 24.6, through) and the five
+   11 × 11 cable cutouts.
+2. **The ten cone seats**, two per port at leg-local (−32, ±17.3), 30°,
+   3 mm tall: whole, with clean flanks and no first-layer flare round their
+   bases. Do not sand them: they place the leg.
+3. **The 21 holes** of the v0.5 table (`part_deck.DECK_HOLES`): four Ø3.4 tab
+   and hanger holes at (±40, −20 / 0), the rails' two north tab holes at
+   (±40, 20), Ø2.8 for a thread-forming screw, two tub hangers at (±58, −18),
+   the (0, 50) trunk slot (12.5 × 7.5) and its two zip anchors at (±12, 50),
+   the tray's latch strike at (0, −43) with its slot running south, six
+   unused Ø2.8 grid holes (trim-cup points), and **three blind Ø2.8 holes
+   from below** at (±50, 34) and (26, 64), 5 deep under a 1.0 mm skin, for the
+   shelf posts: they do not show on the top.
+4. **The six I3 latch strikes** (the five sectors' at station +27.5°, r 74.5,
+   and the tray's): a Ø6.6 bore and two entry slots from the top, a recess
+   underneath that the rotor's lugs turn into. The recess ceiling is the cam,
+   printed as a bridge on the bed side: clear any sag and check the 0.8 mm
+   ramp came out as a slope, not steps (VERIFY,
+   [7.2](#72-the-sectors-and-the-cap)).
+5. An insert (A-13) in each of the ten thumbscrew pockets, flush: **a proud
+   insert holds the coxa plate's pads off the deck**
+   ([1.2](#12-heat-set-inserts)).
+6. **Magnet washers:** glue a B-20 washer into each of the five Ø8 × 1.4
    recesses (station −25.5°, r 76), either face up; the shell feet's magnets
    land on them. **Zinc-plated steel, not stainless**, and not a 12 mm fender
    washer (it does not fit).
-6. Learn the numbering; the bracket later covers the arrow. Station k has k +
-   1 dots by its port; the triangle at (0, 30) points north, to station 0;
-   stations run counter-clockwise from above:
+7. Learn the numbering. Station k has k + 1 dots by its port; the triangle
+   at (0, 30) points north, to station 0; stations run counter-clockwise from
+   above:
 
 | leg | station | dots | ids yaw / hip / knee |
 |---|---|---|---|
@@ -857,134 +882,179 @@ and the bay settle. **Do not drill a printed deck; regenerate it.**
 A leg goes to the station whose ids its servos carry; the bench kit's leg is
 leg 0.
 
-### 4.3 Under the deck: nothing yet
+### 4.3 Hang the tub
 
-The battery bay (I5) is meant to be 175 × 50 × 30 under the deck, along x,
-sled nose to +x. **It is not a part yet:** no floor, walls or door frame
-([8.4](#84-the-body)). D063 measured three layouts for it, with the tray and
-the hub (option A recommended: a tub hung 8 mm under the deck); they wait
-for the owner in [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md). For this
-build:
+The keel tub hangs east-west under the deck at y −20, door −x, nose +x, its
+roof 8 mm under the deck (z −18). The lid goes up first, then the tub.
 
-- **Print no `battery_sled`, `sled_rail` or `dock_block` for the robot, and
-  bolt nothing under the deck.** Only the five hook feet (3.3 mm) hang below
-  it.
-- The `sled_rail`s are floor rails: the sled rides on them, so they cannot
-  hang from the deck.
-- `dock_block` is the robot's half of I5, the bay's floating XT60 receiver
-  with two spare taps, not part of the charging dock (B14); it waits for the
-  bay and as drawn cannot be bolted down.
-- `belly_door` has nothing to close on and no latch strike; `belly_skid` has
-  no place until the bay and stand crown are redesigned.
-- The station-162 (leg 1) latch strike sits inside the bay's footprint and
-  is turned from below: whatever goes there must leave its column open
-  (B100).
-- The robot runs tethered on the bench supply ([6.4](#64-the-pack)).
+1. **Inserts:** 8 × A-13 in the lid's bosses ([1.2](#12-heat-set-inserts)).
+2. **The nose, before the tub goes up** (the power tree in
+   [WIRING_HARNESS](WIRING_HARNESS.md#power-tree)): a FEMALE XT60 into the
+   floating carrier (it must float ±0.8 on its four webs; how it is held in
+   its pocket is VERIFY), the loop key's chassis XT60E-M into its pocket
+   above the carrier, facing +x, the fuse holder in the free room over the
+   carrier (16.3 mm high, not modelled), and the 14 AWG feed out through the
+   Ø5.5 exit in the NE nose chamfer. Mark the polarity at the carrier. Every
+   XT60 number is VERIFY: caliper a mated pair first ([8.4](#84-the-body)).
+3. **Lid and rails together:** the lid's six hanger bosses up against the
+   deck's underside, the two `tray_rail`s on the deck's top over the inboard
+   tab holes. Six M3 × 16 from the deck top into the lid's inserts: four
+   through the rail tabs at (±40, −20 / 0), as ISO 7380 button heads (a socket
+   head does not fit under the tray plate), two at (±58, −18). The rails'
+   north tabs (±40, 20) take an ISO 7380 M3 × 10 each, thread-forming into
+   the deck's Ø2.8 hole, no nut: nothing hangs under them, and the tip comes
+   out 2.0 mm under the deck, 1.9 mm over the star board at (40, 20).
+4. **The tub:** offer it up 1.6 mm north of its place, raise it to the lid,
+   slide it 1.6 south so the north wall's return closes over the lid's north
+   edge, then two M3 × 10 from below up through the south pilasters into the
+   lid's inserts.
+5. **The 14 AWG feed:** from the exit it runs under leg 4's drop, where it
+   hangs free for 26.5 mm, 0.2 mm over the tub's bottom (nothing fits round
+   it there), then up the riser, snapped into the clip on the tub's north
+   wall at x ≈ 59, and west to the PDB on the hub shelf
+   ([4.6](#46-the-hub-shelf)). The clip's snap is VERIFY.
+6. **Looms:** the leg 2 and 3 looms tie (3.6 mm ties) to the lid's tie bars
+   beside the (±40, 0) bosses.
 
-### 4.4 The star-board bracket
+### 4.4 The door
 
-![The deck interior as modelled: the star-board bracket on grid holes (0, 20) and (0, 40), and the avionics tray on its rails at the assumed (0, −38), where they would run into the coxa bases at stations 2 and 3 (B51); the coxa bases and the battery sled are not drawn](../cad/out/assembly/body_interior.png)
+1. A latch cartridge, made captive as in
+   [1.3](#13-batch-1-coupons-and-the-blank), glued flush in the door's south
+   ear (A-14), the housing's flat to the pocket's flat.
+2. Rotor at OPEN. The spigot into the opening, the hook tab's barb behind
+   the north wall's keeper (it snaps); the ear lands on the strike in the
+   tub's south boss. With the sled in, the door's boss presses its tail lip
+   0.5 mm: that holds the sled.
+3. **Lock it from +x:** the long screwdriver along the robot's south wall into
+   the rotor's slot (it faces +x at x −85.7), a quarter turn to the stop. A
+   straight Ø5 shaft is free there for 260 mm, on the stand too (2.65 mm to
+   the cradle's south wall, 0.55 under the drop keep-outs of legs 2 and 3);
+   it clears the carapace skirt at x 87.3, hence the 183 mm. A slotted rotor
+   head that turns from the door side is a follow-up.
+4. Off: latch to OPEN, push the tab's free end out, pull the door.
 
-1. `busboard_bracket` to grid holes (0, 20) and (0, 40): 2 × A-10 M3 × 8
-   through its centreline, before the board (it covers them). It sits over the
-   north strap run (B50).
-2. The board ([5.5](#55-star-board)) on the four posts: 4 × M3 (A-09 × 6 or
-   A-10 × 8) into the Ø2.8 bores, 8.5 deep, J1–J5 marked. It must clear the
-   loom ring.
+### 4.5 The battery sled
 
-### 4.5 The avionics tray, on the bench (I4)
+1. **Size the pack first:** the one you bought against
+   `interfaces.battery_sled` (`pack_l` 138, `pack_w` 44, `pack_h` 25, soft
+   case only). Another size goes into params, and `./rocky.sh cad-check
+   part_bay` must pass before the sled and the tub print (B72).
+2. The sled's XT60E-M (B-12) glued in its nose pocket 8.0 mm proud of the
+   nose (VERIFY with the mated pair), on the pack's lead, polarity marked.
+3. Glue the 2 mm foam pad to the tub's roof, over the pack. Nothing straps
+   the pack (pick 8 b): the tub boxes it and the pad takes its play.
+4. **Dry run, loop key out, no pack:** slide the empty sled in from the door
+   end on the floor rails until its XT60 meets the carrier; the carrier
+   floats and the pair telescopes 7 mm (VERIFY). Door on, then off, sled
+   out. On the stand it comes out with leg 1 at yaw +20° or less (at +30
+   leg 1 meets it 130 mm out).
+5. Live, with the pack: [6.4](#64-the-pack).
 
-**As drawn, the tray and its rails fit nowhere between the legs:** at (0, −38)
-they run into the coxa bases at stations 2 and 3, and no position or rotation
-clears all five (B51). **Print no `tray_rail` and do not fit the tray to the
-deck**; tray, rails, bracket and power entry get redesigned together before
-the deck (a measured layout: [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md),
-the tray at (0, 0) with lugs instead of wings). Build the electronics on an
-`avionics_tray` printed only as a bench carrier.
+### 4.6 The hub shelf
 
-1. **Print it from the D063 tree:** the Pi standoffs are 58 × 49 and 11 mm
-   tall (B89, B90), the IMU seats sit on the BNO085's holes, and the zip-tie
-   slots are at x ±30, y 0 / ±14, clear of the standoff feet. A tray printed
-   earlier (58 × 44.1, 6 mm standoffs) fits neither board.
+The harness hub under the deck, north of the tub (picks 1, 9, 14). Build it
+on the bench, boards first.
+
+1. **Up, on the printed standoffs:** the 40 × 30 star board and the
+   30.5 × 30.5 PDB, 4 × M3 × 6 each, thread-forming.
+2. **Face-down under the plate:** the bus adapter on four Ø5 × 2.5 spacers,
+   4 × M2.5 × 8 pan heads from below into the plate's Ø2.05 bores; the buck
+   and the UBEC under 3.6 mm zip ties. The adapter's H2 UART leads go on
+   soldered or in a right-angle housing: a straight Dupont on a vertical H2
+   header hangs 5.5 mm below the shelf and into the stand's crown plate
+   (VERIFY on the board).
+3. Wire the boards ([5](#5-wiring)) while the shelf is on the bench.
+4. **Up to the deck:** three M3 × 30 socket heads from below, through the
+   plate and the Ø8 posts, into the deck's blind holes (heads in their Ø6.4
+   counterbores). From the top a head at (±50, 34) would sit under the docked
+   coxa plates of legs 1 and 4.
+5. **Service is with the robot off the stand:** on the stand the crown plate
+   covers three of the adapter's four screws (B134).
+
+### 4.7 The avionics tray (I4)
+
+The Pi 5 and the IMU only (pick 14). The tray sits at (0, 0) turned 180° on
+its two rails, three lugs a side under the rails' windowed lips, and its
+tongue latches at (0, −43).
+
+1. **Off the robot:** glue `tray_latch_boss` under the tongue (A-14), then a
+   latch cartridge into the boss's pocket, flush with its underside, the
+   housing's flat to the pocket's flat.
 2. **The IMU goes on before the Pi,** which covers it. SPI0, INT and RST
    soldered straight onto its pads (header pins would hit). The four
    `imu_grommet`s into the Ø4.8 holes of the four raised seats (20.32 ×
-   17.78 about (0, 13.5)), the bottom flange in the Ø9 recess under each.
-   The BNO085 on them, then 4 × M2.5 × 10 (B-21) from above with a standard
-   (DIN 934) nut under each: the Ø2.7 grommet bore does not thread. Only ×
-   10: its tail ends 0.9 mm above the deck, and an × 12 reaches it. The
-   screw passes the nut by only ~0.2 mm, so snug it; squeezing the grommet
-   adds thread.
-3. Pi 5 + cooler, once bought: 4 × M2.5 × 6 or × 8 (B-21), thread-forming
-   into the Ø2.05 bores, which run the full 11 mm (4.4 / 6.4 mm engaged).
-   The IMU's top stays 1.2 mm below a 2 mm keep-out under the board, with
-   the USB end either way; the board overhangs ~10 mm at that end. Caliper
-   the Ø6.8 standoff tops against the Pi's pads round its holes (B108).
-4. **The bus adapter, the buck and the UBEC do not fit under the Pi as
-   drawn (B108).** `part_avionics` checks them as envelopes from their
-   datasheets: under the Pi's keep-out there is 9.0 mm of floor. The
-   adapter (A-02: 42 × 33, its DC jack 11 mm over the board, pins 2 mm
-   under it) on its pad by the bulkhead stands 6.1 mm into the keep-out
-   and has no flat place anywhere on the tray, and the pad's two M3 holes
-   (20 mm apart) are not its holes (four Ø2.5 on 37 × 28); the buck (B-10, 8.8 mm)
-   under a tie stands 1.0 mm into it; the UBEC (B-11, 7 mm) under a tie
-   is 0.8 mm below it, short of the 1 mm the IMU keeps. Where the docs
-   put them, the UBEC also meets a Pi standoff. Measured fixes, the
-   owner's call with the tray's layout (B51): Pi standoffs 13 mm put the
-   buck and the UBEC on the x −30 slot column; 18.5 mm with the IMU moved
-   to (18, 1) fits all four. On the bench carrier, keep the boards beside
-   the tray until then.
-5. Buck (B-10) and UBEC (B-11) have no mount but a zip tie (3.6 mm ties
-   through the tray's slots).
-6. Rear bulkhead (70 × 26): XT30 in, XH-5 trunk, 2 × JST-SH, Qwiic, USB-C,
-   every cutout VERIFY. The XT30 cutout (10.4 × 6.4) is for a panel XT30:
-   check that an XT30U half seats before relying on it.
-7. No `latch_housing` in the tongue: the D063 latch works, but its rotor
-   hangs 5.8 mm below the tongue and nothing under it has a strike (B51;
-   [7.2](#72-the-sectors-and-the-cap)).
+   17.78 about (0, 13.5)), the bottom flange in the Ø9 recess under each. The
+   BNO085 on them, then 4 × M2.5 × 10 (B-21) from above with a standard
+   (DIN 934) nut under each: the Ø2.7 grommet bore does not thread. The
+   × 10 is the checked length (its tail ends 2.9 mm above the deck); it
+   passes the nut by only ~0.2 mm, so snug it.
+3. **The Pi 5 + cooler,** once bought: 4 × M2.5 × 6 or × 8 (B-21),
+   thread-forming into the 11 mm standoffs (58 × 49), **USB end +x**, toward
+   leg 4. Caliper the Ø6.8 standoff tops against the Pi's pads (B108). Only
+   the lower middle USB-A port, next to the RJ45, takes a plug: a right-angle
+   one ≤ 20 mm long with an overmold ≤ 14 × 7, cable down or south (B128).
+   Keep it for the lidar.
+4. **Bulkhead** (the north end): the XT30 (the Pi's 5 V from the buck) and
+   the XH-5 trunk (the Pi's UART to the adapter), every cutout VERIFY with
+   the real panel parts. Both go down the deck's (0, 50)
+   slot to the shelf and unplug at the bulkhead before the tray slides. The
+   J6 foot-switch lines have no bulkhead connector (B123).
+5. **On:** carapace off, sled out, robot off the stand. Rotor at OPEN. Lower
+   the tray onto the rails 16 mm south of home, the lugs through the lips'
+   windows and the rotor in the strike's slot; slide it 16 north to engage
+   the lugs; from below, through the tub's driver column at (0, −43), a
+   quarter turn to LOCKED. Plug the bulkhead.
+6. **Off:** the carapace off (slid, the boss meets sector 2's latch pad from
+   14 mm; lifted, the Pi meets sectors 3 and 4, the cap and by 42 mm sector
+   1), the robot off the stand (the cradle blocks the strike's column), the
+   sled out (the column runs through it), the bulkhead unplugged, the latch
+   to OPEN, slide 16 south (the strike's slot stops it at 16.5), lift. It
+   does not come out northward: the plate would cover the trunk slot.
 
-### 4.6 The bench stand
+### 4.8 The bench stand
 
-It holds the robot with the legs unloaded for `pose_check`,
-`calibrate_centers` and the torque step (`part_stand.py`; the runbook writes
-them for the one-leg jig). Print it now: it is safe while nothing hangs under
-the deck.
+It holds the robot by the keel tub and touches nothing else, so the carapace
+stays on (`part_stand.py`). Print it after the tub: without the tub nothing
+rests on it.
 
 1. Stack `stand_base`, the two `stand_section`s, `stand_crown`; each skirt
-   drops over the five bars below when turned right (every 72°).
-2. Deck-bottom height: 47 mm (base + crown), 127 (one section), 207 (two). A
-   leg reaches 172 mm below the deck: two sections free every leg.
-3. **The carapace comes off first:** the crown's arms run into the sector feet
-   (591 mm³). **Nothing may hang under the deck on the stand:** the crown's
-   top plate (apothem 47) is 3 mm below it and its arms bear on it from r 36
-   to 86; only the hook feet are allowed for.
-4. Lower the robot so the deck edge drops into the three saddles: leg 0
-   between the arms at 54° and 126°, the third arm at 270°, between legs
-   2 and 3. About 3 mm of radial slack is normal.
+   drops over the one below when turned right (every 72°).
+2. Deck-bottom height: 89.4 mm (base + crown), 169.4 (one section), 249.4
+   (two). A leg reaches 153.3 mm below the deck to its foot point, 183.5
+   with the B95 hand: two sections free every leg, one does not.
+3. Lower the robot so the tub drops between the cradle's walls (2 mm
+   lead-ins), door end −x, the floor's Ø6.3 hole onto the pin at (0, −20).
+   It goes in one way only. The pin has 0.45 mm of play; ±1 mm in x or y
+   binds.
+4. On the stand you can open the door, swap the sled (leg 1 at yaw ≤ +20°)
+   and turn the sector latches at stations 162 and 306 with the sled out;
+   not the tray's latch, and not the hub's adapter screws.
 
 ### Check before moving on
 
-- `./rocky.sh cad-check part_port_coupon part_deck part_busboard part_avionics
-  part_battery part_panel part_shell part_stand part_smallwins` exits 0 after
-  any params change, before you print.
-- The deck printed after 4.1 settled; inserts flush, washers below the top
-  face, nothing under the deck; the tray's standoffs are 58 × 49, 11 tall.
-- All three saddles carry the deck; on two sections no foot touches.
+- `./rocky.sh cad-check` exits 0 after any params change, before you print.
+- The deck printed after batch 0 was filed; inserts flush, cones clean,
+  washers below the top face.
+- The tub hangs square, the north return over the lid, both pilaster screws
+  in; the door locks and comes off; the empty sled slides in and out.
+- The shelf's boards fixed and its three screws in from below; the tray
+  latches and releases in the order of 4.7.
+- On the stand: the tub on the pin, the carapace clear, no foot touching on
+  two sections.
 
 ## 5. Wiring
 
-The power tree, the tray, the star board and the deck-side looms, every drop
-tested with nothing plugged in. The in-leg harness is [2.7](#27-leg-harness).
+The power tree, the hub, the tray and the deck-side looms are specified in
+[WIRING_HARNESS.md](WIRING_HARNESS.md): build them by it, every drop tested
+with nothing plugged in. The in-leg harness is [2.7](#27-leg-harness).
 
 ### You need
 
 - Power: B-08, B-09 + 15 A fuses, B-10 buck + 1000 µF 16 V, B-11 UBEC (one
-  spare), B-12, B-13, B-24 12 V node.
-- Harness: B-14, B-15, B-16, B-18 star-board parts, A-06, B-23 cable ties, a
-  USB data cable (not charge-only).
-- Avionics: A-02, C-01, and B-03 Pi 5 + B-04 once bought
-  ([5.4](#54-the-pis-operating-system)). None of C-02, C-04, D-01, D-02, X-01
-  or X-03.
+  spare), B-12 and B-25 (the female XT60), B-13, B-24 the 30.5 × 30.5 PDB.
+- Harness: B-14, B-15, B-16, B-18 star-board parts, A-06, B-23 cable ties.
+- Avionics: A-02, B-30 the UART lead, C-01, C-05 the lidar's right-angle
+  USB-A cable, and B-03 Pi 5 + B-04 once one leg walks.
 - Tools: A-04, X-12, X-14, X-15 (custom-length XH looms only).
 - Done first: the bench leg passed the runbook; every servo labelled and in
   the leg of its ID.
@@ -997,110 +1067,50 @@ tested with nothing plugged in. The in-leg harness is [2.7](#27-leg-harness).
 - Gauges (B-15): 14 AWG pack run, 20 AWG silicone per leg pair, 24–26 AWG for
   data, 6 V and sensors.
 
-### 5.1 Power tree
+### 5.1 The order of work
 
-As designed: pack → sled-nose XT60 → dock XT60 → 14 AWG up through the deck →
-15 A fuse → XT60 loop key → 12 V node → five XT30 leg drops and the tray's
-XT30 ([power tree](WIRING_HARNESS.md#power-tree)). Until the bay exists, the
-chain starts at the bench supply's XT60 lead into the fuse
-([2.8](#28-the-bench-legs-power-lead)).
+1. **Power tree** ([WIRING_HARNESS](WIRING_HARNESS.md#power-tree)): pack →
+   sled XT60 → the tub's carrier → fuse and loop key in the tub's nose →
+   14 AWG out of the NE chamfer and up the riser → the PDB on the shelf →
+   five XT30 leg drops, the buck (the tray's 5 V XT30), the UBEC and the
+   adapter's 12 V input. Until the tub exists the chain
+   starts at the bench supply's XT60 lead into the fuse
+   ([2.8](#28-the-bench-legs-power-lead)).
+2. **The bus adapter on the Pi's UART** (pick 14): H2 RXD to Pi pin 10, TXD
+   to pin 8 (crossed), GND from pin 9 or 14; jumper H4 to A. In UART mode the
+   adapter's logic runs only from its 12 V input, so the bus is dead with the
+   loop key out. Before the Pi is bought, the adapter's USB-C goes to a
+   laptop.
+3. **The Pi's 5 V and the hand's 6 V:** the buck feeds the Pi's header
+   (WIRING_HARNESS has the route); set the Pi's EEPROM
+   `PSU_MAX_CURRENT=5000` (or `usb_max_current_enable=1` in `config.txt`),
+   or it will not know it has 5 A; the 5 V reaches the tray through its
+   bulkhead XT30. The UBEC's jumper to 6 V, its output to the star board's
+   J0.3 only (the hand rail), measured at its plug before it goes in.
+4. **Star board** ([build
+   order](WIRING_HARNESS.md#star-board-build-order)): build and buzz it on the
+   bench before it goes on the shelf: J1–J5 pin 1 to J0.1; pin 2 to J0.2 and
+   J6 GND; pin 3 to J0.3; each pin 4 to its own J6 pin only; pins 5, J0.4,
+   J0.5 to nothing.
+5. **Looms and power pairs:** every drop reaches its port from under the
+   deck (B109). Check each length on the built body against WIRING_HARNESS's
+   cut-length table, terminate at true length, label both ends with the leg
+   number, and write the real lengths next to the table. Ties: legs 1 and 4
+   at the shelf posts, leg 0 at the (12, 50) zip anchor, legs 2 and 3 at the
+   lid's tie bars.
+6. **The Pi:** its OS and microSD setup is not in the repo yet (B96); ROS 2
+   Jazzy targets Ubuntu 24.04 ([ros2/README.md](../ros2/README.md)), plus
+   `dialout` and `pip install -e ".[hw]"` ([runbook
+   §0](../bench/BENCH_RUNBOOK.md#0-before-anything-is-plugged-in)). On its
+   header: the BNO085 on SPI0 (GPIO 8 CE0, 9 MISO, 10 MOSI, 11 SCLK; INT and
+   RST on free GPIOs) and the five foot switches on free GPIOs with pull-ups,
+   each closing to GND. Write your choices into the [pin
+   map](WIRING_HARNESS.md#pi-5-pin-map-draft-verify) (B43).
 
-1. With the dock (after the bay), its 14 AWG pair comes up through the Ø9
-   grommet at (52, −6), zipped to anchors at (44, −14) and (60, −14); B51 may
-   move them (the body-layout proposal drops the grommet and keeps the power
-   under the deck).
-2. The 15 A fuse holder (B-09), then the loop key's chassis XT60E-M, in series
-   in the feed. The key is an XT60H female with a short 12–14 AWG loop (B-08):
-   arming plug and E-stop, reachable with the carapace on (nothing carries it
-   yet; the proposal puts it in the bay's nose). A DC-rated ≥ 20 A rocker is
-   the alternative.
-3. After the key, the 12 V node (B-24; no mount yet, B92): five XT30 pairs
-   in 20 AWG silicone, one per port, and the tray's XT30. Cut the leg pairs by the
-   [table](WIRING_HARNESS.md#cut-lengths-computed-from-the-deck-geometry)
-   (115–294 mm) after checking each on the printed deck.
-4. The dock's two XT30 spare taps sit ahead of the fuse (B66): **fuse anything
-   plugged into them.** Nothing here needs them. Later options, X-01 (INA228,
-   0x40) and X-03's relay contact, go after the fuse; no mounts yet (B47,
-   B48).
-   B-13's ten XT30 pairs: five drops, the tray power-in, two I5 taps, one
-   bench lead for the jig leg; one spare.
+### 5.2 Test before any servo plugs in
 
-### 5.2 Tray electronics
-
-On the bench carrier ([4.5](#45-the-avionics-tray-on-the-bench-i4)).
-
-1. USB data cable from the Pi (a laptop until the Pi is bought, 5.4) to the
-   adapter's USB-C. The adapter is the bus master (`/dev/ttyACM0`); the ESP32
-   driver (A-03) stays on the bench.
-2. Buck and UBEC fed from the bulkhead XT30.
-3. Buck output to the Pi header's 5 V and GND, the 1000 µF with it (side not
-   written down, [8.5](#85-wiring)). This skips USB-C PD: set EEPROM
-   `PSU_MAX_CURRENT=5000` (or `usb_max_current_enable=1` in `config.txt`), or
-   the Pi will not know it has 5 A.
-4. UBEC jumper to 6 V; its output goes to trunk pin 3 only, measured before
-   the trunk is plugged in.
-5. Trunk XH-5: pin 1 adapter data, 2 GND, 3 UBEC 6 V, 4–5 spare. **The
-   adapter's servo V+ stays out of the trunk:** J0 has no 12 V pin.
-6. The IMU on SPI0 ([4.5](#45-the-avionics-tray-on-the-bench-i4) step 2).
-
-### 5.3 Pi 5 header (draft, VERIFY)
-
-The [pin map](WIRING_HARNESS.md#pi-5-pin-map-draft-verify) is a plan (B43).
-For this build: the BNO085 on SPI0 (GPIO 8 CE0, 9 MISO, 10 MOSI, 11 SCLK; INT
-and RST on free GPIOs; protocol-select set for SPI, VERIFY), and the five foot
-switches on free GPIOs with internal pull-ups, each closing to GND. Free: 4,
-5, 6, 7, 12, 13, 16, 17, 20, 22–27 (GPIO 7 is SPI0 CE1, free while the IMU is
-the only SPI device). Write your choices into the pin map; I²C, I²S, UART,
-camera and lidar are optional.
-
-### 5.4 The Pi's operating system
-
-**The Pi's OS and microSD setup is not in the repo yet** ([8.5](#85-wiring));
-this guide prescribes no image. What exists: ROS 2 Jazzy targets Ubuntu 24.04
-([ros2/README.md](../ros2/README.md)); the 5 A setting (5.2); `dialout` and
-`pip install -e ".[hw]"` ([runbook
-§0](../bench/BENCH_RUNBOOK.md#0-before-anything-is-plugged-in),
-[driver/README.md](../driver/README.md)). B-03/B-04 wait until one leg walks;
-until then the adapter's host is a laptop.
-
-### 5.5 Star board
-
-Build it on the bench by the [star-board build
-order](WIRING_HARNESS.md#star-board-build-order); it mounts once the deck and
-bracket exist ([4.4](#44-the-star-board-bracket)).
-
-1. Perfboard (2.54 mm) cut to 40 × 30, corners drilled Ø3.2 on 34 × 24. J0
-   (XH-5 right-angle, trunk), J1–J5 (XH-5 vertical, leg numbers), J6 (XH-6,
-   foot switches); lanes W1–W4 per [the board
-   table](WIRING_HARNESS.md#the-board).
-2. Buzz it: J1–J5 pin 1 to J0.1; pin 2 to J0.2 and J6 GND; pin 3 to J0.3; each
-   pin 4 to its own J6 pin only; pins 5, J0.4, J0.5 to nothing.
-3. J6 to the Pi header: five switch lines and GND.
-
-### 5.6 Deck-side looms and power pairs
-
-On the printed deck, bracket and board on.
-
-1. XH-5 looms, board to each port, 108–287 mm by the table: check each on the
-   deck, then crimp one end (with pre-crimped B-16 leads, the nearest length).
-2. Dry-route looms and XT30 pairs: radial to the r ≈ 62 ring lane, round it
-   the short way, radial to the cutout at r 81. Terminate the station ends at
-   true length, zip the ring to the bracket's wings, label both ends, write
-   the real lengths next to the table.
-3. The coxa plate lies flat from r 64 outward and its channel starts only at
-   the cutout's inboard edge (r 75.5): a lead on the deck top cannot reach the
-   cutout under the plate (697 mm³ of plate in the way), while the column
-   under the cutout is clear. So every drop reaches its port from under the
-   deck (B109), and the ring lane above is provisional until the body layout
-   settles ([BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md) §1; its option
-   A's looms are 113–235 mm).
-4. Trunk: bulkhead XH-5 to J0 round the tray; not computed (B67), so measure
-   it once the tray has a place.
-
-### 5.7 Test before any servo plugs in
-
-No pack or supply, loop key out, every leg unplugged, trunk off J0, the Pi's 5
-V lead off the header.
+No pack or supply, loop key out, every leg unplugged, J0 unplugged, the
+tray's XT30 (the Pi's 5 V) unplugged.
 
 1. Continuity and polarity end to end: each XT30 red to red, black to black,
    no short; each XH-5 loom pin for pin.
@@ -1121,7 +1131,7 @@ all legs. The legs dock one at a time as the power-up asks.
 
 ### You need
 
-- The deck on the stand, wired and tested, carapace off.
+- The robot on the stand by its tub, wired and tested; the carapace off.
 - The five calibrated legs, each with two knobs and M3 × 16 hex bolts.
 - The tray electronics; A-04 with its XT60 lead to the fuse.
 - B-05 pack, B-06 charger, B-07 alarm and LiPo bag.
@@ -1130,52 +1140,48 @@ all legs. The legs dock one at a time as the power-up asks.
 
 ![Leg 0's coxa base docked on its I1 port, station 0 (north, one dot)](../cad/out/assembly/leg_on_deck.png)
 
-The dowels and hook lip take shear and torque; the thumbscrews only clamp and,
-with the hook, resist lifting
-([I1](INTERFACES.md#i1--leg-port-deck--coxa-base-the-flagship)).
-
-> ⚠ **These steps cannot be done with the parts as drawn (2026-10-01, B117).**
-> The lip's foot does not pass the 4.2 slot and the dowel posts block the pivot;
-> step 3's plugging at the cutout is 1.6–2.5 mm out of reach while hooked, and
-> the mated XH-5 pair does not pass the cutout (B120). The leg's own carapace
-> sector must also be off (B125). The sequence is rewritten once the I1 fix is
-> signed (body-layout decision 15; the recommended fix docks at 7–10° onto two
-> cone seats). The load-path sentence above is also wrong: in stance the
-> thumbscrews carry the plate, not the hook (B118).
+The two cone seats place the leg and take shear and torque. In stance the
+ground lifts the plate's outboard end, the plate pivots on its inboard pads
+and the two thumbscrews carry the pull (B118); the hook is a catch for a
+hanging leg ([I1](INTERFACES.md#i1--leg-port-deck--coxa-base-the-flagship)).
 
 1. Loop key out.
-2. Leg by its coxa, plate at ~15°: inboard lip through the station's hook slot
-   (leg-local x −48), slide inboard until the lip's foot hooks under.
-3. Hooked, not flat: plug the station's XT30 and XH-5 to the leg's drop at the
-   cutout by hand; only a drop that passed
-   [5.7](#57-test-before-any-servo-plugs-in).
-4. Pivot flat onto the dowel posts at (−28, ±19); they drop in without force.
-   If you push, stop and find what binds.
-5. Then a knob with its M3 × 16 in each inboard hole at (−41, ±17),
-   finger-tight: it takes 5.5 of the insert's 5.7 mm and stays inside the
-   deck. No longer.
-6. Push the coxa sideways, lift its end: the plate must not rock or rise.
+2. **The leg's own carapace sector off**, if the carapace is on: from below,
+   its latch to OPEN, lift it (B125). The sectors at stations 162 and 306
+   latch through the tub: the sled out first ([7.2](#72-the-sectors-and-the-cap)).
+3. Leg by its coxa, the plate at 7–10°, outboard end up: bring it in
+   radially and pass the L through the station's 6.2 slot (leg-local x −47)
+   without force, then hook it.
+4. Hooked, plug the station's XT30 and XH-5 to the leg's drop at the cutout,
+   by hand; only a drop that passed [5.2](#52-test-before-any-servo-plugs-in).
+   B120 is open: as drawn the mated XH-5 pair may not pass the 11 × 11
+   cutout, so note what you find.
+5. Lower the plate onto the two cones at (−32, ±17.3): it centres itself. If
+   you push, stop and find what binds.
+6. A knob with its M3 × 16 in each inboard hole at (−41, ±17), finger-tight:
+   it takes 5.5 of the insert's 5.7 mm and stays inside the deck. No longer.
+7. Push the coxa sideways, lift its end: the plate must not rock or rise.
 
-To swap a leg: key out, knobs out, pivot up, unplug, unhook (target under two
-minutes). **The thumbscrews are not captive:** unscrewed, knob and bolt lift
-out. Keep each leg's pair with it, e.g. in a bag taped to it.
+To swap a leg: key out, its sector off, knobs out, lift it off the cones,
+unplug, unhook. **The thumbscrews are not captive:** unscrewed, knob and bolt
+lift out. Keep each leg's pair with it, e.g. in a bag taped to it.
 
 ### 6.2 First power: bench supply, nothing plugged in
 
 1. Supply 12.0 V, ~1.5 A, output off, checked; its XT60 lead into the fuse and
    loop key.
-2. Output on, key in: 12.0 V, + on red, at the node, every port's XT30 and the
-   tray's XT30.
-3. The buck's 5 V measured before its lead goes onto the header; then the Pi,
-   if bought yet, boots; its 5 A setting ([5.2](#52-tray-electronics)).
-4. **6.0 V at the UBEC's plug**; only then the trunk into J0, and 6.0 V (pin 3
+2. Output on, key in: 12.0 V, + on red, at the PDB and every port's XT30.
+3. 5.0 V from the buck at the tray's XT30 before it is plugged into the
+   bulkhead; then the Pi, if bought yet, boots; its 5 A setting
+   ([5.1](#51-the-order-of-work) step 3).
+4. **6.0 V at the UBEC's plug**; only then its lead into J0, and 6.0 V (pin 3
    to 2) on J1–J5 and every port's XH-5. Anything near 12 V: stop.
 5. The adapter on its host (`ls /dev/ttyACM*`, `dialout`, the install); the
    Pi's own control loop is B35.
 
 ### 6.3 One leg, then all legs
 
-1. Deck on the stand, carapace off, nothing under the deck, feet clear.
+1. Robot on the stand by its tub, the carapace off, feet clear.
 2. Key out, dock leg 0 ([6.1](#61-dock-a-leg-i1)), key in. From `bench/`:
    `python3 bus_scan.py --port /dev/ttyACM0` finds IDs 1, 2, 3 (16 with its
    hand) and nothing else, at ~12 V; nothing found: [runbook
@@ -1196,23 +1202,22 @@ out. Keep each leg's pair with it, e.g. in a bag taped to it.
 
 ### 6.4 The pack
 
-1. B-05: soft case, ≤ 138 × 44 × 25. **Hard-case packs (~37 mm) do not fit the
-   30 mm bay**, nor most 50C soft 5200s (26.7–27 mm). Another size goes in
-   `interfaces.battery_sled`, then `./rocky.sh cad-check part_battery` must
-   print FITS (it counts sled + pack, not the rail under the sled).
+1. B-05: soft case, ≤ 138 × 44 × 25 (the BOM's pack is 132 long; pick 5
+   keeps the bay at 138). **Hard-case packs (~37 mm) do not fit.** Another
+   size goes into `interfaces.battery_sled` before the sled prints
+   ([4.5](#45-the-battery-sled)).
 2. Charge in the LiPo bag, never unattended; store at storage charge. The
    alarm (B-07) rides the balance lead whenever the robot runs: the 9.9 V
    floor is software, the alarm is not.
-3. **The pack stays off the robot until the bay exists** (a proposal for
-   it: [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md)). **No deck-strap
-   fallback:** the bracket blocks the north strap run (B50) and the hook feet
-   of legs 1 and 4 press into a 132 mm pack's ends. The sled never goes in on
-   the stand. Later, with the bay
-   ([I5](INTERFACES.md#i5--battery-sled--xt60-dock)): polarity checked at the
-   sled nose and the dock before the first mate, made with the loop key out;
-   to swap packs, limp the servos, swap the sled (~5 s), reboot the Pi.
-4. Prove the E-stop on the bench supply: pull the loop key; everything goes
-   dark, the Pi too.
+3. **First mate:** polarity checked at the sled nose and at the carrier,
+   loop key out, robot on the stand. The pack in the sled, the sled in until
+   the XT60s mate, the door on and latched ([4.4](#44-the-door)), then the
+   loop key in.
+4. **To swap packs:** limp the servos, key out, door off, sled out (on the
+   stand with leg 1 at yaw ≤ +20°), swap, sled in, door on, key in; the Pi
+   reboots.
+5. Prove the E-stop on the bench supply first: pull the loop key; everything
+   goes dark, the Pi too.
 
 ### 6.5 Safety floors
 
@@ -1232,19 +1237,23 @@ offset + 2°) in each servo's EEPROM, and the 15 A fuse. A 3S pack sags
 
 - 6.0 V at the UBEC plug and every port's pin 3 before any claw; the Pi, once
   fitted, runs from the buck with its 5 A setting.
-- Every leg: dowels home, no light under the plate, knobs snug, no rock.
+- Every leg: seated on its cones, no light under the inboard pads (the 0.2 mm
+  gap outboard of them is designed), knobs snug, no rock.
 - IDs 1–15 (16–20 with hands) each on its labelled station; `PROTECT_CURRENT`
   archived on all 15; the monitor quiet at rest.
-- The loop key cuts everything; the pack is charged, alarmed, off the robot.
+- The loop key cuts everything; the pack is charged and alarmed, and goes in
+  only with the key out.
 
 ## 7. The carapace
 
-Last, after the power-up; it comes off whenever the robot goes on the stand
-([4.6](#46-the-bench-stand)).
+Last, after the power-up. The stand holds the robot by its tub, so the
+carapace can stay on there; one sector comes off for a leg swap, and the
+carapace for the tray ([4.7](#47-the-avionics-tray-i4)).
 
 ### You need
 
-- 5 × `shell_sector` and `shell_cap`, printed last; 5 latch cartridges
+- 5 × `shell_sector` (from the current tree: since 2026-10-08 each clears
+  the docked cup's back wall, B124) and `shell_cap`; 5 latch cartridges
   (`latch_housing` + `latch_rotor`), A-14 CA, a flat screwdriver with a
   blade ≤ 5 mm.
 - B-19 N35 Ø6 × 3 magnets: one per sector foot, and ten for the hatch (five
@@ -1268,9 +1277,8 @@ and the panel magnet S: two magnets stacked the same way up attract.
    (opening down). All ten go in **N up**: the seats show N, the cap's show
    S. Glue each flush; with all ten in, the cap still seats on the five
    sectors (0.000 mm³ as modelled).
-4. **Demo parts:** `belly_door`'s pockets go right through: glue those flush
-   with the inner face. `shell_sector_demo`'s are blind since D063 (a boss
-   under each).
+4. **Demo parts:** `shell_sector_demo`'s pockets are blind (a boss under
+   each).
 
 ### 7.2 The sectors and the cap
 
@@ -1279,7 +1287,7 @@ D063, its I3 latch hold it (B87): a bayonet cartridge in the foot's pad,
 turned a quarter turn from under the deck into the deck's strike. The latch
 only retains (D020): **do not carry the robot by the shell.** The 0.2 mm cam
 bite is VERIFY on `frame_coupon` first (B99,
-[1.3](#13-batch-1-coupons-and-the-blank) step 8).
+[1.3](#13-batch-1-coupons-and-the-blank) step 7).
 
 1. **Cartridges, off the robot:** each rotor into its housing, lugs through
    the two keyways, then a quarter turn off them: it is captive.
@@ -1309,8 +1317,12 @@ bite is VERIFY on `frame_coupon` first (B99,
 8. To reach a leg port: from below, a quarter turn back to OPEN, then lift
    that sector straight up.
 
-The loop key must stay reachable with the carapace on; nothing carries it yet.
-Skip the charging dock (`dock_base`, `dock_tower`; B14).
+**The sectors at stations 162 (leg 1) and 306 (leg 3)** latch over the keel
+tub: the screwdriver goes up a Ø6 column through the tub's floor and roof,
+which is the sled's space, so take the sled out first (on the stand too).
+
+The loop key faces +x in the tub's nose wall (pick 3). Skip the charging dock
+(`dock_base`, `dock_tower`; B14).
 
 ### 7.3 Accessories (I6)
 
@@ -1320,7 +1332,7 @@ is undercut, so the shoe cannot lift off, and the set screw wedges it
 against the flanks.
 
 1. An A-19 M3 × 16 hex head pressed into a `thumb_knob_m3` (as in
-   [1.3](#13-batch-1-coupons-and-the-blank)), threaded into the shoe's
+   [1.1](#11-batch-0-the-printer-and-the-port) step 4), threaded into the shoe's
    angled bore; back it out until its tip clears the slot (the knob about
    7 mm off its spot face).
 2. Turn the shoe so its knob faces the leg's arch, away from the seam: two
@@ -1354,211 +1366,131 @@ and checks. Ids refer to [DESIGN_BACKLOG.md](DESIGN_BACKLOG.md).
 
 ### 8.1 Prints
 
-- **Fit ladder → params** (B28; **blocks** the deck).
+- **Fit ladder and port coupons → params** (B28, B117; **block** the deck and
+  every `coxa_yaw_base`).
+- **`coxa_yaw_base` at servo stall** (B119, B139; **blocks** four of the five
+  bases): SF 1.10 in FEM case V on the real I1 support; the fix is an owner
+  decision after a measured option round.
 - **PLA ladder, PETG parts:** `params.print` names no material; if a PETG part
   fits unlike its PLA coupon, note it with the material.
 - **The tube socket has no key** (10 + `clearance_fit`): if row E disagrees
   with row A, decide which wins.
-- **Not in the print estimate** (`print_estimate.json`; PRINT_PLAN lists
-  them): 10 × `thumb_knob_m3` and one more per I6 shoe; 5 latch cartridges
-  (the tongue's and the door's wait for strikes); one `tube_clip` per exposed
-  tube and one `link_clip` per femur, 5 each + spares. The two
-  `stand_section`s are in it (221 g / 8.1 h for the stand).
+- **Not in the print estimate:** the port coupons, 10 × `thumb_knob_m3` and
+  one more per I6 shoe, 7 latch cartridges (5 sectors, the tray, the door),
+  4 IMU grommets, one `tube_clip` per exposed tube and one `link_clip` per
+  femur.
 - **Printed-part strength** (B75): FEM allowables VERIFY; no pull coupon.
 
 ### 8.2 The leg
 
-- **The fork's inward push rests on the horn face** (D063): with the idler
-  pocket open to the mouth, an inward push on the foot (FEM case R−, SF 2.47,
-  the fork's governing case) goes through the side cheeks into the horn face
-  and its four screws alone. Keep those screws snug; check them after the
-  first torque tests.
-- **I1 thumbscrews are not captive** (B82; length and head fixed in D063):
-  nothing retains knob and bolt in the plate, so they lift out with the leg
-  ([6.1](#61-dock-a-leg-i1)); no "printed lips" are modelled.
+- **The fork's inward push** (FEM case R−, SF 2.47) goes through the side
+  cheeks into the horn face and its four screws alone: keep them snug, and
+  check them after the first torque tests.
+- **I1 thumbscrews are not captive** (B82): knob and bolt lift out with the
+  leg ([6.1](#61-dock-a-leg-i1)).
 - **The servo's numbers** (B23, VERIFY): horn thread and radius (if M2, A-12
   needs 60 + 60), rim screw size, plug height (then re-run `check_assembly`),
   envelope, mass, whether horn and idler ship fitted.
 - **Blanks:** no rim pilots; the glued idler sits 0.3 mm proud of the real
-  one, using up the idler pockets' 0.3 mm clearance, so a tight pocket on a
-  blank may be this.
+  one and uses up the idler pockets' 0.3 mm clearance.
 - **Coupler screw length:** under an M3 × 6 head, 1.9 mm of thread passes the
   horn against a 1.8 mm gap to the case (`out_boss_h`, VERIFY).
-- **The gauges (as modelled):** `calib_gauge_hip`'s cradle is 6 mm high (it
-  assumes leg z 0 at jig z 140; the proxy top is at 130, so leg z 0 is at
-  134): ~4–6° of femur tilt, by where it stands (not specified).
-  `calib_gauge_knee` seats a Ø10 tube at x ≈ 128.2 (the Ø19 sleeve ≈ 121.6),
-  not under the knee axis at x 140.
+- **The gauges as modelled:** `calib_gauge_hip` assumes leg z 0 at jig z 140
+  (it is at 134): ~4–6° of femur tilt. `calib_gauge_knee` seats the tube at
+  x ≈ 128.2, not under the knee axis at x 140.
 - **Bench tests:** the adapter-to-jig data lead is not drawn and no current
-  limit is given for a whole leg (1.5 A is first contact); `torque_step.py`
-  predicts m·g·arm only, so decide whether §8 loads the built leg or a bare
-  lever; watch the channel wall (B49). The per-tick goal speed (D063) is
-  VERIFY-ON-BENCH until the runbook's §8b sag test passes (B98).
-- **In-leg harness:** threading order, lead construction, hip → knee route and
-  lengths go into [In-leg routing](WIRING_HARNESS.md#in-leg-routing).
-- **The hand's leg lead: length and mating half** (B91):
-  B-17 is a 100 mm plug-to-plug cable against a ~0.45–0.55 m run, and two
-  plugs do not mate ([2.7](#27-leg-harness)).
+  limit is given for a whole leg; `torque_step.py` predicts m·g·arm only;
+  watch the channel wall (B49); the per-tick goal speed is VERIFY until the
+  runbook's §8b passes (B98).
+- **Harness:** threading order, lead construction and lengths go into
+  [In-leg routing](WIRING_HARNESS.md#in-leg-routing); the hand's lead (B91):
+  B-17 is a 100 mm plug-to-plug cable against a ~0.45–0.55 m run.
 
 ### 8.3 The foot
 
-- **The hand-as-foot overshoots l3** (B95; **blocks**
-  cutting five tubes): knee to sole is tube + 136.2 mm
-  ([3.1](#31-decide-the-tube-length-and-the-foot)).
-- **SEA travel with a tool on:** every tool's Ø16 socket mouth sits 3.0 mm
-  below the outer at the slider's lowest: 3.0 mm of travel, not 7.
-- **Slider assembly:** unchecked (`check_assembly` stops at J5); the striker
-  must pass the 0.9 mm lip, then its only stop. Does it hold?
-- **The switch:** not modelled; a 6 × 13 × 6 body centred in the pocket
-  overlaps the resting slider by ~60 mm³ (the striker ~34, the flange the
-  rest). Decide the lever side and the contact that closes on load, the same
-  on all legs.
+- **The hand-as-foot overshoots l3** (B95; **blocks** cutting five tubes):
+  knee to sole is tube + 136.2 mm ([3.1](#31-decide-the-tube-length-and-the-foot)).
+- **SEA travel with a tool on** is 3.0 mm, not 7: every tool's socket mouth
+  sits 3.0 below the outer at the slider's lowest.
+- **The slider** is unchecked (`check_assembly` stops at J5): the 0.9 mm lip
+  is the striker's only stop.
+- **The switch** is not modelled: a 6 × 13 × 6 body in the pocket overlaps
+  the resting slider by ~60 mm³; decide the lever side and the contact that
+  closes on load, the same on all legs.
 - **The spring** (B44): no free length, rate or preload in params; 9.6 mm of
-  room against A-16's 25 mm (0.6 wire) and 20 mm (0.8) free lengths: measure
-  the preload that leaves. A-16's two (~1 N and 3–4 N over 7 mm) are far
-  softer than B44's ≥ 2 N/mm for a ~6.5 N stance (A-16 says ~9 N), so expect
+  room, and A-16's two springs are far softer than B44's ≥ 2 N/mm, so expect
   either on its stop when standing.
-- **Outer to tube:** glue is the only retention; the pocket's direction is not
-  set. Switch forces are VERIFY until [3.4](#34-measure-the-switch-force).
-- **Lead route:** the tube is sealed in the CAD, so leads run outside in clips
-  (`part_clips.py`), while WIRING_HARNESS says "down the tube" and INTERFACES
-  I2 has the pigtail exit "the tube above the socket".
-- **The plain foot** (B25): not modelled; needs the I2 female socket and must
-  meet the l3 and travel items.
-- **The hand's servo:** the SCS0009 envelope (VERIFY) overlaps `hand_hub` by
-  ~416 mm³ and, with no bore-end shoulder, the stub's face bears on it:
-  caliper one first. Also open: its lead, the pad with the claw open, the
-  hinge pins (1.75 mm filament, X-07's zero-cost default, is likely loose in
-  2.1; PRINT_PLAN says Ø2 filament).
-- **Whiskers:** no switch mount; J6 carries only the five foot lines + GND.
+- **Outer to tube:** glue is the only retention; switch forces are VERIFY
+  until [3.4](#34-measure-the-switch-force).
+- **Lead route:** the tube is sealed, so the leads run outside in clips,
+  while WIRING_HARNESS says "down the tube" and INTERFACES I2 has the exit
+  "the tube above the socket".
+- **The plain foot** (B25) is not modelled. **The hand's servo:** the SCS0009
+  envelope (VERIFY) overlaps `hand_hub` by ~416 mm³ and the stub's face bears
+  on it; also its lead and the hinge pins (1.75 mm filament is likely loose
+  in 2.1). **Whiskers:** no switch mount.
 
 ### 8.4 The body
 
-The layout items below (B51, B84, B85, B86, B92, B93) were measured together
-in D063 as three options, A recommended; they wait for the owner's decisions
-in [BODY_LAYOUT_PROPOSAL.md](BODY_LAYOUT_PROPOSAL.md#8-decisions-only-the-owner-can-make).
-Nothing of it is in the CAD yet.
-
-- **Deck thickness** (B27; **blocks** the deck): the CAD cuts 6 mm,
-  `body.deck_t` says 4 (unread). The D063 latch strike needs at least 6
-  (`iface.latch_strike` asserts it).
-- **I4 tray position** (B51; **blocks** the deck): no pose of tray and rails
-  clears the coxa bases ([4.5](#45-the-avionics-tray-on-the-bench-i4)), the
-  rail holes miss the grid, and it slides out neither way. Measured lead: tabs
-  inboard, tray at (0, 0), clear of every leg and on grid holes, but in the
-  bracket's place and over the power grommet; the proposal adds lugs
-  (slide 16 mm, lift) and a latch strike at (0, −43). Place tray, bracket and
-  power entry together and check the tray against the leg ports
-  (`part_avionics` counts a 50 mm half-span; the tabs reach 58.3). Trunk: B67.
-- **Deck hole plan:** 13 grid holes against 27 wanted (bracket 2, tray rails
-  6, sled rails 10, dock 2, skids 6, trim cup 1+), cut with B51 and the bay.
-- **The battery bay is not a part** (B84; **blocks** the pack on
-  the robot; [4.3](#43-under-the-deck-nothing-yet)). Also: floor to pack top
-  30.25 mm against 30 (the B72 check counts sled + pack only); legs 1 and 4's
-  hook feet 3.3 mm into it; sled + dock 194 mm against 175; south corners 10.6
-  mm past the deck; `belly_door` fits no opening. The station-162 latch
-  strike sits inside its footprint and is turned from below (B100); legs 1–4
-  can fold into a belly tub inside their soft limits, and nothing checks it
-  (B97).
-- **`dock_block` cannot be bolted down** (B86): its two holes
-  sit under a closed roof, where no driver reaches and no nut fits, 16 mm
-  apart on a 20 mm grid.
-- **The stand crown fills the belly** (B85): its plate and arms
-  occupy the bay, rails and skids ([4.6](#46-the-bench-stand)). Three latch
-  strikes sit 11.0 mm from an arm's centreline: 1.5 mm for a Ø5 screwdriver
-  shank, if the carapace is ever left on for the stand.
-- **Sled strap slots take only ~5 mm straps** (B93): 6 × 5
-  mm, and no BOM row straps the pack. A strap also needs width: the 44 mm
-  pack fills the sled, 0.6 mm a side against a 1.5 mm strap.
-- **The dock's XT60:** it needs a female half, but its pocket is cut to the
-  male XT60E-M (B-12 lists only male panel mounts); the pack's live side ends in
-  exposed male pins at the sled nose. Its spare taps sit ahead of the fuse
-  (B66).
-- **The tray's other boards** (B108): the bus adapter, buck and UBEC have
-  no place under the Pi as drawn ([4.5](#45-the-avionics-tray-on-the-bench-i4) step 4);
-  either measured fix raises the Pi (13 mm standoffs for the buck and UBEC,
-  18.5 with the IMU moved for all four), and the Pi stack against the
-  carapace is measured only in the proposal (5.5 mm margin in option A with
-  11 mm standoffs; each mm of standoff takes a mm of it). The Ø6.8
-  standoff tops against the Pi's pads are uncalipered; every bulkhead
-  cutout is VERIFY.
-- **The I3 latch's other two users have no strike** (B51, B84): the rotor
-  hangs 5.8 mm below the tray tongue and the belly door. The cam's 0.2 mm
-  bite in PLA is a coupon (B99, [1.3](#13-batch-1-coupons-and-the-blank)
-  step 8). Their pockets carry the keyway index (B107) with the part's own
-  +x as the strike's: their strikes must be drawn to match.
-- **Leg swap under the carapace:** knobs at r ≈ 69, arch from r 72. Does a leg
-  come off with its sector on?
-- **Not parts yet:** the loop key's mount (B-08), camera bracket (B16), lidar
-  hatch cap (B12, B46), the charging dock's electrical side (B14, `PLUG_H` 52
-  VERIFY); no CoM target for ballast.
+- **Deck thickness** (B27): the CAD cuts 6 mm and v0.5 depends on it (the
+  blind post holes, the strikes); params `body.deck_t` says 4, unread.
+- **The XT60s** (VERIFY): the mated pair's 7.0 mm engagement, the sled's male
+  glued 8.0 proud, the 6.0 mm of lead room behind the female, how the female
+  is held in the carrier, the loop key's flange and screw holes (not drawn).
+  Caliper a mated pair before the tub and the sled print; the door's press
+  boss is the feature to file. The pack's live side ends in exposed male pins
+  at the sled nose.
+- **The tub door's latch** turns from +x with a ≥ 183 mm shaft; a slotted
+  rotor head would let it turn from the door side.
+- **Snaps:** the riser clip (1.0 mm jaws, 1.8 % strain in PETG) and the
+  door's hook tab are VERIFY on the first print.
+- **The 14 AWG feed** spans 26.5 mm free under leg 4's drop, 0.2 mm over the
+  tub's bottom, the robot's lowest point. A real 14 AWG bend at the riser may
+  come within 0–0.3 mm of that drop's keep-out (an estimate, not modelled).
+- **The hub:** the PDB's height (parts and leads ≤ 6.0 mm over the board) and
+  the adapter's connector positions (no published layout) are VERIFY; three
+  of the adapter's four screws are covered on the stand (B134).
+- **The tray:** the bulkhead connectors' rear bodies are unmodelled (4.6 mm
+  from the bulkhead to the Pi board's edge in the lower row), the J6 lines
+  have no bulkhead connector (B123), and the Active Cooler and HATs are
+  unmodelled.
+- **Leg swap under the carapace** (B125): the leg's own sector comes off
+  first, with the screwdriver from below; for legs 1 and 3 the sled is out.
+- **The shell over the docked base** (B124): fixed in the shell
+  (`cup_back_relief`); moving the leg arch or trimming the cup's back wall
+  are the owner's alternatives.
+- **In the sim, not on the robot:** the tub's protrusions (latch boss and
+  door ear, pilasters, keeper, north return, riser clip) are not in the sim's
+  belly; leg 0 touches the shelf plate in 2 of 200 simulated shove falls
+  (≤ 1.40 mm), which a leg-0 hip floor of −62.5° clears with identical
+  outcomes (the clamp stays on legs 1–4, pick 13).
+- **Not parts yet:** the camera bracket (B16), the lidar hatch cap (B12,
+  B46), the charging dock's electrical side (B14); no CoM target for
+  ballast.
 
 ### 8.5 Wiring
 
 - **The harness is a design:** nothing wired yet; file every change in
   [WIRING_HARNESS.md](WIRING_HARNESS.md).
-- **The 12 V power node** (B92): B-24 is a placeholder, no part picked, no mount (nor
-  for the dock's bus-bar cavity); also which conductor the fuse and key break,
-  and the tray feed's gauge. The proposal puts it on a hub shelf under the
-  deck (option A).
-- **Deck-side leads to the cutout** (B109): a lead on the deck top cannot
-  reach the cutout under the coxa plate, so the r ≈ 62 lane is unrouted
-  ([5.6](#56-deck-side-looms-and-power-pairs)); the drops meet the body
-  under the deck.
+- **Deck-side leads** (B109): every drop reaches its port from under the
+  deck.
 - **Buck capacitor:** which side the 1000 µF (16 V) goes; on the input it has
   thin margin against 12.6 V.
-- **Adapter power on the robot:** its servo-power input (9–12.6 V) gets no
-  feed; bench whether it drives the bus on USB alone. The adapter-to-trunk
-  lead is unspecified.
-- **Across the tray boundary:** the J6 lines, camera ribbon and lidar USB have
-  no bulkhead connector; the two JST-SH and the USB-C slot are unassigned.
-- **Lengths and limits:** looms, power pairs, trunk (B67), tray feed; no
+- **The adapter on UART:** its H2 leads soldered or right-angle, its logic
+  fed only from its 12 V input (VERIFY on the board).
+- **Leg-side XH-5 pins 1–2** may carry two or three wires each (B121,
+  unverified).
+- **Lengths and limits:** looms, power pairs, the trunk (B67); no
   bench-supply current limit for five legs.
-- **Pi pin map** (B43): INT, RST, switch and whisker GPIOs, protocol-select,
-  IMU and amplifier supply pins.
-- **Pi 5 bring-up doc** (B96): nothing takes the Pi from a
-  blank microSD to the driver ([5.4](#54-the-pis-operating-system)).
-- **Also open:** `PROTECT_CURRENT`'s 6.5 mA/count unit (VERIFY; no script
-  writes it); where the balance-lead alarm rides with the pack in the bay,
-  and whether it is heard through the shell; nothing on the Pi reads the IMU
-  or foot switches yet (B35).
+- **Also open:** the Pi pin map (B43) and bring-up doc (B96);
+  `PROTECT_CURRENT`'s 6.5 mA/count unit (VERIFY; no script writes it); where
+  the balance-lead alarm rides with the pack in the tub, and whether it is
+  heard through the shell; nothing on the Pi reads the IMU or the foot
+  switches yet (B35).
 
-### 8.6 Wording left to fix
+### 8.6 Older findings
 
-The docs, BOM and CAD comments were corrected with this guide (2026-09-28).
-Two items remain: PRINT_PLAN gives `tibia_knee_carrier` as "cup floor DOWN"
-while `check_printability.py` audits it as exported, so check the pose before
-slicing; and the dated [REVIEW_2026-09-22.md](REVIEW_2026-09-22.md) still
-reads the horn slots as BCD 14.0–15.6 (they cover 14.0–17.2). (The
-`coxa_fork` drawing lists its horn-head relief, idler pocket and idler-head
-relief again since 2026-09-30, as open channels: B105.)
-
-### 8.7 Fixed in D063
-
-Fixed in the CAD and checked there on 2026-09-28, not yet on a print
-([decisions](decisions.md) D063, [DESIGN_BACKLOG.md](DESIGN_BACKLOG.md)):
-
-- **B80, B81: the fork goes on** ([2.3](#23-coxa-steps-1-and-2)). The horn
-  head's relief and the idler pocket run out through the C's mouth, the horn
-  face bears on a flat hub top, and two side cheeks carry the inward push
-  that the open mouth lost (FEM SF 2.47, +5.5 g a fork). `check_assembly` J1
-  now checks the slide-on path.
-- **B82: the knob** is 8.6 mm tall and the M3 × 16's head sits in its 2.1 mm
-  pocket ([1.3](#13-batch-1-coupons-and-the-blank)). Captive is still open
-  ([8.2](#82-the-leg)).
-- **B83: the I6 shoe clamps** ([7.3](#73-accessories-i6)): the ring's male
-  is undercut and the set knob wedges it.
-- **B87: the I3 latch** is a bayonet turned from below the deck
-  ([7.2](#72-the-sectors-and-the-cap)).
-- **B88: the hatch magnets** have walled seats ([7.1](#71-magnets)).
-- **B89, B90: the tray's** Pi standoffs are 58 × 49, 11 mm tall, and the IMU
-  seats fit the BNO085 with room for its nuts
-  ([4.5](#45-the-avionics-tray-on-the-bench-i4)).
-- **B94: `link_clip`** fits the D062 femur ([2.7](#27-leg-harness)).
-- **B79, the tool half:** `register_dump.py` reads the factory block
-  ([1.5](#15-the-servos-arrive-on-the-desk)).
-
-D063 also changed how the robot moves (B76: a soft-landing swing, a
-command slew, a per-tick goal speed; walking envelope 34.2 mm/s,
-[SERVO_NOTES](SERVO_NOTES.md#fluid-motion-what-limits-it)), not how it is
-built.
+The geometry check that wrote this guide (2026-09-28) found B80–B96; D063 fixed
+nine of them in the CAD. Their record is [DESIGN_BACKLOG.md](DESIGN_BACKLOG.md)
+and the 2026-09-28 entry of [BUILD_LOG.md](../BUILD_LOG.md) (older entries:
+[archive/](archive/README.md)).

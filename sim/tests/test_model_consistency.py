@@ -172,7 +172,7 @@ def test_pebble_xml_is_regenerated():
 
 def test_spec_matches_compiled_links(model):
     """D053: the robot description's shape IS the compiled model's. Until the
-    generators read the chain (ROBOT_AS_DATA step 2) the leg is still a template
+    generators read the chain (DESIGN_CHANGE_GUIDE §9 step 2) the leg is still a template
     in build_mjcf.leg_xml; this pins the two together (0.06 mm = the template's
     %.4f m rounding)."""
     spec = rm.robot()

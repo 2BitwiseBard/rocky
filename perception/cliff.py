@@ -12,7 +12,7 @@ stays open:
 
 On rubble this same signal fires on bridged/late feet — there it feeds the
 stuck-watchdog; on commanded-flat ground it means the world ends. The
-arbitration lives in the caller (docs/PERCEPTION_PLAN.md, reflex arbitration).
+arbitration lives in the caller (docs/SIM_GUIDE.md §9, reflex arbitration).
 
 Terrain-aware option (D050): on rough ground or an obstacle course the
 same timing signal fires on bridged feet, bumps and blocked swings — none

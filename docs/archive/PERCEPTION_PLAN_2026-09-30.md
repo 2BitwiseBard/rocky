@@ -1,5 +1,8 @@
 # Perception plan
 
+*Archived 2026-10-08. What exists is in [SIM_GUIDE](../SIM_GUIDE.md) and [PLACES](../PLACES.md);
+the sensor plan that is not built yet is SIM_GUIDE §9. Kept as written on 2026-09-30.*
+
 How Pebble knows anything, from reflex-fast to semantic-slow. Each layer
 runs where its latency budget lives, keeps working when the layers above it
 die, and exists in a testable form today (in the sim or in code). The
@@ -18,7 +21,7 @@ are upper bounds for the real robot, which has no sensor wired yet (B35).
 | **L0 proprioception** | 100 Hz IMU, 50 Hz bus | Pi | servo position / load / temperature over the bus, the SEA foot microswitches (D010), BNO085 IMU on SPI | joint state, contact flags, body attitude, the `perception/legged_odom.py` pose | legged-odometry EKF (D026): drift 4.49 / 5.02 / 8.06 % of distance on flat / turny / 20 mm rubble; the StillnessGate (zero yaw rate while standing) ends a patrol at 1.63° of yaw instead of 14.37°, drift 3.51 % | nothing yet: IMU driver and foot switches are B35 |
 | **L1 local bubble** | 10–20 Hz | Pi | the cliff detector (software: a planted foot whose switch stays open), the contact-seeking foot probe, whiskers on an I6 shoe; later a sonar skirt and downward ToF | void events, "something within 40 cm at bearing θ", stuck | cliff detector (D034): `run_cliff` ends 252.3 mm short of the edge at x = 350 mm (the torso's closest approach was 170.7 mm short, then the retreat), no fall; the foot probe (D050) and the always-on void guard + touchdown gate (D052), except a lip band of 7 in 310 approach angles (D052a); goto `stuck` after 3 s without 2 cm of progress | nothing; sonar (X-09) and ToF (X-02) are optional and unbought |
 | **L2 geometric map** | 1–10 Hz | Pi (SLAM) + server | a 360° 2D lidar (LDRobot D500, phase C), the L0 odometry prior, a Wi-Fi RSSI prior | occupancy map, global pose, a place signature | `sim/sim_lidar.py` + the frozen LaserScan contract (D024: 360 rays at 8 Hz over 0.12–6 m); ICP SLAM-lite (D027; the lap re-recorded inside the envelope 2026-09-30, B111): ATE 59.2 → 9.2 mm, map IoU 0.187 → 0.692, end yaw 0.13°; goto `blocked` detours; lidar place signatures (D057, off by default); the RSSI logger's k-NN demo (a ~1.8 m room-level prior) | lidar in phase C: mount B12, params block B46 |
-| **L3 semantics + memory** | 0.2–1 Hz | server (vision model / LLM) | a fixed wide camera behind a gill; a mic | labelled objects with bearing and distance, the scene memory, places, narration | `look` (D049); `find_object` turns a vision model's box into bearing and distance through the eye's pose (D054: 0.7°, 3 cm); scene memory + a situation line per turn (D054); place recognition from lidar + look descriptions (D057: 21/21 verdicts, changes 3/6, [PLACES.md](PLACES.md)) | no camera yet (B16); the sim eye is not yet the real lens (B45) |
+| **L3 semantics + memory** | 0.2–1 Hz | server (vision model / LLM) | a fixed wide camera behind a gill; a mic | labelled objects with bearing and distance, the scene memory, places, narration | `look` (D049); `find_object` turns a vision model's box into bearing and distance through the eye's pose (D054: 0.7°, 3 cm); scene memory + a situation line per turn (D054); place recognition from lidar + look descriptions (D057: 21/21 verdicts, changes 3/6, [PLACES.md](../PLACES.md)) | no camera yet (B16); the sim eye is not yet the real lens (B45) |
 
 ## Reflex arbitration
 
@@ -61,7 +64,7 @@ heavy semantics:
   the salient objects with bearing and extent"); results are pinned to the
   map as annotations. In the sim this is the cockpit: `look` and
   `find_object` send the eye frame to a vision model, and any brain drives
-  the one tool registry ([TOOLS.md](TOOLS.md), [BRAINS.md](BRAINS.md)).
+  the one tool registry ([TOOLS.md](../TOOLS.md), [BRAINS.md](../BRAINS.md)).
 - **Downlink:** sparse annotations and high-level goals ("the kitchen is
   bearing 40°, 3 m"), latency-tolerant by design.
 - **Nothing safety-critical depends on the link.** Reflexes, the void guard
@@ -80,13 +83,13 @@ word; `docs/COCKPIT_GUIDE.md`); the robot never speaks English.
 NPU-class board (Orin Nano, a Pi AI HAT+, Hailo-8) for an onboard small
 vision model and detector behind the same interface, so the server split is
 the API contract and the software moves unchanged. Decide when the scale-up
-starts ([SCALE_UP_NOTES.md](SCALE_UP_NOTES.md)); nothing before it depends
+starts ([SCALE_UP_NOTES.md](../DESIGN_CHANGE_GUIDE.md#10-scaling-up-to-full-rocky)); nothing before it depends
 on the choice.
 
 ## Sensor hardware (Pebble)
 
-Rows are in [bom/BOM.csv](../bom/BOM.csv); pins in
-[WIRING_HARNESS.md](WIRING_HARNESS.md#pi-5-pin-map-draft-verify) (B43).
+Rows are in [bom/BOM.csv](../../bom/BOM.csv); pins in
+[WIRING_HARNESS.md](../WIRING_HARNESS.md#pi-5-pin-map-draft-verify) (B43).
 
 - **IMU: BNO085 on SPI** (C-01). Not I²C: a Pi's I²C controller mishandles
   its clock stretching. Not UART-RVC: that mode reports no angular rates,
@@ -112,7 +115,7 @@ Rows are in [bom/BOM.csv](../bom/BOM.csv); pins in
   HAT's APA102 LEDs sit on SPI0 MOSI/SCLK, which the SPI0 IMU would clock;
   and it takes GPIO17 and the whole header.
 - **Foot switches:** each leg's SEA microswitch has its own Pi GPIO
-  (star-board J6, [WIRING_HARNESS.md](WIRING_HARNESS.md)).
+  (star-board J6, [WIRING_HARNESS.md](../WIRING_HARNESS.md)).
 
 ## Sensor pod standard (rides I6, the dovetail ring)
 

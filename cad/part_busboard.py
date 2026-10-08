@@ -88,6 +88,8 @@ POST_BORE = PR["screw_m3_clear"]              # 3.4
 M3_LENGTHS = (25.0, 30.0, 35.0, 40.0)         # stocked ISO 4762 lengths
 DECK_HOLE_DEPTH = 5.0                         # part_deck's shelf_post_* (asserted against the table)
 SCREW_END_GAP = 0.5                           # the tip stops this far off the blind hole's bottom
+TAB_TIP_GAP = 1.0                             # B155: a north tray-tab screw's tip (2.0 under the deck) to
+                                              # the shelf: room for the burr a thread-forming tip pushes out
 
 # ---- board-side hardware
 TAP = PR["screw_m3_tap"]                      # 2.8: M3 thread-forming (star, node)
@@ -640,7 +642,20 @@ if __name__ == "__main__":
              v_shelf < 1e-3 and outside < 1e-3 and z_tip <= hole_top - SCREW_END_GAP + 1e-9,
              f"shank x shelf {v_shelf:.3f} mm^3, axis outside the hole {outside:.3f} mm^3, tip z {z_tip:.2f} "
              f"({hole_top - z_tip:.2f} under the hole's end z {hole_top:.1f}, {DECK_BOT_Z + T_DECK - hole_top:.1f} skin)")
+    # B155: the rails' north tabs thread into the deck itself (DECK_HOLES tray_tab_+-40_20, Ø2.8):
+    # each M3 x 10's tip column (Ø3, the deck bottom to the tip) against every shelf part, solid by
+    # solid (shelf_parts' halos, so the star board's lead room counts), and the tub
+    from part_deck import DECK_HOLES as _DH, TAB_TAP_SCREW_L
+    from part_avionics import TAB_T
+    z_tip = DECK_BOT_Z + T_DECK + TAB_T - TAB_TAP_SCREW_L
     tub = tub_solid()
+    loaded = {**shelf_parts(), "the keel tub": tub}
+    for e in (e for e in _DH if e[0] in ("tray_tab_-40_20", "tray_tab_+40_20")):
+        tip = Pos(e[1][0], e[1][1], (DECK_BOT_Z + z_tip) / 2) * Cylinder(1.5, DECK_BOT_Z - z_tip)
+        g, gn = min((tip.distance_to(s), n) for n, s in loaded.items())
+        need(f"{e[0]} {e[1]}: the M3 x {TAB_TAP_SCREW_L:.0f} thread-forming into the deck (Ø{e[3][0]}), its tip "
+             f"z {z_tip:.1f} clear of the shelf and the tub", e[2] == "m3_top" and e[3][0] == TAP and g >= TAB_TIP_GAP,
+             f"{g:.2f} to {gn} (>= {TAB_TIP_GAP})")
     audit("the keel tub as part_bay builds it (bay_tub + bay_lid + bay_door, the exit hole, the "
           "riser clip)", tub, "1.92: the plate's SE corner to part_bay's riser clip, 4.80 to the params box")
     t_ext = bay_tub_extent()

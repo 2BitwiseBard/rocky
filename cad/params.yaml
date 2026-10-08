@@ -19,6 +19,8 @@ meta:
                          # (c10b970d2bb2 was the provisional budget on the shelf's hull box); the 9q
                          # review's shell relief over the docked cup's back wall (part_shell
                          # cup_back_relief, -69 mm^3 a sector, torso 1555.2 -> 1555.0 g) -> c3e82f13b671
+                         # -> 965f4f70e5d1 (the (±40, 20) tab holes back to Ø2.8, +0.02 g of deck, B155:
+                         # the torso still 1555.0 g, its inertia moved in the 8th decimal)
 
 # ------------------------------------------------------------
 # D052 (2026-09-24): ONE place for what the actuators ARE and what the joints
@@ -241,7 +243,7 @@ bus:                     # Feetech TTL bus (D003 one bus, D016 dual protocol)
     load_warn_pct: 60
 
 # ------------------------------------------------------------
-# D053 (2026-09-24): the robot's SHAPE as data — docs/ROBOT_AS_DATA.md.
+# D053 (2026-09-24): the robot's SHAPE as data — docs/DESIGN_CHANGE_GUIDE.md §9.
 # rocky_model.robot() reads this block (and builds exactly this from
 # leg/body/bus if it is absent). Every number here is an ALIAS (*name) of a
 # key above — nothing is typed twice. Ranges stay in joints.pos_deg (keyed
@@ -269,7 +271,7 @@ robot:
     servo: *leg_servo          # default per joint; a chain entry may say servo: <actuators key>
     ik: {solver: auto, branch: knee_down}   # auto = analytic iff the chain is yaw + 2 parallel pitches
   overrides: {}                # per-leg / per-joint servo: validate() REFUSES non-empty until a
-                               # consumer honours it (ROBOT_AS_DATA step 10)
+                               # consumer honours it (DESIGN_CHANGE_GUIDE §9 step 10)
 
 interfaces:              # D020 — see docs/INTERFACES.md. Loads through features
                          # (seats, lips, shoulders), NEVER latches; at I1 the seats take the
@@ -277,7 +279,7 @@ interfaces:              # D020 — see docs/INTERFACES.md. Loads through featur
                          # only a catch (hook_foot_gap below). Frozen D020; leg_port revised
                          # 2026-10-07 (body-layout decision 15, below); avionics_tray (I4) and
                          # battery_sled (I5) revised 2026-10-07 (decision 11, the owner's sign-off):
-                         # docs/BODY_LAYOUT_PROPOSAL.md option A (pick 1). hub_shelf and stand are
+                         # docs/archive/BODY_LAYOUT_PROPOSAL_2026-09-28.md option A (pick 1). hub_shelf and stand are
                          # new: the under-deck layout the CAD parts and the sim's belly share
   leg_port:              # I1: deck <-> coxa base
     # 2026-10-07 revision (body-layout decision 15 = "seats", B117): as frozen in D020 the

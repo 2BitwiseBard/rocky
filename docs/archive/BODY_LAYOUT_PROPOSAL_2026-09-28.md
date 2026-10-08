@@ -1,7 +1,11 @@
 # D063 body interior: three layouts for the bay, the tray and the hub
 
+*Archived 2026-10-08. Built as D064 on 2026-10-07/08 from the owner's 15 picks; the as-built
+numbers are in [INTERFACES](../INTERFACES.md) I4/I5 and the [ASSEMBLY_GUIDE](../ASSEMBLY_GUIDE.md).
+Where this text and the tree disagree, the tree is right.*
+
 **Status:** a proposal for the owner to choose from, not built (D063,
-[decisions](decisions.md), BUILD_LOG 9m). Every number below was
+[decisions](../decisions.md), BUILD_LOG 9m). Every number below was
 measured on 2026-09-28 in build123d scratch geometry posed against the repo's
 own parts (`coxa_yaw_base`, the yaw servo, `body_deck`, the five carapace
 sectors + cap, `battery_sled`, `dock_block`, `avionics_tray`, `stand_crown`'s
@@ -17,7 +21,7 @@ numbers it turns on. The owner's phone page carries the same list. Decision 1 (w
 print for an enclosed belly (section 5). Section 6 has the three side by side.
 Once the decisions are in, section 11 lists the checks the implementation must
 add, and the backlog rows B51, B84, B85, B86, B92 and B93
-([DESIGN_BACKLOG](DESIGN_BACKLOG.md)) close with it; B97 (the legs reach the
+([DESIGN_BACKLOG](../DESIGN_BACKLOG.md)) close with it; B97 (the legs reach the
 tub) and B109 (the leg drops meet under the deck) ride along. Not checked by
 either run: station 162's carapace latch (B87) is turned from under the deck at
 body (−73.5, −12.3), which is inside the tub's plan outline (section 2: x −97.5
@@ -50,7 +54,7 @@ review changed, each marked *(review)* where it sits:
 
 **Re-measured 2026-10-01/02** (two read-only prep rounds, 39 agents, every
 headline claim re-measured by a second agent; BUILD_LOG 9p; the full records
-are [archive/prep-2026-10-01/](archive/prep-2026-10-01/): `PREP_REPORT_1.md`,
+are [archive/prep-2026-10-01/](prep-2026-10-01/): `PREP_REPORT_1.md`,
 `PREP_REPORT_2.md`, `I1_DOCK_OPTIONS.md`). Nothing below changes the
 recommendation (A, 8 mm layer); three things change what the build must do
 first, and the owner's page gained decisions 14 and 15 (section 8).
@@ -625,7 +629,7 @@ if an enclosed belly matters more than 30 g and a big print.
     −x gives 3.56 mm and straight plugs. B127, B128, B134 list what the
     build must add.)*
 15. *(2026-10-02, B117)* **The I1 leg-port fix.** Today's port cannot dock.
-    Three verified fixes ([archive/prep-2026-10-01/I1_DOCK_OPTIONS.md](archive/prep-2026-10-01/I1_DOCK_OPTIONS.md)):
+    Three verified fixes ([archive/prep-2026-10-01/I1_DOCK_OPTIONS.md](prep-2026-10-01/I1_DOCK_OPTIONS.md)):
     **seats** (two 30° cone posts at (−32, ±17.3), slot 6.2 at x −47, a plate
     rib; recommended), **minimal** (slot 5.2, short foot, 3 mm tapered posts;
     play ±0.9°, plate still at SF 0.76), **sequence** (flat slide, chevron

@@ -2,7 +2,9 @@
 
 `BOM.csv` is the one list of what Pebble needs. GitHub renders it as a table,
 any spreadsheet opens it, and a price change is a one-line diff. Prices are
-USD estimates checked on **2026-09-28**, before tax and shipping. Check them
+USD estimates checked on **2026-09-28**, before tax and shipping; the rows
+added on 2026-10-08 for the body layout (D064: the keel tub, the hub shelf,
+the UART link) are typical-range estimates (`est`), not yet priced. Check them
 again at checkout, and change them in `BOM.csv` only: no other file repeats
 a price. `python3 bom/totals.py` prints the subtotals below and checks that
 every line total is qty × unit.
@@ -20,18 +22,18 @@ every line total is qty × unit.
 | `status` | `to buy` · `wait until one leg walks` (buy later, on purpose) · `optional` · `have` (workshop basics: buy only if missing) · `choice` (buy only if a bench measurement says so) · `alternative` (replaces another row; never summed) |
 | `design_ref` | the `cad/params.yaml` key, CAD part, decision (`docs/decisions.md`) or backlog item (`docs/DESIGN_BACKLOG.md`) that sets the part |
 
-## Totals (2026-09-28)
+## Totals (2026-10-08)
 
 | | to buy | wait | total |
 |---|---:|---:|---:|
 | A bench kit | $282 | | **$282** |
-| B full robot | $662 | $153 (Pi 5 4 GB + cooler + card) | $815 |
-| C senses | $134 | | $134 |
-| **Core robot (A-C)** | | | **$1,231** |
+| B full robot | $688 | $153 (Pi 5 4 GB + cooler + card) | $841 |
+| C senses | $142 | | $142 |
+| **Core robot (A-C)** | | | **$1,265** |
 | D voice/brain (optional) | | | $21 |
 | X optional, near term (power monitor, downward ToF, kill relay, Wi-Fi adapter, logic analyzer, second pack, pins, whisker wire, filament dryer) | | | $216 |
 | X optional, later (sensor pods, depth camera) | | | $214 |
-| Workshop basics, if missing (calipers, meter, scales, iron, crimper, PETG, PLA) | | | $212 |
+| Workshop basics, if missing (calipers, meter, scales, iron, crimper, PETG, PLA, a long screwdriver) | | | $218 |
 
 Each row carries the cheapest reliable source seen. Buying the bench kit
 all on Amazon costs about $60 more, mostly the servos and the two Waveshare
@@ -59,7 +61,8 @@ switches. Everything in B waits until that leg passes
   measure 6.0 V at the plug before a claw goes on. Data and ground are shared,
   V+ is not.
 - **Soft-case pack only**, at most 138 × 44 × 25 mm (D062: the sled narrowed to fit its bay). Hard-case 3S 5200 packs
-  are ~37 mm tall and do not fit the 30 mm bay.
+  are ~37 mm tall and do not fit the keel tub (33 mm for the sled, the pack
+  and its foam pad).
 - **LiPo:** voltage alarm on the balance lead whenever the robot runs; charge
   in a LiPo bag, never unattended; store at storage charge.
 - **Fuse, then loop key**, first thing after the pack. Each leg's 12 V fans
@@ -81,5 +84,13 @@ switches. Everything in B waits until that leg passes
 - **M3 × 10 socket heads for the leg-port thumbscrews.** The knob keys a hex
   head and an M3 × 10 stops short of the insert (B82); they are A-19, as
   are the I6 shoes' set screws (D063).
+- **A pack strap or a grommet for the battery lead.** Nothing straps the
+  pack inside the robot (pick 8 b): the tub boxes it and a 2 mm foam pad
+  (B-29) takes its play. The 14 AWG leaves the tub through a printed Ø5.5
+  hole.
+- **Socket heads for the tray-rail tabs.** Their heads sit under the tray
+  plate: ISO 7380 button heads (B-27).
+- **Nuts for the rails' north tabs.** The two M3 × 10 at (±40, 20) thread
+  into the deck's Ø2.8 holes (B155).
 - **683ZZ bearings, a USB-UART dongle, STS3250 knees, a pan turret.** Older
   plans had them; the current design (D047 and later) does not use them.
