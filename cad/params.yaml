@@ -130,7 +130,8 @@ level:                   # D065 BodyLeveler(gait, **rocky_model.level_defaults()
                          # Control, not physics: params_rev and the fingerprint stay
   enabled: false         # master switch at construction; the playground's `level on|off` overrides it per session
   tau_s: 0.6             # s, integral time constant of the plane slope on the filtered IMU tilt error
-  filter_s: 0.2          # s, first-order low-pass on the tilt error ahead of the deadband
+  filter_s: 1.0          # s, first-order low-pass on the tilt error ahead of the deadband (B162: 0.2 -> 1.0, the only value
+                         # measured that holds a noisy IMU's straight flat walk at 0.00 mm of offset; it settles slower)
   deadband_deg: 0.5      # radial deadband on the filtered tilt error: a straight flat walk reads zero offsets (a turn, a stop or a shove past it leaves its plane: the deadband never unwinds it)
   raise_mm: 30.0         # the window: every foot RAISED 0..raise_mm, never lowered (the probe keeps its 30 mm)
   rate_mm_s: 20.0        # a stance foot's offset rate; also the plane's tilt rate, as mm/s at stance_radius
@@ -138,6 +139,13 @@ level:                   # D065 BodyLeveler(gait, **rocky_model.level_defaults()
   tilt_max_deg: 30.0     # no integration past this tilt: that is a fall, not a slope
   min_contacts: 3        # foot switches closed for the plane to integrate
   swing_blend: [0.30, 0.70]  # swing progress over which a swing foot's plane point moves lift-off -> touchdown
+  rough_r0_mm: 8.0       # B162: walking, the probe's roughness (max - min probe_dz over the loaded feet, held) past this caps the body's sink
+                         # (review round: 12 -> 8, picked on train seeds >= 1000: at 12 the cap was off on most 30 mm rubble ticks)
+  rough_r1_mm: 8.0       # B162: the cap falls from the full window's sink (16.6 mm) at r0 to sink_max_mm here (<= r0: a step at r0)
+  sink_max_mm: 3.0       # B162: the most the plane may sink the body (c) on rough ground, mm (review round: 6 -> 3: the belly lost
+                         # ~1.5 x c against S1, so 6 left 21-23 mm over 30 mm rubble out of sample; picked on train seeds)
+  rough_hold_s: 4.0      # B162: the held roughness decays toward the present reading over this (a peak hold; a planted stance freezes it; review: 2 -> 4)
+  rough_off_mm: 4.0      # B162 review: the cap's latch releases once the held roughness is back to this (<= r0; = r0: no hysteresis)
 
 sensing:
   foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold

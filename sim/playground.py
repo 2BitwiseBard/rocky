@@ -42,7 +42,9 @@ Commands (REPL or --script, ';'-separated):
                         level.tau_s level.filter_s level.deadband_deg
                         level.raise_mm level.rate_mm_s level.swing_rate_mm_s
                         level.tilt_max_deg level.min_contacts level.gyro_calm
-                        (the body leveler, D065; kept across a respawn)
+                        level.rough_r0_mm level.rough_r1_mm level.sink_max_mm
+                        level.rough_hold_s level.rough_off_mm
+                        (the body leveler, D065 / B162; kept across a respawn)
                         (phase-continuous: changing T rescales the clock so
                         feet don't teleport)
     gait NAME           load a gait preset (gait/gaits/NAME.json; `default`
@@ -355,7 +357,10 @@ GAIT_HSTEP_RANGE = (0.0, 80.0)  # (check / pebble_feasibility says whether a val
 # inside the 30 mm window the probe's room and the swing band were proven with
 LEVEL_SET = {"tau_s": (0.01, 60.0), "filter_s": (0.01, 10.0), "deadband_deg": (0.0, 10.0),
              "raise_mm": (0.0, PROBE_MAX), "rate_mm_s": (0.1, 200.0), "swing_rate_mm_s": (0.1, 200.0),
-             "tilt_max_deg": (1.0, 89.0), "min_contacts": (0, 5), "gyro_calm": (0.01, 10.0)}
+             "tilt_max_deg": (1.0, 89.0), "min_contacts": (0, 5), "gyro_calm": (0.01, 10.0),
+             # B162: the rough-ground sink cap (0 / 0 / 0 caps every rough reading; r0 past 2 x PROBE_MAX never caps)
+             "rough_r0_mm": (0.0, 2 * PROBE_MAX), "rough_r1_mm": (0.0, 2 * PROBE_MAX),
+             "sink_max_mm": (0.0, PROBE_MAX), "rough_hold_s": (0.05, 60.0), "rough_off_mm": (0.0, 2 * PROBE_MAX)}
 LEVEL_STILL_MM = 0.02       # an offset that moved less than this over a 50 Hz tick is standing still
 #                             (motion_reason; a saturated plane re-scales every tick and jitters below it)
 IMU_KEYS = ("grav_sigma", "gyro_sigma", "gyro_bias", "latency_s", "mount_deg", "mount_axis")
@@ -640,6 +645,8 @@ class Playground:
         dz = np.asarray(lv.dz, float)
         out += (f" | plane {st['slope_deg']:.2f} deg, tilt error {st['tilt_err_deg']:.2f} deg, feet up "
                 f"{np.round(dz, 1).tolist()} mm" + (" | SATURATED (partial leveling)" if st["saturated"] else "")
+                + ((" | SINK CAPPED (walking with no probe)" if st.get("rough_blind")
+                    else f" | SINK CAPPED (rough {st['rough_mm']:.0f} mm)") if st.get("sink_capped") else "")
                 + (f" | hold: {st['hold']}" if st["hold"] not in (None, "off") else ""))
         return out
 

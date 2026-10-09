@@ -256,7 +256,7 @@ def test_evaluate_passes_a_clean_s2_and_fails_each_rule():
     assert broken("W1.flat.walk.p0", "S2", progress_mm=470.0)["P4"]["status"] == "fail"
     assert broken("W1.flat.walk.p0", "S2", fell=True)["P5"]["status"] == "fail"
     assert broken("W8.cliff.a0.v25", "S2", fired=False)["P6"]["status"] == "fail"
-    assert broken("W1.flat.walk.p0", "S2", false_void=True)["P6"]["status"] == "fail"
+    assert broken("W1.flat.walk.p0", "S2", false_void=True, void_class="false")["P6"]["status"] == "fail"
     assert broken("W1.flat.walk.p0", "S2", min_clear_mm=20.0)["P7"]["status"] == "fail"
     assert broken("W1.flat.walk.p0", "S2", load_rms_max=0.7)["P8"]["status"] == "fail"
     assert broken("W1.flat.walk.p0", "S2", tilt_rms_deg=1.2)["R1"]["status"] == "fail"
@@ -268,6 +268,65 @@ def test_evaluate_passes_a_clean_s2_and_fails_each_rule():
     assert tb.evaluate([r for r in base if r["stack"] == "S1"])["verdict"] == "unavailable"
     m = [dict(r, imu="mount1.5") for r in base]
     assert tb.evaluate(m)["verdict"] == "unavailable"
+
+
+def test_the_b162_restatements_keep_the_d065_wording_visible():
+    """B162 restated P1 (the flat-motion rows), P4 (the derate; rubble by family) and P6 (a
+    void the probe cannot reach is reported, not gated); evaluate() still returns each under
+    its D065 wording, and a restated rule still fails on what it claims to measure."""
+    base = [_run("W1.flat.walk.p0", "S1"), _run("W1.flat.walk.p0", "S2"),
+            _run("W1.flat.turn", "S1", kind="motion", progress_mm=None),
+            _run("W1.flat.turn", "S2", kind="motion", progress_mm=None, level_max_mm=0.6, digest="t"),
+            # the walk + turn: the same walk until `stop`, then the leveler answers the probe's HOLD (B163)
+            _run("W1.flat.walkturn", "S1", kind="motion", progress_mm=124.3, progress_stop_mm=126.6, tilt_rms_deg=1.17),
+            _run("W1.flat.walkturn", "S2", kind="motion", progress_mm=127.9, progress_stop_mm=126.6, tilt_rms_deg=0.80,
+                 level_max_mm=14.7, digest="w"),
+            _run("W2.slope5.d0.walk.p0", "S1", progress_mm=690.0),
+            _run("W2.slope5.d0.walk.p0", "S2", progress_mm=633.0, derate_pct=94.97),
+            _run("W6.stairs15.walk.p0", "S1", tipped=True), _run("W6.stairs15.walk.p0", "S2")]
+    base += [_run(f"W4.rubble20.s{k}.walk", st, progress_mm=p)
+             for k, (p1, p2) in enumerate(((400.0, 300.0), (300.0, 420.0))) for st, p in (("S1", p1), ("S2", p2))]
+    v = tb.evaluate(base)
+    r, d = v["rules"], v["d065"]
+    # P1: a turn the leveler acts on is gated on tilt and progress, its offset reported; D065 failed it
+    assert r["P1"]["status"] == "pass" and d["P1"]["status"] == "fail"
+    assert any("W1.flat.turn" in x for x in r["P1"]["flat_motion"])
+    # P4: 633 / (690 x 0.9497) = 96.6 % passes; the D065 line (95 % of 690) fails; rubble by family
+    assert r["P4"]["status"] == "pass" and d["P4"]["status"] == "fail", (r["P4"], d["P4"])
+    assert r["P4"]["rubble_family"]["ideal"]["family_pct"] == pytest.approx(102.9, abs=0.1)
+    assert r["P4"]["rubble_family"]["ideal"]["rows_under_95"] == ["W4.rubble20.s0.walk"]
+    assert r["P4"]["stairs"]["ideal"]["s1_tips"] == 1 and r["P4"]["stairs"]["ideal"]["s2_tips"] == 0
+
+    def broken(row, stack, **kw):
+        runs = [dict(x) for x in base]
+        next(x for x in runs if x["row"] == row and x["stack"] == stack).update(kw)
+        return tb.evaluate(runs)
+    assert broken("W1.flat.turn", "S2", tilt_rms_deg=1.1)["rules"]["P1"]["status"] == "fail"
+    assert broken("W1.flat.walkturn", "S2", progress_stop_mm=120.0)["rules"]["P1"]["status"] == "fail"
+    assert any("progress at stop 126.6 -> 126.6 mm, at the end 124.3 -> 127.9" in x for x in r["P1"]["flat_motion"])
+    assert broken("W2.slope5.d0.walk.p0", "S2", progress_mm=600.0)["rules"]["P4"]["status"] == "fail"
+    assert broken("W4.rubble20.s1.walk", "S2", progress_mm=330.0)["rules"]["P4"]["status"] == "fail"
+    # P6: a probe-reach void is a safe stop, reported; within the probe's reach it fails
+    pr = broken("W1.flat.walk.p0", "S2", false_void=True, void_class="probe_reach")
+    assert pr["rules"]["P6"]["status"] == "pass" and pr["d065"]["P6"]["status"] == "fail"
+    assert pr["rules"]["P6"]["probe_reach"]
+    assert broken("W1.flat.walk.p0", "S2", false_void=True, void_class="false")["rules"]["P6"]["status"] == "fail"
+
+
+def test_the_meter_classes_a_void_by_the_probes_reach():
+    """void_class: 'false' within PROBE_MAX of the un-probed target, past it 'drop' on a drop
+    world and 'probe_reach' on one without (B161), none without a void."""
+    row = dict(tb.row_by_id("W1.flat.walk.p0"))
+    pg = tb._playground(row)
+    m = tb.Meter(pg, dict(row, drop=False))
+    assert m._void_class(False) is None
+    for nom, drop, want in ((10.0, False, "false"), (10.0, True, "false"), (35.0, False, "probe_reach"),
+                            (35.0, True, "drop")):
+        m = tb.Meter(pg, dict(row, drop=drop))
+        m.void_ground_mm, m.void_ground_nom_mm = 5.0, nom
+        assert m._void_class(True) == want, (nom, drop)
+    m.void_ground_mm, m.void_ground_nom_mm = None, None              # no ground found under the foot
+    assert m._void_class(True) == "drop"
 
 
 def test_pct_s1():
@@ -297,3 +356,72 @@ def test_cli_list_and_bad_args(capsys):
     for bad in (["--stack", "S9"], ["--imu", "perfect"]):
         with pytest.raises(SystemExit):
             tb.main(bad)
+
+
+# ------------------------------------------------------------------ B162 review round
+def test_the_heldout_rubble_rows_join_the_gate_after_the_bench_w4():
+    """B162 review: the sink cap was first picked on the seeds P7 scored; the full bench now adds
+    HELDOUT_N held-out rubble seeds per height (tier 'heldout'), never a training seed."""
+    held = tb.heldout_rows()
+    assert len(held) == 3 * tb.HELDOUT_N == 36
+    assert all(r["world"] == "W4" and r["tier"] == "heldout" and tb.tier_of(r["seed"]) == "heldout" for r in held)
+    assert KEYS <= set(held[0]) and not {r["id"] for r in held} & {r["id"] for r in tb.rows()}
+    rs = tb.with_heldout(tb.rows(), tb.HELDOUT_N)
+    ids = [r["id"] for r in rs]
+    assert len(ids) == len(set(ids)) == 87 + 36
+    last_w4 = max(i for i, r in enumerate(rs) if r["world"] == "W4")
+    assert ids[last_w4] == "W4.rubble30.s111.walk" and rs[last_w4 + 1]["world"] == "W5"
+    assert tb.row_by_id("W4.rubble30.s105.walk")["seed"] == 105
+    # --tier heldout already scores 100-104: they are not added twice
+    assert len(tb.with_heldout(tb.rows(tier="heldout"), tb.HELDOUT_N)) == 87 + 36 - 15
+
+
+def test_r1_judges_rubble_by_family_and_p4_and_p7_per_height_on_both_tiers():
+    """B162 review: R1 per row on rubble judged the seed's chaos (S1 against S1 with only the IMU's
+    noise stream changed moves 23 of 51 rows past 0.1 deg); the family per height is the line,
+    the D065 wording stays beside it. P4 judges each rubble height's family, P7 every row."""
+    def rub(amp, s, st, **kw):
+        return _run(f"W4.rubble{amp}.s{s}.walk", st, **kw)
+    base = [rub(20, s, st) for s in (0, 100) for st in ("S1", "S2")]
+    base += [rub(30, s, st) for s in (0, 100) for st in ("S1", "S2")]
+    v = tb.evaluate(base)
+    assert v["rules"]["R1"]["status"] == "pass" and v["rules"]["P4"]["status"] == "pass"
+
+    def with_(changes):
+        runs = [dict(x) for x in base]
+        for (row, st), kw in changes.items():
+            next(x for x in runs if x["row"] == row and x["stack"] == st).update(kw)
+        return tb.evaluate(runs)
+    # one row +0.3 deg, its family +0.15 -> fails both; offset by a -0.3 row -> the family passes, D065 fails
+    one = with_({("W4.rubble20.s0.walk", "S2"): dict(tilt_rms_deg=1.3)})
+    assert one["rules"]["R1"]["status"] == "fail" and one["d065"]["R1"]["status"] == "fail"
+    two = with_({("W4.rubble20.s0.walk", "S2"): dict(tilt_rms_deg=1.3),
+                 ("W4.rubble20.s100.walk", "S2"): dict(tilt_rms_deg=0.7)})
+    assert two["rules"]["R1"]["status"] == "pass" and two["d065"]["R1"]["status"] == "fail"
+    assert any("W4.rubble20.s0.walk" in x for x in two["rules"]["R1"]["rubble_rows"])
+    assert two["rules"]["R1"]["rubble_family"]["ideal"][20] == dict(n=2, s1=1.0, s2=1.0)
+    # P4: 30 mm rubble's family under 95 % fails though the pooled family passes
+    p4 = with_({("W4.rubble30.s0.walk", "S2"): dict(progress_mm=400.0), ("W4.rubble30.s100.walk", "S2"): dict(progress_mm=450.0),
+                ("W4.rubble20.s0.walk", "S2"): dict(progress_mm=600.0), ("W4.rubble20.s100.walk", "S2"): dict(progress_mm=600.0)})
+    fam = p4["rules"]["P4"]["rubble_family"]["ideal"]
+    assert fam["family_pct"] >= 95.0 and fam["per_height"][30]["family_pct"] == 85.0
+    assert fam["per_height"][30]["by_tier"] == {"bench": 80.0, "heldout": 90.0}
+    assert p4["rules"]["P4"]["status"] == "fail"
+    # P7 on a held-out row
+    assert with_({("W4.rubble30.s100.walk", "S2"): dict(min_clear_mm=24.0)})["rules"]["P7"]["status"] == "fail"
+
+
+def test_a_stand_records_its_tilt_signed_along_the_initial_tilt():
+    """B162 review: tilt_end_deg is unsigned, so the 1.0 s filter's overshoot past level did not
+    show; tilt_end_signed_deg (< 0 = past level) and overshoot_deg do."""
+    row = dict(tb.row_by_id("W3.stone20.f0.stand"))
+    pg = tb._playground(row)
+    m = tb.Meter(pg, row)
+    m.pre = [(0.02 * k, 3.0, 0.0, 3.0) for k in range(1, 51)]            # pitched 3 deg, nose down
+    m.roll = [0.0] * 200
+    m.pitch = list(np.linspace(3.0, -0.6, 100)) + [-0.4] * 100            # 0.6 past level, ends 0.4 past
+    t = 0.02 * np.arange(1, 201)
+    out = m._signed(t)
+    assert out == dict(tilt_end_signed_deg=-0.4, overshoot_deg=0.6)
+    m.pre = [(0.02 * k, 0.05, 0.05, 0.0) for k in range(1, 51)]           # flat: nothing to sign against
+    assert m._signed(t) == dict(tilt_end_signed_deg=None, overshoot_deg=None)

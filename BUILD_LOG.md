@@ -9,6 +9,270 @@ the end indexes them.*
 
 ---
 
+## 2026-10-09 · Session 9t — B162 wip 2: the review's fixes, the cap re-picked on train seeds, held-out rubble in the gate; the leveler stays off
+
+**Ask:** a reviewer re-checked wip 1 (9s) and would not flip: one blocker (P7 was an in-sample
+fit), three majors (the cap fails open without the probe; its stairs cost was under-reported;
+out of sample it gave back half of D065's rubble gain), five minors. Fix them, re-bench, and flip
+`level.enabled` only if every gated rule passes under the restated wording and the blockers are
+fixed with numbers that defend it. They are not: **`level.enabled` stays false.**
+
+**(1) The blocker: P7 out of sample.** The review's held-out run (rubble seeds 100–111, 12 per
+height): wip 1's S2 left 21.7 mm of belly clearance on 30 mm rubble (3 of 12 rows under 25),
+24.6 noisy; S1 ≥ 30.1. A per-tick probe found why: at each failing row's closest tick the cap held
+the plane's sink c at 5–6 mm, and the belly sat about 1.5 × c lower than S1's closest (the levelled
+body also tilts over the stone), so a 6 mm sink cannot keep 25 mm where S1 itself has 30. The cap
+was re-picked on **train seeds only** (≥ 1000: rubble 10 / 20 / 30 × seeds 1000–1011; the ramps
+and stairs at clock phases 1/6, 1/2, 5/6 with IMU seeds 1000+): 12 candidates and S1 × ideal /
+noisy, 1224 runs. Minimum belly clearance and the costs (ideal / noisy):
+
+| candidate (r0 → sink mm, latch off at, hold) | 30 mm rubble clearance mm | stairs clearance mm | 30 mm rubble tilt RMS ° | stairs tilt RMS ° ideal, 15 / 20 mm · tips ideal / noisy | 10° ramp tilt RMS ° |
+|---|---|---|---|---|---|
+| S1 | 30.8 / 30.8 | 45.5 / 47.5 | 2.15 / 2.03 | 4.98 / 6.14 · 5 / 4 | 7.18 / 7.13 |
+| no cap | 14.9 / 18.3 | 24.4 / 23.3 | 1.94 / 1.79 | 1.99 / 2.85 · 0 / 0 | 3.62 / 3.60 |
+| wip 1 (12 → 6, no latch, 2 s) | 22.7 / 21.0 | 26.2 / 26.4 | 1.79 / 1.66 | 2.94 / 3.37 · 0 / 0 | 4.21 / 4.21 |
+| 12 → 6, off 6 | 22.7 / 21.5 | 26.1 / 25.8 | 1.77 / 1.66 | 3.28 / 4.20 · 2 / 3 | 4.46 / 4.44 |
+| 12 → 3, off 6 | 25.1 / 26.6 | 26.5 / 27.5 | 2.01 / 1.88 | 2.98 / 4.80 · 3 / 3 | 4.90 / 4.91 |
+| 12 → 2, off 6 | 25.1 / 27.8 | 27.1 / 25.3 | 2.01 / 1.71 | 3.64 / 4.72 · 4 / 4 | 5.22 / 5.21 |
+| 12 → 0, off 6 | 25.1 / 27.8 | 25.4 / 27.5 | 2.06 / 2.04 | 3.43 / 4.78 · 3 / 3 | 5.58 / 5.60 |
+| 12 → 3, off 6, 4 s | 25.1 / 26.6 | 28.1 / 26.5 | 2.00 / 1.87 | 3.72 / 5.33 · 3 / 2 | 5.31 / 5.29 |
+| 8 → 3, off 4 | 27.3 / 26.6 | 25.5 / 27.8 | 1.95 / 1.86 | 3.89 / 5.34 · 4 / 3 | 5.10 / 5.12 |
+| 8 → 2, off 4 | 28.0 / 28.2 | 23.9 / 25.6 | 1.93 / 1.69 | 4.04 / 5.60 · 4 / 3 | 5.41 / 5.39 |
+| 6 → 3, off 3 | 27.3 / 26.6 | 27.3 / 24.2 | 1.95 / 1.84 | 4.09 / 5.36 · 5 / 3 | 5.24 / 5.26 |
+| 6 → 2, off 3 | 28.0 / 28.2 | 24.5 / 27.8 | 1.92 / 1.72 | 3.77 / 5.83 · 5 / 2 | 5.52 / 5.51 |
+| **8 → 3, off 4, 4 s (chosen)** | **27.3 / 26.6** | **30.0 / 27.0** | 1.95 / 1.88 | 4.21 / 5.48 · 3 / 3 | 5.58 / 5.59 |
+
+**Chosen** by one rule fixed before the held-out run: the largest worst-case clearance over the
+train tier's 30 mm rubble and stairs in both IMU modes (26.6 mm; the next best 25.5). In params:
+`rough_r0_mm` 8, `rough_r1_mm` 8, `sink_max_mm` 3, `rough_hold_s` 4 and the new `rough_off_mm` 4
+(finding 5). Its cost, visible on train already: the stairs keep little of their levelling (tilt
+RMS 4.21 / 5.48 against no cap's 1.99 / 2.85 and S1's 4.98 / 6.14; 3 tips against S1's 5), nor does
+the 10° ramp (5.58 against 3.62). **The held-out check, run once after the pick** (rubble 100–111,
+72 runs; reproduced digest for digest inside the full bench): 30 mm rubble 25.1 / 25.7 mm, no row
+under 25 of 36 per mode (wip 1 21.7 / 24.6 with 3 + 1 rows under; D065's S2 12.8 / 13.8 with
+6 + 6). It passes by 0.1 / 0.7 mm.
+
+**(2) Major: the cap failed open without the probe.** `BodyLeveler._rough` marks a walking stance
+with `probe_dz` None as blind (`rough_blind`), and `sink_limit()` returns `sink_max_mm` there. The
+Pi has no probe until B157, so a Pi loop with the leveler would walk with its sink capped at 3 mm.
+With `probe off` + `level on` on the review's three rows: 30.5 / 28.9 / 37.4 mm of belly clearance
+(review: 14.8 / 20.7 / 24.3), c ≤ 3.0. On the gait suite's kinematic plant a 3° slope walked blind
+rests at 2.03° (≤ 0.5° with a probe that reads no spread).
+
+**(3) Major: the stairs.** The bench rows at the same 1.0 s filter (tilt RMS ° / peak ° / tips /
+progress mm / min belly clearance mm):
+
+| W6 stairs ×6 | S1 | no cap | wip 1 cap | this cap |
+|---|---|---|---|---|
+| ideal | 4.72 / 12.43 / 2 / 3257 / 45.1 | 2.08 / 7.29 / 0 / 3352 / 27.0 | 2.49 / 8.71 / 0 / 3200 / 26.2 | 3.77 / 11.01 / 2 / 3233 / 28.0 |
+| noisy | 5.83 / 16.16 / 3 / 3537 / 45.5 | 2.48 / 8.62 / 0 / 3734 / **23.0** | 3.05 / 10.01 / 1 / 3628 / 25.2 | 4.16 / 10.81 / 1 / 3367 / **24.4** |
+
+The stairs need a cap for P7 (no cap leaves 23.0 mm), and every cap measured takes their
+levelling back: this one nearly doubles no cap's tilt RMS and brings 2 / 1 tips back, and on the
+row P7 fails (`W6.stairs20.p1` noisy) it LOWERS the clearance (no cap 26.6, this cap 24.4). wip 1's
+noisy `stairs20.p2` tip was its cap's (no cap 7.02° and no tip; 9s now says so). Here that row
+stops on a `probe_reach` void at 203 mm (S1 walked 440 and tipped): P4's other failure. A
+roughness signal that reads a staircase as rough cannot tell it from rubble, and a ramp's kinks
+read rough too (the 10° ramp's tilt RMS 3.59–3.65 → 5.42–5.48° against no cap, ideal; the cap
+scales the plane on 41–48 % of its ticks).
+
+**(4) Major: rubble tilt out of sample; R1 restated for rubble.** Held-out rubble (36 rows per
+mode), mean tilt RMS ideal / noisy: S1 2.07 / 1.97, D065's S2 1.60 / 1.57, wip 1 1.82 / 1.70, this
+cap 1.90 / 1.75 (bench tier: 2.20 → 1.83, 2.05 → 1.76): the safer cap gives back more of D065's
+gain. R1 is restated for rubble only. S1 against S1 with nothing changed but the noisy IMU's noise
+stream (the row's seed + 5000 for the IMU alone, the 51 rubble rows of both tiers) moved 23 rows'
+tilt RMS past 0.1° (−1.01 to +0.72) while each height's family mean moved ≤ 0.04°, so the per-row
+line judged the seed's chaos. Rubble is now judged by the family per height and IMU mode over the
+bench and held-out seeds (17 per height), every row's change reported (`rubble_rows`), the D065
+wording beside it (`d065`); off rubble R1 stays per row.
+
+**Minors.** (5) The cap latches (`rough_off_mm`): it switched on at most twice per row in the record
+(wip 1: up to 19–20 times in 20 s, with 20 ms dwells). (6) A stand's or a shove's tilt is now signed
+along its initial tilt (`tilt_end_signed_deg`, `overshoot_deg`): the 20 mm stone ends −0.43° (past
+level) after a 0.72° overshoot (f0, ideal; f3 −0.43 / 0.71), noisy −0.20 / 0.96 (its 4.98 s settle is
+this overshoot) and −0.49 / 0.66; the 10 mm stone −0.07 / 0.07; the 30 mm stone stays short of
+level (+0.37 / +0.44); a 5° stand overshoots 0.07° (d90) or not at all; 8° and 10° are saturated.
+(7) The walk + turn's 14.71 mm after its `stop` keeps sim → robot blocked until `level off`
+(`level_held_reason`): a flip cost, now in D065 and B163. (8) P4 judges rubble per height (one pooled
+family hid 30 mm rubble at 91.1 % under 20 mm's), each family over bench + held-out seeds. (9) Stale
+numbers: 9s's mount1.5 flat walk 1.46 → 1.40 and its stairs tip, B159, B161. (10) What a flip needs
+beyond the bench: B162.
+
+**The record** (`sim/out/terrain_bench.json`: 1465 runs, 1099 made, in 968 s, `--stack S0,S1,S2,S3
+--imu ideal,noisy,mount1.5 --jobs 6`: the 87 rows + 36 held-out rubble rows, on `83c0c76` plus this
+commit's code, `code_diff_sha256` `41291132…`, `965f4f70e5d1`, params D064). Every S0 and S1 run
+(258 + 258) is bit-identical to wip 1's record (digests, and every field the two share), as wip 1's
+were to D065's; the 72 held-out S1 runs match the review's harness digest for digest. S2 moved only on rubble, ramps and stairs (68 of 258:
+W4 43, W6 16, W5 9); the slopes, stones, flat rows, shoves and cliffs are wip 1's bit for bit (the
+cap never engages there). S1 → S2, ideal / noisy:
+- Flat, slopes, stones, W7, cliffs: as in 9s (straight flat walks bit-identical in both modes; 5°
+  5.04 → 0.07–0.20°; 8° 8.06 → 2.96–3.22; the 20 mm stone 3.88 → 0.43 / 0.23–0.51; slope walks
+  7.59 → 2.99 / 2.98; the 8° shove's own peak 12.08 → 3.92; cliff grid 10/10, slope cliffs 6/6).
+- Rubble (bench + held-out, 17 seeds per height): tilt RMS 1.29 → 1.20, 2.51 → 2.10, 2.53 → 2.33 /
+  1.24 → 1.19, 2.36 → 2.06, 2.38 → 2.01; min belly clearance 27.2 / 27.3 on the bench tier, 25.1 /
+  25.7 held out (S1 31.3 / 30.1).
+- Ramps 5.49 → 3.16 / 5.46 → 3.18 (wip 1 2.50 / 2.57); stairs 4.72 → 3.77 / 5.83 → 4.16, tips 2 → 2 /
+  3 → 1.
+- No fall, no belly contact, load ≤ 0.239 × stall, heat ≤ 0.2 % of the budget; `run_sim` 189 mm,
+  41.7°, in band. mount1.5 (reported): the flat stand 1.34° off true, the flat walks 1.40°, 30 mm
+  held-out rubble 20.6 mm (B159).
+
+**Verdict: fail.** Restated: P1, P2, P3, P5, P6, P8 and R1 pass; **P4** fails on two stairs rows
+(`W6.stairs15.p1` ideal, 646 against 708 mm = 92.2 % of S1 × derate; `W6.stairs20.p2` noisy, 203
+against 440 = 46.5 %, the `probe_reach` stop) and **P7** on one (`W6.stairs20.p1` noisy, 24.4 mm).
+Rubble passes P4 per height (ideal 100.8 / 99.1 / 106.8 %, noisy 100.7 / 95.9 / 95.4 %) and P7 on
+both tiers. Under the D065 wording it fails P1 (the walk + turn, B163; `shove.y` 0.03 mm), P4 (30 pairs:
+the 16 slope rows on the derate, 12 rubble, the two stairs rows), P6 (five `probe_reach` voids S1 did not have: `W4.rubble20.s100` noisy,
+`s101` in both modes, `W4.rubble30.s104` noisy, `W6.stairs20.p2` noisy; ground 33–46 mm under the
+un-probed target, or none found) and R1 (15 rubble row × mode pairs, two where S1 had stopped on a
+void). **`level.enabled` stays false.** Even where it passes, the held-out P7 margin is 0.1 mm: no
+setting measured keeps 2 mm of margin on both 30 mm rubble and 20 mm stairs, because a raise-only
+plane levels by sinking the body, and the probe's roughness cannot tell rubble (where the sink
+meets a stone) from stairs and ramps (where levelling is the point). What it would take: B162.
+
+**The loop:** gait 132 passed; `sim/tests` fast 854 passed, 8 skipped, 2 xfailed (the same with
+`ROCKY_LEVEL=1`), slow 6 passed + 3 xfailed; driver 88, harness 116; ruff clean; fingerprint `965f4f70e5d1`, params D064. New tests:
+`test_the_sink_caps_latch_has_hysteresis`, the blind cap in `test_the_rough_ground_sink_cap` and
+on the kinematic plant, `set level.rough_off_mm`, the held-out rows, the family R1 with per-height
+P4 and held-out P7, the signed tilt.
+
+---
+
+## 2026-10-09 · Session 9s — B162 wip 1: the leveler re-tuned (filter 1.0 s, a rough-ground sink cap), three rules restated, re-benched; still off
+
+**Ask (B162):** take the leveler toward a verdict the owner can flip on without hiding anything:
+(1) `level.filter_s` against the noisy flat drift, (2) a cap on the body's sink over rough ground
+for P7, (3) restate P1 / P4 / P6 only where they measured something other than what they claim,
+with the D065 wording's verdict kept beside them, (4) the full bench. `level.enabled` stays
+false. The first verdict's record stays as `sim/out/terrain_bench_d065_off.json`; the new one
+is `sim/out/terrain_bench.json`. (A first attempt at this round was cut off by a usage limit;
+its scratch law and runs were finished and re-measured here. Every scratch number below is
+confirmed against the final record by run digest: the filter 1.0 rows 106 of 106, the chosen
+cap's rough rows 54 of 54.)
+
+**(1) filter_s** (S2 against the D065 record's S1; W1 / W2 / W3 / W7; the 0.2 runs reproduce the
+D065 record's S2 bit for bit):
+
+| filter_s | noisy straight walks ×3 + stand, max offset mm | ideal turn / walk+turn / shove x / y, mm | 20 mm stone end tilt ° ideal (f0, f3) / noisy | its settle s, ideal | 5° · 8° stand settle s | slope walks tilt RMS ° | W7 shove peak down / up ° | W7 row's start tilt ° |
+|---|---|---|---|---|---|---|---|---|
+| 0.2 (D065) | 1.19 / 1.68 / 1.38 / 0.42 | 0.47 / 11.65 / 0.92 / 0.36 | 0.36, 0.35 / 0.16, 0.17 | 1.38 | 1.46–1.52 · 1.44–1.52 | 2.91 | 3.97 / 3.21 | 5.15 |
+| 0.6 | 0.00 / 0.33 / 0.04 / 0.00 | 0.13 / 13.86 / 0.11 / 0.10 | 0.37, 0.36 / 0.34, 0.33 | 1.56 | 1.62–1.66 · 1.52–1.60 | 2.95 | 3.96 / 3.21 | 5.45 |
+| 0.8 (W1, W7 only) | 0.00 / 0.03 / 0.00 / 0.00 | 0.01 / 14.53 / 0.00 / 0.05 | – | – | – | – | 3.97 / 3.21 | 5.57 |
+| **1.0** | **0.00 / 0.00 / 0.00 / 0.00** | 0.00 / 14.71 / 0.00 / 0.03 | 0.42, 0.43 / 0.23, 0.51 | 1.78 | 1.78–1.82 · 1.60–1.70 | 2.99 | 3.92 / 3.21 | 5.69 |
+
+Settle = from the spawn until the tilt stays within 0.5° of its final value (a new metric,
+`settle_s`); the 5° and 8° end tilts hold (0.07–0.24 → 0.07–0.20°; 2.96–3.22 at both). **Chosen: 1.0**,
+the only value measured that holds every noisy flat row at 0.00 mm (0.6 leaves 0.33, 0.8 0.03). Its
+P2 / P3 / W7 cost: the stone's end tilt 0.36 → 0.42° ideal, 0.16–0.17 → 0.23–0.51 noisy (P2's limit 1.0),
+and +0.4 s to settle (one noisy stone row 4.98 s: a late wander past 0.5°, ending at 0.23°), the stands +0.16 to +0.32 s, the
+shove's own peak no higher (3.92 against 3.97, excursion 0.71 against 0.76). `tilt_peak_deg` on W7
+was never the shove: on a leveled slope it is the leveler still converging when the row's clock
+starts, 5.15 → 5.69° here (D065 quoted it as "the 8° shove's peak 12.08 → 5.15"; the shove's own
+peak is 3.97 → 3.92, now `shove_peak_deg`). Costs outside P2 / P3 / W7: the integral loop (τ 0.6 s)
+behind a 1.0 s lag is underdamped (damping ≈ 0.39 against ≈ 0.87): on the gait suite's kinematic
+plant a 3° slope comes to rest 0.24 / 0.28° *past* level (standing / walking; 0.47 / 0.41 short of it
+at 0.2), inside the deadband either way, and settles in 2.45 s against 1.36. On rough ground the
+slower filter costs tilt (no cap: rubble 1.60 → 1.82° ideal, 1.54 → 1.79 noisy; stairs 1.87 → 2.08 /
+2.20 → 2.48; ramps 2.20 → 2.24) and puts `W4.rubble10.s0` (ideal) over R1: S1 0.84°, S2 1.02 (0.98 at
+0.6). The turn and the rim shoves now stay inside the deadband (0.00–0.03 mm); the walk + turn's
+14.71 mm is B163's.
+
+**(2) The rough-ground sink cap** (`gait/pebble_level.py` step 3b, `params.yaml` `level.rough_r0_mm
+/ rough_r1_mm / sink_max_mm / rough_hold_s`): raise-only sinks the body by the plane's c (up to
+16.58 mm), and on rubble or stairs the belly then meets a stone or a step edge. The probe feels
+the roughness: walking, r = max − min of `probe_dz` over the loaded feet (stance and switch), held as
+a peak decaying over 2 s, frozen while the stance is fully planted. Past `rough_r0_mm` the plane is
+scaled down until c ≤ `sink_limit()` (a step to `sink_max_mm`, or a ramp from the full window's
+16.58 mm to `sink_max_mm` at `rough_r1_mm`); it only ever shrinks the plane. The supervisor now
+passes its `probe_dz` into the leveler's tick; no probe reads r = 0. Measured at filter 1.0 on W4 /
+W5 / W6 (S1 from the D065 record; ideal / noisy):
+
+| cap | W4 min belly clearance mm | W6 min clearance | W4 tilt RMS ° | 10° ramp tilt RMS | W6 tilt RMS | W6 S2 tips | rows over R1 |
+|---|---|---|---|---|---|---|---|
+| none | 21.1 / 16.0 (5 rows < 25) | 27.0 / 23.0 | 1.82 / 1.79 | 3.62 / 3.61 | 2.08 / 2.48 | 0 / 0 | 2 |
+| **A: r0 12, step to 6 mm** | **25.3 / 25.8** | **26.2 / 25.2** | **1.73 / 1.76** | 4.13 / 4.27 | 2.49 / 3.05 | 0 / 1 | 2 |
+| B: r0 16, step to 6 | 25.3 / 23.9 | 28.3 / 25.3 | 1.74 / 1.77 | 4.04 / 4.13 | 2.68 / 2.93 | 0 / 0 | 2 |
+| E: r0 12, step to 8 | 25.3 / 24.3 | 27.0 / 26.3 | 1.76 / 1.73 | 4.00 / 4.05 | 2.35 / 2.80 | 0 / 0 | 2 |
+| C: ramp 8 → 24, floor 4 | 25.3 / 24.4 | 27.0 / 23.3 | 1.82 / 1.77 | 3.94 / 3.88 | 2.43 / 2.75 | 1 / 1 | 4 |
+| D: ramp 12 → 30, floor 4 | 25.3 / 19.3 | 26.1 / 23.3 | 1.86 / 1.90 | 3.73 / 3.69 | 2.34 / 2.57 | 0 / 0 | 2 |
+| F: ramp 16 → 24, floor 4 | 25.2 / 18.2 | 27.0 / 23.0 | 1.85 / 1.80 | 3.87 / 3.76 | 2.29 / 2.76 | 1 / 1 | 3 |
+
+The interrupted round had measured the cap acting on stands too (filter 1.0, W2–W6): every
+raise cap (r0 6 / 8 / 12 × 4 / 6 / 8 mm) took the stones' mean end tilt from 0.29 to 1.12–2.33° (the
+four floor feet probe down 10–30 mm, so a stand on a stone reads rough); capping the net sink (c
+minus the probe's mean lowering) kept the stones (0.30–0.98°) but not the belly (W4 17.7–23.2 mm
+ideal); lowering the window to 15 / 10 mm on rough ground (the brief's (c); the same shrink with a
+heading-dependent ratio) cost the stones 1.44 / 2.14°. Freezing the estimate in a planted stance
+leaves every stand, stone and slope run bit-identical to no cap and every rubble, ramp and stairs
+row bit-identical to the ungated cap (54 of 54). **Chosen: A** (`rough_r0_mm` 12, `rough_r1_mm` 12, `sink_max_mm` 6,
+`rough_hold_s` 2): the only walking-gated candidate that keeps every rubble and stairs row ≥ 25 mm in
+both IMU modes, with the lowest rubble tilt RMS of those that clear it. Nothing changes on the slopes or the
+stones (their r is 0: bit-identical to no cap). Its costs: the 10° ramp, where the kinks read as
+rough (r p95 ≈ 22–23 mm) and the cap acts on 24–26 % of the ticks with the belly 38 mm clear, 3.62 →
+4.13 / 4.27°; the stairs 2.08 / 2.48 → 2.49 / 3.05°, and one noisy stairs row tips (`W6.stairs20.p2`,
+S1 tips it too, at 16.2°; *review correction:* without the cap S2 does not, peak 7.02°, so this tip
+is the cap's; 9t has the stairs with and without it); the clearances pass by 0.2–1.2 mm. With the cap A at filter 0.2 / 0.6 / 0.8: P7
+passes only at 0.2 (where P1 fails); 24.5 mm at 0.6, 24.6–24.8 at 0.8.
+
+**(3) The rules, restated where they measured something else** (`evaluate()` returns the D065
+wording beside them in `d065`, with its own verdict; each note says why):
+- **P1** — the straight walks and the stand keep every D065 clause (≤ 0.05° tilt RMS, progress within
+  1 %, |offset| ≤ 0.5 mm, ideal bit-identical). The turn in place, the walk + turn and the rim shoves
+  tilt the body past the deadband for real, so they are gated on tilt RMS ≤ S1 + 0.05° and the walk's
+  progress within 1 %, judged when `stop` is sent (`progress_stop_mm`, new): the walk + turn is
+  bit-identical to S1 until `stop` (126.6 mm both); after it S1 slides back to 124.3 mm while S2 levels
+  the tilt the probe's HOLD leaves (14.71 mm of offset, end tilt 2.44 → 1.13°) and ends at 127.9
+  (B163). Offsets, end progress and bit-identity are reported in `flat_motion`.
+- **P4** — a walk off rubble is judged per row against S1 × the row's derate (`derate_pct`, new: the
+  envelope the levelled plane allowed, tick by tick, against the bare one for the same ask; 94.86–
+  95.03 % on the saturated slope walks, 97.1–97.4 % on the ramps, 96.5–100 % on the stairs;
+  `level_slope_mean_deg` 4.94–5.14° on the slopes). Rubble is judged by the family per IMU mode, the
+  rows' spread reported (`rubble_family`); the stairs stay per row with their trade reported
+  (`stairs`: progress, tilt, tips).
+- **P6** — the cliff clauses are unchanged; a void is classed (`void_class`, new): `false` (ground
+  within `PROBE_MAX` of the un-probed target), `probe_reach` (a world with no drop, ground deeper
+  than the probe reaches: a safe stop, B161), `drop`. Only a new `false` void is gated.
+- R1 is unchanged (a row's tilt RMS ≤ S1's + 0.1°), and so are P2, P3, P5, P7, P8.
+
+**(4) The record** (`sim/out/terrain_bench.json`: 1033 runs, 775 made, in 648 s, `--stack S0,S1,S2,S3
+--imu ideal,noisy,mount1.5 --jobs 6`, on `8b301e8` plus this commit's code, `code_diff_sha256`
+`1620fe48…`, `965f4f70e5d1`, params D064): every S0 and S1 run (258 + 258) bit-identical to the D065
+record's; S2 changed in 244 of 258. S1 → S2, ideal / noisy:
+- Flat: the straight walks and the stand bit-identical to S1 in **both** IMU modes (0.00 mm); the
+  turn and `shove.x` bit-identical too, `shove.y` 0.03 / 0.01 mm; the walk + turn above.
+- Standing: 5° 5.04 → 0.07–0.20 / 0.09–0.21°; 8° 8.06 → 2.96–3.22 / 2.98–3.22; 10° → 4.98–5.24; the
+  20 mm stone 3.88 → 0.425 (f0) / 0.23 noisy, 0.43 / 0.51 (f3); all stones 0.03–0.44 / 0.15–0.51.
+- Walking: slopes 7.59 → 2.99 / 2.98° (progress 95.4 % of S1; per row 95.9–108.4 % of S1 × derate:
+  downhill 95.9–97.1, across 99.4–100.9, uphill 104.6–108.4); rubble 2.20 → 1.73 / 2.05 → 1.76 (family 100.8 / 101.2 % of S1 × derate;
+  rows 77.6–113.0 / 88.5–172.3 %); ramps 5.49 → 2.50 / 5.46 → 2.57; stairs 4.72 → 2.49 / 5.83 → 3.05
+  (tips 2 → 0 / 3 → 1; progress 98.2 / 102.6 % of S1).
+- W7: the shove's peak 12.08 → 3.92 (downhill), 8.06 → 3.21 (uphill), both modes within 0.02°.
+- Belly clearance ≥ 25.3 / 25.8 mm on rubble (S1 31.3), 26.2 / 25.2 on the stairs; no fall, no belly
+  contact, load ≤ 0.229 × stall, heat ≤ 0.3 % of the budget; the cliff grid 10 / 10 and the 5°
+  slope cliff 6 / 6 fire and hold in every mode; no new false void: S2's one is S1's own
+  `W6.stairs20.p2` (ideal, `probe_reach`: ground 35.1 mm under the target), and S1's other
+  (`W4.rubble20.s0` noisy, `probe_reach`) S2 walks through. `run_sim`
+  189 mm, 41.7°, in band.
+- mount1.5 (reported): the flat stand ends 1.34° off true (1.045 at filter 0.2: the slower loop
+  overshoots inside the deadband the other way), the flat walks 1.40° (rows 1.43 / 1.50 / 1.27;
+  *review correction:* this line said 1.46, which matched no row); W4 clearance 24.2 mm (B159).
+
+**Verdict: fail, on R1 alone.** P1–P8 pass; R1 fails on two ideal rubble rows: `W4.rubble10.s0`
+0.84 → 1.02° (the filter's: 1.02 with no cap) and `W4.rubble20.s3` 2.12 → 2.25° (the cap's: 2.10
+without it), while the rubble family goes 2.20 → 1.73°. Under the D065 wording it would fail P1 (the
+walk + turn's B163 residue, and `shove.y` not bit-identical at 0.03 mm), P4 (25 row × IMU pairs: 16
+slope rows, the derate; 7 rubble; `W6.stairs15.p1` noisy 94.6 % and `W6.stairs20.p1` ideal 93.5 %)
+and R1; it would pass P6 (no new false void at all). `level.enabled` stays false. What is left is
+the owner's call or B162's next round: R1 per row on chaotic rubble seeds (the reason P4 is judged
+by family), against a slower filter that rubble10.s0 does not like.
+
+**The loop:** gait 131 passed; `sim/tests` fast 851 passed, 8 skipped, 2 xfailed; ruff clean;
+fingerprint `965f4f70e5d1`, params D064. Tests: the sink cap (`test_the_rough_ground_sink_cap`),
+`set level.sink_max_mm`, the restated rules with the D065 wording beside them, the void classes; the
+kinematic-plant and anti-windup tests now run at both filters (the overshoot above).
+
+---
+
 ## 2026-10-08 → 10-09 · Session 9r — the body leveler and its terrain bench (D065), landed off
 
 **Ask:** nothing levelled the body. The gait stands its feet on one body-frame plane, so on an 8°

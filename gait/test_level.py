@@ -61,7 +61,9 @@ def fixed_plane(g, slope, psi_deg, raise_mm=30.0):
 def test_level_defaults_come_from_params_with_their_types():
     d = rm.level_defaults()
     assert set(d) == {"enabled", "tau_s", "filter_s", "deadband_deg", "raise_mm", "rate_mm_s",
-                      "swing_rate_mm_s", "tilt_max_deg", "min_contacts", "swing_blend"}
+                      "swing_rate_mm_s", "tilt_max_deg", "min_contacts", "swing_blend",
+                      "rough_r0_mm", "rough_r1_mm", "sink_max_mm", "rough_hold_s",     # B162: the sink cap
+                      "rough_off_mm"}                                                  # its latch (B162 review)
     assert d["enabled"] is False                      # lands OFF (the bench flips it)
     assert isinstance(d["min_contacts"], int) and isinstance(d["swing_blend"], tuple)
     lv = BodyLeveler(WaveGait())
@@ -112,9 +114,10 @@ def test_window_raise_only_and_anti_windup():
     assert lv.saturated and lv.dz.min() >= 0.0 and lv.dz.max() <= lv.raise_mm
     span_x = np.ptp(g.p_nom[:, 0])
     assert np.hypot(*lv.P) == pytest.approx(lv.raise_mm / span_x, abs=1e-12)         # 4.87 deg along x
-    # no windup: the plane comes straight back when the tilt reverses
+    # no windup: the plane comes straight back once the filtered tilt reverses (one filter_s:
+    # 0.2 s at D065's filter, 1.0 s at B162's)
     p0 = lv.P[0]
-    t = run_idle(lv, 0.2, grav_low(10.0, 180.0), t0=6.0)
+    t = run_idle(lv, lv.filter_s, grav_low(10.0, 180.0), t0=6.0)
     assert lv.P[0] > p0
     run_idle(lv, 6.0, grav_low(10.0, 180.0), t0=t)
     assert lv.P[0] == pytest.approx(-p0, abs=1e-9)
@@ -142,6 +145,87 @@ def test_rate_caps_per_leg_class():
     assert dZ[:, 2].max() <= lv.swing_rate_mm_s * TICK + 1e-9
     assert dZ[:, 2].max() > lv.rate_mm_s * TICK + 1e-6        # airborne moves faster than stance
     assert not dZ[:, 3].any()                                  # in the band: held
+
+
+def test_the_rough_ground_sink_cap():
+    """B162: walking with the probe's loaded feet 20 mm apart (rubble, stairs) the plane is
+    scaled until it sinks the body <= sink_max_mm; the same tilt with no roughness (a
+    uniform slope: r = 0) or a fully planted stance (a stand on a stone) keeps the full
+    window. The held roughness decays over rough_hold_s once the ground evens out. Walking
+    with no probe is blind and fails CLOSED (the cap applies; B162 review)."""
+    g = WaveGait()
+    kw = dict(enabled=True, rough_r0_mm=12.0, rough_r1_mm=12.0, sink_max_mm=6.0, rough_hold_s=2.0,
+              rough_off_mm=12.0)
+    xy = g.p_nom[:, :2].copy()
+    walk = np.array([True, True, False, True, True])            # leg 2 in swing
+    s = np.array([np.nan, np.nan, 0.5, np.nan, np.nan])
+    clear = np.array([0.0, 0.0, 24.0, 0.0, 0.0])
+    rough = np.array([0.0, 20.0, 30.0, 4.0, 0.0])               # leg 2 (swing) is not counted: ptp 20
+
+    def run(stance, probe, secs=4.0, t0=0.0, lv=None):
+        lv = lv or BodyLeveler(g, **kw)
+        for k in range(int(round(secs / TICK))):
+            lv.tick(t0 + k * TICK, grav_low(10.0, 0.0), 0.0, "NORMAL", stance, np.ones(N_LEGS, bool),
+                    xy, s if not stance.all() else np.full(N_LEGS, np.nan), clear, probe_dz=probe)
+        return lv
+    assert BodyLeveler(g, **kw).full_sink_mm() == pytest.approx(16.5836, abs=1e-3)
+    flat = run(walk, np.zeros(N_LEGS))
+    assert flat.saturated and not flat.sink_capped and flat.c == pytest.approx(15.0, abs=1e-6)   # along x
+    assert flat.rough_mm == 0.0
+    capped = run(walk, rough)
+    assert capped.rough_mm == pytest.approx(20.0) and capped.sink_capped
+    assert capped.c == pytest.approx(6.0, abs=1e-9)
+    assert np.hypot(*capped.P) == pytest.approx(np.hypot(*flat.P) * 6.0 / 15.0, rel=1e-9)   # partial leveling
+    assert capped.status()["sink_capped"] and capped.status()["rough_mm"] == 20.0
+    for probe in (None, rough):                                  # a planted stance (a stand): no cap
+        lv = run(np.ones(N_LEGS, bool), probe)
+        assert lv.rough_mm == 0.0 and not lv.sink_capped and lv.c == pytest.approx(flat.c, abs=1e-6)
+    blind = run(walk, None)                                      # walking with no probe: fail closed
+    assert blind.rough_blind and blind.sink_capped and blind.c == pytest.approx(6.0, abs=1e-9)
+    assert blind.rough_mm == 0.0 and blind.status()["rough_blind"] and blind.cap_engages == 1
+    run(walk, np.zeros(N_LEGS), secs=1.0, t0=4.0, lv=blind)     # the probe back on flat ground: the cap lets go
+    assert not blind.rough_blind and not blind.sink_capped
+    # the ground evens out: the held 20 mm decays toward 0 over rough_hold_s (first order at the law's ticks)
+    run(walk, np.zeros(N_LEGS), secs=2.0, t0=4.0, lv=capped)
+    assert capped.rough_mm == pytest.approx(20.0 * (1.0 - TICK / 2.0) ** 100, rel=1e-6)
+    # a planted stance freezes it
+    held = capped.rough_mm
+    run(np.ones(N_LEGS, bool), np.zeros(N_LEGS), secs=1.0, t0=6.0, lv=capped)
+    assert capped.rough_mm == held
+    # the continuous form: from the full window's sink at r0 to sink_max_mm at r1
+    lv = BodyLeveler(g, **dict(kw, rough_r0_mm=8.0, rough_r1_mm=24.0, sink_max_mm=4.0, rough_off_mm=8.0))
+    lv.rough_mm, lv.rough_on = 16.0, True
+    assert lv.sink_limit() == pytest.approx(lv.full_sink_mm() + 0.5 * (4.0 - lv.full_sink_mm()))
+    lv.rough_mm, lv.rough_on = 8.0, False
+    assert lv.sink_limit() == np.inf
+    lv.rough_mm, lv.rough_on = 40.0, True
+    assert lv.sink_limit() == pytest.approx(4.0)
+
+
+def test_the_sink_caps_latch_has_hysteresis():
+    """B162 review: one threshold chattered (20 ms on / off dwells on the stairs, 19 engages in
+    20 s on rubble) and pumped the body. The latch engages past rough_r0_mm and lets go only
+    at rough_off_mm; rough_off_mm = rough_r0_mm is the single threshold (no hysteresis)."""
+    g = WaveGait()
+    xy = g.p_nom[:, :2].copy()
+    walk = np.array([True, True, False, True, True])
+    s = np.array([np.nan, np.nan, 0.5, np.nan, np.nan])
+    clear = np.array([0.0, 0.0, 24.0, 0.0, 0.0])
+
+    def series(off):
+        lv = BodyLeveler(g, enabled=True, rough_r0_mm=12.0, rough_r1_mm=12.0, sink_max_mm=6.0,
+                         rough_hold_s=0.05, rough_off_mm=off)
+        on = []
+        for k in range(200):                     # the loaded feet's spread wanders 9..15 mm (4 s)
+            r = 12.0 + 3.0 * np.sin(2 * np.pi * k / 10.0)
+            lv.tick(k * TICK, grav_low(10.0, 0.0), 0.0, "NORMAL", walk, np.ones(N_LEGS, bool), xy, s, clear,
+                    probe_dz=np.array([0.0, r, 0.0, 0.0, 0.0]))
+            on.append(lv.rough_on)
+        return lv, np.array(on)
+    single, a = series(12.0)
+    latched, b = series(6.0)
+    assert single.cap_engages >= 15 and np.count_nonzero(a[1:] != a[:-1]) >= 30    # chatters every swing
+    assert latched.cap_engages == 1 and b[b.argmax():].all()                        # on once, stays on
 
 
 def test_tick_is_time_based_one_law_at_any_call_rate():
@@ -270,10 +354,14 @@ def test_status_and_com_margin_along_gravity():
 def test_kinematic_plant_levels_a_slope():
     """Closed loop on a kinematic plant: the planted feet stand on the slope, so the body
     tilt is the slope minus the plane of its stance offsets (a 50 ms body lag). Inside the
-    window it levels to the deadband without overshoot; past it the window saturates."""
-    def run(slope_deg, dir_deg, cmd=(0.0, 0.0, 0.0), secs=8.0):
+    window it levels to the deadband; past it the window saturates. With D065's 0.2 s
+    filter it never goes past level; B162's 1.0 s filter (params) puts a lag in the
+    integral loop (tau 0.6 s: damping ~0.39 against ~0.87) and it overshoots: on 3 deg it
+    rests 0.24 / 0.28 deg past level standing / walking (0.2 s: 0.47 / 0.41 short of it),
+    inside the 0.5 deg deadband either way."""
+    def run(slope_deg, dir_deg, cmd=(0.0, 0.0, 0.0), secs=8.0, filter_s=None, probe=True):
         g = WaveGait()
-        lv = BodyLeveler(g, enabled=True)
+        lv = BodyLeveler(g, enabled=True, filter_s=filter_s)
         u = np.array([np.cos(np.radians(dir_deg)), np.sin(np.radians(dir_deg))])
         a = np.tan(np.radians(slope_deg)) * u
         beta, tg, along, dz = a.copy(), 0.0, [], []
@@ -288,16 +376,26 @@ def test_kinematic_plant_levels_a_slope():
             fit = np.linalg.lstsq(np.column_stack([xy[st], np.ones(st.sum())]), z[st], rcond=None)[0]
             beta += (DT / 0.05) * ((a - fit[:2]) - beta)
             grav = np.array([-beta[0], -beta[1], -1.0]) / np.linalg.norm([beta[0], beta[1], 1.0])
-            lv.tick(k * DT, grav, 0.0, "NORMAL", st, np.ones(N_LEGS, bool), xy, s, cl)
+            lv.tick(k * DT, grav, 0.0, "NORMAL", st, np.ones(N_LEGS, bool), xy, s, cl,
+                    probe_dz=np.zeros(N_LEGS) if probe else None)     # a uniform slope: the probe reads no spread
             along.append(np.degrees(np.arctan(beta @ u)))
             dz.append(z)
         return np.array(along), np.array(dz)
     for cmd in ((0.0, 0.0, 0.0), (32.0, 0.0, 0.0)):
-        tilt, dz = run(3.0, 37.0, cmd)
-        assert tilt[-1] <= 0.5 + 1e-6                                   # to the deadband
-        assert tilt[int(3.0 / DT):].max() <= 0.6                        # within 3 s
-        assert tilt.min() > 0.0                                         # never past level
-        assert dz.min() >= 0.0 and dz.max() <= 30.0
+        for fs in (0.2, None):                                          # D065's filter, params' (B162)
+            tilt, dz = run(3.0, 37.0, cmd, filter_s=fs)
+            assert tilt[-1] <= 0.5 + 1e-6                               # to the deadband
+            assert tilt[int(3.0 / DT):].max() <= 0.6                    # within 3 s
+            if fs == 0.2:
+                assert tilt.min() > 0.0                                 # never past level
+            else:
+                assert -0.3 < tilt.min() < 0.0 and abs(tilt[-1]) < 0.5  # past level, inside the deadband
+            assert dz.min() >= 0.0 and dz.max() <= 30.0
+    # B162 review: walking with no probe the roughness is unknown and the sink cap applies (fail
+    # closed): the body sinks at most sink_max_mm, so a 3 deg slope levels only partly
+    tilt, dz = run(3.0, 37.0, (32.0, 0.0, 0.0), probe=False)
+    assert tilt[-1] > 1.5                                                # 2.03 deg left (0.5 with the probe)
+    assert dz[-1].mean() <= rm.level_defaults()["sink_max_mm"] + 0.05    # the body sinks <= sink_max_mm
     tilt, dz = run(8.0, 0.0)
     full = np.degrees(np.arctan(30.0 / np.ptp(WaveGait().p_nom[:, 0])))
     assert tilt[-1] == pytest.approx(8.0 - full, abs=0.3)               # partial: the window is full
