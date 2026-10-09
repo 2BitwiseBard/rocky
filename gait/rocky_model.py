@@ -248,6 +248,20 @@ def reflex_defaults() -> dict:
             for k, v in _p()["reflex"].items()}
 
 
+def level_defaults() -> dict:
+    """BodyLeveler kwargs (D065, params level:): a bool stays a bool, an int an int
+    (min_contacts), a list comes back as a tuple of floats, every other key a float."""
+    def conv(v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            return int(v)
+        if isinstance(v, (list, tuple)):
+            return tuple(float(x) for x in v)
+        return float(v)
+    return {k: conv(v) for k, v in _p()["level"].items()}
+
+
 # D064 (pick 13, B130): the righter's hip clamp. Leg 0 is not in the set: it never reaches
 # the keel tub inside its soft limits (BODY_LAYOUT_PROPOSAL correction 8; the tub runs
 # east-west at y -20, south of leg 0's station). params reflex.righter_clamp_legs names the
