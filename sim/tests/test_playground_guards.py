@@ -1054,6 +1054,9 @@ def test_level_commands_and_guard_status():
     assert pg.do("set level.sink_max_mm 4").startswith("level.sink_max_mm = 4")     # B162: the sink cap
     assert pg.sup.leveler.sink_max_mm == 4.0 and "refused" in pg.do("set level.sink_max_mm 40")
     pg.level_kw.pop("sink_max_mm")
+    assert pg.do("set level.rough_off_mm 6").startswith("level.rough_off_mm = 6")   # B162 review: the latch
+    assert pg.sup.leveler.rough_off_mm == 6.0
+    pg.level_kw.pop("rough_off_mm")
     pg.step()
     gs = pg.guard_status()
     json.dumps(gs)

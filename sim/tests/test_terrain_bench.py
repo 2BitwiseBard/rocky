@@ -356,3 +356,72 @@ def test_cli_list_and_bad_args(capsys):
     for bad in (["--stack", "S9"], ["--imu", "perfect"]):
         with pytest.raises(SystemExit):
             tb.main(bad)
+
+
+# ------------------------------------------------------------------ B162 review round
+def test_the_heldout_rubble_rows_join_the_gate_after_the_bench_w4():
+    """B162 review: the sink cap was first picked on the seeds P7 scored; the full bench now adds
+    HELDOUT_N held-out rubble seeds per height (tier 'heldout'), never a training seed."""
+    held = tb.heldout_rows()
+    assert len(held) == 3 * tb.HELDOUT_N == 36
+    assert all(r["world"] == "W4" and r["tier"] == "heldout" and tb.tier_of(r["seed"]) == "heldout" for r in held)
+    assert KEYS <= set(held[0]) and not {r["id"] for r in held} & {r["id"] for r in tb.rows()}
+    rs = tb.with_heldout(tb.rows(), tb.HELDOUT_N)
+    ids = [r["id"] for r in rs]
+    assert len(ids) == len(set(ids)) == 87 + 36
+    last_w4 = max(i for i, r in enumerate(rs) if r["world"] == "W4")
+    assert ids[last_w4] == "W4.rubble30.s111.walk" and rs[last_w4 + 1]["world"] == "W5"
+    assert tb.row_by_id("W4.rubble30.s105.walk")["seed"] == 105
+    # --tier heldout already scores 100-104: they are not added twice
+    assert len(tb.with_heldout(tb.rows(tier="heldout"), tb.HELDOUT_N)) == 87 + 36 - 15
+
+
+def test_r1_judges_rubble_by_family_and_p4_and_p7_per_height_on_both_tiers():
+    """B162 review: R1 per row on rubble judged the seed's chaos (S1 against S1 with only the IMU's
+    noise stream changed moves 23 of 51 rows past 0.1 deg); the family per height is the line,
+    the D065 wording stays beside it. P4 judges each rubble height's family, P7 every row."""
+    def rub(amp, s, st, **kw):
+        return _run(f"W4.rubble{amp}.s{s}.walk", st, **kw)
+    base = [rub(20, s, st) for s in (0, 100) for st in ("S1", "S2")]
+    base += [rub(30, s, st) for s in (0, 100) for st in ("S1", "S2")]
+    v = tb.evaluate(base)
+    assert v["rules"]["R1"]["status"] == "pass" and v["rules"]["P4"]["status"] == "pass"
+
+    def with_(changes):
+        runs = [dict(x) for x in base]
+        for (row, st), kw in changes.items():
+            next(x for x in runs if x["row"] == row and x["stack"] == st).update(kw)
+        return tb.evaluate(runs)
+    # one row +0.3 deg, its family +0.15 -> fails both; offset by a -0.3 row -> the family passes, D065 fails
+    one = with_({("W4.rubble20.s0.walk", "S2"): dict(tilt_rms_deg=1.3)})
+    assert one["rules"]["R1"]["status"] == "fail" and one["d065"]["R1"]["status"] == "fail"
+    two = with_({("W4.rubble20.s0.walk", "S2"): dict(tilt_rms_deg=1.3),
+                 ("W4.rubble20.s100.walk", "S2"): dict(tilt_rms_deg=0.7)})
+    assert two["rules"]["R1"]["status"] == "pass" and two["d065"]["R1"]["status"] == "fail"
+    assert any("W4.rubble20.s0.walk" in x for x in two["rules"]["R1"]["rubble_rows"])
+    assert two["rules"]["R1"]["rubble_family"]["ideal"][20] == dict(n=2, s1=1.0, s2=1.0)
+    # P4: 30 mm rubble's family under 95 % fails though the pooled family passes
+    p4 = with_({("W4.rubble30.s0.walk", "S2"): dict(progress_mm=400.0), ("W4.rubble30.s100.walk", "S2"): dict(progress_mm=450.0),
+                ("W4.rubble20.s0.walk", "S2"): dict(progress_mm=600.0), ("W4.rubble20.s100.walk", "S2"): dict(progress_mm=600.0)})
+    fam = p4["rules"]["P4"]["rubble_family"]["ideal"]
+    assert fam["family_pct"] >= 95.0 and fam["per_height"][30]["family_pct"] == 85.0
+    assert fam["per_height"][30]["by_tier"] == {"bench": 80.0, "heldout": 90.0}
+    assert p4["rules"]["P4"]["status"] == "fail"
+    # P7 on a held-out row
+    assert with_({("W4.rubble30.s100.walk", "S2"): dict(min_clear_mm=24.0)})["rules"]["P7"]["status"] == "fail"
+
+
+def test_a_stand_records_its_tilt_signed_along_the_initial_tilt():
+    """B162 review: tilt_end_deg is unsigned, so the 1.0 s filter's overshoot past level did not
+    show; tilt_end_signed_deg (< 0 = past level) and overshoot_deg do."""
+    row = dict(tb.row_by_id("W3.stone20.f0.stand"))
+    pg = tb._playground(row)
+    m = tb.Meter(pg, row)
+    m.pre = [(0.02 * k, 3.0, 0.0, 3.0) for k in range(1, 51)]            # pitched 3 deg, nose down
+    m.roll = [0.0] * 200
+    m.pitch = list(np.linspace(3.0, -0.6, 100)) + [-0.4] * 100            # 0.6 past level, ends 0.4 past
+    t = 0.02 * np.arange(1, 201)
+    out = m._signed(t)
+    assert out == dict(tilt_end_signed_deg=-0.4, overshoot_deg=0.6)
+    m.pre = [(0.02 * k, 0.05, 0.05, 0.0) for k in range(1, 51)]           # flat: nothing to sign against
+    assert m._signed(t) == dict(tilt_end_signed_deg=None, overshoot_deg=None)
