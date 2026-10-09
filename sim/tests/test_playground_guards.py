@@ -1050,7 +1050,10 @@ def test_level_commands_and_guard_status():
     assert pg.do("set level.bogus 1").startswith("unknown param level.bogus")
     assert pg.do("set level.min_contacts 4").startswith("level.min_contacts = 4")
     assert pg.sup.leveler.min_contacts == 4 and pg.level_kw == {"min_contacts": 4}
-    assert "level.swing_rate_mm_s" in pg.do("set")
+    assert "level.swing_rate_mm_s" in pg.do("set") and "level.sink_max_mm" in pg.do("set")
+    assert pg.do("set level.sink_max_mm 4").startswith("level.sink_max_mm = 4")     # B162: the sink cap
+    assert pg.sup.leveler.sink_max_mm == 4.0 and "refused" in pg.do("set level.sink_max_mm 40")
+    pg.level_kw.pop("sink_max_mm")
     pg.step()
     gs = pg.guard_status()
     json.dumps(gs)

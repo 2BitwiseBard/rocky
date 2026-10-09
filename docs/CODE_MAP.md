@@ -348,7 +348,8 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
   (`BodyLeveler.prime()`), read out by `Playground.envelope()`. Explained: SIM_GUIDE §3.
 - Live: `level on` / `level off` / `level` in the playground or the cockpit console; tune with
   `set level.tau_s 1.2` (also `filter_s deadband_deg raise_mm rate_mm_s swing_rate_mm_s tilt_max_deg
-  min_contacts gyro_calm`; sim-only, kept across a respawn). A noisy IMU:
+  min_contacts gyro_calm`, and B162's rough-ground sink cap `rough_r0_mm rough_r1_mm sink_max_mm
+  rough_hold_s`; sim-only, kept across a respawn). A noisy IMU:
   `Playground(imu={"grav_sigma": 0.02, "latency_s": 0.02, "seed": 0})` or `pg.set_imu(...)`; a mount
   error: `mount_deg`, `mount_axis`.
 - Keep a value: `params.yaml` `level:` (one comment per key; `rocky_model.level_defaults()` reads
@@ -376,12 +377,15 @@ MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --quick --jobs 6           #
 MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --jobs 6 --stack S0,S1,S2,S3 --imu ideal,noisy,mount1.5
 MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --one W3.stone20.f0.stand --stack S1,S2   # prints JSON
 ```
-- The full run is 1033 runs (775 made, S3's reported unavailable) in 643 s at `--jobs 6` and
+- The full run is 1033 runs (775 made, S3's reported unavailable) in 643–648 s at `--jobs 6` and
   writes `sim/out/terrain_bench.json` (provenance: HEAD, dirty, `code_diff_sha256` when the code
   is dirty, fingerprint, the params `level:` block, the IMU modes, the date); the
   last line is the verdict, rule by rule. A mode or stack the Playground cannot apply is reported
   `unavailable`, never run as ideal; S3 is always unavailable until B160.
-- The rules gate the ideal and noisy IMUs (mount1.5 is reported only, B159); P9 is the test suites
+- The rules gate the ideal and noisy IMUs (mount1.5 is reported only, B159). B162 restated P1, P4 and
+  P6 where they measured something else; `evaluate()` returns their D065 wording beside them
+  (`verdict['d065']`, `verdict_d065_wording`) and the reports it does not gate (`settle_s`, the
+  shove's own peak, `flat_motion`, `rubble_family`, `stairs`, `probe_reach`). P9 is the test suites
   with `ROCKY_LEVEL=1`, which covers less than it sounds: most sim tests never level anything (see
   BUILD_LOG 9r, the review fixes), and the gait suite does not read it. Commit the JSON with the
   docs that quote it; a run on a dirty tree names its code by `code_diff_sha256`

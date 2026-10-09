@@ -41,6 +41,18 @@ call — a t - t_last >= tick_s rule ticked 62 % of them at 0.3 ms of jitter):
      window (13.4 for a slope along y, 16.6 at 54 deg). The 30 mm window over
      the 352 x 335 mm footprint levels fully to 4.87 deg for a slope along x
      and 5.12 deg along y; past that the leveling is partial.
+  3b. The rough-ground sink cap (B162): sinking the body brings the belly down
+     onto whatever is under it, and on rubble or stairs that is a stone or a
+     step edge, not the plane the feet stand on. The probe feels it: walking,
+     r = max - min of probe_dz over the loaded feet (~0 on flat ground and on a
+     uniform slope, where the plane takes the slope; a step's or a stone's
+     height on stairs and rubble), held as a peak decaying over rough_hold_s
+     and frozen while the stance is fully planted (a stand on a stone keeps the
+     full window; a stop on rubble keeps the cap). Past rough_r0_mm the plane
+     is scaled down until c <= sink_limit(): the full window's sink (16.58 mm)
+     falling to sink_max_mm at rough_r1_mm (a step at r0 when r1 <= r0). It only
+     ever shrinks the plane, so a cap is partial leveling, never a lowered foot.
+     No probe (probe off) reads r = 0.
   4. Per-leg copies: each leg keeps its own (P_x, P_y, c) that follows the
      plane, rate-limited at its own foot, on EVERY call (the plane moves on the
      ticks; the copies by rate x the call's dt, so a 500 Hz stream has no 50 Hz
@@ -105,7 +117,8 @@ class BodyLeveler:
 
     def __init__(self, gait, enabled=None, tau_s=None, filter_s=None, deadband_deg=None,
                  raise_mm=None, rate_mm_s=None, swing_rate_mm_s=None, tilt_max_deg=None,
-                 min_contacts=None, swing_blend=None, gyro_calm=None):
+                 min_contacts=None, swing_blend=None, gyro_calm=None, rough_r0_mm=None,
+                 rough_r1_mm=None, sink_max_mm=None, rough_hold_s=None):
         # a None kwarg comes from params level: (rocky_model.level_defaults()); gyro_calm from
         # reflex: (the supervisor's calm threshold: the plane only moves while the body is calm)
         d = _rm.level_defaults()
@@ -122,7 +135,12 @@ class BodyLeveler:
         self.min_contacts = int(pick(min_contacts, "min_contacts"))
         self.swing_blend = tuple(float(x) for x in pick(swing_blend, "swing_blend"))
         self.gyro_calm = float(_rm.reflex_defaults()["gyro_calm"] if gyro_calm is None else gyro_calm)
+        self.rough_r0_mm = float(pick(rough_r0_mm, "rough_r0_mm"))
+        self.rough_r1_mm = float(pick(rough_r1_mm, "rough_r1_mm"))
+        self.sink_max_mm = float(pick(sink_max_mm, "sink_max_mm"))
+        self.rough_hold_s = float(pick(rough_hold_s, "rough_hold_s"))
         self.tick_s = 1.0 / _rm.bus_hz()
+        self._fs_key = self._fs_ratio = None       # full_sink_mm()'s geometry, per p_nom
         self.reset()
         if self.enabled:
             self.prime()
@@ -137,6 +155,9 @@ class BodyLeveler:
         self.e_f = np.zeros(2)                     # filtered tilt error (tan)
         self.dz = np.zeros(N_LEGS)                 # the offsets of the last call, mm
         self.saturated = False                     # the window scaled P on the last tick
+        self.rough_mm = 0.0                        # B162: the held roughness, mm (rough())
+        self.sink_capped = False                   # B162: the rough-ground sink cap scaled P on the last tick
+        self._probe_in = None                      # this call's probe_dz (mm, + = lowered), None = no probe
         self.hold = "reset"                        # why P did not integrate on the last tick (None: it did)
         self.imu_ok = False                        # the last tick had a usable grav
         self.com_margin_mm = None                  # CoM margin along -grav (enabled ticks with q_meas)
@@ -215,7 +236,7 @@ class BodyLeveler:
 
     # ------------------------------------------------------------------ the law
     def tick(self, t, grav, gyro_xy, state, stance, switches, xy, s, clear, hold=None, q_meas=None,
-             foot_xy=None):
+             foot_xy=None, probe_dz=None):
         """Call every supervisor step; the law advances once per tick_s slot of t,
         the copies on every call. grav: body-frame unit gravity or None; gyro_xy:
         |roll/pitch rate| rad/s; state: the supervisor's; stance (5,) the commanded
@@ -224,9 +245,11 @@ class BodyLeveler:
         swing progress NaN in stance, the swing foot's lift over its lift-off
         ground, the feet's real xy; foot_xy None judges the band by clear alone);
         hold: the caller's freeze (bool, reason or reasons); q_meas (5, 3):
-        measured joints, for com_margin_mm. Returns the (5,) offsets (mm, + = foot
-        higher) at xy (zeros when idle)."""
+        measured joints, for com_margin_mm; probe_dz (5,) the stance probe's
+        lowering (mm, + = lowered; None = no probe: the sink cap reads no roughness).
+        Returns the (5,) offsets (mm, + = foot higher) at xy (zeros when idle)."""
         xy = None if xy is None else np.asarray(xy, float)
+        self._probe_in = None if probe_dz is None else np.asarray(probe_dz, float)
         if self._t_call is not None and t < self._t_call:
             self._t_last = self._t_next = None     # a new time base
         dt_call = 0.0 if self._t_call is None else min(float(t - self._t_call), self.DT_MAX_S)
@@ -286,6 +309,7 @@ class BodyLeveler:
                 if k > cap:
                     dP = dP * (cap / k)
                 self.P = self.P + dP
+        self._rough(dt, stance, switches)
         self._window()
         self.com_margin_mm = None
         if self.enabled and q_meas is not None and up is not None and switches is not None:
@@ -295,9 +319,57 @@ class BodyLeveler:
                 q = np.asarray(q_meas, float).reshape(N_LEGS, 3)
                 self.com_margin_mm = float(pf.margins(q, support=sup, normal=up)[0])
 
+    def _rough(self, dt, stance, switches):
+        """B162: the roughness the probe feels while walking, held. r = max - min of
+        probe_dz over the loaded feet (commanded stance and switch closed, >= 2 of
+        them): ~0 on flat ground and on a uniform slope (the plane takes the slope),
+        a step's or a stone's height on stairs and rubble. Held as a peak that decays
+        toward the present reading over rough_hold_s; a fully planted stance (a stand,
+        a stop) neither raises nor decays it, so a stand on a stone keeps the full
+        window and a stop on rubble keeps the cap. No probe (S0, probe off): 0."""
+        if bool(np.all(stance)):
+            return
+        p, r = self._probe_in, 0.0
+        if p is not None and switches is not None:
+            ld = np.asarray(stance, bool) & np.asarray(switches, bool)
+            if int(ld.sum()) >= 2:
+                r = float(np.ptp(p[ld]))
+        if r >= self.rough_mm:
+            self.rough_mm = r
+        else:
+            self.rough_mm += (r - self.rough_mm) * min(1.0, dt / self.rough_hold_s)
+
+    def full_sink_mm(self):
+        """The most a plane inside the window sinks the body (c, mm): raise_mm x the
+        worst heading's -min / span over the nominal footholds (16.58 mm at 30 mm on
+        the D064 stance; 15.0 for a slope along x, 13.42 along y)."""
+        key = self.g.p_nom[:, :2].tobytes()
+        if self._fs_key != key:
+            a = np.radians(np.arange(0.0, 360.0, 0.25))
+            pr = self.g.p_nom[:, :2] @ np.array([np.cos(a), np.sin(a)])
+            self._fs_ratio = float((-pr.min(axis=0) / np.ptp(pr, axis=0)).max())
+            self._fs_key = key
+        return self.raise_mm * self._fs_ratio
+
+    def sink_limit(self):
+        """B162: the most the plane may sink the body (c, mm) at the held roughness:
+        no cap up to rough_r0_mm, then falling linearly from the full window's sink
+        (full_sink_mm) to sink_max_mm at rough_r1_mm (a step to sink_max_mm when
+        rough_r1_mm <= rough_r0_mm). inf = no cap."""
+        r = self.rough_mm
+        if r <= self.rough_r0_mm:
+            return np.inf
+        if self.rough_r1_mm <= self.rough_r0_mm:
+            return self.sink_max_mm
+        f = min(1.0, (r - self.rough_r0_mm) / (self.rough_r1_mm - self.rough_r0_mm))
+        full = self.full_sink_mm()
+        return full + f * (self.sink_max_mm - full)
+
     def _window(self):
         """Anti-windup + raise-only: the plane spans <= raise_mm over the nominal
-        footholds, its lowest one at 0."""
+        footholds, its lowest one at 0; then the rough-ground sink cap (B162): a
+        plane that sinks the body more than sink_limit() is scaled down to it (the
+        cap only ever shrinks the plane)."""
         m = self.g.p_nom[:, :2] @ self.P
         span = float(m.max() - m.min())
         self.saturated = span >= self.raise_mm - 1e-9
@@ -305,6 +377,12 @@ class BodyLeveler:
             self.P = self.P * (self.raise_mm / span)
             m = self.g.p_nom[:, :2] @ self.P
         self.c = 0.0 - float(m.min())
+        lim = self.sink_limit()
+        self.sink_capped = bool(self.c > lim)
+        if self.sink_capped:
+            k = max(0.0, lim) / self.c
+            self.P = self.P * k
+            self.c = self.c * k
 
     def _follow(self, stance, xy, s, clear, dt, foot_xy=None):
         """Each leg's copy toward the plane, its change at its own point <= its class's
@@ -357,6 +435,7 @@ class BodyLeveler:
         k = float(np.hypot(self.P[0], self.P[1]))
         return dict(enabled=self.enabled, active=self.active, hold=self.hold,
                     saturated=bool(self.saturated), settled=self.settled,
+                    rough_mm=round(float(self.rough_mm), 2), sink_capped=bool(self.sink_capped),
                     P=[round(float(x), 6) for x in self.P], c_mm=round(float(self.c), 3),
                     slope_deg=round(float(np.degrees(np.arctan(k))), 3),
                     level_slope=round(self.level_slope(), 6),

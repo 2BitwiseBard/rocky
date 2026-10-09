@@ -497,7 +497,7 @@ class ReflexSupervisor:
         if self.state == BRACE and not hold:
             hold = "brace"
         self.leveler.tick(t, grav, gyro_xy, self.state, stance, switches, xy, s, clear,
-                          hold=hold, q_meas=q_meas, foot_xy=foot)
+                          hold=hold, q_meas=q_meas, foot_xy=foot, probe_dz=self._probe)
 
     # ------------------------------------------------------------------
     def _enter_plant(self, t):

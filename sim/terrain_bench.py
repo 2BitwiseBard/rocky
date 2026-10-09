@@ -61,6 +61,16 @@ the last END_S: in S1 and S2 alike it stands unloaded); min_clear_mm = belly (ro
 + belly_posts bottoms) to the ground along gravity by mj_ray, belly_contact_s;
 load_rms_max / load_peak (|tau_e| / stall, rl_common.motor_torque), heat_max (fraction
 of the thermal budget), thermal_trip; level_sat_pct, level_max_mm (|offset|).
+B162 adds: void_class (false | probe_reach | drop, _void_class: false + probe_reach = the
+D065 false_void); on a walk, level_slope_mean(_deg) and derate_pct (the envelope the leveled
+plane allowed, tick by tick, as % of the bare one for the same ask: the deliberate speed cost
+P4 is judged after); level_sinkcap_pct and level_rough_p95/max_mm (the rough-ground sink cap's
+share of the ticks and the roughness it read); on a stand or a shove settle_s (from the spawn,
+or the push, until the tilt stays within SETTLE_DEG of tilt_end); on a shove shove_peak_deg and
+shove_excursion_deg (the tilt after the push, and its peak over the 0.5 s before it: on a leveled
+slope tilt_peak_deg is the leveler still converging at the row's start, not the shove).
+The rules (evaluate()) carry the D065 wording of the three B162 restated (P1, P4, P6) beside
+them, with that wording's verdict.
 """
 from __future__ import annotations
 
@@ -124,6 +134,7 @@ T_SETTLE = 1.0          # s planted after the spawn, before the row's clock star
 TICK_S = 0.02           # metrics sample at the bus rate
 PHASES = (0.0, 1 / 3, 2 / 3)
 END_S = 2.0             # tilt_end: the mean over the row's last END_S
+SETTLE_DEG = 0.5        # settle_s (B162): the tilt stays within this of tilt_end from then on
 WALK_ASK = 45.0         # mm/s asked: the budget fits it (34.2 on the D064 gait)
 CLIFF_MAX_S = 20.0      # a cliff approach runs until 3 s after the fire, at most this
 CLIFF_AFTER_S = 3.0
@@ -398,7 +409,9 @@ class Meter:
         self.belly_ticks = 0
         self.probe_edges = 0
         self._out_prev = np.zeros(len(pg.fids), bool)
-        self.lv_ticks = self.lv_sat = 0
+        self.lv_ticks = self.lv_sat = self.lv_cap = 0
+        self.ls, self.derate, self._bare = [], [], {}   # B162: per walking tick, the plane slope and its derate
+        self.rough = []                                 # B162: the leveler's held roughness, per enabled tick
         self.lv_max = 0.0
         self.probe_max = 0.0
         self.heat_max = 0.0
@@ -414,6 +427,13 @@ class Meter:
         self.stone = row.get("stone_foot")
         self.stone_n, self.stone_closed = [], []
         self.zmin = float(pg.data.xpos[pg.torso][2])
+        self.progress_stop_mm = None                    # B162: a motion row's progress when `stop` is sent
+
+    def mark_stop(self):
+        """A motion row's progress along its command when `stop` is sent: the walk's own,
+        before the stop's BRACE / RECOVER and what the stance does after it (B163)."""
+        disp = self.pg.data.xpos[self.pg.torso][:2] - self.p0
+        self.progress_stop_mm = round(1000.0 * float(disp @ self.u_cmd), 1)
 
     def _ray(self, p):
         d = mujoco.mj_ray(self.pg.model, self.pg.data, np.asarray(p, float), self.gdir, None, 1,
@@ -488,12 +508,58 @@ class Meter:
         if lv is not None and lv.enabled:
             self.lv_ticks += 1
             self.lv_sat += int(bool(lv.saturated))
+            self.lv_cap += int(bool(getattr(lv, "sink_capped", False)))
+            self.rough.append(float(getattr(lv, "rough_mm", 0.0)))
+        ask = np.asarray(pg.cmd_v, float)
+        if self.row["kind"] in ("walk", "cliff") and ask.any():
+            # B162 (P4): the envelope the derated plane allowed this tick against the bare one, for
+            # this ask (WaveGait.budget; the leveler's plane slope as the Playground quantizes it)
+            ls = float(pg._level_slope())
+            key = (round(float(ask[0]), 4), round(float(ask[1]), 4), round(float(ask[2]), 5))
+            bare = self._bare.get(key)
+            if bare is None:
+                bare = self._bare[key] = float(np.linalg.norm(pg.gait.budget(*key)))
+            self.ls.append(ls)
+            self.derate.append(float(np.linalg.norm(pg._budget(ask))) / bare if bare > 0 else 1.0)
         th = pg.thermal
         self.heat_max = max(self.heat_max, float(np.max(th.heat / th.budget)))
         if self.stone is not None:
             self.stone_n.append(_foot_normal_n(m, d, pg.fids[self.stone]))
             self.stone_closed.append(bool(con[self.stone]))
         self.digest.update(d.qpos.tobytes())
+
+    def _void_class(self, void):
+        """B162 (P6), a void split by the probe's reach: None (no void) | 'false' (the D065
+        false_void within reach: ground within PROBE_MAX of the un-probed target, or on a
+        world with no drop its depth unknown) | 'probe_reach' (a world with no drop, ground
+        PROBE_MAX or more under the un-probed target, or none found: the probe cannot reach
+        it by design, a safe stop; B161) | 'drop' (a drop world, ground beyond the probe's
+        reach or none found: the guard's job). 'false' + 'probe_reach' = D065's false_void."""
+        if not void:
+            return None
+        nom, under = self.void_ground_nom_mm, self.void_ground_mm
+        if self.row["drop"]:
+            return "false" if nom is not None and nom < PROBE_MAX else "drop"
+        if nom is not None:
+            deep = nom >= PROBE_MAX
+        else:                                     # no ground found, or its lower bound (the lowered foot's)
+            deep = under is None or under >= PROBE_MAX
+        return "probe_reach" if deep else "false"
+
+    def _settle_s(self, T, t):
+        """B162: how long the tilt takes to settle for good within SETTLE_DEG of tilt_end:
+        a stand from the spawn (the settle's samples included: the leveler is on from the
+        first step), a shove from the push. 0 = never left the band."""
+        end = float(T[t >= t[-1] - END_S + 1e-9].mean())
+        if self.row["kind"] == "shove":
+            t0 = float(self.row["shove"][3])
+            ts, xs = t[t >= t0] - t0, T[t >= t0]
+        else:
+            pre = getattr(self, "pre", [])
+            ts = np.r_[[p[0] for p in pre], t + T_SETTLE]
+            xs = np.r_[[p[1] for p in pre], T]
+        out = np.nonzero(np.abs(xs - end) > SETTLE_DEG)[0]
+        return 0.0 if not len(out) else round(float(ts[out[-1] + 1] if out[-1] + 1 < len(ts) else ts[-1]), 2)
 
     def result(self):
         pg, row = self.pg, self.row
@@ -528,7 +594,7 @@ class Meter:
             void_ground_mm=None if self.void_ground_mm is None else round(self.void_ground_mm, 1),
             void_ground_nom_mm=None if self.void_ground_nom_mm is None else round(self.void_ground_nom_mm, 1),
             void_nohit=bool(void and self.void_ground_mm is None),
-            false_void=fv,
+            false_void=fv, void_class=self._void_class(void),
             min_clear_mm=round(min(self.clear), 1) if self.clear else None,
             belly_contact_s=round(self.belly_ticks * TICK_S, 2),
             min_loaded=int(self.min_loaded),
@@ -536,7 +602,28 @@ class Meter:
             heat_max=round(self.heat_max, 3), thermal_trip=bool(self.heat_max > 1.0),
             level_sat_pct=round(100.0 * self.lv_sat / self.lv_ticks, 1) if self.lv_ticks else None,
             level_max_mm=round(self.lv_max, 2),
+            level_sinkcap_pct=round(100.0 * self.lv_cap / self.lv_ticks, 1) if self.lv_ticks else None,
+            level_rough_p95_mm=round(float(np.percentile(self.rough, 95)), 1) if self.rough else None,
+            level_rough_max_mm=round(float(np.max(self.rough)), 1) if self.rough else None,
             nan_count=int(pg.nan_count), digest=self.digest.hexdigest()[:16])
+        if row["kind"] == "motion" and any(row["cmd"][:2]):
+            r["progress_stop_mm"] = self.progress_stop_mm
+        if self.derate:
+            r.update(level_slope_mean=round(float(np.mean(self.ls)), 5),
+                     level_slope_mean_deg=round(float(np.degrees(np.arctan(np.mean(self.ls)))), 3),
+                     derate_pct=round(100.0 * float(np.mean(self.derate)), 2))
+        if row["kind"] in ("stand", "shove") and len(T):
+            r["settle_s"] = self._settle_s(T, t)
+        if row["kind"] == "shove" and len(T):
+            # B162: tilt_peak_deg is the row's peak, and on a leveled slope that is the leveler still
+            # converging when the row's clock starts (the 8 deg stand's own peak), not the shove: the
+            # shove's own peak and its excursion over the 0.5 s before the push
+            t0 = float(row["shove"][3])
+            pre_s = T[(t > t0 - 0.5) & (t <= t0)]
+            post = T[t > t0]
+            r.update(shove_peak_deg=round(float(post.max()), 3) if len(post) else None,
+                     shove_excursion_deg=(round(float(post.max() - pre_s.mean()), 3)
+                                          if len(post) and len(pre_s) else None))
         if self.stone is not None:
             last = t >= t[-1] - END_S + 1e-9
             r.update(stone_foot_n=round(float(np.mean(np.array(self.stone_n)[last])), 2),
@@ -581,12 +668,16 @@ def run_one(row, stack, imu, seconds=None):
     if why:
         return dict(base, status="unavailable", why=why)
     n_tick = int(round(TICK_S / pg.DT))
-    for _ in range(int(round(T_SETTLE / pg.DT))):
+    pre = []                                     # (t from the spawn, tilt): the settle's samples, for settle_s
+    for k in range(int(round(T_SETTLE / pg.DT))):
         pg.step()
+        if (k + 1) % n_tick == 0:
+            pre.append(((k + 1) * pg.DT, float(np.degrees(tilt_from_grav(grav_body(pg.model, pg.data, pg.torso))))))
     why = (_check_latency(pg) if IMU_MODES[imu].get("latency_s") else None) or _check_level(pg, stack)
     if why:
         return dict(base, status="unavailable", why=why)
     meter = Meter(pg, row)
+    meter.pre = pre
     secs = float(seconds if seconds is not None else row["seconds"])
     if row["kind"] in ("walk", "cliff", "motion"):
         pg.sup.t_gait = float(row["phase"]) * pg.gait.T
@@ -602,6 +693,7 @@ def run_one(row, stack, imu, seconds=None):
         if shove is not None and k == int(round(shove[3] / pg.DT)):
             pg.do(f"push {shove[0]:g} {shove[1]:g} {shove[2]:g}")
         if k == k_stop:
+            meter.mark_stop()
             pg.do("stop")
         pg.step()
         meter.physics(t_row + pg.DT)
@@ -662,37 +754,70 @@ def add_ratios(runs):
 
 def evaluate(runs):
     """The S2 pass rules over the GATED_IMU modes in which both S1 and S2 ran:
-    {rule: {status: pass | fail | unavailable | external, fails: [...], note}}."""
+    {rules: {rule: {status: pass | fail | unavailable | external, fails: [...], note}},
+     d065: P1 / P4 / P6 under their D065 wording (B162 restated them; kept so the original
+     verdict stays visible), reports: what is measured but not gated, verdict}."""
     ix = _idx(runs)
     pairs = [(row, imu, s1, ix[(row, "S2", imu)]) for (row, st, imu), s1 in ix.items()
              if st == "S1" and imu in GATED_IMU and (row, "S2", imu) in ix]
-    rules = {}
+    rules, d065 = {}, {}
 
-    def rule(name, note, bad, rows_=None):
+    def rule(name, note, bad, rows_=None, into=None):
+        into = rules if into is None else into
         sel = [p for p in pairs if rows_ is None or rows_(p[0])]
         if not sel:
-            rules[name] = dict(status="unavailable", note=note, fails=[])
+            into[name] = dict(status="unavailable", note=note, fails=[])
             return
         fails = [f for f in (bad(*p) for p in sel) if f]
-        rules[name] = dict(status="fail" if fails else "pass", note=note, n=len(sel), fails=fails)
+        into[name] = dict(status="fail" if fails else "pass", note=note, n=len(sel), fails=fails)
 
     def f(row, imu, msg):
         return f"{row} [{imu}]: {msg}"
 
-    def p1(row, imu, a, b):
+    def tilt_prog(a, b):
         msgs = []
         if b["tilt_rms_deg"] - a["tilt_rms_deg"] > 0.05:
             msgs.append(f"tilt RMS +{b['tilt_rms_deg'] - a['tilt_rms_deg']:.3f} deg")
         if a.get("progress_mm") and abs(b["progress_mm"] - a["progress_mm"]) > 0.01 * abs(a["progress_mm"]):
             msgs.append(f"progress {b['progress_mm']:.0f} vs {a['progress_mm']:.0f} mm")
+        return msgs
+
+    def p1_d065(row, imu, a, b):
+        msgs = tilt_prog(a, b)
         if b["level_max_mm"] > 0.5:
             msgs.append(f"max offset {b['level_max_mm']} mm")
         if imu == "ideal" and b["digest"] != a["digest"]:
             msgs.append("not bit-identical to S1")
         return f(row, imu, "; ".join(msgs)) if msgs else None
-    rule("P1", "flat (straight walks, the stand, a turn in place, a walk + turn and its stop, rim "
+    straight = lambda r: r.startswith("W1.flat.walk.") or r == "W1.flat.stand"     # noqa: E731
+    flat_motion = lambda r: r.startswith("W1.") and not straight(r)                  # noqa: E731
+
+    def at_stop(r):
+        """A motion row judged on its walk: the progress when `stop` was sent (B162)."""
+        return dict(r, progress_mm=r["progress_stop_mm"]) if r.get("progress_stop_mm") is not None else r
+
+    def p1_motion(row, imu, a, b):
+        msgs = tilt_prog(at_stop(a), at_stop(b))
+        return f(row, imu, "; ".join(msgs)) if msgs else None
+    rule("P1", "flat. The straight walks and the stand: S2 - S1 tilt RMS <= 0.05 deg, progress within 1 %, "
+               "|offset| <= 0.5 mm; ideal: bit-identical. The turn in place, the walk + turn and its stop, the "
+               "rim shoves: tilt RMS <= S1 + 0.05 deg and the walk's progress (at `stop`) within 1 %; their "
+               "offsets, end progress and bit-identity reported in 'flat_motion' (B162 restatement: these rows "
+               "tilt the body past the deadband for real, so a leveler acting on them is not drift; the walk + "
+               "turn is bit-identical to S1 until `stop`, after which its offset and its few mm of extra travel "
+               "are the leveler levelling the tilt the probe's HOLD leaves after a turning stop, B163)",
+         lambda row, imu, a, b: p1_d065(row, imu, a, b) if straight(row) else p1_motion(row, imu, a, b),
+         lambda r: r.startswith("W1."))
+    rules["P1"]["flat_motion"] = [
+        f(row, imu, f"max offset {b['level_max_mm']} mm, end tilt {a['tilt_end_deg']} -> {b['tilt_end_deg']} deg, "
+                    f"tilt RMS {a['tilt_rms_deg']} -> {b['tilt_rms_deg']}"
+                    + (f", progress at stop {a.get('progress_stop_mm')} -> {b.get('progress_stop_mm')} mm, at the end "
+                       f"{a.get('progress_mm')} -> {b.get('progress_mm')}" if a.get("progress_stop_mm") is not None else "")
+                    + f", bit-identical {b['digest'] == a['digest']}")
+        for row, imu, a, b in pairs if flat_motion(row)]
+    rule("P1", "D065 wording: flat (straight walks, the stand, a turn in place, a walk + turn and its stop, rim "
                "shoves): S2 - S1 tilt RMS <= 0.05 deg, progress within 1 %, |offset| <= 0.5 mm; ideal: "
-               "bit-identical", p1, lambda r: r.startswith("W1."))
+               "bit-identical", p1_d065, lambda r: r.startswith("W1."), into=d065)
     rule("P2", "a 20 mm stone, standing: end tilt <= 1.0 deg (the stone foot's load is reported, not "
                "gated: it stands unloaded in S1 and S2 alike)",
          lambda row, imu, a, b: f(row, imu, f"end tilt {b['tilt_end_deg']} deg") if b["tilt_end_deg"] > 1.0 else None,
@@ -706,19 +831,86 @@ def evaluate(runs):
          lambda row, imu, a, b: next((f(row, imu, f"end tilt {b['tilt_end_deg']} deg") for k, v in lim3.items()
                                       if row.startswith(k) and b["tilt_end_deg"] > v), None),
          lambda r: r.endswith(".stand") and any(r.startswith(k) for k in lim3))
-    rule("P4", "every walk: progress >= 95 % of S1's",
+
+    # P4: the derate (WaveGait.budget(level_slope=)) is the leveler's deliberate speed cost; judged on what
+    # remains after it. Rubble seeds are chaotic per row (S1 alone moves 341-398 mm across IMU modes on one
+    # seed): the family, per IMU mode
+    walk = lambda r: ".walk" in r                                                   # noqa: E731
+    rubble = lambda r: r.startswith("W4.")                                         # noqa: E731
+    der = lambda b: float(b.get("derate_pct") or 100.0) / 100.0                    # noqa: E731
+    rule("P4", "D065 wording: every walk: progress >= 95 % of S1's",
          lambda row, imu, a, b: (f(row, imu, f"{b['progress_mm']:.0f} vs {a['progress_mm']:.0f} mm")
                                  if a.get("progress_mm") and b["progress_mm"] < 0.95 * a["progress_mm"] else None),
-         lambda r: ".walk" in r)
+         walk, into=d065)
+    rule("P4", "every walk off rubble, per row: progress >= 95 % of S1's x the row's derate (derate_pct: the "
+               "envelope the leveled plane allowed, tick by tick, against the bare one for the same ask: the "
+               "deliberate cost, 94.97 % on a plane saturated along x); rubble: the family per IMU mode on the "
+               "same line, the rows' spread reported; the stairs stay per row, their trade (progress and tips, "
+               "S1 vs S2) reported in 'stairs' (B162 restatement: the derate is a design cost, not a loss, and "
+               "the rubble seeds are chaotic per row: S1 alone walks 341-398 mm on one seed across IMU modes)",
+         lambda row, imu, a, b: (f(row, imu, f"{b['progress_mm']:.0f} vs {a['progress_mm']:.0f} mm x derate "
+                                             f"{100 * der(b):.2f} % = {100 * b['progress_mm'] / (a['progress_mm'] * der(b)):.1f} %")
+                                 if a.get("progress_mm") and b["progress_mm"] < 0.95 * a["progress_mm"] * der(b) else None),
+         lambda r: walk(r) and not rubble(r))
+    fam = {}
+    for imu in GATED_IMU:
+        sel = [(row, a, b) for row, i, a, b in pairs if i == imu and walk(row) and rubble(row) and a.get("progress_mm")]
+        if not sel:
+            continue
+        s1 = sum(a["progress_mm"] * der(b) for _, a, b in sel)
+        s2 = sum(b["progress_mm"] for _, a, b in sel)
+        per = [100.0 * b["progress_mm"] / (a["progress_mm"] * der(b)) for _, a, b in sel]
+        fam[imu] = dict(n=len(sel), family_pct=round(100.0 * s2 / s1, 1), row_min_pct=round(min(per), 1),
+                        row_max_pct=round(max(per), 1),
+                        rows_under_95=[row for (row, a, b), p in zip(sel, per) if p < 95.0])
+        if s2 < 0.95 * s1:
+            rules["P4"]["fails"].append(f"W4 rubble family [{imu}]: {100.0 * s2 / s1:.1f} % of S1 x derate")
+    rules["P4"]["rubble_family"] = fam
+    stairs = {}
+    for imu in GATED_IMU:
+        sel = [(row, a, b) for row, i, a, b in pairs if i == imu and row.startswith("W6.")]
+        if sel:
+            stairs[imu] = dict(
+                s1_tips=sum(int(bool(a.get("tipped"))) for _, a, _b in sel),
+                s2_tips=sum(int(bool(b.get("tipped"))) for *_, b in sel),
+                s1_tilt_rms=round(float(np.mean([a["tilt_rms_deg"] for _, a, _b in sel])), 2),
+                s2_tilt_rms=round(float(np.mean([b["tilt_rms_deg"] for *_, b in sel])), 2),
+                progress_pct=round(100.0 * sum(b["progress_mm"] for *_, b in sel)
+                                   / sum(a["progress_mm"] for _, a, _b in sel), 1),
+                rows=[f"{row}: {a['progress_mm']:.0f} -> {b['progress_mm']:.0f} mm "
+                      f"({100.0 * b['progress_mm'] / (a['progress_mm'] * der(b)):.1f} % of S1 x derate), tilt RMS "
+                      f"{a['tilt_rms_deg']} -> {b['tilt_rms_deg']}, tipped {bool(a.get('tipped'))} -> {bool(b.get('tipped'))}"
+                      for row, a, b in sel if a.get("progress_mm")])
+    rules["P4"]["stairs"] = stairs
+    if rules["P4"]["status"] == "pass" and rules["P4"]["fails"]:
+        rules["P4"]["status"] = "fail"
+
     rule("P5", "no new falls", lambda row, imu, a, b: f(row, imu, "falls") if b["fell"] and not a["fell"] else None)
-    rule("P6", "every cliff approach fires without a fall, holds where S1 held; no new false void anywhere "
-               "(a void on a world without a drop, or ground within PROBE_MAX of the un-probed target)",
-         lambda row, imu, a, b: (f(row, imu, "never fired") if a["kind"] == "cliff" and not b["fired"]
-                                 else f(row, imu, "fell") if a["kind"] == "cliff" and b["fell"]
-                                 else f(row, imu, "not held") if a.get("cliff_ok") and not b.get("cliff_ok")
-                                 else f(row, imu, "false void" + (" (no ground found under the foot)"
-                                                                  if b.get("void_nohit") else ""))
-                                 if b["false_void"] and not a["false_void"] else None))
+
+    def cliff(row, imu, a, b):
+        if a["kind"] != "cliff":
+            return None
+        return (f(row, imu, "never fired") if not b["fired"] else f(row, imu, "fell") if b["fell"]
+                else f(row, imu, "not held") if a.get("cliff_ok") and not b.get("cliff_ok") else None)
+    rule("P6", "D065 wording: every cliff approach fires without a fall, holds where S1 held; no new false void "
+               "anywhere (a void on a world without a drop, or ground within PROBE_MAX of the un-probed target)",
+         lambda row, imu, a, b: (cliff(row, imu, a, b) or (f(row, imu, "false void" + (" (no ground found under the foot)"
+                                                                                       if b.get("void_nohit") else ""))
+                                                            if b["false_void"] and not a["false_void"] else None)),
+         into=d065)
+    rule("P6", "every cliff approach fires without a fall, holds where S1 held; no new false void within the "
+               "probe's reach (void_class 'false': ground within PROBE_MAX of the un-probed target, or its depth "
+               "unknown). A void with the ground deeper than PROBE_MAX under the un-probed target on a world with "
+               "no drop is a 'probe_reach' void (B161: the probe cannot reach it by design; S1 has the same class; "
+               "a safe stop), reported, not gated (B162 restatement)",
+         lambda row, imu, a, b: (cliff(row, imu, a, b) or (f(row, imu, "false void within the probe's reach")
+                                                            if b.get("void_class") == "false"
+                                                            and a.get("void_class") != "false" else None)))
+    rules["P6"]["probe_reach"] = [f(row, imu, f"S1 {a.get('void_class')} / S2 {b.get('void_class')} "
+                                             f"(ground {b.get('void_ground_mm')} mm under the foot, "
+                                             f"{b.get('void_ground_nom_mm')} under its target)")
+                                  for row, imu, a, b in pairs
+                                  if "probe_reach" in (a.get("void_class"), b.get("void_class"))]
     rule("P7", "min belly clearance >= 25 mm; no new belly contact",
          lambda row, imu, a, b: (f(row, imu, f"clearance {b['min_clear_mm']} mm")
                                  if b["min_clear_mm"] is not None and b["min_clear_mm"] < 25.0
@@ -732,9 +924,18 @@ def evaluate(runs):
     rule("R1", "no row's tilt RMS worse than S1's by > 0.1 deg",
          lambda row, imu, a, b: (f(row, imu, f"+{b['tilt_rms_deg'] - a['tilt_rms_deg']:.2f} deg")
                                  if b["tilt_rms_deg"] - a["tilt_rms_deg"] > 0.1 else None))
+    reports = dict(
+        settle_s=[f(row, imu, f"S1 {a.get('settle_s')} / S2 {b.get('settle_s')} s, end tilt {a.get('tilt_end_deg')} / "
+                              f"{b.get('tilt_end_deg')} deg") for row, imu, a, b in pairs if a["kind"] == "stand"],
+        shove=[f(row, imu, f"shove peak S1 {a.get('shove_peak_deg')} / S2 {b.get('shove_peak_deg')} deg, excursion "
+                           f"{a.get('shove_excursion_deg')} / {b.get('shove_excursion_deg')} (the row's tilt_peak "
+                           f"{a.get('tilt_peak_deg')} / {b.get('tilt_peak_deg')})") for row, imu, a, b in pairs if a["kind"] == "shove"])
     gated = [rules[k]["status"] for k in rules if k != "P9"]
     verdict = ("unavailable" if "unavailable" in gated else "fail" if "fail" in gated else "pass")
-    return dict(rules=rules, verdict=verdict, gated_imu=list(GATED_IMU))
+    v65 = [(d065.get(k) or rules[k])["status"] for k in rules if k != "P9"]
+    verdict_d065 = ("unavailable" if "unavailable" in v65 else "fail" if "fail" in v65 else "pass")
+    return dict(rules=rules, verdict=verdict, d065=d065, verdict_d065_wording=verdict_d065, reports=reports,
+                gated_imu=list(GATED_IMU))
 
 
 def _git(*args):
