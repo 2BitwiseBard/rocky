@@ -126,6 +126,19 @@ reflex:                  # ReflexSupervisor(gait, **rocky_model.reflex_defaults(
                          # widening the set (its zero-margin hip: -57.55 on the hull, -62.5 on
                          # plate + pad)
 
+level:                   # D065 BodyLeveler(gait, **rocky_model.level_defaults()) — keys = its kwargs.
+                         # Control, not physics: params_rev and the fingerprint stay
+  enabled: false         # master switch at construction; the playground's `level on|off` overrides it per session
+  tau_s: 0.6             # s, integral time constant of the plane slope on the filtered IMU tilt error
+  filter_s: 0.2          # s, first-order low-pass on the tilt error ahead of the deadband
+  deadband_deg: 0.5      # radial deadband on the filtered tilt error: a straight flat walk reads zero offsets (a turn, a stop or a shove past it leaves its plane: the deadband never unwinds it)
+  raise_mm: 30.0         # the window: every foot RAISED 0..raise_mm, never lowered (the probe keeps its 30 mm)
+  rate_mm_s: 20.0        # a stance foot's offset rate; also the plane's tilt rate, as mm/s at stance_radius
+  swing_rate_mm_s: 40.0  # an airborne swing foot's offset rate (inside the 15 mm band a swing foot's is held)
+  tilt_max_deg: 30.0     # no integration past this tilt: that is a fall, not a slope
+  min_contacts: 3        # foot switches closed for the plane to integrate
+  swing_blend: [0.30, 0.70]  # swing progress over which a swing foot's plane point moves lift-off -> touchdown
+
 sensing:
   foot_switch:           # the SEA microswitch (KW10) in the foot cartridge, as a force threshold
     close_n: 2.0         # VERIFY: KW10 operating force is ~1-2 N at the lever; the spring

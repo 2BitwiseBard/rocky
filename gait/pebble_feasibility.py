@@ -364,12 +364,15 @@ def margins(q, support=None, normal=None):
     """(com_margin_mm, origin_margin_mm, support bool[5]) for a pose: the CoM and
     the body origin projected along the support-plane normal onto it (the
     plane is level in the world when the robot stands on it). support /
-    normal: skip the plane search when the caller already has them."""
+    normal: skip the plane search when the caller already has them. D065: a
+    normal is honoured on its own too (it was replaced by the searched plane's
+    unless support came with it): the leveler's callers judge the CoM along
+    -grav, a unit "up" in the BODY frame, with support = stance & switches."""
     feet = feet_body(q)
     com = com_body(q)
     if support is None or normal is None:
         n, _p0, sup = support_plane(feet, com=com)
-    else:
+    if normal is not None:
         n = np.asarray(normal, float)
     if support is not None:
         sup = np.asarray(support, bool)

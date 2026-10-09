@@ -126,7 +126,8 @@ it in the same commit. Do not loosen the tolerance.
 `docs/decisions.md`. If a physics number changed, bump `meta.params_rev` in
 `params.yaml` to that D-number; a mass change counts (D064's body layout took
 it from D063 to D064). `sim/model_fingerprint` prints `params_rev`, and RL
-checkpoints record it.
+checkpoints record it. A control-only block is not physics: D065's `level:` (the body
+leveler) left `params_rev` at D064 and the fingerprint as it was.
 
 **RL checkpoints go stale on almost every change.** The robot fingerprint
 covers masses, damping, forcerange, joint ranges, friction and geometry. A

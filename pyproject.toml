@@ -40,9 +40,9 @@ dev = ["pytest", "pytest-asyncio", "ruff"]
 # the importable core (D009 layering: no ROS needed): the gait modules and the bus driver.
 # sim/, harness/, bench/ run from the repo root. Editable installs only (pip install -e .):
 # rocky_model reads ../cad/params.yaml and pebble_feasibility ../sim/mass_budget.json
-py-modules = ["rocky_model", "pebble_gait", "pebble_feasibility", "pebble_reflex", "pebble_watchdog",
-              "pebble_gestures", "pebble_gestures2", "pebble_keyframes", "pebble_pose_solver",
-              "pebble_manip_adjacent"]
+py-modules = ["rocky_model", "pebble_gait", "pebble_feasibility", "pebble_reflex", "pebble_level",
+              "pebble_watchdog", "pebble_gestures", "pebble_gestures2", "pebble_keyframes",
+              "pebble_pose_solver", "pebble_manip_adjacent"]
 packages = ["rocky_driver"]
 
 [tool.setuptools.package-dir]

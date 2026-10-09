@@ -60,6 +60,27 @@ def leg_ik(p):
     q2 = np.arctan2(dz, dx) - np.arctan2(L3*np.sin(q3), L2 + L3*np.cos(q3))
     return np.array([q1, q2, q3])
 
+def _leg_ik_rows(P):
+    """leg_ik over the rows of P (n, 3) at once -> (n, 3), NaN rows where unreachable.
+    The same algebra, vectorised for the D065 leveled-plane envelope (budget(level_slope=)
+    bisects 26 swings per slope step); leg_ik stays the reference everywhere else."""
+    P = np.asarray(P, float)
+    x, y, z = P[:, 0], P[:, 1], P[:, 2]
+    q1 = np.arctan2(y, x)
+    dx = np.hypot(x, y) - L1
+    dz = z - Z_HIP
+    c3 = (dx*dx + dz*dz - L2*L2 - L3*L3) / (2*L2*L3)
+    q3 = -np.arccos(np.clip(c3, -1.0, 1.0))
+    q2 = np.arctan2(dz, dx) - np.arctan2(L3*np.sin(q3), L2 + L3*np.cos(q3))
+    Q = np.stack([q1, q2, q3], axis=1)
+    Q[np.abs(c3) > 1.0] = np.nan
+    return Q
+
+def smooth01(x):
+    """Smoothstep of x clipped to [0, 1] (float or array)."""
+    x = np.clip(x, 0.0, 1.0)
+    return x * x * (3.0 - 2.0 * x)
+
 def ik_ok(q, guard_deg=0.0):
     """True if q (3,) or (5,3) is finite and inside the soft joint limits
     (params joints.pos_deg) shrunk by guard_deg. leg_ik answers geometry
@@ -176,9 +197,10 @@ class WaveGait:
         vf = v[None, :] + np.cross(np.array([0.0, 0.0, wz]), self.p_nom)
         return float(np.linalg.norm(vf[:, :2], axis=1).max())
 
-    def vf_limit(self):
+    def vf_limit(self, level_slope=0.0, level_blend=None):
         """(coxa, tangential, lift) mm/s: the ceilings on
         max_i |v_f,i| (the ground speed under the fastest foot). budget() uses the min.
+        level_slope / level_blend (D065): the lift ceiling on a leveled plane (_lift_limit).
         coxa:        half-stride |v_f| duty T / 2 <= r_leg tan(33 deg) (~49 mm),
                      r_leg = R0 - R_BODY.
         tangential:  the swing foot covers the stride in (1-duty) T along
@@ -198,10 +220,23 @@ class WaveGait:
         coxa = 2.0 * r_leg * np.tan(np.deg2rad(self.COXA_SWEEP_DEG)) / (self.duty * self.T)
         tang = (self.SPEED_SAFETY * _rm.servo_speed("free") * (1.0 - self.duty) * r_leg
                 / (swing_xy_peak(self.duty) * self.duty))
-        return float(coxa), float(tang), self._lift_limit()
+        return float(coxa), float(tang), self._lift_limit(level_slope, level_blend)
 
     _LIFT_CACHE = {}
     LIFT_SAFETY = 0.995       # the swing sim IS the checker's computation, sampled 6x finer
+    LEVEL_SLOPE_STEP = 0.0025  # D065: budget(level_slope=) rounds the plane slope UP to this (mm/mm,
+    #                           0.14 deg): one cached lift ceiling per step, never an optimistic one
+
+    @classmethod
+    def level_slope_q(cls, level_slope):
+        """|level_slope| rounded UP to LEVEL_SLOPE_STEP; exactly 0.0 for a bare plane, inf if
+        non-finite (no envelope: budget() then stops the robot)."""
+        s = abs(float(level_slope))
+        if not np.isfinite(s):
+            return float("inf")
+        if s <= 1e-12:
+            return 0.0
+        return round(float(np.ceil(s / cls.LEVEL_SLOPE_STEP - 1e-9)) * cls.LEVEL_SLOPE_STEP, 9)
 
     def lift_scale(self, vf_max):
         """Fraction of hstep a swing lifts at this fastest-foot ground speed
@@ -234,6 +269,36 @@ class WaveGait:
         vfree = float(V[~both].max()) if (~both).any() else 0.0
         return vl, vfree
 
+    def _swing_speeds_level(self, u, speed, plane, blend, n=160, lift=None, pn=None):
+        """_swing_speeds on a leveled plane (D065): plane (mm/mm) is its slope along the
+        stride (+ = the ground rises ahead), through the foothold. The swing carries its
+        lift-off point's plane offset and moves to its touchdown point's by a smoothstep
+        over swing progress blend = (a, b) — BodyLeveler's transfer, so it lands on the
+        plane — and the 15 mm band is judged over the plane under the foot, as
+        pebble_feasibility.check's support_plane does. The foothold sits unraised: a
+        raised one (BodyLeveler raises 0..raise_mm) has the higher ceiling."""
+        pn = np.array([self.R0 - R_BODY, 0.0, -self.h]) if pn is None else np.asarray(pn, float)
+        vf = speed * np.array([u[0], u[1], 0.0])
+        T_st, T_sw = self.duty * self.T, (1.0 - self.duty) * self.T
+        s = np.linspace(0.0, 1.0, n)
+        xy, z = swing_profile(s, self.duty)
+        p_lift, p_land = pn - vf * (0.5 * T_st), pn + vf * (0.5 * T_st)
+        P = p_lift + (p_land - p_lift) * xy[:, None]
+        P[:, 2] += (self.hstep * self.lift_scale(speed) if lift is None else lift) * z
+        ux = np.array([u[0], u[1]], float)
+        ground = plane * ((P[:, :2] - pn[:2]) @ ux)                 # the plane under the foot
+        g0, g1 = plane * ((p_lift[:2] - pn[:2]) @ ux), plane * ((p_land[:2] - pn[:2]) @ ux)
+        P[:, 2] += g0 + (g1 - g0) * smooth01((s - blend[0]) / (blend[1] - blend[0]))
+        Q = _leg_ik_rows(P)
+        if not np.isfinite(Q).all():
+            return np.inf, np.inf
+        V = np.abs(np.diff(Q, axis=0)).max(axis=1) / (T_sw / (n - 1))
+        low = (P[:, 2] - (pn[2] + ground)) < SUPPORT_TOL_MM
+        both = low[:-1] & low[1:]
+        vl = float(V[both].max()) if both.any() else 0.0
+        vfree = float(V[~both].max()) if (~both).any() else 0.0
+        return vl, vfree
+
     def _lift_feet(self):
         """[(LEG-frame foothold, stride directions in deg)] the lift ceiling is
         simulated at: every WaveGait foot stands on its leg's axis at
@@ -241,61 +306,105 @@ class WaveGait:
         0..180 deg covers every stride. ArmedGait's leaned feet override it."""
         return [(np.array([self.R0 - R_BODY, 0.0, -self.h]), np.arange(0, 181, 15))]
 
-    def _lift_limit(self):
+    def _lift_limit(self, level_slope=0.0, level_blend=None):
         """Largest |v_f| (mm/s) whose swing keeps near-ground joints under the
         loaded limit and airborne ones under the free limit, worst of the
         stride directions at every foothold of _lift_feet (13 at one for
         WaveGait). Bisection, cached per gait parameter set (~0.1 s the first
         time). The full lift is tested alone first: lift_scale fades it out
         near standing, which must not hide a step height the servo cannot lift
-        at any speed."""
+        at any speed.
+        D065: level_slope > 0 (rounded up by level_slope_q) judges every swing on
+        a leveled plane of that slope along its stride, uphill and downhill
+        (_swing_speeds_level), with the transfer over level_blend (None = params
+        level.swing_blend). The transfer keeps a swing foot inside the band a
+        little longer, so the ceiling drops (34.20 -> 33.51 mm/s at tan 2 deg,
+        32.48 at tan 5, 31.42 at tan 8; 30-77 ms per slope step, measured
+        2026-10-08/09: prime_level() computes them up front). 0 is the bare
+        gait: the same key and the same number as before."""
         feet = self._lift_feet()
         key = (self.h, self.R0, self.T, self.duty, self.hstep, self.LIFT_FULL_MM_S,
                tuple(tuple(np.round(f, 6)) for f, _a in feet))
+        q = self.level_slope_q(level_slope)
+        if not np.isfinite(q):
+            return 0.0                   # an unknown plane: no envelope
+        blend = None
+        if q > 0.0:
+            blend = tuple(float(x) for x in (_rm.level_defaults()["swing_blend"]
+                                             if level_blend is None else level_blend))
+            key = key + (("level", q, blend),)
         if key not in self._LIFT_CACHE:
             lo_l = self.LIFT_SAFETY * _rm.servo_speed("loaded")
             lo_f = self.LIFT_SAFETY * _rm.servo_speed("free")
 
-            def ok(pn, u, v, lift=None):
-                vl, vf = self._swing_speeds(u, v, lift=lift, pn=pn)
+            def ok(pn, u, v, lift=None, plane=0.0):
+                if plane:
+                    vl, vf = self._swing_speeds_level(u, v, plane, blend, lift=lift, pn=pn)
+                else:
+                    vl, vf = self._swing_speeds(u, v, lift=lift, pn=pn)
                 return vl <= lo_l and vf <= lo_f
 
             def limit():
                 best = np.inf
+                planes = (0.0,) if q == 0.0 else (q, -q)
                 for pn, angs in feet:
                     for ang in np.deg2rad(angs):
                         u = (np.cos(ang), np.sin(ang))
                         if not ok(pn, u, 0.0, lift=self.hstep):
                             return 0.0           # the lift alone breaks the budget: fix h / T
-                        a, b = 0.0, 150.0
-                        if ok(pn, u, b):
-                            continue
-                        for _ in range(12):
-                            m = 0.5 * (a + b)
-                            a, b = (m, b) if ok(pn, u, m) else (a, m)
-                        best = min(best, a)
+                        for pl in planes:
+                            a, b = 0.0, 150.0
+                            if ok(pn, u, b, plane=pl):
+                                continue
+                            for _ in range(12):
+                                m = 0.5 * (a + b)
+                                a, b = (m, b) if ok(pn, u, m, plane=pl) else (a, m)
+                            best = min(best, a)
                 return best
             self._LIFT_CACHE[key] = float(limit())
         return self._LIFT_CACHE[key]
 
-    def budget(self, vx, vy, wz):
+    def prime_level(self, max_slope, level_blend=None):
+        """Compute the lift ceiling for every LEVEL_SLOPE_STEP up to max_slope now
+        (D065, review 9r: lazily, budget(level_slope=) bisected inside the control
+        step, 30-77 ms per new step). BodyLeveler.prime() calls it. Returns how
+        many were computed (the rest were cached)."""
+        n0 = len(self._LIFT_CACHE)
+        q = self.level_slope_q(max_slope)
+        if np.isfinite(q):
+            for k in range(1, int(round(q / self.LEVEL_SLOPE_STEP)) + 1):
+                self._lift_limit(k * self.LEVEL_SLOPE_STEP, level_blend)
+        return len(self._LIFT_CACHE) - n0
+
+    def budget(self, vx, vy, wz, level_slope=0.0, level_blend=None):
         """(vx, vy, wz) scaled UNIFORMLY (heading and curvature kept) so the
         command fits the coxa sweep and the free-leg speed limit. Commands
         inside the envelope come back unchanged. The step-lift speed does not
         depend on the command once the lift is full (3 h / ((1-duty) T)): it
-        is the gait parameters' job — check_gait flags it."""
+        is the gait parameters' job — check_gait flags it.
+        D065: level_slope = BodyLeveler.level_slope() (mm/mm) derates the
+        envelope for the leveled plane (_lift_limit); 0 is the bare one."""
         m = self._vf_max(vx, vy, wz)
         if m < 1e-9:
             return float(vx), float(vy), float(wz)
-        k = min(1.0, min(self.vf_limit()) / m)
+        k = min(1.0, min(self.vf_limit(level_slope, level_blend)) / m)
         return float(vx * k), float(vy * k), float(wz * k)
 
-    def max_command(self):
+    def max_command(self, level_slope=0.0, level_blend=None):
         """The envelope for a UI: {'v': mm/s any heading (wz = 0), 'wz': rad/s
         turning in place, 'vf': the foot ground-speed ceiling (mm/s)}. A mixed
         command is feasible when max_i |v + wz x p_i| <= vf (use budget())."""
-        vf = min(self.vf_limit())
+        vf = min(self.vf_limit(level_slope, level_blend))
         return dict(v=vf, wz=vf / self.R0, vf=vf, vx=vf, vy=vf)
+
+    def _stride_ends(self, pn, vf):
+        """(lift-off, touchdown) BODY-frame points of a swing over foothold pn at
+        ground velocity vf: stance ENDS at pn - vf*Tst/2 (behind), so the swing
+        lifts there and flies FORWARD to pn + vf*Tst/2 where the next stance
+        begins. (Reversed signs here = the walking-in-place bug that only
+        physics simulation caught, 2026-07-28.)"""
+        T_st = self.duty * self.T
+        return pn - vf * (0.5 * T_st), pn + vf * (0.5 * T_st)
 
     def _leg_target(self, ph, pn, vf, lift):
         """(BODY-frame target, in stance) for one leg at gait phase ph (0..1),
@@ -305,15 +414,46 @@ class WaveGait:
             return pn - vf * ((ph / self.duty - 0.5) * T_st), True   # s = -0.5 .. +0.5
         s = (ph - self.duty) / (1 - self.duty)             # SWING: fly to next touchdown, 0..1
         xy, z = swing_profile(s, self.duty)
-        # continuity: stance ENDS at pn - vf*Tst/2 (behind), so swing
-        # lifts there and flies FORWARD to pn + vf*Tst/2 where the next
-        # stance begins. (Reversed signs here = the walking-in-place bug
-        # that only physics simulation caught, 2026-07-28.)
-        p_lift = pn - vf * (0.5 * T_st)
-        p_land = pn + vf * (0.5 * T_st)
+        p_lift, p_land = self._stride_ends(pn, vf)
         p = p_lift + (p_land - p_lift) * xy
         p[2] += lift * z
         return p, False
+
+    def level_xy(self, t, vx, vy, wz, blend=None, foot=False):
+        """Where BodyLeveler evaluates its plane for each leg at time t (D065):
+        (xy (5,2) BODY mm, s (5,) swing progress, NaN in stance, clear (5,) mm the
+        swing foot's lift over its lift-off ground, 0 in stance). Stance: the
+        foot's own xy (_leg_target), so a planted foot sweeping a slope stays on it.
+        Swing: its lift-off point, moved to its touchdown point by a smoothstep
+        over s in blend (None = params level.swing_blend), so the foot lands on the
+        plane — evaluating at the stations instead lands a downhill foot off it
+        every step, and the plain swing xy rides the plane's slope through the
+        15 mm band at full speed. foot=True adds a fourth: the feet's real xy
+        (5, 2), where the band is judged."""
+        if blend is None:
+            blend = _rm.level_defaults()["swing_blend"]
+        v = np.array([vx, vy, 0.0])
+        lift = self.hstep * self.lift_scale(self._vf_max(vx, vy, wz))
+        xy = np.zeros((N_LEGS, 2))
+        fxy = np.zeros((N_LEGS, 2))
+        s = np.full(N_LEGS, np.nan)
+        clear = np.zeros(N_LEGS)
+        a, b = blend
+        for i in range(N_LEGS):
+            ph = (t / self.T + self.phase_off[i]) % 1.0     # = foot_targets'
+            pn = self.p_nom[i]
+            vf = v + np.cross(np.array([0, 0, wz]), pn)
+            if ph < self.duty:
+                xy[i] = fxy[i] = self._leg_target(ph, pn, vf, lift)[0][:2]
+                continue
+            si = (ph - self.duty) / (1 - self.duty)
+            p_lift, p_land = self._stride_ends(pn, vf)
+            xy[i] = (p_lift + (p_land - p_lift) * smooth01((si - a) / (b - a)))[:2]
+            pxy, pz = swing_profile(si, self.duty)
+            fxy[i] = (p_lift + (p_land - p_lift) * pxy)[:2]
+            s[i] = si
+            clear[i] = lift * pz
+        return (xy, s, clear, fxy) if foot else (xy, s, clear)
 
     def foot_targets(self, t, vx, vy, wz):
         """BODY-frame foot targets for all legs at time t."""
@@ -530,7 +670,7 @@ class ArmedGait(WaveGait):
         leg's axis the mirror symmetry no longer halves them."""
         return [(f, np.arange(0, 360, 15)) for f in self._feet_leg()]
 
-    def vf_limit(self):
+    def vf_limit(self, level_slope=0.0, level_blend=None):
         """(coxa, tangential, lift) mm/s, each the worst over the active legs'
         leaned footholds f = (x, y) (LEG frame); budget() uses the min.
         coxa:        the stride may point anywhere, so the half-stride
@@ -550,13 +690,18 @@ class ArmedGait(WaveGait):
         r = min(float(np.hypot(f[0], f[1])) for f in feet)
         tang = (self.SPEED_SAFETY * _rm.servo_speed("free") * (1.0 - self.duty) * r
                 / (swing_xy_peak(self.duty) * self.duty))
-        return float(coxa), float(tang), self._lift_limit()
+        return float(coxa), float(tang), self._lift_limit(level_slope, level_blend)
 
-    def max_command(self):
+    def max_command(self, level_slope=0.0, level_blend=None):
         """WaveGait's, but in place the fastest foot is the leaned one farthest
         from the body centre (190.5 mm, not R0)."""
-        vf = min(self.vf_limit())
+        vf = min(self.vf_limit(level_slope, level_blend))
         return dict(v=vf, wz=vf / self._vf_max(0.0, 0.0, 1.0), vf=vf, vx=vf, vy=vf)
+
+    def level_xy(self, t, vx, vy, wz, blend=None, foot=False):
+        """Not on the arm gait (D065): its raised limbs are not footholds, so the
+        leveler's window and contact count would read them as ground."""
+        raise NotImplementedError("D065: BodyLeveler runs on the WaveGait only")
 
     def foot_targets(self, t, vx, vy, wz):
         v = np.array([vx, vy, 0.0])

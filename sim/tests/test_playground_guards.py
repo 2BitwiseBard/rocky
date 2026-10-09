@@ -21,6 +21,7 @@ import mujoco                                                     # noqa: E402
 import rocky_model as rm                                          # noqa: E402
 from pebble_gait import WaveGait, N_LEGS                          # noqa: E402
 from pebble_reflex import ReflexSupervisor, NORMAL, PLANT, BRACE  # noqa: E402
+from playground import TIPPED_DEG                                 # noqa: E402  the tip after a fire
 
 
 def make(**kw):
@@ -245,8 +246,6 @@ def _approach(speed, approach_deg, seconds=20.0):
             break
     return pg.sup.fall_count > 0 or zmin < 0.24, t_fire, t_hold, tilt
 
-
-TIPPED_DEG = 10.0      # tilt after the fire that counts as a tip (a guard that caught it: < 3, D063)
 
 
 def _approach_falls(speed, approach_deg, seconds=20.0):
@@ -515,7 +514,8 @@ def test_docstring_lists_the_new_commands():
     import playground
     doc = playground.__doc__
     for cmd in ("walk", "stop", "gesture", "say", "set", "show", "push", "record",
-                "rl", "righter", "help", "gait NAME", "check", "clear", "probe"):
+                "rl", "righter", "help", "gait NAME", "check", "clear", "probe",
+                "level on|off", "level.tau_s"):
         assert cmd in doc, cmd
 
 
@@ -893,3 +893,335 @@ def test_a_gate_hold_freezes_the_running_command_and_outlives_the_ramp():
         cur["n"] += 1
     assert holds
     assert any(h["ramping"] and h["n"] > 10 for h in holds), [(h["n"], h["ramping"]) for h in holds]
+
+
+# ------------------------------------------------------------------ D065 body leveler + IMU spec
+def _true_tilt_deg(pg):
+    """The torso's tilt from the TRUE attitude vs gravity (not world z: wrong on a gravity
+    slope, and not pg.last: that is the IMU's reading)."""
+    from sim_imu import grav_body, tilt_from_grav
+    return float(np.degrees(tilt_from_grav(grav_body(pg.model, pg.data, pg.torso))))
+
+
+def _gravity_slope(pg, deg):
+    """A slope the cheap way (the RL envs' stand-in): gravity tilted toward +x, so +x is downhill."""
+    a = np.radians(deg)
+    pg.model.opt.gravity[:] = 9.81 * np.array([np.sin(a), 0.0, -np.cos(a)])
+
+
+def _stand_tilt(pg, seconds, tail=1.0):
+    """Mean true tilt (deg) over the last `tail` s of a `seconds` stand."""
+    tl = []
+    run(pg, seconds, lambda p: tl.append(_true_tilt_deg(p)))
+    return float(np.mean(tl[-int(round(tail / pg.DT)):]))
+
+
+def _stone_pg(h_mm, foot, **kw):
+    """A 40 x 40 mm stone of h_mm under `foot`'s nominal foothold; the planted stance
+    spawns h_mm up (the other four feet settle onto the floor)."""
+    import world_builder as wb
+    p = WaveGait().p_nom[foot, :2] / 1000.0
+    model, z0 = wb.build({"base": "flat", "objects": [
+        {"kind": "box", "pos": [float(p[0]), float(p[1])], "size": [0.04, 0.04, h_mm / 1000.0]}]})
+    return make(model=model, z0=z0 + h_mm / 1000.0, **kw)
+
+
+def test_level_is_off_by_default_and_a_flat_walk_never_levels():
+    """params level.enabled lands false. On flat ground with the ideal IMU a walk's
+    filtered tilt stays inside the 0.5 deg deadband, so `level on` changes nothing:
+    offsets exactly zero, joint targets bit-identical to level off."""
+    from playground import level_default
+    if os.environ.get("ROCKY_LEVEL") is None:                 # (P9 runs the suite with it on)
+        assert rm.level_defaults()["enabled"] is False and level_default() is False
+    ctrl = {}
+    for on in (False, True):
+        pg = make(level=on)
+        assert pg.level_on is on and pg.sup.leveler.enabled is on
+        run(pg, 1.0)
+        pg.do("walk 45")
+        rows = []
+        run(pg, 3.0, lambda p: rows.append(p.data.ctrl[:15].copy()))
+        assert np.max(np.abs(pg.sup.leveler.dz)) == 0.0 and pg.sup.leveler.level_slope() == 0.0
+        ctrl[bool(on)] = np.array(rows)
+    assert np.array_equal(ctrl[False], ctrl[True])
+
+
+def test_level_default_follows_rocky_level_then_params(monkeypatch):
+    """ROCKY_LEVEL=1 / 0 overrides params level.enabled for Playground(level=None) (the
+    bench's P9 run); anything else falls back to params."""
+    from playground import level_default
+    for env, want in (("1", True), ("0", False), ("yes", rm.level_defaults()["enabled"])):
+        monkeypatch.setenv("ROCKY_LEVEL", env)
+        assert level_default() is want, env
+    monkeypatch.setenv("ROCKY_LEVEL", "1")
+    assert make().level_on is True and make(level=False).level_on is False
+    monkeypatch.delenv("ROCKY_LEVEL")
+    assert level_default() is bool(rm.level_defaults()["enabled"])
+
+
+@pytest.mark.parametrize("deg,limit", [(5.0, 0.6), (8.0, 3.5)])
+def test_level_stands_level_on_a_gravity_slope(deg, limit):
+    """On a slope the bare stance takes the slope; the raise-only plane takes it out,
+    fully to ~5 deg, partly past it (the 30 mm window saturates)."""
+    off, on = make(level=False), make(level=True)
+    _gravity_slope(off, deg)
+    _gravity_slope(on, deg)
+    t_off, t_on = _stand_tilt(off, 5.0), _stand_tilt(on, 5.0)
+    assert t_off > deg - 0.3, t_off
+    assert t_on <= limit, (deg, t_on)
+    lv = on.sup.leveler
+    assert lv.dz.min() >= 0.0 and lv.dz.max() <= lv.raise_mm
+    assert int(np.argmax(lv.dz)) in (1, 2)                    # +x is downhill: the -x feet rise
+    assert on.sup.state == NORMAL and on.sup.fall_count == 0
+    if deg > 5.5:
+        assert lv.saturated
+
+
+def test_level_takes_a_stone_under_one_foot_out():
+    """A 20 mm stone under foot 0 tilts the bare stance ~3.9 deg; level on stands it
+    <= 1 deg by raising the stone foot (and its neighbours), never lowering one."""
+    t_off = _stand_tilt(_stone_pg(20, 0, level=False), 5.0)
+    on = _stone_pg(20, 0, level=True)
+    t_on = _stand_tilt(on, 5.0)
+    assert t_off > 3.0 and t_on <= 1.0, (t_off, t_on)
+    dz = on.sup.leveler.dz
+    assert int(np.argmax(dz)) == 0 and dz.min() >= 0.0
+    assert on.sup.state == NORMAL and on.sup.fall_count == 0
+
+
+def test_level_resets_on_a_gesture_and_a_respawn_keeps_its_settings():
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 3.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 5.0
+    assert pg.do("set level.tau_s 1.2").startswith("level.tau_s = 1.2") and lv.tau_s == 1.2
+    fn, total = pg.gestures["wave"]
+    assert pg.start_gesture(fn, total, "wave") is None
+    run(pg, 0.3)
+    assert pg._ges is not None and not lv.P.any() and not lv.dz.any()     # the gesture owns the legs
+    pg.end_gesture()
+    for _ in range(int(5.0 / pg.DT)):
+        if not pg.gesture_busy:
+            break
+        pg.step()
+    assert not pg.gesture_busy
+    run(pg, 3.0)
+    assert lv.dz.max() > 5.0                                  # levels again once the gesture is out
+    # a respawn (the cockpit's _respawn: a fresh supervisor from the factory) keeps the ask,
+    # the `set level.*` overrides and the IMU spec
+    pg.set_imu(grav_sigma=0.01, seed=3)
+    imu = pg.imu
+    pg.sup = pg._make_sup()
+    pg.step()
+    lv2 = pg.sup.leveler
+    assert lv2 is not lv and lv2.enabled and lv2.tau_s == 1.2 and lv2.g is pg.gait
+    assert pg.imu is not imu and pg.imu.grav_sigma == 0.01
+
+
+def test_level_is_off_while_mirroring_sim2real_and_holds_its_start():
+    """sim2real runs the leveler off (no offsets on the real feet), and refuses to start
+    while it holds a foot up (the release would reach the real legs)."""
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 3.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 5.0
+    assert not pg.is_idle() and "leveler holds a foot" in pg.level_held_reason()
+    assert pg.do("level off").startswith("level off") and not lv.enabled
+    run(pg, 3.0)                                              # slews back at 20 mm/s
+    assert not lv.dz.any() and pg.is_idle() and pg.level_held_reason() is None
+    pg.hw = FakeHW()
+    assert "inactive while mirroring" in pg.do("level on") and not lv.enabled
+    peak = []
+    run(pg, 2.0, lambda p: peak.append(p.sup.leveler.dz.max()))
+    assert pg.level_on and not lv.enabled and max(peak) == 0.0
+    assert pg.guard_status()["level_active"] is False
+
+
+def test_level_commands_and_guard_status():
+    import json
+    pg = make(level=False)
+    assert pg.do("level").startswith("level off")
+    assert pg.do("level maybe") == "level on|off"
+    assert pg.do("level on").startswith("level on") and pg.sup.leveler.enabled
+    assert "refused" in pg.do("set level.raise_mm 40")       # the 30 mm window the probe was proven with
+    assert pg.do("set level.enabled 1") == "use `level on|off`"
+    assert pg.do("set level.bogus 1").startswith("unknown param level.bogus")
+    assert pg.do("set level.min_contacts 4").startswith("level.min_contacts = 4")
+    assert pg.sup.leveler.min_contacts == 4 and pg.level_kw == {"min_contacts": 4}
+    assert "level.swing_rate_mm_s" in pg.do("set")
+    pg.step()
+    gs = pg.guard_status()
+    json.dumps(gs)
+    assert gs["level_on"] is True and gs["level_dz"] == [0.0] * N_LEGS
+    assert {"level_active", "level_hold", "level_sat", "level_slope_deg", "level_tilt_deg"} <= set(gs)
+    assert "level on" in pg.do("show")
+
+
+def test_sim_imu_mount_error_is_a_constant_tilt_bias():
+    from sim_imu import SimIMU, grav_body
+    pg = make()
+    run(pg, 0.5)
+    d, true = pg.data, grav_body(pg.model, pg.data, pg.torso)
+    assert np.array_equal(SimIMU(pg.model, pg.torso).read(d, pg.t)["grav"], true)   # the ideal default
+    m = SimIMU(pg.model, pg.torso, mount_deg=1.5, mount_axis=(1, 0, 0))
+    g = m.read(d)["grav"]
+    ang = np.degrees(np.arctan2(np.linalg.norm(np.cross(g, true)), g @ true))
+    assert ang == pytest.approx(1.5, abs=1e-6)                # (< 1.5 by g's tiny component along x)
+    assert g[0] == pytest.approx(true[0], abs=1e-12)          # about body x: g_x is untouched
+    assert np.array_equal(m.read(d)["grav"], g)               # constant: no noise to average it out
+    from sim_imu import axis_rotation, gyro_body               # the gyro is seen through the same mount
+    d.qvel[3:6] = [0.2, -0.3, 0.1]
+    mujoco.mj_forward(pg.model, d)
+    w_true = gyro_body(pg.model, d, pg.torso)
+    assert np.linalg.norm(w_true) > 0.1
+    assert np.allclose(m.measure(d)["gyro"] - m.bias, axis_rotation(1.5, (1, 0, 0)).T @ w_true, atol=1e-12)
+    assert not np.allclose(m.measure(d)["gyro"] - m.bias, w_true, atol=1e-3)
+    true = grav_body(pg.model, d, pg.torso)                   # (mj_forward refreshed the pose)
+    m.reset(mount_deg=0.0)
+    assert np.array_equal(m.read(d)["grav"], true)
+    # a zero mount error leaves the noise stream exactly as it was
+    kw = dict(grav_sigma=0.02, gyro_sigma=0.02, gyro_bias=0.01)
+    a = SimIMU(pg.model, pg.torso, rng=np.random.default_rng(0), **kw)
+    b = SimIMU(pg.model, pg.torso, rng=np.random.default_rng(0), mount_deg=0.0, **kw)
+    for _ in range(3):
+        ra, rb = a.measure(d), b.measure(d)
+        assert np.array_equal(ra["grav"], rb["grav"]) and np.array_equal(ra["gyro"], rb["gyro"])
+    with pytest.raises(ValueError):
+        SimIMU(pg.model, pg.torso, mount_deg=1.0, mount_axis=(0, 0, 0))
+
+
+def test_playground_imu_spec_latency_applies_and_survives_reset_guards():
+    """step() reads the IMU with the sim time, so a spec's latency is applied (before
+    D065 read(d) dropped it silently); the spec is rebuilt by reset_guards."""
+    assert make().imu.latency_s == 0.0 and make().imu_spec == {}
+    with pytest.raises(ValueError):
+        make(imu={"grav_noise": 0.1})
+    pg = make(imu={"latency_s": 0.02})
+    run(pg, 0.5)
+    assert pg.imu.latency_s == 0.02 and pg.imu._buf
+    _gravity_slope(pg, 10.0)
+    seen = []
+    for _ in range(20):
+        pg.step()
+        seen.append(pg.last["tilt"])
+    n_old = sum(1 for x in seen if x < 2.0)
+    assert n_old == pytest.approx(round(0.02 / pg.DT), abs=1) and seen[-1] > 9.0, seen
+    imu = pg.imu
+    pg.reset_guards()
+    assert pg.imu is not imu and pg.imu.latency_s == 0.02
+
+
+# ---- D065 review fixes (9r) ------------------------------------------------------------
+def test_level_holds_name_every_floor_feel_condition():
+    """The holds that keep the void verdict honest (the body still while a foot feels for
+    the floor): a gate hold, a void phase, a probe_out, a gesture, a commanded-stance foot
+    still seeking after its settle window. Each one names itself."""
+    from playground import SEEK
+    pg = make(level=True)
+    run(pg, 0.5)
+    assert pg._level_holds(False) == set()
+    assert pg._level_holds(True) == {"gesture"}
+    pg._gate = {"leg": 0}
+    assert pg._level_holds(False) == {"gate"}
+    pg._gate = None
+    pg._void_phase = "stop"
+    assert pg._level_holds(False) == {"void"}
+    pg._void_phase = None
+    pg.probe_out[2] = True
+    assert pg._level_holds(False) == {"probe_out"}
+    pg.probe_out[:] = False
+    st = pg.sup.last_stance
+    i = int(np.flatnonzero(st)[0])
+    pg.probe_state[i] = SEEK
+    pg._probe_age[i] = pg._settle_ticks()
+    assert pg._level_holds(False) == set()                    # inside its settle window: free
+    pg._probe_age[i] = pg._settle_ticks() + 1
+    assert pg._level_holds(False) == {"seek"}
+
+
+def test_a_playground_hold_freezes_the_plane_and_the_copies(monkeypatch):
+    """step() hands _level_holds to the supervisor: while it names a reason, the
+    leveler's plane and every copy stand still (on a slope, mid-convergence)."""
+    pg = make(level=True)
+    _gravity_slope(pg, 6.0)
+    run(pg, 1.0)
+    lv = pg.sup.leveler
+    assert lv.P.any() and lv.hold is None
+    monkeypatch.setattr(pg, "_level_holds", lambda monitor: {"gate"})
+    pg.step()
+    P, C = lv.P.copy(), lv.copies.copy()
+    run(pg, 0.5)
+    assert lv.hold == "gate" and np.array_equal(lv.P, P) and np.array_equal(lv.copies, C)
+
+
+@pytest.mark.parametrize("approach_deg", [15, 20])
+def test_level_on_the_void_guard_still_holds_the_cliff(approach_deg):
+    """Review 9r: with the floor-feel holds removed the leveler tilts the body while the
+    leading foot feels the edge, and a15 / a20 at walk 45 tip (peak 20.5 / 18.7 deg)
+    where the shipped stack stops. With the holds it fires and stops."""
+    pg = make(cliff=True, level=True)
+    a = np.radians(approach_deg) / 2
+    pg.data.qpos[3:7] = [np.cos(a), 0, 0, np.sin(a)]
+    mujoco.mj_forward(pg.model, pg.data)
+    run(pg, 1.0)
+    pg.do("walk 45")
+    t_fire, peak = None, 0.0
+    for _ in range(int(20.0 / pg.DT)):
+        pg.step()
+        peak = max(peak, _true_tilt_deg(pg))
+        if t_fire is None and pg.void is not None:
+            t_fire = pg.t
+        if pg.sup.fall_count or (t_fire is not None and pg.t > t_fire + 3.0):
+            break
+    assert pg.sup.fall_count == 0 and t_fire is not None and peak <= TIPPED_DEG, (t_fire, peak)
+
+
+def test_reset_guards_zeroes_a_levelled_leveler():
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 3.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 5.0
+    pg.reset_guards()
+    assert not lv.P.any() and not lv.copies.any() and lv.enabled
+
+
+def test_level_derates_the_envelope_the_robot_runs_and_reports_it():
+    """On a saturated 5 deg plane the command door runs the derated envelope (the bare
+    34.2 mm/s asked runs at 32.5), and the readouts say so: envelope(), `check`."""
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 4.0)
+    bare = pg.gait.max_command()["v"]
+    assert pg.V_MAX[0] == bare                                # the ask's cap stays the bare one
+    ev = pg.envelope()
+    assert ev["level_slope_deg"] > 4.0 and ev["v"] < bare - 1.0
+    pg.do("walk 45")
+    run(pg, 3.0)
+    v = pg.envelope()["v"]                                    # (the slew's lag still closing on it)
+    assert v - 0.5 < pg.cmd_eff[0] <= v + 1e-6 and pg.cmd_eff[0] < bare - 1.0, (pg.cmd_eff, v)
+    assert "derates it to" in pg.do("check")
+    off = make(level=False)
+    assert off.envelope()["v"] == bare and off.envelope()["level_slope_deg"] == 0.0
+
+
+def test_a_gait_change_keeps_the_levelled_plane():
+    """Review 9r: apply_gait reset the leveler on any h / R0 key, the same value too, so
+    `gait default` on a levelled slope dropped the feet up to 30 mm in one step (4.7 rad/s
+    at the guard's clamp, 4.8 deg of tilt). It keeps the plane now: no offset jumps."""
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 5.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 20.0
+    for cmd in ("gait default", f"set gait.h {pg.gait.h:g}", f"set gait.h {pg.gait.h - 4:g}"):
+        prev, worst = lv.dz.copy(), 0.0
+        assert "refused" not in pg.do(cmd), cmd
+        for _ in range(int(0.5 / pg.DT)):
+            pg.step()
+            worst = max(worst, float(np.max(np.abs(lv.dz - prev))))
+            prev = lv.dz.copy()
+        assert worst <= lv.rate_mm_s * pg.DT + 1e-6, (cmd, worst)
+        assert lv.dz.max() > 20.0

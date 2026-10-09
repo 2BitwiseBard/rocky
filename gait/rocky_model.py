@@ -81,9 +81,13 @@ def reload() -> None:
 
 
 def _p() -> dict:
-    """Internal read-only view (no copy) — never hand this out."""
-    params()
-    return _CACHE[os.path.normpath(PARAMS_PATH)]
+    """Internal read-only view (no copy) — never hand this out. D065: it called
+    params() and threw the deep copy away, 0.22 ms per call, and servo_speed()
+    runs on every playground step."""
+    p = os.path.normpath(PARAMS_PATH)
+    if p not in _CACHE:
+        params()
+    return _CACHE[p]
 
 
 def params_rev() -> str:
@@ -246,6 +250,20 @@ def reflex_defaults() -> dict:
     A list-valued key (a leg set) comes back as a tuple, every other one as a float."""
     return {k: (tuple(v) if isinstance(v, (list, tuple)) else float(v))
             for k, v in _p()["reflex"].items()}
+
+
+def level_defaults() -> dict:
+    """BodyLeveler kwargs (D065, params level:): a bool stays a bool, an int an int
+    (min_contacts), a list comes back as a tuple of floats, every other key a float."""
+    def conv(v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, int):
+            return int(v)
+        if isinstance(v, (list, tuple)):
+            return tuple(float(x) for x in v)
+        return float(v)
+    return {k: conv(v) for k, v in _p()["level"].items()}
 
 
 # D064 (pick 13, B130): the righter's hip clamp. Leg 0 is not in the set: it never reaches

@@ -87,7 +87,6 @@ from hw_bridge import HardwareBridge, serial_ports, MIRRORS                     
 import hw_bridge                                                                # noqa: E402
 from world_builder import (build as build_world, PRESETS, KINDS, random_course,   # noqa: E402
                            saved_worlds, save_world, load_world)
-from pebble_reflex import ReflexSupervisor                             # noqa: E402
 from sim_lidar import scan as lidar_scan, RANGE_MAX, PUCK_DZ, RATE_HZ as LIDAR_HZ   # noqa: E402
 import rocky_model as rm                                               # noqa: E402
 import pebble_feasibility as pf                                        # noqa: E402
@@ -896,7 +895,7 @@ class CockpitSim(Playground):
 
     def sim2real_refusal(self):
         """None when sim2real may start, else why (the UI shows it)."""
-        why = self.idle_reason()
+        why = self.idle_reason() or self.level_held_reason()
         if why:
             return why
         hot = self.thermal_status()["tripped"]
@@ -947,7 +946,10 @@ class CockpitSim(Playground):
         or a walker's training gait changes the speed, the turn rate and the step);
         the registry's own numbers when the gait cannot say. Never raises, never warns
         (the state feed reads the version, so a bad gait that slipped past validation,
-        T = 0, is rebuilt here: its non-finite numbers are refused below, not printed)."""
+        T = 0, is rebuilt here: its non-finite numbers are refused below, not printed).
+        The BARE gait's (D065): the registry describes the gait, and a leveled plane's
+        derate moves with every 0.14 deg of slope (the version would churn); the live
+        derated number is sim.envelope(), on the gait panel and the model panel."""
         env = tool_registry.default_envelope()
         try:
             g = self.gait
@@ -1678,7 +1680,7 @@ class CockpitSim(Playground):
         mujoco.mj_forward(self.model, self.data)
         with self.lock:
             self.cmd_v[:] = 0
-        self.sup = ReflexSupervisor(self.gait)
+        self.sup = self._make_sup()                     # D065: the Playground's (with its leveler)
         self.mode = "idle"
         if keep_righter:
             if old is not None:
@@ -4176,7 +4178,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
                 continuous_nm=rm.continuous_nm(), damping_nms=rm.damping_nms(),
                 bus=dict(hz=rm.bus_hz(), latency_s=rm.latency_s()),
                 gait_defaults=rm.gait_defaults(), reflex_defaults=rm.reflex_defaults(),
-                gait={k: float(getattr(g, k)) for k in GAIT_KEYS}, envelope=g.max_command(),
+                gait={k: float(getattr(g, k)) for k in GAIT_KEYS}, envelope=sim.envelope(),
                 body=dict(circumradius_mm=float(p["body"]["circumradius"]), stance_radius_mm=float(g.R0),
                           body_height_mm=float(g.h), stance_torso_z_m=rm.stance_torso_z_m(g.h),
                           foot_contact_radius_mm=rm.foot_contact_radius_mm()),
@@ -4190,7 +4192,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     async def gait_list(_):
         return JSONResponse({"presets": gait_presets(), "current": {k: float(getattr(sim.gait, k)) for k in GAIT_KEYS},
-                             "envelope": _jsonable(sim.gait.max_command())})
+                             "envelope": _jsonable(sim.envelope())})
 
     # ---------------------------------------------------------- D051: servo realism
     async def servo_set(request):

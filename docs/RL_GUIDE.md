@@ -544,6 +544,22 @@ In order, each teaching one thing:
    0 of 9) — with ctrl rev/s no worse than `recover5_v3_warm`'s, audited
    side by side with `--servo nominal` (4.5 on `deae868522cc`, 2026-10-07).
 
+**The terrain residual: planned, not built (B160).** The gait residual
+(`robust_fwd2`) lost to the bare gait on flat ground, so the next learned
+piece is narrower: a per-foot height correction on rough ground, riding the
+D065 body leveler's composer (its offsets are added to the gait's foot z
+before the probe measures, so the probe and the void guard keep their
+meaning). The action is modal, not per joint: a few foot-z modes (k0 a
+common offset, k1 / k2 the two tilt modes of the five feet), clipped inside
+the leveler's 0–30 mm raise-only window. Seeds come in tiers
+(`sim/terrain_bench.py`: bench 0–4, held out 100–199, training ≥ 1000), and
+the switches the policy sees go through the same `contact_filter` as the
+probe's. A 1 M-step run is the go / no-go; it ships only if a paired
+bootstrap on the terrain bench beats S2 (the leveler alone) at τ 0.3, 0.6
+and 1.2 s and beats the classical rival, a height loop that re-arms the
+probe (B156). `PebbleEnv` stays the flat-ground env; the residual gets its
+own.
+
 ## 6. In the playground and the cockpit
 
 `./rocky.sh cockpit` has an RL panel: the checkpoint table, a righter

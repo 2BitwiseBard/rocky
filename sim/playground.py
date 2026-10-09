@@ -39,6 +39,10 @@ Commands (REPL or --script, ';'-separated):
                         reflex.fallen_max_s servo.on servo.hold_hz
                         servo.latency_s servo.rate_rad_s servo.quant
                         gate.wait (1 = careful walk, see the touchdown gate)
+                        level.tau_s level.filter_s level.deadband_deg
+                        level.raise_mm level.rate_mm_s level.swing_rate_mm_s
+                        level.tilt_max_deg level.min_contacts level.gyro_calm
+                        (the body leveler, D065; kept across a respawn)
                         (phase-continuous: changing T rescales the clock so
                         feet don't teleport)
     gait NAME           load a gait preset (gait/gaits/NAME.json; `default`
@@ -49,6 +53,14 @@ Commands (REPL or --script, ';'-separated):
     clear               release a latched void (cliff guard) and a latched
                         safe-stop (3 gyro trips in 5 s) — D052
     probe on|off        the stance contact probe (feet feel for the floor)
+    level on|off        the body leveler (D065, gait/pebble_level.py): a plane of
+                        foot RAISES (0..30 mm) from the IMU tilt keeps the body
+                        level on a slope or a stone; levels fully to ~5 deg,
+                        partly beyond. Holds still while a foot feels for the
+                        floor (gate hold, void, probe_out, a late seek), off
+                        while mirroring sim->real; `level` alone = its state.
+                        Default: params level.enabled (env ROCKY_LEVEL=1|0
+                        overrides it). Off slews back at 20 mm/s
     show                current params + robot state
     push FX FY [DUR]    shove the shell rim: peak N, N, half-sine over DUR s (0.4)
     record on|off       capture an offscreen mp4 clip (playground_clip.mp4)
@@ -87,7 +99,8 @@ teleop, the cockpit's goto and residual walker, the hardware mirror):
                         sim2real until it cools (the real servo would be at
                         its over-temp cut). Reset on a respawn
     hardware            while mirroring sim->real: no probe on the real feet,
-                        no walking (velocity OR a gaited gesture) until the
+                        no body leveler (and no start while it holds a foot
+                        up), no walking (velocity OR a gaited gesture) until the
                         bridge allows locomotion, no gesture during its soft
                         entry, no push / gait change; the mirror is DROPPED
                         (real legs hold) when the sim's reflex leaves NORMAL
@@ -103,7 +116,8 @@ mode (guard_status()['thermal'], notes at half the budget and at the trip,
 sim2real refused while a joint is past it; the sim never derates), in the RL
 envs by the same proxy with the derate on, in audit_gestures by
 pebble_feasibility.judge_load) and the servo realism
-layer above, friction guessed, no gear backlash. It is EXCELLENT for logic
+layer above, friction guessed, no gear backlash, an IDEAL IMU by default
+(Playground(imu=...) adds noise, latency and a mount error). It is EXCELLENT for logic
 (does the reflex trip? does the gesture reach? does a gait tweak break the
 sweep limits?) and DIRECTIONAL for dynamics (push envelopes, stability
 trends). It is NOT calibrated — that happens when a real servo answers
@@ -134,6 +148,7 @@ import rl_common as rc                                                # noqa: E4
 import pebble_feasibility as pf                                       # noqa: E402
 from pebble_gait import WaveGait, leg_ik, body_to_leg, N_LEGS        # noqa: E402
 from pebble_reflex import ReflexSupervisor, body_gyro_xy             # noqa: E402,F401
+from pebble_level import BodyLeveler                                  # noqa: E402
 from pebble_gestures import (jazz_hands, fist_bump, beckon,          # noqa: E402
                              JAZZ_TOTAL, BUMP_TOTAL, BECKON_TOTAL)
 from contacts import foot_contacts                                    # noqa: E402
@@ -233,6 +248,8 @@ def save_gait_preset(name, gait, note=None):
 #   offset ramps out at PROBE_RELAX_RATE.
 PROBE_RATE = 120.0          # mm/s a contactless planted foot is lowered
 PROBE_MAX = 30.0            # mm: probed this far with nothing under it = the ground is not there
+TIPPED_DEG = 10.0           # a tilt past this after a void fire is a tip, not a stop (D063: a caught one
+#                             stays < 3); the guard tests, the lip grid and the terrain bench share it
 PROBE_PRELOAD_MM = 3.5      # mm past first contact (half the SEA's ~7 mm travel)
 PROBE_PRELOAD_MIN_MM = 3.0  # preload only a foot that had to SEEK this far: a foot that lands
 #                             on the nominal plane is already loaded by the stance geometry
@@ -334,6 +351,25 @@ SHOVE_DUR_S = (0.05, 2.0)   # and to this duration range
 GAIT_T_RANGE = (0.4, 10.0)  # D052 V2: `set gait.T 0` divided by zero in every phase reader and
 GAIT_DUTY_RANGE = (0.5, 0.95)   # made the cockpit unrecoverable; these are sanity bounds, not tuning
 GAIT_HSTEP_RANGE = (0.0, 80.0)  # (check / pebble_feasibility says whether a value is actually good)
+# D065: `set level.KEY V` — sanity bounds, not tuning (params level: has the values); raise_mm stays
+# inside the 30 mm window the probe's room and the swing band were proven with
+LEVEL_SET = {"tau_s": (0.01, 60.0), "filter_s": (0.01, 10.0), "deadband_deg": (0.0, 10.0),
+             "raise_mm": (0.0, PROBE_MAX), "rate_mm_s": (0.1, 200.0), "swing_rate_mm_s": (0.1, 200.0),
+             "tilt_max_deg": (1.0, 89.0), "min_contacts": (0, 5), "gyro_calm": (0.01, 10.0)}
+LEVEL_STILL_MM = 0.02       # an offset that moved less than this over a 50 Hz tick is standing still
+#                             (motion_reason; a saturated plane re-scales every tick and jitters below it)
+IMU_KEYS = ("grav_sigma", "gyro_sigma", "gyro_bias", "latency_s", "mount_deg", "mount_axis")
+#                             D065: Playground(imu={...}) / set_imu — SimIMU's options + "seed" or "rng"
+
+
+def level_default():
+    """D065: the leveler's start state when Playground(level=None): ROCKY_LEVEL=1 / 0 if
+    set (the terrain bench's P9 runs every sim test with the leveler on without editing
+    params), else params level.enabled."""
+    env = os.environ.get("ROCKY_LEVEL", "").strip()
+    if env in ("0", "1"):
+        return env == "1"
+    return bool(rm.level_defaults()["enabled"])
 
 
 def is_gaited(name=None, fn=None):
@@ -394,7 +430,11 @@ def kinematic_height_m(q, contacts, grav_body):
 
 
 class Playground:
-    def __init__(self, cliff=False, model=None, z0=0.0):
+    def __init__(self, cliff=False, model=None, z0=0.0, imu=None, level=None):
+        """model + z0: a world and the height its floor is under the spawn (a platform,
+        a stone under a foot: the planted stance spawns z0 up). imu (D065): a SimIMU
+        spec, IMU_KEYS + "seed", kept across respawns (set_imu); None = ideal.
+        level (D065): the body leveler on / off at start; None = level_default()."""
         if model is not None:                       # D049: the cockpit's world builder
             self.model = model
         elif cliff:
@@ -407,7 +447,11 @@ class Playground:
             z0 = 0.0
         self.z0 = z0
         self.gait = WaveGait()
-        self.sup = ReflexSupervisor(self.gait)
+        # D065: the leveler rides on the supervisor (_make_sup); level_on is the ask, kept here
+        # like probe_on, and level_kw the `set level.*` overrides, so a respawn keeps both
+        self.level_on = level_default() if level is None else bool(level)
+        self.level_kw = {}
+        self.sup = self._make_sup()
         self.data = mujoco.MjData(self.model)
         q0 = np.array([leg_ik(body_to_leg(i, self.gait.p_nom[i]))
                        for i in range(N_LEGS)]).flatten()
@@ -456,6 +500,7 @@ class Playground:
         self._hw_seen = None
         self._loco_note_t = -1e9
         self._model_seen = self._data_seen = self._sup_seen = None
+        self.set_imu(imu)
         self.reset_guards()
         self.last = dict(con=np.zeros(N_LEGS, bool), tilt=0.0, height=float(self.data.xpos[self.torso][2]),
                          kin_h=0.0, gxy=0.0, grav=np.array([0.0, 0.0, -1.0]), gyro=np.zeros(3))
@@ -479,7 +524,7 @@ class Playground:
         self._jadr = np.array([m.joint(f"{n}{i}").qposadr[0] for i in range(N_LEGS)
                                for n in ("yaw", "hip", "knee")])
         self.fids = [m.geom(f"foot{i}").id for i in range(N_LEGS)]
-        self.imu = SimIMU(m, self.torso)          # ideal; gravity from model.opt.gravity
+        self.imu = self._new_imu()                # self.imu_spec (ideal by default); gravity from model.opt.gravity
         self._con_state = np.zeros(N_LEGS, bool)  # switch hysteresis memory
         self.probe_dz = np.zeros(N_LEGS)
         self.probe_out = np.zeros(N_LEGS, bool)
@@ -511,7 +556,121 @@ class Playground:
         self.thermal = rc.ThermalProxy(on=False)
         self._thermal_noted = np.zeros(15, bool)
         self._thermal_tripped = np.zeros(15, bool)
+        lv = self._leveler()
+        if lv is not None:
+            lv.reset()                            # D065: a respawn starts un-leveled
+        self._level_dz_prev = np.zeros(N_LEGS)
+        self._level_moving = False
         self._model_seen, self._data_seen, self._sup_seen = m, self.data, self.sup
+
+    # ------------------------------------------------------------ D065: IMU spec + leveler
+    def set_imu(self, spec=None, **kw):
+        """The IMU the robot reads: a SimIMU spec as a dict and/or keywords (IMU_KEYS,
+        + "seed" or "rng" for its noise stream; nothing = ideal). Kept on the
+        Playground, so reset_guards (a respawn, a world change) rebuilds the same
+        IMU and its noise stream carries on. Returns the spec (without the rng)."""
+        spec = dict(spec or {}, **kw)
+        bad = sorted(set(spec) - set(IMU_KEYS) - {"seed", "rng"})
+        if bad:
+            raise ValueError(f"imu spec: unknown key(s) {', '.join(bad)}; have {', '.join(IMU_KEYS)}, seed, rng")
+        rng = spec.pop("rng", None)
+        self.imu_spec = spec
+        self._imu_rng = rng if rng is not None else np.random.default_rng(spec.get("seed"))
+        if getattr(self, "_model_seen", None) is not None:
+            self.imu = self._new_imu()
+        return dict(spec)
+
+    def _new_imu(self):
+        kw = {k: v for k, v in self.imu_spec.items() if k != "seed"}
+        return SimIMU(self.model, self.torso, rng=self._imu_rng, **kw)
+
+    def _make_sup(self, **kw):
+        """The supervisor the Playground runs (and the cockpit's respawn): the reflex
+        with the D065 leveler on its own gait, built from params level: + the `set
+        level.*` overrides, enabled from level_on (step() keeps it in sync)."""
+        lv = BodyLeveler(self.gait, enabled=bool(self.level_on), **self.level_kw)
+        return ReflexSupervisor(self.gait, leveler=lv, **kw)
+
+    def _leveler(self):
+        """The supervisor's leveler, or None (a supervisor built without one)."""
+        return getattr(self.sup, "leveler", None)
+
+    def _level_holds(self, monitor):
+        """Why the leveler must hold the body still this step (a set; empty = free):
+        while a foot feels for the floor the body may not move under it — the void
+        verdict and the hold's 1 deg roll rule judge the probe alone (a rolled body
+        gave a false void, PROBE_HOLD_ROLL_DEG)."""
+        hold = set()
+        if self._gate is not None:
+            hold.add("gate")
+        if self._void_phase is not None:
+            hold.add("void")
+        if self.probe_out.any():
+            hold.add("probe_out")
+        if monitor:
+            hold.add("gesture")
+        st = self.sup.last_stance
+        if st is not None:
+            settle = self._settle_ticks()
+            if any(st[i] and self.probe_state[i] == SEEK and self._probe_age[i] > settle
+                   for i in range(N_LEGS)):
+                hold.add("seek")
+        return hold
+
+    def set_level(self, on):
+        """`level on|off` (the ask; sim2real runs it off whatever this says). Off
+        slews the offsets back to zero at the leveler's caps. Returns a reply line."""
+        self.level_on = bool(on)
+        lv = self._leveler()
+        if lv is not None:                        # at once (step() keeps it in sync after)
+            if self.level_on and not self.sim2real:
+                lv.engage()
+            else:
+                lv.release()
+        return self.level_line()
+
+    def level_line(self):
+        lv = self._leveler()
+        if lv is None:
+            return f"level {'on' if self.level_on else 'off'} (this supervisor has no leveler)"
+        st = lv.status()
+        out = f"level {'on' if self.level_on else 'off'}"
+        if self.level_on and self.sim2real:
+            out += " (inactive while mirroring sim->real)"
+        dz = np.asarray(lv.dz, float)
+        out += (f" | plane {st['slope_deg']:.2f} deg, tilt error {st['tilt_err_deg']:.2f} deg, feet up "
+                f"{np.round(dz, 1).tolist()} mm" + (" | SATURATED (partial leveling)" if st["saturated"] else "")
+                + (f" | hold: {st['hold']}" if st["hold"] not in (None, "off") else ""))
+        return out
+
+    def set_level_param(self, key, val):
+        """`set level.KEY V`: one of LEVEL_SET, on the live leveler and kept for a
+        respawn (level_kw). Returns a reply line."""
+        if key == "enabled":
+            return "use `level on|off`"
+        if key not in LEVEL_SET:
+            return f"unknown param level.{key}; have: {' '.join('level.' + k for k in LEVEL_SET)}"
+        lo, hi = LEVEL_SET[key]
+        if not (np.isfinite(val) and lo <= val <= hi):
+            return f"set level.{key} refused: {val:g} is outside {lo:g}..{hi:g}"
+        v = int(round(val)) if key == "min_contacts" else float(val)
+        self.level_kw[key] = v
+        lv = self._leveler()
+        if lv is not None:
+            setattr(lv, key, v)
+        return f"level.{key} = {v:g}  (sim-only until params.yaml level: — kept across a respawn)"
+
+    def level_held_reason(self):
+        """None, or why sim2real may not start: the leveler holds a foot off the
+        gait's plane, and sim2real runs it off — the release would reach the real legs."""
+        lv = self._leveler()
+        if lv is None:
+            return None
+        m = float(np.max(lv.dz))
+        if m > 0.0:
+            return (f"the body leveler holds a foot {m:.1f} mm up — `level off` and wait for it to "
+                    f"settle (sim2real runs it off)")
+        return None
 
     def _sync_external(self):
         """The cockpit replaces model/data (set_world) or the supervisor
@@ -593,6 +752,8 @@ class Playground:
             return "a safe-stop is pending"
         if self._gate is not None:
             return "the touchdown gate is holding a step"
+        if self._level_moving:
+            return "the body leveler is still moving the feet — wait"
         return None
 
     def _running_cmd(self, fallback):
@@ -605,11 +766,13 @@ class Playground:
         """What the hardware bridge may start sim2real from: planted standstill
         (state NORMAL, no velocity asked or still being executed — a void
         retreat, the command slew still slowing down (D063), a pending
-        safe-stop, a gate hold — no gesture or blend, no goto)."""
+        safe-stop, a gate hold, the leveler moving — no gesture or blend, no
+        goto) and no leveler offset to release (D065, level_held_reason)."""
         return (self.sup.state == "NORMAL" and not np.any(self.cmd_v)
                 and self.motion_reason() is None
                 and self.gesture is None and self._ges is None
-                and getattr(self, "goto_state", None) is None)
+                and getattr(self, "goto_state", None) is None
+                and self.level_held_reason() is None)
 
     @property
     def gesture_phase(self):
@@ -624,9 +787,19 @@ class Playground:
 
     @property
     def V_MAX(self):
-        """Teleop per-axis caps (mm/s, mm/s, rad/s) = the gait's envelope (D052)."""
+        """Teleop per-axis caps (mm/s, mm/s, rad/s) = the gait's envelope (D052). The
+        bare one: it caps the ASK, and _budget derates what runs every step (D065), so
+        a plane levelled for a while never caps the ask for good."""
         mc = self.gait.max_command()
         return np.array([mc["vx"], mc["vy"], mc["wz"]])
+
+    def envelope(self):
+        """The envelope the robot runs now (a UI readout): max_command() derated for the
+        leveled plane (D065), with that plane's level_slope_deg (0 = the bare gait)."""
+        ls = self._level_slope()
+        mc = dict(self.gait.max_command(level_slope=ls, level_blend=self._level_blend()))
+        mc["level_slope_deg"] = round(float(np.degrees(np.arctan(ls))), 2)
+        return mc
 
     def budget_note(self):
         """'' when the last command fit the envelope, else what scaled it."""
@@ -635,16 +808,22 @@ class Playground:
     def _budget_words(self, k):
         if k >= 0.999:
             return ""
-        lim = self.gait.vf_limit()
+        ls = self._level_slope()
+        lim = self.gait.vf_limit(level_slope=ls, level_blend=self._level_blend())
         which = ("coxa", "swing-speed", "lift-speed")[int(np.argmin(lim))]
+        if ls > 0.0 and which == "lift-speed":
+            which = f"lift-speed (on the {np.degrees(np.arctan(ls)):.1f} deg leveled plane)"
         if k < 1e-3:
             return (f"the {which} budget allows NO motion on this gait "
                     f"(its step alone is too fast: raise T or lower hstep) — cmd zeroed")
         return f"cmd scaled to {k:.2f}x by the {which} budget"
 
     def guard_status(self):
-        """JSON-safe summary of every D052 guard (for a HUD / the cockpit)."""
+        """JSON-safe summary of every D052 guard (for a HUD / the cockpit); D065 the
+        leveler's level_* fields (level_on is the ask, level_active it is levelling)."""
         v = self.void
+        lv = self._leveler()
+        ls = lv.status() if lv is not None else {}
         return dict(
             void=None if v is None else {k: (round(float(x), 2) if isinstance(x, (float, np.floating)) else x)
                                          for k, x in v.items() if k != "xy"},
@@ -656,7 +835,11 @@ class Playground:
             probe_dz=[round(float(x), 1) for x in self.probe_dz], probe_out=[bool(x) for x in self.probe_out],
             gesture_phase=self.gesture_phase, nan_count=int(self.nan_count),
             servo_on=bool(self.servo.p["on"]), kin_h=round(float(self.last.get("kin_h", 0.0)), 4),
-            thermal=self.thermal_status())
+            thermal=self.thermal_status(),
+            level_on=bool(self.level_on), level_active=bool(ls.get("active", False)),
+            level_hold=ls.get("hold"), level_sat=bool(ls.get("saturated", False)),
+            level_slope_deg=ls.get("slope_deg"), level_tilt_deg=ls.get("tilt_err_deg"),
+            level_dz=[round(float(x), 1) for x in ls.get("offsets", [])])
 
     # ------------------------------------------------------------ physics
     def step(self):
@@ -668,7 +851,7 @@ class Playground:
             push = self.push
         d, m = self.data, self.model
         # --- sensors: what the robot can measure (D052) ------------------
-        r = self.imu.read(d)
+        r = self.imu.read(d, self.t)              # D065: with t, so a spec's latency_s applies
         grav, w_body = r["grav"], r["gyro"]
         tilt_deg = float(np.degrees(r["tilt"]))
         gxy = float(np.hypot(w_body[0], w_body[1]))
@@ -721,11 +904,24 @@ class Playground:
             # itself compares the TARGET (v_sup), so a ramp never ends a hold
             v_sup, direct = self._gate["run"].copy(), True
         self._drive_clock(state0)
+        # --- D065 body leveler: ticks inside sup.step at the bus rate, probe on or off ---
+        lv = self._leveler()
+        level_hold = None
+        if lv is not None:
+            want = bool(self.level_on) and not self.sim2real   # never on the real feet (like the probe)
+            if want and not lv.enabled:
+                lv.engage()
+            elif lv.enabled and not want:
+                lv.release()                                   # slews back to zero at its caps
+            level_hold = self._level_holds(monitor)
         q, state = self.sup.step(self.t, v_sup[0], v_sup[1], v_sup[2], gxy,
                                  contacts=con, gyro_vec=w_body[:2], tilt_deg=tilt_deg,
                                  height=kin_h, monitor=monitor,
                                  probe_dz=self.probe_dz.copy() if probing else None,
-                                 q_meas=q_meas, direct=direct)
+                                 q_meas=q_meas, direct=direct, grav=grav, level_hold=level_hold)
+        if lv is not None and tick:
+            self._level_moving = bool(np.max(np.abs(lv.dz - self._level_dz_prev)) > LEVEL_STILL_MM)
+            self._level_dz_prev = lv.dz.copy()
         self._v_gait = self._running_cmd(v_sup)          # what the gait ran this step (slewed)
         if self._void_phase != "retreat":                # the retreat reports its reverse itself
             self.cmd_eff = self._v_gait.copy()
@@ -836,14 +1032,25 @@ class Playground:
         return c
 
     # ------------------------------------------------------------ velocity
+    def _level_slope(self):
+        """D065: the leveled plane's slope the envelope is derated for, rounded up as
+        WaveGait.budget does (0.0 without a leveler or with a bare plane)."""
+        lv = self._leveler()
+        return 0.0 if lv is None else WaveGait.level_slope_q(lv.level_slope())
+
+    def _level_blend(self):
+        lv = self._leveler()
+        return None if lv is None else lv.swing_blend
+
     def _budget(self, v):
+        ls = self._level_slope()
         key = (round(float(v[0]), 4), round(float(v[1]), 4), round(float(v[2]), 5),
-               self.gait.h, self.gait.R0, self.gait.T, self.gait.duty, self.gait.hstep)
+               self.gait.h, self.gait.R0, self.gait.T, self.gait.duty, self.gait.hstep, ls)
         b = self._budget_cache.get(key)
         if b is None:
             if len(self._budget_cache) > 512:
                 self._budget_cache.clear()
-            b = np.array(self.gait.budget(*key[:3]))
+            b = np.array(self.gait.budget(*key[:3], level_slope=ls, level_blend=self._level_blend()))
             self._budget_cache[key] = b
         return b
 
@@ -1390,6 +1597,13 @@ class Playground:
             if "h" in kw or "R0" in kw:
                 g.p_nom = WaveGait(g.h, g.R0, g.T, g.duty, g.hstep).p_nom
                 self.sup._q_planted = None
+                # D065: the leveler keeps its plane (a slope, mm/mm): its next tick re-fits the
+                # window over the new footholds and the feet follow at its caps. It used to
+                # reset() here, on any h / R0 key, the same value too (`gait default`): standing
+                # leveled on 5 deg that dropped the feet up to 30 mm in one step (review 9r)
+            lv = self._leveler()
+            if lv is not None and lv.enabled:
+                lv.prime()                                  # the new gait's derate, before a step needs it
             self._budget_cache.clear()
         return {k: getattr(g, k) for k in GAIT_KEYS}
 
@@ -1414,6 +1628,11 @@ class Playground:
         cmds += [(mc["v"], 0.0, 0.0), (0.0, mc["v"], 0.0), (0.0, 0.0, mc["wz"])]
         out = [f"envelope: |v| <= {mc['v']:.1f} mm/s, |wz| <= {mc['wz']:.3f} rad/s in place "
                f"(gait T={g.T} h={g.h} R0={g.R0} duty={g.duty} hstep={g.hstep})"]
+        ev = self.envelope()
+        if ev["level_slope_deg"] > 0.0:          # D065: what runs is derated; check_gait judges the bare gait
+            out.append(f"level: the {ev['level_slope_deg']:.2f} deg leveled plane derates it to |v| <= "
+                       f"{ev['v']:.1f} mm/s (the commands run budgeted to that); the checks below judge "
+                       f"the BARE gait, without the leveler's offsets")
         for c in cmds:
             out += list(pf.check_gait(g, c).lines)
         return out
@@ -1589,6 +1808,12 @@ class Playground:
                 self.probe_on = args[0] == "on"
             return f"probe {'on' if self.probe_on else 'off'}" + \
                    (" (inactive while mirroring sim->real)" if self.sim2real else "")
+        if c == "level":
+            if args and args[0] in ("on", "off"):
+                return self.set_level(args[0] == "on")
+            if args:
+                return "level on|off"
+            return self.level_line()
         if c == "gait":
             presets = gait_presets()
             if not args or args[0] == "list":
@@ -1634,12 +1859,15 @@ class Playground:
             if len(args) != 2:
                 return "set PARAM VALUE — params: gait.T gait.h gait.R0 "\
                        "gait.duty gait.hstep reflex.trip reflex.stall_s reflex.fallen_max_s gate.wait "\
-                       "servo.on servo.hold_hz servo.latency_s servo.rate_rad_s servo.quant"
+                       "servo.on servo.hold_hz servo.latency_s servo.rate_rad_s servo.quant " + \
+                       " ".join("level." + k for k in LEVEL_SET)
             p = args[0]
             try:
                 val = float(args[1])
             except ValueError:
                 return f"set {p}: not a number"
+            if p.startswith("level."):
+                return self.set_level_param(p.split(".", 1)[1], val)
             if p.startswith("servo."):
                 k = p.split(".", 1)[1]
                 if k not in self.servo.p:
@@ -1688,6 +1916,8 @@ class Playground:
                 extra.append("locomotion held (sim2real)")
             if self.nan_count:
                 extra.append(f"{self.nan_count} non-finite targets dropped")
+            if self.level_on or any(gs["level_dz"]):
+                extra.append(self.level_line())
             return (f"gait: T={g.T} h={g.h} R0={g.R0} duty={g.duty} "
                     f"hstep={g.hstep} | reflex: trip={self.sup.gyro_trip} "
                     f"state={self.sup.state} trips={self.sup.trip_count} | pose=({p[0]*1000:.0f}, "
@@ -1727,7 +1957,7 @@ class Playground:
                 return f"wrote playground_clip.mp4 ({n} frames)"
             return "nothing recorded"
         return f"unknown command {c!r} — walk/stop/gesture/say/set/show/gait/check/" \
-               "clear/probe/push/record/rl/righter/wait/quit"
+               "clear/probe/level/push/record/rl/righter/wait/quit"
 
 
 def new_notes(pg, cursor):

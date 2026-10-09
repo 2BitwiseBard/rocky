@@ -12,6 +12,7 @@ adapter and the playground all import it.
     imu = SimIMU(model)                               # ideal: no noise, no lag
     imu = SimIMU(model, grav_sigma=0.02, gyro_sigma=0.02, gyro_bias=0.01,
                  latency_s=0.01, rng=np.random.default_rng(0))
+    imu = SimIMU(model, mount_deg=1.5, mount_axis=(1, 0, 0))   # D065: mounted 1.5 deg off the deck
     r = imu.read(data, t)          # dict(grav=(3,), gyro=(3,), tilt=rad)
 
     grav_body(model, data, torso)  # the ideal quantities, stateless
@@ -47,6 +48,18 @@ def gyro_body(model, data, body) -> np.ndarray:
     return R.T @ data.cvel[body][0:3]
 
 
+def axis_rotation(deg, axis) -> np.ndarray:
+    """(3, 3) rotation by deg about axis (Rodrigues)."""
+    k = np.asarray(axis, dtype=float).reshape(3)
+    n = float(np.linalg.norm(k))
+    if n < 1e-12:
+        raise ValueError("mount_axis must be a non-zero vector")
+    k = k / n
+    a = np.radians(float(deg))
+    K = np.array([[0.0, -k[2], k[1]], [k[2], 0.0, -k[0]], [-k[1], k[0], 0.0]])
+    return np.eye(3) + np.sin(a) * K + (1.0 - np.cos(a)) * (K @ K)
+
+
 def tilt_from_grav(g_body) -> float:
     """Angle (rad) between body z and 'up', from a body-frame gravity direction."""
     g = np.asarray(g_body, dtype=float)
@@ -65,16 +78,22 @@ class SimIMU:
                 reset (a new bias per episode, like a new power-up), or a (3,)
                 array used as given
     latency_s   a reading becomes visible latency_s after the state it measures
+    mount_deg   D065: the sensor is mounted rotated mount_deg about mount_axis (body
+    mount_axis  frame) off the deck, so grav and gyro are the body's seen in that
+                frame: a CONSTANT tilt bias on grav (noise alone averages out, a
+                mount error does not — what a leveler on an uncalibrated IMU levels to)
     """
 
     def __init__(self, model, body="torso", grav_sigma=0.0, gyro_sigma=0.0,
-                 gyro_bias=0.0, latency_s=0.0, rng=None):
+                 gyro_bias=0.0, latency_s=0.0, rng=None, mount_deg=0.0, mount_axis=(1.0, 0.0, 0.0)):
         self.model = model
         self.body = model.body(body).id if isinstance(body, str) else int(body)
         self.grav_sigma = float(grav_sigma)
         self.gyro_sigma = float(gyro_sigma)
         self.gyro_bias_spec = gyro_bias
         self.latency_s = float(latency_s)
+        self.mount_deg = float(mount_deg)
+        self.mount_axis = tuple(float(x) for x in np.asarray(mount_axis, float).reshape(3))
         self.rng = rng if rng is not None else np.random.default_rng()
         self.reset()
 
@@ -83,9 +102,13 @@ class SimIMU:
         fresh bias draw and an empty latency pipeline."""
         if rng is not None:
             self.rng = rng
-        for k in ("grav_sigma", "gyro_sigma", "latency_s"):
+        for k in ("grav_sigma", "gyro_sigma", "latency_s", "mount_deg"):
             if k in kw:
                 setattr(self, k, float(kw[k]))
+        if "mount_axis" in kw:
+            self.mount_axis = tuple(float(x) for x in np.asarray(kw["mount_axis"], float).reshape(3))
+        # the sensor-from-body rotation; None = mounted true (the ideal path, untouched)
+        self._mount_T = None if self.mount_deg == 0.0 else axis_rotation(self.mount_deg, self.mount_axis).T
         if "gyro_bias" in kw:
             self.gyro_bias_spec = kw["gyro_bias"]
         b = self.gyro_bias_spec
@@ -99,10 +122,13 @@ class SimIMU:
     def measure(self, data) -> dict:
         """One reading of the current state with noise and bias, no latency."""
         g = grav_body(self.model, data, self.body)
+        w = gyro_body(self.model, data, self.body)
+        if self._mount_T is not None:
+            g, w = self._mount_T @ g, self._mount_T @ w
         if self.grav_sigma > 0:
             g = g + self.rng.normal(0.0, self.grav_sigma, 3)
             g = g / max(float(np.linalg.norm(g)), 1e-9)
-        w = gyro_body(self.model, data, self.body) + self.bias
+        w = w + self.bias
         if self.gyro_sigma > 0:
             w = w + self.rng.normal(0.0, self.gyro_sigma, 3)
         return dict(grav=g, gyro=w, tilt=tilt_from_grav(g))

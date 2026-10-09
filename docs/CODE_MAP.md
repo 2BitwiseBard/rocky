@@ -1,7 +1,7 @@
 # Code map
 
 Where things are, how the pieces feed each other, and the exact command for the common jobs.
-Checked 2026-10-08 against the D064 tree (`build/body-layout`); the deeper guides are linked.
+Checked 2026-10-09 against the D065 tree (`build/level`); the deeper guides are linked.
 
 ## 1. The one-page map
 
@@ -31,6 +31,7 @@ rocky/
 │   ├── pebble_gait.py    IK/FK + WaveGait (the five-phase wave gait) + CommandSlew + ArmedGait
 │   ├── pebble_feasibility.py   the judge every motion passes (limits, speed, CoM, self-contact)
 │   ├── pebble_reflex.py  ReflexSupervisor: brace, FALLEN / RIGHTED, the righter's hip clamp
+│   ├── pebble_level.py   BodyLeveler (D065): foot raises from the IMU tilt; opt-in on the supervisor
 │   ├── pebble_watchdog.py   stuck detection + RetryPolicy (higher steps on rubble)
 │   ├── pebble_gestures.py, pebble_gestures2.py (code) · pebble_keyframes.py, pebble_pose_solver.py (JSON, reach IK)
 │   └── gaits/  gait presets (one file: legacy_d050.json) · gestures/  keyframe gestures · test_*.py
@@ -40,7 +41,8 @@ rocky/
 │   ├── playground.py     terminal REPL + viewer · cockpit.py, cockpit_brains.py, cockpit_ui.html   the browser cockpit
 │   ├── rocky_env.py, rocky_recover_env.py, rl_common.py, train_ppo.py, eval_*.py, righter.py,
 │   │   audit_righter.py, rl_dashboard.py   RL (§2.4) · runs/   checkpoints (git-lfs .pt)
-│   ├── run_sim.py, shove_envelope.py, torque_audit.py, audit_gestures.py   tools that give published numbers
+│   ├── run_sim.py, shove_envelope.py, torque_audit.py, audit_gestures.py, terrain_bench.py   tools that give
+│   │   published numbers
 │   ├── hw_bridge.py      the cockpit's real-servo bridge · servo_model.py, sim_imu.py, sim_lidar.py, shove.py
 │   ├── world_builder.py + worlds/, scenes.py, scene_memory.py, place_memory.py   worlds, memory, places
 │   ├── brain_install.py, brain_bench.py, vision_bench.py, place_bench.py, envfile.py   brains and benches
@@ -77,7 +79,8 @@ ros2/rocky_description/generate_urdf.py → urdf/pebble.urdf(.xacro);  sim/check
 sim/model_fingerprint.py   12-hex hash of the robot in pebble.xml; checkpoints and records carry it
    │
 gait/   rocky_model (numbers) · pebble_gait.WaveGait (motion) · pebble_feasibility (gate)
-        · pebble_reflex.ReflexSupervisor (supervision) · pebble_keyframes (gait/gestures/*.json)
+        · pebble_reflex.ReflexSupervisor (supervision, + pebble_level.BodyLeveler when opted in)
+        · pebble_keyframes (gait/gestures/*.json)
    │
 sim/playground.py · sim/cockpit.py · harness/ (MCP, brains) · sim/hw_bridge.py → driver/rocky_driver
 ```
@@ -294,7 +297,8 @@ From the repo root with `MUJOCO_GL=egl .venv/bin/python`. Experiments write the 
 | rubble (30 mm 3/4, 35 mm 1/4, watchdog 40 mm 3/4) | `sim/experiments/run_stuck.py` | `results/stuck_results.json` |
 | cliff safe-stop (PASS, margin 228.9 mm) | `sim/experiments/run_cliff_safestop.py` | `results/cliff_safestop_results.json` |
 | cliff control (INCONCLUSIVE since D064: it hangs on the tub) | `sim/experiments/run_cliff.py` | `results/cliff_results.json` |
-| void-guard lip band | `.venv/bin/python -m pytest sim/tests/test_playground_guards.py` (strict xfail) | the test |
+| void-guard lip band (364 approaches) | `sim/experiments/run_lip_grid.py --jobs 6 [--level]`; the strict xfail in `sim/tests/test_playground_guards.py` | `results/lip_grid[_level]_results.json` |
+| terrain: the leveler's bench (S0 / S1 / S2 × 3 IMUs, P1–P8) | `sim/terrain_bench.py --jobs 6` (§2.18) | `sim/out/terrain_bench.json` |
 | masses, fingerprint | §2.10 | `sim/mass_budget.json` |
 
 The 200-seed counts (righting 198/200, 104/200 without the righter) came from a scratch harness
@@ -304,7 +308,9 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
 - `./rocky.sh test`: `driver/tests`, `harness -m "not slow"`, `gait`, `sim/tests -m "not slow"`, on
   the reference setup (rocky.env is not read). The 9q fix round (2026-10-08) ran all of
   `sim/tests`, slow included: 819 passed + 1 re-pinned, 7 skipped, 5 xfailed; driver + gait +
-  harness fast: 305 passed.
+  harness fast: 305 passed. D065 after its review (2026-10-09): `sim/tests` fast 849 passed, 8 skipped, 2 xfailed, slow
+  6 passed + 3 xfailed, the same with `ROCKY_LEVEL=1` (every Playground built with the leveler on;
+  17 tests ever raise a foot); gait 130, driver + harness fast 204.
 - CI (`.github/workflows/ci.yml`; a push to `main`, a pull request, or by hand). **fast**: `bash -n
   rocky.sh`, `ruff check .`, the unit suites, MJCF + URDF regenerated and `git diff --exit-code`,
   `harness.capabilities --check docs/TOOLS.md`, `run_sim.py`, all of `sim/tests`, URDF parity, the
@@ -331,6 +337,56 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
   measurements until they are filed into params. [archive/](archive/README.md): superseded records.
 - The owner's desk page (order ticks, the body-layout picks) is a private claude.ai page; its
   link is kept outside the repo.
+
+### 2.16 Make the robot level itself, or tune the leveler
+- The law: `gait/pebble_level.py` `BodyLeveler` (its docstring has the six steps and the signs);
+  the supervisor runs it when built with one (`ReflexSupervisor(gait, leveler=BodyLeveler(gait))`,
+  `sup.step(..., grav=, level_hold=)`), and the playground and the cockpit build theirs through
+  `Playground._make_sup`. The plane's points per foot: `WaveGait.level_xy(t, vx, vy, wz, foot=True)`
+  (the plane points, the swing progress, the lift, the feet's real xy); the derated envelope:
+  `WaveGait.budget(..., level_slope=leveler.level_slope())`, primed by an enabled leveler
+  (`BodyLeveler.prime()`), read out by `Playground.envelope()`. Explained: SIM_GUIDE §3.
+- Live: `level on` / `level off` / `level` in the playground or the cockpit console; tune with
+  `set level.tau_s 1.2` (also `filter_s deadband_deg raise_mm rate_mm_s swing_rate_mm_s tilt_max_deg
+  min_contacts gyro_calm`; sim-only, kept across a respawn). A noisy IMU:
+  `Playground(imu={"grav_sigma": 0.02, "latency_s": 0.02, "seed": 0})` or `pg.set_imu(...)`; a mount
+  error: `mount_deg`, `mount_axis`.
+- Keep a value: `params.yaml` `level:` (one comment per key; `rocky_model.level_defaults()` reads
+  it). `level.enabled` is false: flipping it is a terrain-bench verdict (§2.18, decisions D065), and
+  it changes no physics (`params_rev` and the fingerprint stay).
+- Tests: `gait/test_level.py` (the law, the window, the derate) and the `test_level_*` tests in
+  `sim/tests/test_playground_guards.py`; `ROCKY_LEVEL=1` runs every sim test with it on (the P9 run).
+
+### 2.17 Add a terrain world to the bench
+- The rows are `sim/terrain_bench.py` `rows()`: `add(id, world, kind, build, seconds, ...)` with
+  `build` a `world_builder` spec (`{"wb": {...}}`), `{"rubble": [amp_mm, seed]}` or
+  `{"cliff": True}`; `kind` walk / stand / shove / cliff / motion (`cmd=[vx, vy, wz]`, `stop_at=` s:
+  the W1 turn rows); `z0` spawns the stance up (a stone under a foot, `stone_foot=` for its load),
+  `slope_deg` sets the tip line, `drop=True` says the world has a drop (a void elsewhere is false). Keep the specs in the
+  bench, not in `world_builder.PRESETS` (`test_place_bench` pins that list).
+- A seed is a bench seed (0–4); 100–199 is held out (`--tier heldout`), ≥ 1000 is for training
+  (`BENCH_SEEDS`, `HELDOUT_SEEDS`, `TRAIN_SEED_MIN`, pinned by `sim/tests/test_terrain_bench.py`).
+- Update the row count in `test_row_table_schema_and_counts` (87) and the CLI test's
+  `87 rows`, then `--one NEW_ROW --stack S1,S2` before a full run.
+
+### 2.18 Run the terrain bench
+```bash
+MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --list                     # the rows
+MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --quick --jobs 6           # one phase, one seed
+MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --jobs 6 --stack S0,S1,S2,S3 --imu ideal,noisy,mount1.5
+MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --one W3.stone20.f0.stand --stack S1,S2   # prints JSON
+```
+- The full run is 1033 runs (775 made, S3's reported unavailable) in 643 s at `--jobs 6` and
+  writes `sim/out/terrain_bench.json` (provenance: HEAD, dirty, `code_diff_sha256` when the code
+  is dirty, fingerprint, the params `level:` block, the IMU modes, the date); the
+  last line is the verdict, rule by rule. A mode or stack the Playground cannot apply is reported
+  `unavailable`, never run as ideal; S3 is always unavailable until B160.
+- The rules gate the ideal and noisy IMUs (mount1.5 is reported only, B159); P9 is the test suites
+  with `ROCKY_LEVEL=1`, which covers less than it sounds: most sim tests never level anything (see
+  BUILD_LOG 9r, the review fixes), and the gait suite does not read it. Commit the JSON with the
+  docs that quote it; a run on a dirty tree names its code by `code_diff_sha256`
+  (`git diff HEAD~1 HEAD -- . ':!*.md' ':!docs' ':!sim/out' ':!sim/experiments/results' | sha256sum`
+  after the commit).
 
 ## 3. Reading order for a newcomer
 1. [README.md](../README.md): status, setup, the ground rules.

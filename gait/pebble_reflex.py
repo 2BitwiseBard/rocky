@@ -105,6 +105,20 @@ D052 options (a caller that passes none of them gets the plain supervisor):
                    harness that must reproduce pre-D052 numbers passes
                    trip_escalate_n=None.
 
+D065 body leveler (OFF unless a caller passes one; leveler=None is the D064
+supervisor bit for bit):
+  leveler=BodyLeveler(gait) (gait/pebble_level.py) — a plane of per-foot RAISE
+                   offsets on the IMU tilt. step(grav=, switches=, level_hold=)
+                   feeds it (switches default to contacts); _gait_feet adds its
+                   offsets to the gait's feet BEFORE last_feet_raw, so the probe's
+                   meas and probe_out stay relative to the leveled target and
+                   probe_dz is untouched. The law ticks at the bus rate at the end
+                   of step() in NORMAL / PLANT / BRACE / RECOVER (BRACE freezes it,
+                   only NORMAL integrates); FALLEN, RIGHTED and a gesture (monitor)
+                   reset it. PLANT's swing-low test measures each foot from its
+                   own leveled ground, and the brace captures the offsets into its
+                   crouch plane (it would undo them within crouch_ramp_s).
+
 D063 command slew (ON by default; slew=False is the pre-D063 pass-through):
   the velocity reaches the gait through pebble_gait.CommandSlew (25 mm/s^2 on
   the fastest foot, then a 0.2 s lag: standing -> the 34.2 mm/s envelope in
@@ -171,7 +185,8 @@ class ReflexSupervisor:
                  right_ramp_s=None, right_hold_s=0.5, fallen_max_s=None,
                  stall_s=None, stall_tilt_deg=None, righter_hip_min_deg=None,
                  righter_clamp_legs=None,
-                 trip_escalate_n=3, trip_escalate_s=5.0, cmd_accel=None, slew=True):
+                 trip_escalate_n=3, trip_escalate_s=5.0, cmd_accel=None, slew=True,
+                 leveler=None):
         # D052: a None kwarg comes from params.yaml `reflex:` (rocky_model.
         # reflex_defaults()); anything passed wins, so every existing caller
         # (gait only, or gait + gyro_trip/stall_s/...) behaves as before —
@@ -266,8 +281,16 @@ class ReflexSupervisor:
         self._probe = None                       # (5,) mm, set per step by the caller
         self._brace_probe = np.zeros(N_LEGS)
         self.last_stance = None                  # commanded stance mask of the last step (probe uses it)
-        self.last_feet_raw = None                # the gait's feet BEFORE the probe offset
+        self.last_feet_raw = None                # the gait's feet (+ the leveler's) BEFORE the probe offset
         self.right_reason = None
+        # D065: the body leveler, opt-in (see the module docstring)
+        if leveler is not None and leveler.g is not gait:
+            raise ValueError("D065: the leveler must be built on the supervisor's own gait")
+        self.leveler = leveler
+        self.level_dz = None                     # (5,) mm the leveler added to the feet (+ = higher)
+        self._brace_level = None                 # the offsets the brace captured
+        self._lv_in = None                       # this step's leveler inputs
+        self._lv_pts = None                      # (stance, xy, s, clear, foot_xy) of the last _gait_feet
 
     # ------------------------------------------------------------------
     def set_righter(self, fn):
@@ -416,11 +439,27 @@ class ReflexSupervisor:
     def _gait_feet(self, vx, vy, wz):
         """(feet, commanded_stance_mask) — idle = five planted feet. The caller's
         probe offsets (D052) are applied here, so every state built on the gait
-        (NORMAL, PLANT, RECOVER, the brace capture) sees the probed feet."""
-        if abs(vx) + abs(vy) + abs(wz) * 100 < self.idle_eps:
+        (NORMAL, PLANT, RECOVER, the brace capture) sees the probed feet.
+        D065: the leveler's offsets go on first, before last_feet_raw."""
+        idle = abs(vx) + abs(vy) + abs(wz) * 100 < self.idle_eps
+        if idle:
             feet, stance = self.g.p_nom.copy(), np.ones(N_LEGS, dtype=bool)
         else:
             feet, stance = self.g.foot_targets(self.t_gait, vx, vy, wz)
+        if self.leveler is not None:
+            if self.leveler.idle:                # off and at zero: its offsets need no points
+                xy = s = clear = None
+            elif idle:
+                xy, s, clear = self.g.p_nom[:, :2].copy(), np.full(N_LEGS, np.nan), np.zeros(N_LEGS)
+                foot = xy
+            else:
+                xy, s, clear, foot = self.g.level_xy(self.t_gait, vx, vy, wz, self.leveler.swing_blend,
+                                                     foot=True)
+            if xy is None:
+                foot = None
+            self._lv_pts = (stance.copy(), xy, s, clear, foot)
+            self.level_dz = self.leveler.dz_at(xy)
+            feet[:, 2] += self.level_dz
         self.last_feet_raw = feet.copy()
         self.last_stance = stance.copy()
         if self._probe is not None:
@@ -429,10 +468,36 @@ class ReflexSupervisor:
         return feet, stance
 
     def _swing_low(self, feet, stance):
-        """True when every commanded-swing foot is near the ground."""
+        """True when every commanded-swing foot is near the ground (D065: its own
+        leveled ground, -h + level_dz: a raised foot is low over ITS ground, or
+        PLANT would wait out plant_max_s for it)."""
         gz = -self.g.h
-        return all(feet[i, 2] <= gz + self.plant_z_low
+        if self.level_dz is None:
+            return all(feet[i, 2] <= gz + self.plant_z_low
+                       for i in range(N_LEGS) if not stance[i])
+        return all(feet[i, 2] <= gz + self.level_dz[i] + self.plant_z_low
                    for i in range(N_LEGS) if not stance[i])
+
+    # ------------------------------------------------------------------ D065 leveler
+    def _level_reset(self):
+        """FALLEN, RIGHTED, a gesture: the leveler starts again from zero (the ramps
+        out of them end on the un-leveled planted stance)."""
+        if self.leveler is not None:
+            self.leveler.reset()
+            self.level_dz = np.zeros(N_LEGS)
+
+    def _level_tick(self):
+        """End of step(): the leveler's law at the bus rate, on this step's points
+        and state; BRACE freezes it (the brace holds the captured offsets)."""
+        t, grav, switches, hold, gyro_xy, q_meas = self._lv_in
+        if self._lv_pts is None:
+            xy = self.g.p_nom[:, :2].copy()
+            self._lv_pts = (np.ones(N_LEGS, dtype=bool), xy, np.full(N_LEGS, np.nan), np.zeros(N_LEGS), xy)
+        stance, xy, s, clear, foot = self._lv_pts
+        if self.state == BRACE and not hold:
+            hold = "brace"
+        self.leveler.tick(t, grav, gyro_xy, self.state, stance, switches, xy, s, clear,
+                          hold=hold, q_meas=q_meas, foot_xy=foot)
 
     # ------------------------------------------------------------------
     def _enter_plant(self, t):
@@ -454,6 +519,11 @@ class ReflexSupervisor:
         self._brace_probe = (np.zeros(N_LEGS) if self._probe is None
                              else np.asarray(self._probe, float).copy())
         bf[:, 2] = -(self.g.h + self.crouch) - self._brace_probe   # full-crouch reference
+        if self.leveler is not None:
+            # D065: and from its leveled plane, or the brace undoes the leveling in crouch_ramp_s
+            self._brace_level = (np.zeros(N_LEGS) if self.level_dz is None
+                                 else np.asarray(self.level_dz, float).copy())
+            bf[:, 2] += self._brace_level
         self._brace_feet = bf
         self._z_now = self._brace_z0.copy()
         self.swing_at_brace = self._swing_legs()
@@ -467,6 +537,8 @@ class ReflexSupervisor:
 
     def _brace_targets(self, t, dt, contacts, gyro_vec):
         crouch_plane = -(self.g.h + self.crouch) - self._brace_probe    # per leg (D052 probe)
+        if self._brace_level is not None:
+            crouch_plane = crouch_plane + self._brace_level             # D065 leveler
         feet = self._brace_feet.copy()
         if not self.contact_aware:
             # v1: one global crouch ramp from captured z
@@ -516,7 +588,8 @@ class ReflexSupervisor:
 
     def step(self, t, vx, vy, wz, gyro_xy: float, contacts=None,
              gyro_vec=None, tilt_deg=None, height=None, monitor=False,
-             probe_dz=None, q_meas=None, direct=False):
+             probe_dz=None, q_meas=None, direct=False, grav=None, switches=None,
+             level_hold=None):
         """Advance the supervisor; returns (q[5,3], state).
 
         t: monotonic time (s). gyro_xy: |body roll/pitch rate| rad/s (IMU).
@@ -540,12 +613,20 @@ class ReflexSupervisor:
         command — the step it finishes is the one that was running. While the
         legs are not on the gait (a gesture, FALLEN, RIGHTED) the command is
         held at zero, so the gait comes back from the planted stance by the
-        ramp, not by a jump to mid-stride."""
+        ramp, not by a jump to mid-stride.
+        D065 (only with a leveler): grav — the IMU's body-frame unit gravity,
+        None = uncalibrated (the leveler releases); switches (5,) bool — the
+        foot switches it counts, default contacts; level_hold — the caller's
+        freeze (bool, reason or set of reasons: a gate hold, a void phase, a
+        probe_out, a foot seeking past its settle window)."""
         if self._t0 is None:
             self._t0 = t
         if self.latched:
             vx = vy = wz = 0.0
         self._probe = None if probe_dz is None else np.asarray(probe_dz, float)
+        if self.leveler is not None:
+            self._lv_in = (t, grav, contacts if switches is None else switches, level_hold,
+                           gyro_xy, q_meas)
         armed = (t - self._t0) >= self.arm_after
         dt = 0.0 if self._last_t is None else max(0.0, t - self._last_t)
         self._last_t = t
@@ -571,11 +652,13 @@ class ReflexSupervisor:
             self._enter_fallen(t)                # ramp knocked it back over
 
         if self.state == FALLEN:
+            self._level_reset()
             q = self._fallen_step(t, dt, tilt_deg, height, contacts, q_meas)
             self._last_q = q.copy()
             self._last_feet = None
             return q, FALLEN if self.state == FALLEN else self.state
         if self.state == RIGHTED:
+            self._level_reset()
             q = self._righted_step(t)
             self._last_q = q.copy()
             self._last_feet = None
@@ -594,6 +677,7 @@ class ReflexSupervisor:
             self._calm_since = None
             self.last_stance = None
             self._last_feet = None
+            self._level_reset()                  # D065: the gesture's exit ends un-leveled
             if q_meas is not None:
                 self._last_q = np.asarray(q_meas, float).reshape(N_LEGS, 3).copy()
             return self._planted_q().copy(), self.state
@@ -675,6 +759,8 @@ class ReflexSupervisor:
             elif a >= 1.0:
                 self.state = NORMAL
 
+        if self.leveler is not None:
+            self._level_tick()
         self._last_feet = feet
         q = np.zeros((N_LEGS, 3))
         for i in range(N_LEGS):

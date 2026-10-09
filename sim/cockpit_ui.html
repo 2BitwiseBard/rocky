@@ -869,8 +869,14 @@ es.onmessage = e => {
   renderGuards(s); renderFingerprint(s); renderSim2realGate(s);
   const g = s.guards || {};
   const probe = (g.probe_state || []).map((p, i) => p[0] + (g.probe_dz && g.probe_dz[i] > 0.5 ? Math.round(g.probe_dz[i]) : '')).join(' ');
+  // D065 body leveler: the plane's slope, its feet raises (mm), saturated / why it holds
+  const lvDz = (g.level_dz || []).map(x => Math.round(x)).join(' ');
+  const level = !g.level_on && !(g.level_dz || []).some(x => x > 0) ? 'level off'
+    : `level ${g.level_on ? (g.level_active ? 'on' : 'on (idle)') : 'releasing'} ${g.level_slope_deg ?? '—'}° up ${lvDz || '—'}` +
+      `${g.level_sat ? ' SAT' : ''}${g.level_hold && g.level_hold !== 'off' ? ' hold ' + g.level_hold : ''}`;
   let ov = `cmd (${s.cmd[0]}, ${s.cmd[1]}) mm/s wz ${s.cmd[2]}  →  gait (${s.cmd_eff[0]}, ${s.cmd_eff[1]}) wz ${s.cmd_eff[2]}\n` +
     `feet ${s.contacts.map(c => c ? '●' : '○').join('')}  probe ${probe || '—'}  h ${s.kin_h} mm (kin)  gyro ${s.gyro}\n` +
+    `${level}\n` +
     `${s.goto ? 'goto → (' + s.goto[0].toFixed(2) + ', ' + s.goto[1].toFixed(2) + ')  ' : ''}${s.paused ? 'PAUSED  ' : ''}trips ${s.trips} falls ${s.falls}  servo ${g.servo_on ? 'real' : 'IDEAL'}\n${s.righter}`;
   let extra = '';
   if (g.budget_note) extra += `\n<span class="budget">${esc(g.budget_note)}</span>`;
@@ -1543,7 +1549,7 @@ for (const [id, p] of [...GAIT_SLIDERS.map(x => [x[0], x[1]]), ['trip','reflex.t
 async function loadGaits() {
   const r = await getj('/api/gait');
   $('#gp-list').innerHTML = Object.entries(r.presets).map(([k, p]) => `<option value="${esc(k)}">${esc(k)} (T ${p.T} h ${p.h} step ${p.hstep})</option>`).join('');
-  const e = r.envelope; $('#gp-env').textContent = `envelope now: |v| ≤ ${f1(e.v)} mm/s at any heading, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place (WaveGait.budget scales anything bigger)`;
+  const e = r.envelope; $('#gp-env').textContent = `envelope now: |v| ≤ ${f1(e.v)} mm/s at any heading, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place (WaveGait.budget scales anything bigger)` + (e.level_slope_deg > 0 ? ` — derated for the ${e.level_slope_deg}° leveled plane` : '');
 }
 loadGaits();
 $('#gp-load').onclick = async () => { const r = await post('/api/cmd', {line: 'gait ' + $('#gp-list').value}); addLog(r.reply); $('#gait-report').textContent = r.reply || ''; gaitInit = false; loadGaits(); };
