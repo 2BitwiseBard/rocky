@@ -447,7 +447,9 @@ class ReflexSupervisor:
         else:
             feet, stance = self.g.foot_targets(self.t_gait, vx, vy, wz)
         if self.leveler is not None:
-            if idle:
+            if self.leveler.idle:                # off and at zero: its offsets need no points
+                xy = s = clear = None
+            elif idle:
                 xy, s, clear = self.g.p_nom[:, :2].copy(), np.full(N_LEGS, np.nan), np.zeros(N_LEGS)
             else:
                 xy, s, clear = self.g.level_xy(self.t_gait, vx, vy, wz, self.leveler.swing_blend)

@@ -443,6 +443,30 @@ def test_no_leveler_is_the_d064_supervisor_bit_for_bit():
     assert lv.hold in (None, "brace", "plant", "recover") and not lv.P.any()
 
 
+def test_an_idle_leveler_needs_no_points(monkeypatch):
+    """Off and at zero, the supervisor never asks the gait for the plane's points (0.2 ms
+    a call); a leveler still releasing, or on, does; dz_at(None) only when idle."""
+    g = WaveGait()
+    lv = BodyLeveler(g)
+    assert lv.idle and not lv.dz_at(None).any()
+    calls = []
+    real = g.level_xy
+    monkeypatch.setattr(g, "level_xy", lambda *a, **k: calls.append(1) or real(*a, **k))
+    sup = ReflexSupervisor(g, arm_after=0.0, leveler=lv)
+    for k in range(200):
+        sup.step(k * DT, 30.0, 0.0, 0.0, 0.1, contacts=np.ones(N_LEGS, bool), grav=grav_low(0.2, 0.0))
+    assert not calls and not sup.level_dz.any()
+    lv.copies[0] = [0.0, 0.0, 1.0]                        # a copy off zero: not idle any more
+    assert not lv.idle
+    with pytest.raises(ValueError):
+        lv.dz_at(None)
+    sup.step(200 * DT, 30.0, 0.0, 0.0, 0.1, contacts=np.ones(N_LEGS, bool), grav=grav_low(0.2, 0.0))
+    assert calls
+    lv.reset()
+    lv.engage()
+    assert not lv.idle                                   # on: the law may move the plane any tick
+
+
 def test_offsets_go_on_before_last_feet_raw_and_the_probe_after():
     g = WaveGait()
     lv = fixed_plane(g, np.tan(np.radians(4.0)), 30.0)

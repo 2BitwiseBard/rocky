@@ -81,9 +81,13 @@ def reload() -> None:
 
 
 def _p() -> dict:
-    """Internal read-only view (no copy) — never hand this out."""
-    params()
-    return _CACHE[os.path.normpath(PARAMS_PATH)]
+    """Internal read-only view (no copy) — never hand this out. D065: it called
+    params() and threw the deep copy away, 0.22 ms per call, and servo_speed()
+    runs on every playground step."""
+    p = os.path.normpath(PARAMS_PATH)
+    if p not in _CACHE:
+        params()
+    return _CACHE[p]
 
 
 def params_rev() -> str:

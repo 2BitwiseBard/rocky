@@ -135,6 +135,13 @@ class BodyLeveler:
         return bool(self.enabled and self.imu_ok)
 
     @property
+    def idle(self):
+        """Off and at zero: every offset is 0 wherever the feet are and a tick moves
+        nothing that depends on them, so the supervisor passes no points (xy=None)
+        and skips WaveGait.level_xy (about 0.2 ms, every supervisor call)."""
+        return bool(not self.enabled and not self.P.any() and not self.copies.any())
+
+    @property
     def settled(self):
         """Every leg's copy sits on the plane (and the plane on zero when off)."""
         return bool(np.all(self.copies == self.target()) and (self.enabled or not self.P.any()))
@@ -151,7 +158,11 @@ class BodyLeveler:
 
     def dz_at(self, xy):
         """(5,) offsets (mm, + = foot higher) of the legs' copies at their points xy (5, 2):
-        what the supervisor adds to the feet every call."""
+        what the supervisor adds to the feet every call. xy=None: an idle leveler's."""
+        if xy is None:
+            if self.copies.any():
+                raise ValueError("dz_at(None) needs an idle leveler (every copy at zero)")
+            return np.zeros(N_LEGS)
         xy = np.asarray(xy, float)
         z = self.copies[:, 0] * xy[:, 0] + self.copies[:, 1] * xy[:, 1] + self.copies[:, 2]
         return np.clip(z, 0.0, self.raise_mm)
@@ -170,8 +181,8 @@ class BodyLeveler:
         level_xy's (the legs' plane points, swing progress NaN in stance, the swing
         foot's lift over its own ground); hold: the caller's freeze (bool, reason
         or reasons); q_meas (5, 3): measured joints, for com_margin_mm.
-        Returns the (5,) offsets (mm, + = foot higher) at xy."""
-        xy = np.asarray(xy, float)
+        Returns the (5,) offsets (mm, + = foot higher) at xy (None when idle)."""
+        xy = None if xy is None else np.asarray(xy, float)
         if self._t_last is not None and t < self._t_last:
             self._t_last = None                    # a new time base
         if self._t_last is None or (t - self._t_last) >= self.tick_s - 1e-9:
@@ -243,6 +254,10 @@ class BodyLeveler:
     def _follow(self, stance, xy, s, clear, dt):
         """Each leg's copy toward the plane, its change at its own point <= its class's rate."""
         T = self.target()
+        if xy is None:                                 # idle: the plane and every copy at zero
+            if T.any() or self.copies.any():
+                raise ValueError("no points for a leveler that is not idle")
+            return
         a, b = self.swing_blend
         for i in range(N_LEGS):
             if stance[i]:
