@@ -43,7 +43,7 @@ bench it against the shipped stack, and ship it off unless the bench passes.
   height error over the loaded feet is −14.3 to −17.1 mm (S1 −0.2 to +1.1).
 - Walking: the slopes' mean tilt RMS 7.59 → 2.91°, ramps 5.49 → 2.20, stairs 4.72 → 1.96 (tips
   2 → 0), rubble 2.20 → 1.57 (S0, no probe, 1.54); the 8° shove's peak 12.08 → 5.15.
-- Flat: bit-identical to S1 with the ideal IMU; under the noisy one the plane drifts 1.19–1.68 mm
+- Flat (straight walks and the stand): bit-identical to S1 with the ideal IMU; under the noisy one the plane drifts 1.19–1.68 mm
   (tilt RMS +0.016…+0.037°).
 - No S1 or S2 run fell or touched the belly; load ≤ 0.238 × stall; heat ≤ 0.2 % of the budget.
   The cliff grid fired and held 10/10 in every mode, the 5° slope cliff 2/2 (S0: 0/10 fire, 8
@@ -51,12 +51,12 @@ bench it against the shipped stack, and ship it off unless the bench passes.
 - mount1.5 (not gated): the leveler levels to the sensor, 1.045° off on a flat stand, the flat
   walk's tilt RMS 1.31° (B159).
 
-**The lip grid** (`sim/experiments/run_lip_grid.py`, 364 approaches, on `965f4f70e5d1`): 356 stop,
+**The lip grid, first run** (`sim/experiments/run_lip_grid.py`, 364 approaches, on `965f4f70e5d1`): 356 stop,
 8 tip, 0 fall, 0 short, worst safe tilt after a fire 5.69° (424 s); with `--level` the same 8 tip,
 no outcome changes, 314 of 364 approaches identical, every void within 0.02 s (439 s). It
 reproduces the 9q record.
 
-**Verdict: fail, so `level.enabled` stays false.** Pass: P2 (the 20 mm stone ≤ 1.0°: 0.346–0.357
+**First-run verdict: fail, so `level.enabled` stays false.** Pass: P2 (the 20 mm stone ≤ 1.0°: 0.346–0.357
 ideal, 0.161–0.165 noisy), P3 (8° ≤ 3.5, 5° ≤ 0.6), P5 (no new falls), P8 (load and heat), R1 (the
 worst row +0.043°, a noisy cliff approach), P9 (below). Fail: **P1** under the noisy IMU (offsets
 1.19 / 1.68 / 1.38 mm against 0.5); **P4** on 21 row × IMU pairs: 14 on the slopes, where a saturated
@@ -87,8 +87,8 @@ xfailed, and the same counts with `ROCKY_LEVEL=1` (P9); driver + harness fast 20
 `docs/TOOLS.md` current; fingerprint `965f4f70e5d1`, params D064. Nothing on main opts in, so no
 published record moves while `level.enabled` is false.
 
-**If it were flipped:** the playground's and the cockpit's default walks on flat ground do not
-change with an ideal IMU (bit-identical), but every record that stands or walks on a slope, a
+**If it were flipped:** the playground's and the cockpit's straight walks on flat ground do not
+change with an ideal IMU (bit-identical; a turn, a stop or a shove does, the review found), but every record that stands or walks on a slope, a
 stone, rubble, a ramp or stairs moves (the terrain bench's S2 column), the envelope falls to 32.48
 mm/s on a 5° plane, and a sim → robot start waits for `level off`. Only the Playground builds a leveler (and so the cockpit and the
 vision, brain and place benches, which start one; their rooms are flat); the harness sim, the RL
@@ -101,6 +101,71 @@ on P4 for creep and derate; B161 (the stairs false void); before any hardware ru
 calibration) and B157 (the probe, gate and void guard into `gait/`); the classical rival B156 and
 the terrain residual B160.
 
+
+**The review round (wip 4).** Two reviewers (controls, sim → real) verified 21 findings against
+the tree; this round fixed them or says why not, re-ran the bench and the lip grid on the fixed
+code, and the docs above now quote that record.
+- **Fixed, the law** (`gait/pebble_level.py`): the tick is a schedule (a call within half the
+  caller's smoothed period of the slot ticks it): on a 50 Hz loop with 0.3 ms of timestamp jitter
+  350 of 350 calls tick (the `t − t_last ≥ tick` rule ticked about 62 %), at 500 Hz the same calls
+  as before. The copies move on every call by rate × the call's dt (the plane still on the ticks),
+  so the 500 Hz stream has no 50 Hz staircase. A swing foot is airborne only when it clears the
+  15 mm band + 2 mm (`BAND_MARGIN_MM`: `pebble_feasibility.support_plane` fits a near-band foot
+  into its plane, ~1.5 mm low) over the highest copy's or the plane's ground under its REAL xy
+  (`WaveGait.level_xy(foot=True)`). An enabled leveler primes the derated ceilings for every
+  0.0025 slope step its window admits (`BodyLeveler.prime()` → `WaveGait.prime_level`, 37 steps
+  to 0.0925, 2.8 s once per process; a `budget(level_slope=)` is then a 0.075 ms lookup), since
+  computed in the control step a new step cost 30–77 ms.
+- **Fixed, the sim:** `apply_gait` reset the leveler on any `h` / `R0` key, the same value too
+  (`gait default` on a levelled 5° slope dropped the feet 30 mm in one step, 4.7 rad/s at the
+  guard's clamp); it keeps the plane now and primes the new gait's derate. The envelope readouts
+  are the derated one (`Playground.envelope()`, the cockpit's gait and model panels, a `check`
+  line saying it judges the bare gait); `V_MAX` (the teleop cap on the ask) and the capability
+  registry's envelope stay bare. `TIPPED_DEG` lives once in `sim/playground.py`; the bench takes
+  `PROBE_MAX` from there; `level.raise_mm`'s cap is `PROBE_MAX`; `level_xy`'s blend defaults to
+  params.
+- **Fixed, the bench:** W1 gains a turn in place, a walk + turn with its stop and two rim shoves
+  (all under P1); W8 the 5° slope cliff walked across and uphill; W3 reports the stone foot's load;
+  a false void on a drop world is now ground within `PROBE_MAX` of the foot's un-probed target
+  (it was 30 mm under the lowered foot), with `void_ground_nom_mm` and `void_nohit` recorded; the
+  provenance carries `code_diff_sha256` on a dirty tree, and the lip grid's record `head` / `dirty`.
+- **Tests that kill the mutations the review survived:** the floor-feel holds (each named, and a
+  hold freezing the plane and the copies through `step()`), the cliff at a15 / a20 walk 45 with
+  the leveler on (removing the holds tips both: 20.4 / 18.8°), `reset_guards`, the derate wiring,
+  the gait change, the filter's 63 % at `filter_s`, the jittered tick, the per-call copies, the
+  airborne band, the priming, the meter's false void, the mount error on the gyro.
+- **Measured envelope, the moving plane:** the review's converging-plane probe (24 runs, 5 / 8 /
+  10°): judged at the Pi's 50 Hz loaded ≤ 2.918, free ≤ 2.867 rad/s; the sim's stream at 100 Hz
+  (check()'s rate) loaded ≤ 2.944 (was 3.395), free ≤ 2.910 (3.614); at 500 Hz raw loaded ≤ 3.003
+  (7.108), free ≤ 3.004 (7.481), the 3.003 one 2 ms step of a swing copy at 40 mm/s that check()
+  classes loaded. The moving vs held plane through the supervisor (20 ms windows, 12 runs): loaded
+  ≤ 2.953 moving (was 3.030), 2.930 held. The 50 Hz jitter probe: offsets step ≤ 0.84 mm per call
+  (1.19 on the 8° / 234° run; was up to 2.20).
+- **Not done, and why:** no leak of the plane inside the deadband (it would walk a levelled
+  slope's residual out to the deadband's edge; the turning stop's residue is the probe's, B163);
+  `_swing_speeds_level` still repeats `_swing_speeds`' body (merging them risks the bare ceiling,
+  34.2041015625, pinned bit for bit); P2 still judges tilt alone (the stone foot carries 0 N in S1
+  and S2, so it is reported, not gated); P4 is the decided rule, now stated with its 94.97 %
+  derate floor (B162 c).
+
+**The record after the fixes** (`sim/out/terrain_bench.json`: 1033 runs, 775 made, in 643 s at
+`--jobs 6`, on `b2bf1b9` plus this commit's code, `code_diff_sha256` `28db9fa2…`): every S0 and S1
+run is bit-identical to the first run's (468 of 468); S2 moved in 177 of 234 shared rows, by
+≤ 0.003° of tilt RMS on the slopes, ramps, stones and the shove, by −0.74…+0.47° on rubble and
+stairs. The numbers are in SIM_GUIDE §3 and D065. The lip grid on the same code: level off
+364 of 364 approaches identical to the first run (259 s); level on 356 stop, 8 tip, 0 fall, worst
+safe tilt after a fire 5.69°, 314 identical to level off, every void within 0.02 s (334 s).
+
+**Verdict, again: fail** — P1 (noisy drift, and now the ideal flat-motion rows), P4 (27 pairs),
+P6 (two noisy false voids, both the probe's, B161), P7 (rubble 23.5 / 24.2 mm), R1 (+0.42° on the
+noisy rubble row that false-voids); P2, P3, P5, P8 pass. `level.enabled` stays false.
+
+**The loop after the fixes:** gait 130 passed; driver + harness fast 204; `sim/tests` fast 849
+passed, 8 skipped, 2 xfailed, slow 6 passed + 3 xfailed (122 s); with `ROCKY_LEVEL=1` the same
+849 / 8 / 2, but of its 859 tests only 125 ran an enabled leveler and 17 ever raised a foot, 10
+of them D065 tests that pin `level=` themselves (the reviewer's spy plugin: P9 covers less than it
+sounds, and the gait suite does not read the variable); ruff clean; `docs/TOOLS.md` current;
+fingerprint `965f4f70e5d1`, params D064.
 ---
 
 ## 2026-10-07 → 10-08 · Session 9q — the body layout is built from the 15 picks (D064)

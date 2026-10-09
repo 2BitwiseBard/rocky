@@ -319,9 +319,9 @@ class WaveGait:
         (_swing_speeds_level), with the transfer over level_blend (None = params
         level.swing_blend). The transfer keeps a swing foot inside the band a
         little longer, so the ceiling drops (34.20 -> 33.51 mm/s at tan 2 deg,
-        32.48 at tan 5, 31.42 at tan 8; 77 ms per slope step, measured
-        2026-10-08). 0 is the bare gait: the same key and the same number as
-        before."""
+        32.48 at tan 5, 31.42 at tan 8; 30-77 ms per slope step, measured
+        2026-10-08/09: prime_level() computes them up front). 0 is the bare
+        gait: the same key and the same number as before."""
         feet = self._lift_feet()
         key = (self.h, self.R0, self.T, self.duty, self.hstep, self.LIFT_FULL_MM_S,
                tuple(tuple(np.round(f, 6)) for f, _a in feet))
@@ -363,6 +363,18 @@ class WaveGait:
                 return best
             self._LIFT_CACHE[key] = float(limit())
         return self._LIFT_CACHE[key]
+
+    def prime_level(self, max_slope, level_blend=None):
+        """Compute the lift ceiling for every LEVEL_SLOPE_STEP up to max_slope now
+        (D065, review 9r: lazily, budget(level_slope=) bisected inside the control
+        step, 30-77 ms per new step). BodyLeveler.prime() calls it. Returns how
+        many were computed (the rest were cached)."""
+        n0 = len(self._LIFT_CACHE)
+        q = self.level_slope_q(max_slope)
+        if np.isfinite(q):
+            for k in range(1, int(round(q / self.LEVEL_SLOPE_STEP)) + 1):
+                self._lift_limit(k * self.LEVEL_SLOPE_STEP, level_blend)
+        return len(self._LIFT_CACHE) - n0
 
     def budget(self, vx, vy, wz, level_slope=0.0, level_blend=None):
         """(vx, vy, wz) scaled UNIFORMLY (heading and curvature kept) so the
@@ -407,18 +419,23 @@ class WaveGait:
         p[2] += lift * z
         return p, False
 
-    def level_xy(self, t, vx, vy, wz, blend=(0.30, 0.70)):
+    def level_xy(self, t, vx, vy, wz, blend=None, foot=False):
         """Where BodyLeveler evaluates its plane for each leg at time t (D065):
         (xy (5,2) BODY mm, s (5,) swing progress, NaN in stance, clear (5,) mm the
-        swing foot's lift over its own ground, 0 in stance). Stance: the foot's
-        own xy (_leg_target), so a planted foot sweeping a slope stays on it.
+        swing foot's lift over its lift-off ground, 0 in stance). Stance: the
+        foot's own xy (_leg_target), so a planted foot sweeping a slope stays on it.
         Swing: its lift-off point, moved to its touchdown point by a smoothstep
-        over s in blend, so the foot lands on the plane — evaluating at the
-        stations instead lands a downhill foot off it every step, and the plain
-        swing xy rides the plane's slope through the 15 mm band at full speed."""
+        over s in blend (None = params level.swing_blend), so the foot lands on the
+        plane — evaluating at the stations instead lands a downhill foot off it
+        every step, and the plain swing xy rides the plane's slope through the
+        15 mm band at full speed. foot=True adds a fourth: the feet's real xy
+        (5, 2), where the band is judged."""
+        if blend is None:
+            blend = _rm.level_defaults()["swing_blend"]
         v = np.array([vx, vy, 0.0])
         lift = self.hstep * self.lift_scale(self._vf_max(vx, vy, wz))
         xy = np.zeros((N_LEGS, 2))
+        fxy = np.zeros((N_LEGS, 2))
         s = np.full(N_LEGS, np.nan)
         clear = np.zeros(N_LEGS)
         a, b = blend
@@ -427,14 +444,16 @@ class WaveGait:
             pn = self.p_nom[i]
             vf = v + np.cross(np.array([0, 0, wz]), pn)
             if ph < self.duty:
-                xy[i] = self._leg_target(ph, pn, vf, lift)[0][:2]
+                xy[i] = fxy[i] = self._leg_target(ph, pn, vf, lift)[0][:2]
                 continue
             si = (ph - self.duty) / (1 - self.duty)
             p_lift, p_land = self._stride_ends(pn, vf)
             xy[i] = (p_lift + (p_land - p_lift) * smooth01((si - a) / (b - a)))[:2]
+            pxy, pz = swing_profile(si, self.duty)
+            fxy[i] = (p_lift + (p_land - p_lift) * pxy)[:2]
             s[i] = si
-            clear[i] = lift * swing_profile(si, self.duty)[1]
-        return xy, s, clear
+            clear[i] = lift * pz
+        return (xy, s, clear, fxy) if foot else (xy, s, clear)
 
     def foot_targets(self, t, vx, vy, wz):
         """BODY-frame foot targets for all legs at time t."""
@@ -679,7 +698,7 @@ class ArmedGait(WaveGait):
         vf = min(self.vf_limit(level_slope, level_blend))
         return dict(v=vf, wz=vf / self._vf_max(0.0, 0.0, 1.0), vf=vf, vx=vf, vy=vf)
 
-    def level_xy(self, t, vx, vy, wz, blend=(0.30, 0.70)):
+    def level_xy(self, t, vx, vy, wz, blend=None, foot=False):
         """Not on the arm gait (D065): its raised limbs are not footholds, so the
         leveler's window and contact count would read them as ground."""
         raise NotImplementedError("D065: BodyLeveler runs on the WaveGait only")

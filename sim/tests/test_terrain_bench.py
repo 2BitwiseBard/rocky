@@ -48,11 +48,11 @@ KEYS = {"id", "world", "kind", "build", "seconds", "z0", "yaw_deg", "walk", "pha
 def test_row_table_schema_and_counts():
     full, quick = tb.rows(), tb.rows(quick=True)
     ids = [r["id"] for r in full]
-    assert len(ids) == len(set(ids)) == 79
+    assert len(ids) == len(set(ids)) == 87
     assert {r["world"] for r in full} == {f"W{k}" for k in range(1, 9)}
     for r in full:
         assert KEYS <= set(r), r["id"]
-        assert r["kind"] in ("walk", "stand", "shove", "cliff", "run_sim"), r["id"]
+        assert r["kind"] in ("walk", "stand", "shove", "cliff", "motion", "run_sim"), r["id"]
         assert r["id"].startswith(r["world"] + "."), r["id"]
     assert {r["id"] for r in quick} <= set(ids)
     # --quick keeps one phase and one rubble seed, never a cliff approach
@@ -60,6 +60,12 @@ def test_row_table_schema_and_counts():
     assert len([r for r in full if r["kind"] == "cliff" and r["build"].get("cliff")]) == \
         len(tb.CLIFF_DEG) * len(tb.CLIFF_SPEEDS)
     assert sum(r["kind"] == "run_sim" for r in full) == 1
+    # review 9r: flat motions beyond the straight walk (P1), a raised leading foot at an edge (P6)
+    w1 = {r["id"] for r in full if r["world"] == "W1"}
+    assert {"W1.flat.turn", "W1.flat.walkturn", "W1.flat.shove.x", "W1.flat.shove.y"} <= w1
+    assert tb.row_by_id("W1.flat.walkturn")["cmd"] == [tb.WALK_ASK, 0.0, 0.2]
+    sc = {r["build"]["wb"]["gravity_tilt_dir_deg"] for r in full if r["id"].startswith("W8.slopecliff5")}
+    assert sc == {0.0, 90.0, 180.0}
     assert tb.row_by_id("W3.stone20.f0.stand")["z0"] == pytest.approx(0.02)
     with pytest.raises(KeyError):
         tb.row_by_id("W9.nowhere")
@@ -181,6 +187,37 @@ def test_smoke_one_walk_under_s0_s1_s2():
     assert runs["S2"]["level_status"]["enabled"] and not runs["S1"]["level_status"]["enabled"]
 
 
+def test_the_meter_calls_a_void_with_ground_in_the_probes_reach_false():
+    """A void verdict on a drop world is false when ground lies within PROBE_MAX of the
+    foot's un-probed target (review 9r: measured from the lowered foot, ground 56-60 mm
+    below the target counted); a void on a world with no drop is false whatever is under
+    it. A planted stance lifted 10 mm: the floor is ~10 mm under every foot."""
+    row = dict(tb.row_by_id("W1.flat.walk.p0"))
+    pg = tb._playground(row)
+    for _ in range(int(round(0.5 / pg.DT))):
+        pg.step()
+    pg.data.qpos[2] += 0.010
+    mujoco.mj_forward(pg.model, pg.data)
+    for drop in (True, False):
+        m = tb.Meter(pg, dict(row, drop=drop))
+        pg.void = {"leg": 0}
+        m.physics(0.0)
+        m.sample(tb.TICK_S)
+        r = m.result()
+        pg.void = None
+        assert r["void"] and r["void_ground_nom_mm"] is not None and 5.0 < r["void_ground_nom_mm"] < 15.0, r
+        assert r["false_void"] and not r["void_nohit"]
+    m = tb.Meter(pg, dict(row, drop=True))
+    m.physics(0.0)
+    m.sample(tb.TICK_S)
+    assert not m.result()["false_void"]                       # no void, nothing to call
+
+
+def test_a_stone_row_reports_the_stone_foot_load():
+    r = tb.run_one(tb.row_by_id("W3.stone20.f0.stand"), "S1", "ideal", seconds=2.5)
+    assert r["status"] == "ok" and r["stone_foot_n"] is not None and 0.0 <= r["stone_foot_closed_pct"] <= 100.0
+
+
 def test_a_stand_measures_the_true_tilt_on_a_gravity_slope():
     r = tb.run_one(tb.row_by_id("W2.slope8.d0.stand"), "S1", "ideal", seconds=0.5)
     assert r["status"] == "ok" and r["tilt_end_deg"] == pytest.approx(8.06, abs=0.1)
@@ -249,12 +286,14 @@ def test_provenance_stamps():
     assert p["decision"] == "D065" and set(p["imu_modes"]) == {"ideal", "noisy", "mount1.5"}
     assert p["gated_imu"] == ["ideal", "noisy"] and p["seed_tiers"]["train_min"] == 1000
     assert p["head"] and len(p["head"]) == 40 and p["date"].endswith("+00:00")
+    assert p["code_diff_sha256"] == tb.code_diff_sha256()          # None on a clean tree, else the code's diff
+    assert p["code_diff_sha256"] is None or len(p["code_diff_sha256"]) == 64
     json.dumps(p)
 
 
 def test_cli_list_and_bad_args(capsys):
     assert tb.main(["--list"]) == 0
-    assert "79 rows" in capsys.readouterr().out
+    assert "87 rows" in capsys.readouterr().out
     for bad in (["--stack", "S9"], ["--imu", "perfect"]):
         with pytest.raises(SystemExit):
             tb.main(bad)

@@ -34,7 +34,7 @@ SPEEDS = (15, 25, 35, 45)
 ANGLES = (-30, 60)
 QUICK_SPEEDS, QUICK_ANGLES = (15, 25, 45), (5, 20)
 FLOOR_Z = 0.24           # the platform is 0.16 m; a standing torso is ~0.32, one hung on the keel 0.243
-TIPPED_DEG = 10.0        # = test_playground_guards.TIPPED_DEG
+from playground import TIPPED_DEG                         # noqa: E402  the guard tests' tip, one definition
 AFTER_S, MAX_S = 3.0, 40.0
 
 
@@ -123,10 +123,10 @@ def main(argv=None):
               f"tilt max {r['tilt_max_deg']} after {r['tilt_after_deg']} belly {r['t_belly_s']} "
               f"zmin {r['torso_zmin_m']}")
     import rocky_model as rm
-    import mujoco
-    from model_fingerprint import robot_fingerprint
-    fp = robot_fingerprint(mujoco.MjModel.from_xml_path(X.MODEL_XML))
-    rec = dict(experiment="lip_grid", fingerprint=fp, params_rev=rm.params_rev(), level=bool(a.level),
+    import terrain_bench as tb
+    fp = tb.provenance()
+    rec = dict(experiment="lip_grid", fingerprint=fp["fingerprint"], head=fp["head"], dirty=fp["dirty"],
+               params_rev=rm.params_rev(), level_params=fp["level"], level=bool(a.level),
                careful=bool(a.careful), quick=bool(a.quick), half=bool(a.half), n=len(runs), count=count,
                worst_safe_tilt_after_deg=max(after) if after else None,
                date=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
@@ -134,7 +134,7 @@ def main(argv=None):
     out = a.out or X.result("lip_grid" + "_level" * a.level + "_careful" * a.careful + "_results.json")
     with open(out, "w") as fh:
         json.dump(rec, fh, indent=1)
-    print(f"{len(runs)} approaches in {rec['wall_s']:.0f} s on {fp}: {count['stop']} stop, "
+    print(f"{len(runs)} approaches in {rec['wall_s']:.0f} s on {rec['fingerprint']} ({rec['head'][:7]}): {count['stop']} stop, "
           f"{count['tip']} tip, {count['fall']} fall, {count['short']} short; worst safe tilt after a fire "
           f"{rec['worst_safe_tilt_after_deg']} deg -> {out}")
     return 0

@@ -308,9 +308,9 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
 - `./rocky.sh test`: `driver/tests`, `harness -m "not slow"`, `gait`, `sim/tests -m "not slow"`, on
   the reference setup (rocky.env is not read). The 9q fix round (2026-10-08) ran all of
   `sim/tests`, slow included: 819 passed + 1 re-pinned, 7 skipped, 5 xfailed; driver + gait +
-  harness fast: 305 passed. D065 (2026-10-09): `sim/tests` fast 840 passed, 8 skipped, 2 xfailed, slow 6
-  passed + 3 xfailed, the same with `ROCKY_LEVEL=1` (every Playground built with the leveler on);
-  gait 125, driver + harness fast 204.
+  harness fast: 305 passed. D065 after its review (2026-10-09): `sim/tests` fast 849 passed, 8 skipped, 2 xfailed, slow
+  6 passed + 3 xfailed, the same with `ROCKY_LEVEL=1` (every Playground built with the leveler on;
+  17 tests ever raise a foot); gait 130, driver + harness fast 204.
 - CI (`.github/workflows/ci.yml`; a push to `main`, a pull request, or by hand). **fast**: `bash -n
   rocky.sh`, `ruff check .`, the unit suites, MJCF + URDF regenerated and `git diff --exit-code`,
   `harness.capabilities --check docs/TOOLS.md`, `run_sim.py`, all of `sim/tests`, URDF parity, the
@@ -342,8 +342,10 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
 - The law: `gait/pebble_level.py` `BodyLeveler` (its docstring has the six steps and the signs);
   the supervisor runs it when built with one (`ReflexSupervisor(gait, leveler=BodyLeveler(gait))`,
   `sup.step(..., grav=, level_hold=)`), and the playground and the cockpit build theirs through
-  `Playground._make_sup`. The plane's points per foot: `WaveGait.level_xy`; the derated envelope:
-  `WaveGait.budget(..., level_slope=leveler.level_slope())`. Explained: SIM_GUIDE §3.
+  `Playground._make_sup`. The plane's points per foot: `WaveGait.level_xy(t, vx, vy, wz, foot=True)`
+  (the plane points, the swing progress, the lift, the feet's real xy); the derated envelope:
+  `WaveGait.budget(..., level_slope=leveler.level_slope())`, primed by an enabled leveler
+  (`BodyLeveler.prime()`), read out by `Playground.envelope()`. Explained: SIM_GUIDE §3.
 - Live: `level on` / `level off` / `level` in the playground or the cockpit console; tune with
   `set level.tau_s 1.2` (also `filter_s deadband_deg raise_mm rate_mm_s swing_rate_mm_s tilt_max_deg
   min_contacts gyro_calm`; sim-only, kept across a respawn). A noisy IMU:
@@ -358,13 +360,14 @@ over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not
 ### 2.17 Add a terrain world to the bench
 - The rows are `sim/terrain_bench.py` `rows()`: `add(id, world, kind, build, seconds, ...)` with
   `build` a `world_builder` spec (`{"wb": {...}}`), `{"rubble": [amp_mm, seed]}` or
-  `{"cliff": True}`; `kind` walk / stand / shove / cliff; `z0` spawns the stance up (a stone under a
-  foot), `slope_deg` sets the tip line, `drop=True` says a void there is real. Keep the specs in the
+  `{"cliff": True}`; `kind` walk / stand / shove / cliff / motion (`cmd=[vx, vy, wz]`, `stop_at=` s:
+  the W1 turn rows); `z0` spawns the stance up (a stone under a foot, `stone_foot=` for its load),
+  `slope_deg` sets the tip line, `drop=True` says the world has a drop (a void elsewhere is false). Keep the specs in the
   bench, not in `world_builder.PRESETS` (`test_place_bench` pins that list).
 - A seed is a bench seed (0–4); 100–199 is held out (`--tier heldout`), ≥ 1000 is for training
   (`BENCH_SEEDS`, `HELDOUT_SEEDS`, `TRAIN_SEED_MIN`, pinned by `sim/tests/test_terrain_bench.py`).
-- Update the row count in `test_row_table_schema_and_counts` (79) and the CLI test's
-  `79 rows`, then `--one NEW_ROW --stack S1,S2` before a full run.
+- Update the row count in `test_row_table_schema_and_counts` (87) and the CLI test's
+  `87 rows`, then `--one NEW_ROW --stack S1,S2` before a full run.
 
 ### 2.18 Run the terrain bench
 ```bash
@@ -373,12 +376,17 @@ MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --quick --jobs 6           #
 MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --jobs 6 --stack S0,S1,S2,S3 --imu ideal,noisy,mount1.5
 MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --one W3.stone20.f0.stand --stack S1,S2   # prints JSON
 ```
-- The full run is 937 runs in 945 s at `--jobs 6` and writes `sim/out/terrain_bench.json`
-  (provenance: HEAD, dirty, fingerprint, the params `level:` block, the IMU modes, the date); the
+- The full run is 1033 runs (775 made, S3's reported unavailable) in 643 s at `--jobs 6` and
+  writes `sim/out/terrain_bench.json` (provenance: HEAD, dirty, `code_diff_sha256` when the code
+  is dirty, fingerprint, the params `level:` block, the IMU modes, the date); the
   last line is the verdict, rule by rule. A mode or stack the Playground cannot apply is reported
   `unavailable`, never run as ideal; S3 is always unavailable until B160.
 - The rules gate the ideal and noisy IMUs (mount1.5 is reported only, B159); P9 is the test suites
-  with `ROCKY_LEVEL=1`. Commit the JSON with the docs that quote it.
+  with `ROCKY_LEVEL=1`, which covers less than it sounds: most sim tests never level anything (see
+  BUILD_LOG 9r, the review fixes), and the gait suite does not read it. Commit the JSON with the
+  docs that quote it; a run on a dirty tree names its code by `code_diff_sha256`
+  (`git diff HEAD~1 HEAD -- . ':!*.md' ':!docs' ':!sim/out' ':!sim/experiments/results' | sha256sum`
+  after the commit).
 
 ## 3. Reading order for a newcomer
 1. [README.md](../README.md): status, setup, the ground rules.

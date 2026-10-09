@@ -29,7 +29,9 @@ Every row spawns at the origin (yaw 0 unless it is a cliff approach), settles 1 
 then walks `walk 45` (fitted to the 34.2 mm/s envelope) or stands. A walking row's
 start phase is the gait clock set to 0, 1/3 or 2/3 of a cycle before the walk (the
 clock does not run at a standstill, so a longer settle would not change it).
-  W1 flat: walk 20 s x 3 phases, stand 10 s
+  W1 flat: walk 20 s x 3 phases, stand 10 s; and (review 9r: the flat-zero claim held only
+     for the straight walk) a turn in place (wz 0.4) and a walk + turn (45, wz 0.2), each
+     8 s then `stop` and 3 s, and a 25 N rim shove at 1 s on a stand (+x and +y), 7 s
   W2 gravity slopes 5 / 10 deg toward 0 / 90 / 180 deg (walking +x: down, across,
      up): walk 20 s x 3 phases; stand 10 s at 5 / 8 / 10 deg (P3 judges 5 and 8)
   W3 a 40 x 40 mm stone of 10 / 20 / 30 mm under foot 0 or foot 3, stand 8 s
@@ -40,7 +42,8 @@ clock does not run at a standstill, so a longer settle would not change it).
   W7 8 deg slope, stand, a 25 N rim shove (sim/shove.py, 0.4 s) at 3 s, downhill / uphill
   W8 regressions: the cliff approach grid (0/15/20/30/45 deg at walk 25 / 45, the
      test_void_guard_holds_at_every_approach_angle grid), a cliff on a 5 deg slope
-     (downhill toward the edge), run_sim's flat band (bare gait: once, not per stack)
+     walked to downhill (d0), across (d90) and uphill (d180: the leading feet are the
+     raised ones), run_sim's flat band (bare gait: once, not per stack)
 
 Metrics per run (units in the key): tilt_rms/p95/peak/end_deg (end = mean of the last
 2 s) from sim_imu.grav_body (gravity, not world z: on a gravity slope world z is not
@@ -49,8 +52,12 @@ the switch-closed feet's lowest points along true up, minus rocky_model.stance_t
 progress_mm along the command (walks; % of S1's same row in pct_s1), creep_mm (stands);
 fell (fall_count or tilt > 30), tipped (tilt > the row's slope / ramp angle + TIPPED_DEG; a
 cliff row holds = fired, no fall, the torso on the platform, no tip after the fire); gate_holds;
-probe_out_edges; void / false_void (a void fired with ground within VOID_GROUND_MM under
-the void foot, or on a world with no drop); min_clear_mm = belly (rocky_model.belly_boxes
+probe_out_edges; void; void_ground_mm (under the void foot, as lowered, at the fire) and
+void_ground_nom_mm (under its un-probed target: + the lowering the foot made), void_nohit
+(the ray found nothing); false_void = a void on a world with no drop, or with ground within
+PROBE_MAX of the un-probed target (the probe could have reached it); W3 stone rows add
+stone_foot_n / stone_foot_closed_pct (the stone foot's mean normal force and switch over
+the last END_S: in S1 and S2 alike it stands unloaded); min_clear_mm = belly (rocky_model.belly_boxes
 + belly_posts bottoms) to the ground along gravity by mj_ray, belly_contact_s;
 load_rms_max / load_peak (|tau_e| / stall, rl_common.motor_torque), heat_max (fraction
 of the thermal budget), thermal_trip; level_sat_pct, level_max_mm (|offset|).
@@ -122,9 +129,8 @@ CLIFF_MAX_S = 20.0      # a cliff approach runs until 3 s after the fire, at mos
 CLIFF_AFTER_S = 3.0
 CLIFF_SPEEDS = (25, 45)
 CLIFF_DEG = (0, 15, 20, 30, 45)
-TIPPED_DEG = 10.0       # = test_playground_guards.TIPPED_DEG: tilt after a fire that is a tip
 FALL_TILT_DEG = 30.0
-VOID_GROUND_MM = 30.0   # ground this close under a void foot = the probe would have found it
+from playground import PROBE_MAX, TIPPED_DEG   # noqa: E402  the probe's reach; a tip after a fire
 SHOVE_N, SHOVE_S, SHOVE_AT = 25.0, 0.4, 3.0
 
 
@@ -175,6 +181,11 @@ def rows(quick=False, tier="bench"):
     for k, ph in phases:
         add(f"W1.flat.walk.p{k}", "W1", "walk", {"wb": {"base": "flat"}}, 20, phase=ph, seed=k)
     add("W1.flat.stand", "W1", "stand", {"wb": {"base": "flat"}}, 10)
+    add("W1.flat.turn", "W1", "motion", {"wb": {"base": "flat"}}, 11, cmd=[0.0, 0.0, 0.4], stop_at=8.0)
+    add("W1.flat.walkturn", "W1", "motion", {"wb": {"base": "flat"}}, 11, cmd=[WALK_ASK, 0.0, 0.2],
+        stop_at=8.0)
+    for name, fx, fy in (("x", SHOVE_N, 0.0), ("y", 0.0, SHOVE_N)):
+        add(f"W1.flat.shove.{name}", "W1", "shove", {"wb": {"base": "flat"}}, 7, shove=[fx, fy, SHOVE_S, 1.0])
     for deg in (5, 10):
         for d in (0, 90, 180):
             for k, ph in phases:
@@ -204,10 +215,11 @@ def rows(quick=False, tier="bench"):
         for a in CLIFF_DEG:
             add(f"W8.cliff.a{a}.v{v}", "W8", "cliff", {"cliff": True}, CLIFF_MAX_S, yaw_deg=a,
                 walk=float(v), drop=True)
-    for v in CLIFF_SPEEDS:
-        add(f"W8.slopecliff5.v{v}", "W8", "cliff", {"wb": {"base": "cliff", "gravity_tilt_deg": 5.0,
-                                                           "gravity_tilt_dir_deg": 0.0}},
-            CLIFF_MAX_S, walk=float(v), drop=True, slope_deg=5)
+    for d in (0, 90, 180):
+        for v in CLIFF_SPEEDS:
+            add(f"W8.slopecliff5.v{v}" if d == 0 else f"W8.slopecliff5.d{d}.v{v}", "W8", "cliff",
+                {"wb": {"base": "cliff", "gravity_tilt_deg": 5.0, "gravity_tilt_dir_deg": float(d)}},
+                CLIFF_MAX_S, walk=float(v), drop=True, slope_deg=5)
     add("W8.run_sim", "W8", "run_sim", {}, 0)
     return out
 
@@ -341,6 +353,18 @@ def _belly_points_m():
     return np.array(pts, float) / 1000.0
 
 
+def _foot_normal_n(m, d, geom):
+    """Normal force (N) on one foot geom, summed over its contacts."""
+    f = np.zeros(6)
+    tot = 0.0
+    for k in range(d.ncon):
+        c = d.contact[k]
+        if int(c.geom1) == geom or int(c.geom2) == geom:
+            mujoco.mj_contactForce(m, d, k, f)
+            tot += abs(float(f[0]))
+    return tot
+
+
 class Meter:
     """Samples one run at the bus rate (and the servo load every physics step)."""
 
@@ -364,6 +388,10 @@ class Meter:
         self.p0 = pg.data.xpos[pg.torso][:2].copy()
         yaw0 = pg.yaw()
         self.u_cmd = np.array([np.cos(yaw0), np.sin(yaw0)])               # walk +x at the start heading
+        c = row.get("cmd")
+        if c is not None and np.hypot(c[0], c[1]) > 0:                    # a motion row: its own heading
+            u = np.array([c[0], c[1]]) / np.hypot(c[0], c[1])
+            self.u_cmd = np.array([[np.cos(yaw0), -np.sin(yaw0)], [np.sin(yaw0), np.cos(yaw0)]]) @ u
         self.gate0 = int(pg.gate_count)
         self.tilt, self.roll, self.pitch, self.t = [], [], [], []
         self.herr, self.clear = [], []
@@ -381,7 +409,10 @@ class Meter:
         self.digest = hashlib.sha256()
         self.t_fire = None
         self.void_ground_mm = None
+        self.void_ground_nom_mm = None
         self.tilt_at_fire = None
+        self.stone = row.get("stone_foot")
+        self.stone_n, self.stone_closed = [], []
         self.zmin = float(pg.data.xpos[pg.torso][2])
 
     def _ray(self, p):
@@ -403,6 +434,17 @@ class Meter:
             leg = int(pg.void["leg"])
             fp = d.geom_xpos[pg.fids[leg]] + (self.r_foot[leg] + 1e-3) * self.gdir
             self.void_ground_mm = self._ray(fp)
+            if self.void_ground_mm is not None:
+                # + how far the foot is below its un-probed target along up (the probe's own
+                # meas: the target against FK of the measured joints, in the gait's foot
+                # convention): the probe's reach (PROBE_MAX) is from there
+                raw = getattr(pg.sup, "last_feet_raw", None)
+                if raw is not None:
+                    import pebble_feasibility as pf
+                    q = d.qpos[pg._jadr].reshape(len(pg.fids), 3)
+                    up_b = -grav_body(pg.model, d, pg.torso)
+                    low = float(up_b @ (np.asarray(raw[leg], float) - pf.feet_body(q)[leg]))
+                    self.void_ground_nom_mm = self.void_ground_mm + low
 
     def _tilt(self):
         return float(np.degrees(tilt_from_grav(grav_body(self.pg.model, self.pg.data, self.pg.torso))))
@@ -448,6 +490,9 @@ class Meter:
             self.lv_sat += int(bool(lv.saturated))
         th = pg.thermal
         self.heat_max = max(self.heat_max, float(np.max(th.heat / th.budget)))
+        if self.stone is not None:
+            self.stone_n.append(_foot_normal_n(m, d, pg.fids[self.stone]))
+            self.stone_closed.append(bool(con[self.stone]))
         self.digest.update(d.qpos.tobytes())
 
     def result(self):
@@ -460,8 +505,10 @@ class Meter:
         lr = np.sqrt(self.x2 / max(self.n_phys, 1))
         void = pg.void is not None
         tip_deg = row["slope_deg"] + TIPPED_DEG       # the excursion past the world's own tilt
-        fv = bool(void and (not row["drop"] or (self.void_ground_mm is not None
-                                                 and self.void_ground_mm < VOID_GROUND_MM)))
+        # no drop in the world: any void stops the robot on walkable ground; on a drop world a
+        # void is false when the ground was within the probe's reach of the un-probed target
+        fv = bool(void and (not row["drop"] or (self.void_ground_nom_mm is not None
+                                                 and self.void_ground_nom_mm < PROBE_MAX)))
         r = dict(
             tilt_rms_deg=rms(T), tilt_p95_deg=round(float(np.percentile(T, 95)), 3),
             tilt_peak_deg=round(float(T.max()), 3),
@@ -469,14 +516,18 @@ class Meter:
             roll_rms_deg=rms(self.roll), pitch_rms_deg=rms(self.pitch),
             height_err_mean_mm=round(float(np.mean(self.herr)), 2) if self.herr else None,
             height_err_rms_mm=rms(self.herr) if self.herr else None,
-            progress_mm=round(1000.0 * float(disp @ self.u_cmd), 1) if row["kind"] in ("walk", "cliff") else None,
-            creep_mm=round(1000.0 * float(np.linalg.norm(disp)), 1) if row["kind"] in ("stand", "shove") else None,
+            progress_mm=(round(1000.0 * float(disp @ self.u_cmd), 1)
+                         if row["kind"] in ("walk", "cliff") or (row["kind"] == "motion" and any(row["cmd"][:2]))
+                         else None),
+            creep_mm=round(1000.0 * float(np.linalg.norm(disp)), 1) if row["kind"] in ("stand", "shove", "motion") else None,
             fell=fell, tipped=bool(len(T) and T.max() > tip_deg),
             fall_count=int(pg.sup.fall_count), trips=int(pg.sup.trip_count), latched=bool(pg.sup.latched),
             gate_holds=int(pg.gate_count) - self.gate0, probe_out_edges=self.probe_edges,
             probe_max_mm=round(self.probe_max, 1),
             void=void, void_t_s=None if self.t_fire is None else round(self.t_fire, 2),
             void_ground_mm=None if self.void_ground_mm is None else round(self.void_ground_mm, 1),
+            void_ground_nom_mm=None if self.void_ground_nom_mm is None else round(self.void_ground_nom_mm, 1),
+            void_nohit=bool(void and self.void_ground_mm is None),
             false_void=fv,
             min_clear_mm=round(min(self.clear), 1) if self.clear else None,
             belly_contact_s=round(self.belly_ticks * TICK_S, 2),
@@ -486,6 +537,10 @@ class Meter:
             level_sat_pct=round(100.0 * self.lv_sat / self.lv_ticks, 1) if self.lv_ticks else None,
             level_max_mm=round(self.lv_max, 2),
             nan_count=int(pg.nan_count), digest=self.digest.hexdigest()[:16])
+        if self.stone is not None:
+            last = t >= t[-1] - END_S + 1e-9
+            r.update(stone_foot_n=round(float(np.mean(np.array(self.stone_n)[last])), 2),
+                     stone_foot_closed_pct=round(100.0 * float(np.mean(np.array(self.stone_closed)[last])), 1))
         if row["kind"] == "cliff":
             after = T[t > self.t_fire] if self.t_fire is not None else np.zeros(0)
             r.update(fired=void, tilt_at_fire_deg=None if self.tilt_at_fire is None else round(self.tilt_at_fire, 2),
@@ -533,17 +588,21 @@ def run_one(row, stack, imu, seconds=None):
         return dict(base, status="unavailable", why=why)
     meter = Meter(pg, row)
     secs = float(seconds if seconds is not None else row["seconds"])
-    if row["kind"] in ("walk", "cliff"):
+    if row["kind"] in ("walk", "cliff", "motion"):
         pg.sup.t_gait = float(row["phase"]) * pg.gait.T
-        reply = pg.do(f"walk {row['walk']:g}")
+        cmd = row.get("cmd") or [row["walk"], 0.0, 0.0]
+        reply = pg.do("walk " + " ".join(f"{x:g}" for x in cmd))
         if not reply.startswith("walking"):
             return dict(base, status="error", why=f"walk refused: {reply}")
     shove = row.get("shove")
+    k_stop = int(round(row["stop_at"] / pg.DT)) if row.get("stop_at") is not None else None
     n = int(round(secs / pg.DT))
     for k in range(n):
         t_row = k * pg.DT
         if shove is not None and k == int(round(shove[3] / pg.DT)):
             pg.do(f"push {shove[0]:g} {shove[1]:g} {shove[2]:g}")
+        if k == k_stop:
+            pg.do("stop")
         pg.step()
         meter.physics(t_row + pg.DT)
         if (k + 1) % n_tick == 0:
@@ -631,11 +690,17 @@ def evaluate(runs):
         if imu == "ideal" and b["digest"] != a["digest"]:
             msgs.append("not bit-identical to S1")
         return f(row, imu, "; ".join(msgs)) if msgs else None
-    rule("P1", "flat: S2 - S1 tilt RMS <= 0.05 deg, progress within 1 %, |offset| <= 0.5 mm; "
-               "ideal: bit-identical", p1, lambda r: r.startswith("W1."))
-    rule("P2", "a 20 mm stone, standing: end tilt <= 1.0 deg",
+    rule("P1", "flat (straight walks, the stand, a turn in place, a walk + turn and its stop, rim "
+               "shoves): S2 - S1 tilt RMS <= 0.05 deg, progress within 1 %, |offset| <= 0.5 mm; ideal: "
+               "bit-identical", p1, lambda r: r.startswith("W1."))
+    rule("P2", "a 20 mm stone, standing: end tilt <= 1.0 deg (the stone foot's load is reported, not "
+               "gated: it stands unloaded in S1 and S2 alike)",
          lambda row, imu, a, b: f(row, imu, f"end tilt {b['tilt_end_deg']} deg") if b["tilt_end_deg"] > 1.0 else None,
          lambda r: r.startswith("W3.stone20."))
+    rules["P2"]["stone_foot"] = [f(row, imu, f"stone foot {a.get('stone_foot_n')} N / {b.get('stone_foot_n')} N, "
+                                            f"switch {a.get('stone_foot_closed_pct')} / {b.get('stone_foot_closed_pct')} % "
+                                            "(S1 / S2, last 2 s)")
+                                 for row, imu, a, b in pairs if row.startswith("W3.")]
     lim3 = {"W2.slope8.": 3.5, "W2.slope5.": 0.6}
     rule("P3", "standing on 8 deg: end tilt <= 3.5 deg; on 5 deg: <= 0.6 deg",
          lambda row, imu, a, b: next((f(row, imu, f"end tilt {b['tilt_end_deg']} deg") for k, v in lim3.items()
@@ -646,11 +711,14 @@ def evaluate(runs):
                                  if a.get("progress_mm") and b["progress_mm"] < 0.95 * a["progress_mm"] else None),
          lambda r: ".walk" in r)
     rule("P5", "no new falls", lambda row, imu, a, b: f(row, imu, "falls") if b["fell"] and not a["fell"] else None)
-    rule("P6", "every cliff approach fires without a fall, holds where S1 held; no new false void anywhere",
+    rule("P6", "every cliff approach fires without a fall, holds where S1 held; no new false void anywhere "
+               "(a void on a world without a drop, or ground within PROBE_MAX of the un-probed target)",
          lambda row, imu, a, b: (f(row, imu, "never fired") if a["kind"] == "cliff" and not b["fired"]
                                  else f(row, imu, "fell") if a["kind"] == "cliff" and b["fell"]
                                  else f(row, imu, "not held") if a.get("cliff_ok") and not b.get("cliff_ok")
-                                 else f(row, imu, "false void") if b["false_void"] and not a["false_void"] else None))
+                                 else f(row, imu, "false void" + (" (no ground found under the foot)"
+                                                                  if b.get("void_nohit") else ""))
+                                 if b["false_void"] and not a["false_void"] else None))
     rule("P7", "min belly clearance >= 25 mm; no new belly contact",
          lambda row, imu, a, b: (f(row, imu, f"clearance {b['min_clear_mm']} mm")
                                  if b["min_clear_mm"] is not None and b["min_clear_mm"] < 25.0
@@ -676,11 +744,25 @@ def _git(*args):
         return None
 
 
+CODE_PATHSPEC = (".", ":!*.md", ":!docs", ":!sim/out", ":!sim/experiments/results")
+
+
+def code_diff_sha256():
+    """sha256 of `git diff HEAD` over the code (not the docs or the records), None when the
+    code is clean: a record run on a dirty tree names the exact code it ran on, checkable
+    after the commit with `git diff HEAD~1 HEAD -- <CODE_PATHSPEC> | sha256sum`."""
+    d = _git("diff", "HEAD", "--", *CODE_PATHSPEC)
+    if not d:
+        return None
+    return hashlib.sha256((d + "\n").encode()).hexdigest()
+
+
 def provenance(args=None):
     from model_fingerprint import robot_fingerprint
     model = mujoco.MjModel.from_xml_path(os.path.join(HERE, "pebble.xml"))
     return dict(decision=DECISION, head=_git("rev-parse", "HEAD"),
                 dirty=bool(_git("status", "--porcelain", "--untracked-files=no")),
+                code_diff_sha256=code_diff_sha256(),
                 fingerprint=robot_fingerprint(model), params_rev=rm.params_rev(),
                 level=rm.params().get("level"), imu_modes=IMU_MODES, gated_imu=list(GATED_IMU),
                 date=datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),

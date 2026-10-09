@@ -111,7 +111,7 @@ def test_window_raise_only_and_anti_windup():
     assert m.min() == pytest.approx(0.0, abs=1e-9)                        # raise-only: the lowest at 0
     assert lv.saturated and lv.dz.min() >= 0.0 and lv.dz.max() <= lv.raise_mm
     span_x = np.ptp(g.p_nom[:, 0])
-    assert np.hypot(*lv.P) == pytest.approx(lv.raise_mm / span_x, abs=1e-12)         # 4.87 deg about x
+    assert np.hypot(*lv.P) == pytest.approx(lv.raise_mm / span_x, abs=1e-12)         # 4.87 deg along x
     # no windup: the plane comes straight back when the tilt reverses
     p0 = lv.P[0]
     t = run_idle(lv, 0.2, grav_low(10.0, 180.0), t0=6.0)
@@ -151,6 +151,62 @@ def test_tick_is_time_based_one_law_at_any_call_rate():
     run_idle(b, 2.0, grav_low(4.0, 70.0), dt=TICK)
     assert np.allclose(a.P, b.P, atol=1e-12) and np.allclose(a.dz, b.dz, atol=1e-9)
     assert a.P.any()
+
+
+def test_tick_one_law_tick_per_call_on_a_jittered_50_hz_loop():
+    """Review 9r: a t - t_last >= tick_s rule ticked 311 of 500 calls at 0.3 ms of
+    jitter (the late tick after an early one is skipped). On the schedule a jittered
+    50 Hz caller gets one tick per call; a 500 Hz one every tenth; a stall re-seeds."""
+    g = WaveGait()
+    st, xy, s, cl = idle_pts(g)
+    for sigma in (0.0, 0.3e-3, 1.0e-3, 3.0e-3):
+        rng = np.random.default_rng(1)
+        lv = BodyLeveler(g, enabled=True)
+        n = 500
+        for k in range(n):
+            t = k * TICK + (rng.normal(0.0, sigma) if k else 0.0)
+            lv.tick(t, grav_low(4.0, 30.0), 0.0, "NORMAL", st, np.ones(N_LEGS, bool), xy, s, cl)
+        assert lv.ticks == n, (sigma, lv.ticks)
+    lv = BodyLeveler(g, enabled=True)
+    run_idle(lv, 2.0, grav_low(4.0, 30.0), dt=DT)
+    assert lv.ticks == int(round(2.0 / TICK))
+    t = lv._t_call + 0.5                                       # a 0.5 s stall: one tick, then the schedule again
+    n0 = lv.ticks
+    for k in range(5):
+        lv.tick(t + k * DT, grav_low(4.0, 30.0), 0.0, "NORMAL", st, np.ones(N_LEGS, bool), xy, s, cl)
+    assert lv.ticks == n0 + 1
+
+
+def test_copies_move_every_call_no_50_hz_staircase():
+    """Review 9r: at 500 Hz the copies moved once per 20 ms tick, a staircase whose raw
+    joint stream broke check()'s speed classes. They move by rate x the call's dt now;
+    the plane still integrates on the ticks only."""
+    g = WaveGait()
+    lv = BodyLeveler(g, enabled=True)
+    st, xy, s, cl = idle_pts(g)
+    Z, P = [], []
+    for k in range(int(3.0 / DT)):
+        lv.tick(k * DT, grav_low(6.0, 200.0), 0.0, "NORMAL", st, np.ones(N_LEGS, bool), xy, s, cl)
+        Z.append(lv.dz.copy())
+        P.append(lv.P.copy())
+    dZ = np.abs(np.diff(np.array(Z), axis=0))
+    assert dZ.max() <= lv.rate_mm_s * DT + 1e-9               # per call, not per tick
+    moving = dZ.max(axis=1) > 0
+    assert moving.mean() > 0.5                                 # between the ticks too
+    dP = np.hypot(*np.diff(np.array(P), axis=0).T)
+    assert np.count_nonzero(dP) <= int(3.0 / TICK) + 1         # the plane: ticks only
+
+
+def test_the_tilt_low_pass_reaches_63_pct_in_filter_s():
+    """filter_s is the first-order lag on the tilt error ahead of the deadband (the
+    B162 knob): a step reaches 1 - 1/e of it in filter_s, at 50 Hz ticks."""
+    for fs in (0.2, 1.0):
+        lv = BodyLeveler(WaveGait(), enabled=True, filter_s=fs)
+        e = np.tan(np.radians(3.0))
+        run_idle(lv, fs, grav_low(3.0, 0.0))
+        got = -lv.e_f[0] / e
+        assert got == pytest.approx(1.0 - (1.0 - TICK / fs) ** round(fs / TICK - 1), abs=1e-9)
+        assert 0.58 < got < 0.68, (fs, got)
 
 
 def test_holds_freeze_and_name_their_reason():
@@ -277,8 +333,39 @@ def test_level_xy_is_the_foot_in_stance_and_lands_on_touchdown():
             assert pts[1][i] == pytest.approx(sv, abs=1e-6)
             lift = g.hstep * g.lift_scale(g._vf_max(*cmd))
             assert pts[2][i] == pytest.approx(lift * swing_profile(sv, g.duty)[1], abs=1e-4)
+    xy4, s4, c4, foot = g.level_xy(0.37, *cmd, foot=True)
+    assert np.array_equal(xy4, xy) and np.allclose(foot, feet[:, :2])   # the real feet, swing too
+    assert g.level_xy(0.37, *cmd, blend=rm.level_defaults()["swing_blend"])[0].tolist() == xy.tolist()
     with pytest.raises(NotImplementedError):
         ArmedGait().level_xy(0.0, 30.0, 0.0, 0.0)
+
+
+def test_airborne_is_judged_over_the_ground_under_the_real_foot():
+    """Review 9r: near s = 0.3 the swing's lift over its lift-off point is not its
+    height over the plane under the foot when the plane rises along the stride:
+    check() classes that foot LOADED, so its copy must not move at the airborne rate
+    there. 18.5 mm of lift 30 mm short of a 0.06 plane is 16.7 over its ground, inside
+    the band + BAND_MARGIN_MM + this call's move: held; well clear, it moves; judged
+    by the lift alone it would have moved."""
+    g = WaveGait()
+    lv = fixed_plane(g, 0.06, 0.0)                     # rises toward +x
+    T = lv.target()
+    lv.copies[:] = T
+    lv.P = lv.P * 0.5                                  # the plane moved: every copy has somewhere to go
+    lv._window()
+    stance = np.array([True, True, False, True, True])
+    xy = g.p_nom[:, :2].copy()
+    foot = xy.copy()
+    foot[2, 0] += 30.0                                 # the real foot 30 mm ahead (+x, uphill)
+    s = np.array([np.nan, np.nan, 0.31, np.nan, np.nan])
+    for clear, moves in ((18.5, False), (40.0, True)):
+        lv.copies[:] = T
+        cl = np.array([0.0, 0.0, clear, 0.0, 0.0])
+        lv._follow(stance, xy, s, cl, TICK, foot)
+        assert (not np.array_equal(lv.copies[2], T)) is moves, clear
+        lv.copies[:] = T
+        lv._follow(stance, xy, s, cl, TICK, None)       # the lift alone calls 18.5 airborne
+        assert not np.array_equal(lv.copies[2], T)
 
 
 def test_rows_ik_is_leg_ik():
@@ -304,6 +391,22 @@ def test_budget_level_slope_zero_is_the_bare_envelope():
     assert WaveGait.level_slope_q(0.005) == 0.005 and WaveGait.level_slope_q(-0.0051) == 0.0075
     assert g.budget(45.0, 0.0, 0.0, level_slope=np.nan) == (0.0, 0.0, 0.0)   # unknown plane: stop
     assert g.max_command(level_slope=np.tan(np.radians(5)))["v"] == lim[2]
+
+
+def test_an_enabled_leveler_primes_the_derate_so_budget_is_a_lookup():
+    """Review 9r: budget(level_slope=) bisected each new 0.0025 slope step in the
+    control step (30-77 ms, past the Pi's 20 ms tick). An enabled leveler primes every
+    step its window admits; budget() then computes nothing."""
+    g = WaveGait()
+    lv = BodyLeveler(g, enabled=True)
+    assert lv.max_slope() == pytest.approx(30.0 / np.ptp(g.p_nom[:, 1]), rel=1e-6)   # the narrow width
+    assert lv.prime() == 0                                         # already primed at construction
+    n = len(WaveGait._LIFT_CACHE)
+    for sl in np.linspace(0.0, lv.max_slope(), 37):
+        g.budget(45.0, 10.0, 0.05, level_slope=sl)
+        g.max_command(level_slope=sl)
+    assert len(WaveGait._LIFT_CACHE) == n
+    assert BodyLeveler(WaveGait(), raise_mm=20.0).prime() == 0     # a narrower window: inside it
 
 
 def _swing_peaks(g, u, speed, plane, w, z0, blend, n=400):

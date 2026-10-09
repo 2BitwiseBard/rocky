@@ -21,6 +21,7 @@ import mujoco                                                     # noqa: E402
 import rocky_model as rm                                          # noqa: E402
 from pebble_gait import WaveGait, N_LEGS                          # noqa: E402
 from pebble_reflex import ReflexSupervisor, NORMAL, PLANT, BRACE  # noqa: E402
+from playground import TIPPED_DEG                                 # noqa: E402  the tip after a fire
 
 
 def make(**kw):
@@ -245,8 +246,6 @@ def _approach(speed, approach_deg, seconds=20.0):
             break
     return pg.sup.fall_count > 0 or zmin < 0.24, t_fire, t_hold, tilt
 
-
-TIPPED_DEG = 10.0      # tilt after the fire that counts as a tip (a guard that caught it: < 3, D063)
 
 
 def _approach_falls(speed, approach_deg, seconds=20.0):
@@ -1072,6 +1071,14 @@ def test_sim_imu_mount_error_is_a_constant_tilt_bias():
     assert ang == pytest.approx(1.5, abs=1e-6)                # (< 1.5 by g's tiny component along x)
     assert g[0] == pytest.approx(true[0], abs=1e-12)          # about body x: g_x is untouched
     assert np.array_equal(m.read(d)["grav"], g)               # constant: no noise to average it out
+    from sim_imu import axis_rotation, gyro_body               # the gyro is seen through the same mount
+    d.qvel[3:6] = [0.2, -0.3, 0.1]
+    mujoco.mj_forward(pg.model, d)
+    w_true = gyro_body(pg.model, d, pg.torso)
+    assert np.linalg.norm(w_true) > 0.1
+    assert np.allclose(m.measure(d)["gyro"] - m.bias, axis_rotation(1.5, (1, 0, 0)).T @ w_true, atol=1e-12)
+    assert not np.allclose(m.measure(d)["gyro"] - m.bias, w_true, atol=1e-3)
+    true = grav_body(pg.model, d, pg.torso)                   # (mj_forward refreshed the pose)
     m.reset(mount_deg=0.0)
     assert np.array_equal(m.read(d)["grav"], true)
     # a zero mount error leaves the noise stream exactly as it was
@@ -1104,3 +1111,117 @@ def test_playground_imu_spec_latency_applies_and_survives_reset_guards():
     imu = pg.imu
     pg.reset_guards()
     assert pg.imu is not imu and pg.imu.latency_s == 0.02
+
+
+# ---- D065 review fixes (9r) ------------------------------------------------------------
+def test_level_holds_name_every_floor_feel_condition():
+    """The holds that keep the void verdict honest (the body still while a foot feels for
+    the floor): a gate hold, a void phase, a probe_out, a gesture, a commanded-stance foot
+    still seeking after its settle window. Each one names itself."""
+    from playground import SEEK
+    pg = make(level=True)
+    run(pg, 0.5)
+    assert pg._level_holds(False) == set()
+    assert pg._level_holds(True) == {"gesture"}
+    pg._gate = {"leg": 0}
+    assert pg._level_holds(False) == {"gate"}
+    pg._gate = None
+    pg._void_phase = "stop"
+    assert pg._level_holds(False) == {"void"}
+    pg._void_phase = None
+    pg.probe_out[2] = True
+    assert pg._level_holds(False) == {"probe_out"}
+    pg.probe_out[:] = False
+    st = pg.sup.last_stance
+    i = int(np.flatnonzero(st)[0])
+    pg.probe_state[i] = SEEK
+    pg._probe_age[i] = pg._settle_ticks()
+    assert pg._level_holds(False) == set()                    # inside its settle window: free
+    pg._probe_age[i] = pg._settle_ticks() + 1
+    assert pg._level_holds(False) == {"seek"}
+
+
+def test_a_playground_hold_freezes_the_plane_and_the_copies(monkeypatch):
+    """step() hands _level_holds to the supervisor: while it names a reason, the
+    leveler's plane and every copy stand still (on a slope, mid-convergence)."""
+    pg = make(level=True)
+    _gravity_slope(pg, 6.0)
+    run(pg, 1.0)
+    lv = pg.sup.leveler
+    assert lv.P.any() and lv.hold is None
+    monkeypatch.setattr(pg, "_level_holds", lambda monitor: {"gate"})
+    pg.step()
+    P, C = lv.P.copy(), lv.copies.copy()
+    run(pg, 0.5)
+    assert lv.hold == "gate" and np.array_equal(lv.P, P) and np.array_equal(lv.copies, C)
+
+
+@pytest.mark.parametrize("approach_deg", [15, 20])
+def test_level_on_the_void_guard_still_holds_the_cliff(approach_deg):
+    """Review 9r: with the floor-feel holds removed the leveler tilts the body while the
+    leading foot feels the edge, and a15 / a20 at walk 45 tip (peak 20.5 / 18.7 deg)
+    where the shipped stack stops. With the holds it fires and stops."""
+    pg = make(cliff=True, level=True)
+    a = np.radians(approach_deg) / 2
+    pg.data.qpos[3:7] = [np.cos(a), 0, 0, np.sin(a)]
+    mujoco.mj_forward(pg.model, pg.data)
+    run(pg, 1.0)
+    pg.do("walk 45")
+    t_fire, peak = None, 0.0
+    for _ in range(int(20.0 / pg.DT)):
+        pg.step()
+        peak = max(peak, _true_tilt_deg(pg))
+        if t_fire is None and pg.void is not None:
+            t_fire = pg.t
+        if pg.sup.fall_count or (t_fire is not None and pg.t > t_fire + 3.0):
+            break
+    assert pg.sup.fall_count == 0 and t_fire is not None and peak <= TIPPED_DEG, (t_fire, peak)
+
+
+def test_reset_guards_zeroes_a_levelled_leveler():
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 3.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 5.0
+    pg.reset_guards()
+    assert not lv.P.any() and not lv.copies.any() and lv.enabled
+
+
+def test_level_derates_the_envelope_the_robot_runs_and_reports_it():
+    """On a saturated 5 deg plane the command door runs the derated envelope (the bare
+    34.2 mm/s asked runs at 32.5), and the readouts say so: envelope(), `check`."""
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 4.0)
+    bare = pg.gait.max_command()["v"]
+    assert pg.V_MAX[0] == bare                                # the ask's cap stays the bare one
+    ev = pg.envelope()
+    assert ev["level_slope_deg"] > 4.0 and ev["v"] < bare - 1.0
+    pg.do("walk 45")
+    run(pg, 3.0)
+    v = pg.envelope()["v"]                                    # (the slew's lag still closing on it)
+    assert v - 0.5 < pg.cmd_eff[0] <= v + 1e-6 and pg.cmd_eff[0] < bare - 1.0, (pg.cmd_eff, v)
+    assert "derates it to" in pg.do("check")
+    off = make(level=False)
+    assert off.envelope()["v"] == bare and off.envelope()["level_slope_deg"] == 0.0
+
+
+def test_a_gait_change_keeps_the_levelled_plane():
+    """Review 9r: apply_gait reset the leveler on any h / R0 key, the same value too, so
+    `gait default` on a levelled slope dropped the feet up to 30 mm in one step (4.7 rad/s
+    at the guard's clamp, 4.8 deg of tilt). It keeps the plane now: no offset jumps."""
+    pg = make(level=True)
+    _gravity_slope(pg, 5.0)
+    run(pg, 5.0)
+    lv = pg.sup.leveler
+    assert lv.dz.max() > 20.0
+    for cmd in ("gait default", f"set gait.h {pg.gait.h:g}", f"set gait.h {pg.gait.h - 4:g}"):
+        prev, worst = lv.dz.copy(), 0.0
+        assert "refused" not in pg.do(cmd), cmd
+        for _ in range(int(0.5 / pg.DT)):
+            pg.step()
+            worst = max(worst, float(np.max(np.abs(lv.dz - prev))))
+            prev = lv.dz.copy()
+        assert worst <= lv.rate_mm_s * pg.DT + 1e-6, (cmd, worst)
+        assert lv.dz.max() > 20.0

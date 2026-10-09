@@ -248,6 +248,8 @@ def save_gait_preset(name, gait, note=None):
 #   offset ramps out at PROBE_RELAX_RATE.
 PROBE_RATE = 120.0          # mm/s a contactless planted foot is lowered
 PROBE_MAX = 30.0            # mm: probed this far with nothing under it = the ground is not there
+TIPPED_DEG = 10.0           # a tilt past this after a void fire is a tip, not a stop (D063: a caught one
+#                             stays < 3); the guard tests, the lip grid and the terrain bench share it
 PROBE_PRELOAD_MM = 3.5      # mm past first contact (half the SEA's ~7 mm travel)
 PROBE_PRELOAD_MIN_MM = 3.0  # preload only a foot that had to SEEK this far: a foot that lands
 #                             on the nominal plane is already loaded by the stance geometry
@@ -352,7 +354,7 @@ GAIT_HSTEP_RANGE = (0.0, 80.0)  # (check / pebble_feasibility says whether a val
 # D065: `set level.KEY V` — sanity bounds, not tuning (params level: has the values); raise_mm stays
 # inside the 30 mm window the probe's room and the swing band were proven with
 LEVEL_SET = {"tau_s": (0.01, 60.0), "filter_s": (0.01, 10.0), "deadband_deg": (0.0, 10.0),
-             "raise_mm": (0.0, 30.0), "rate_mm_s": (0.1, 200.0), "swing_rate_mm_s": (0.1, 200.0),
+             "raise_mm": (0.0, PROBE_MAX), "rate_mm_s": (0.1, 200.0), "swing_rate_mm_s": (0.1, 200.0),
              "tilt_max_deg": (1.0, 89.0), "min_contacts": (0, 5), "gyro_calm": (0.01, 10.0)}
 LEVEL_STILL_MM = 0.02       # an offset that moved less than this over a 50 Hz tick is standing still
 #                             (motion_reason; a saturated plane re-scales every tick and jitters below it)
@@ -785,9 +787,19 @@ class Playground:
 
     @property
     def V_MAX(self):
-        """Teleop per-axis caps (mm/s, mm/s, rad/s) = the gait's envelope (D052)."""
+        """Teleop per-axis caps (mm/s, mm/s, rad/s) = the gait's envelope (D052). The
+        bare one: it caps the ASK, and _budget derates what runs every step (D065), so
+        a plane levelled for a while never caps the ask for good."""
         mc = self.gait.max_command()
         return np.array([mc["vx"], mc["vy"], mc["wz"]])
+
+    def envelope(self):
+        """The envelope the robot runs now (a UI readout): max_command() derated for the
+        leveled plane (D065), with that plane's level_slope_deg (0 = the bare gait)."""
+        ls = self._level_slope()
+        mc = dict(self.gait.max_command(level_slope=ls, level_blend=self._level_blend()))
+        mc["level_slope_deg"] = round(float(np.degrees(np.arctan(ls))), 2)
+        return mc
 
     def budget_note(self):
         """'' when the last command fit the envelope, else what scaled it."""
@@ -797,7 +809,7 @@ class Playground:
         if k >= 0.999:
             return ""
         ls = self._level_slope()
-        lim = self.gait.vf_limit(level_slope=ls)
+        lim = self.gait.vf_limit(level_slope=ls, level_blend=self._level_blend())
         which = ("coxa", "swing-speed", "lift-speed")[int(np.argmin(lim))]
         if ls > 0.0 and which == "lift-speed":
             which = f"lift-speed (on the {np.degrees(np.arctan(ls)):.1f} deg leveled plane)"
@@ -1026,6 +1038,10 @@ class Playground:
         lv = self._leveler()
         return 0.0 if lv is None else WaveGait.level_slope_q(lv.level_slope())
 
+    def _level_blend(self):
+        lv = self._leveler()
+        return None if lv is None else lv.swing_blend
+
     def _budget(self, v):
         ls = self._level_slope()
         key = (round(float(v[0]), 4), round(float(v[1]), 4), round(float(v[2]), 5),
@@ -1034,7 +1050,7 @@ class Playground:
         if b is None:
             if len(self._budget_cache) > 512:
                 self._budget_cache.clear()
-            b = np.array(self.gait.budget(*key[:3], level_slope=ls))
+            b = np.array(self.gait.budget(*key[:3], level_slope=ls, level_blend=self._level_blend()))
             self._budget_cache[key] = b
         return b
 
@@ -1581,9 +1597,13 @@ class Playground:
             if "h" in kw or "R0" in kw:
                 g.p_nom = WaveGait(g.h, g.R0, g.T, g.duty, g.hstep).p_nom
                 self.sup._q_planted = None
-                lv = self._leveler()
-                if lv is not None:
-                    lv.reset()                              # D065: its window is over the old footholds
+                # D065: the leveler keeps its plane (a slope, mm/mm): its next tick re-fits the
+                # window over the new footholds and the feet follow at its caps. It used to
+                # reset() here, on any h / R0 key, the same value too (`gait default`): standing
+                # leveled on 5 deg that dropped the feet up to 30 mm in one step (review 9r)
+            lv = self._leveler()
+            if lv is not None and lv.enabled:
+                lv.prime()                                  # the new gait's derate, before a step needs it
             self._budget_cache.clear()
         return {k: getattr(g, k) for k in GAIT_KEYS}
 
@@ -1608,6 +1628,11 @@ class Playground:
         cmds += [(mc["v"], 0.0, 0.0), (0.0, mc["v"], 0.0), (0.0, 0.0, mc["wz"])]
         out = [f"envelope: |v| <= {mc['v']:.1f} mm/s, |wz| <= {mc['wz']:.3f} rad/s in place "
                f"(gait T={g.T} h={g.h} R0={g.R0} duty={g.duty} hstep={g.hstep})"]
+        ev = self.envelope()
+        if ev["level_slope_deg"] > 0.0:          # D065: what runs is derated; check_gait judges the bare gait
+            out.append(f"level: the {ev['level_slope_deg']:.2f} deg leveled plane derates it to |v| <= "
+                       f"{ev['v']:.1f} mm/s (the commands run budgeted to that); the checks below judge "
+                       f"the BARE gait, without the leveler's offsets")
         for c in cmds:
             out += list(pf.check_gait(g, c).lines)
         return out

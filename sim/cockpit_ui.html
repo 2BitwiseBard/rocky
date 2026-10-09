@@ -1549,7 +1549,7 @@ for (const [id, p] of [...GAIT_SLIDERS.map(x => [x[0], x[1]]), ['trip','reflex.t
 async function loadGaits() {
   const r = await getj('/api/gait');
   $('#gp-list').innerHTML = Object.entries(r.presets).map(([k, p]) => `<option value="${esc(k)}">${esc(k)} (T ${p.T} h ${p.h} step ${p.hstep})</option>`).join('');
-  const e = r.envelope; $('#gp-env').textContent = `envelope now: |v| ≤ ${f1(e.v)} mm/s at any heading, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place (WaveGait.budget scales anything bigger)`;
+  const e = r.envelope; $('#gp-env').textContent = `envelope now: |v| ≤ ${f1(e.v)} mm/s at any heading, |wz| ≤ ${(+e.wz).toFixed(3)} rad/s in place (WaveGait.budget scales anything bigger)` + (e.level_slope_deg > 0 ? ` — derated for the ${e.level_slope_deg}° leveled plane` : '');
 }
 loadGaits();
 $('#gp-load').onclick = async () => { const r = await post('/api/cmd', {line: 'gait ' + $('#gp-list').value}); addLog(r.reply); $('#gait-report').textContent = r.reply || ''; gaitInit = false; loadGaits(); };

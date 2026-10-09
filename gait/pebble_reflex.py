@@ -290,7 +290,7 @@ class ReflexSupervisor:
         self.level_dz = None                     # (5,) mm the leveler added to the feet (+ = higher)
         self._brace_level = None                 # the offsets the brace captured
         self._lv_in = None                       # this step's leveler inputs
-        self._lv_pts = None                      # (stance, xy, s, clear) of the last _gait_feet
+        self._lv_pts = None                      # (stance, xy, s, clear, foot_xy) of the last _gait_feet
 
     # ------------------------------------------------------------------
     def set_righter(self, fn):
@@ -451,9 +451,13 @@ class ReflexSupervisor:
                 xy = s = clear = None
             elif idle:
                 xy, s, clear = self.g.p_nom[:, :2].copy(), np.full(N_LEGS, np.nan), np.zeros(N_LEGS)
+                foot = xy
             else:
-                xy, s, clear = self.g.level_xy(self.t_gait, vx, vy, wz, self.leveler.swing_blend)
-            self._lv_pts = (stance.copy(), xy, s, clear)
+                xy, s, clear, foot = self.g.level_xy(self.t_gait, vx, vy, wz, self.leveler.swing_blend,
+                                                     foot=True)
+            if xy is None:
+                foot = None
+            self._lv_pts = (stance.copy(), xy, s, clear, foot)
             self.level_dz = self.leveler.dz_at(xy)
             feet[:, 2] += self.level_dz
         self.last_feet_raw = feet.copy()
@@ -487,13 +491,13 @@ class ReflexSupervisor:
         and state; BRACE freezes it (the brace holds the captured offsets)."""
         t, grav, switches, hold, gyro_xy, q_meas = self._lv_in
         if self._lv_pts is None:
-            self._lv_pts = (np.ones(N_LEGS, dtype=bool), self.g.p_nom[:, :2].copy(),
-                            np.full(N_LEGS, np.nan), np.zeros(N_LEGS))
-        stance, xy, s, clear = self._lv_pts
+            xy = self.g.p_nom[:, :2].copy()
+            self._lv_pts = (np.ones(N_LEGS, dtype=bool), xy, np.full(N_LEGS, np.nan), np.zeros(N_LEGS), xy)
+        stance, xy, s, clear, foot = self._lv_pts
         if self.state == BRACE and not hold:
             hold = "brace"
         self.leveler.tick(t, grav, gyro_xy, self.state, stance, switches, xy, s, clear,
-                          hold=hold, q_meas=q_meas)
+                          hold=hold, q_meas=q_meas, foot_xy=foot)
 
     # ------------------------------------------------------------------
     def _enter_plant(self, t):

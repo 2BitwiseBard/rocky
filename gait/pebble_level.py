@@ -3,9 +3,12 @@ RAISING feet — a plane of per-foot offsets under the wave gait.
 
 Before it nothing levelled the body: the gait stands its feet on one body-frame
 plane, so on a slope the body takes the slope, and a stone under one foot tilts
-it. Pure numpy on the gait engine (no sim imports): the Pi's 50 Hz loop runs
-this file as the sim does. ReflexSupervisor(gait, leveler=BodyLeveler(gait))
-opts in; without one the supervisor is the D064 one bit for bit.
+it. Pure numpy on the gait engine (no sim imports), written for the Pi's 50 Hz
+loop as well as the sim's 500 Hz one; no Pi loop runs it yet (ros2's gait node
+drives the bare WaveGait): when one runs the supervisor (B35 / B157) it must pass
+grav=None until calibration.yaml has an imu: block (B159).
+ReflexSupervisor(gait, leveler=BodyLeveler(gait)) opts in; without one the
+supervisor is the D064 one bit for bit.
 
 Frames and signs (pebble_gait's BODY frame, +z up, mm):
   grav   unit gravity in the body frame, [0, 0, -1] upright (sim_imu, the
@@ -16,10 +19,16 @@ Frames and signs (pebble_gait's BODY frame, +z up, mm):
          the OPPOSITE of the probe's probe_dz). +x low: e_x < 0, P_x < 0, so the
          -x feet rise and that side of the body comes down to level.
 
-The law, one tick per 1 / bus_hz, time-based (the sim calls the supervisor at
-500 Hz, the Pi at 50 Hz: one code path):
-  1. e low-passed (filter_s), then a radial deadband (deadband_deg), so flat
-     ground reads exactly zero offsets with an ideal IMU.
+The law, one tick per 1 / bus_hz on a fixed schedule (the sim calls the
+supervisor at 500 Hz, the Pi at 50 Hz with jitter: a call within half a call
+period of the next slot ticks it, so a jittered 50 Hz loop gets one law tick per
+call — a t - t_last >= tick_s rule ticked 62 % of them at 0.3 ms of jitter):
+  1. e low-passed (filter_s), then a radial deadband (deadband_deg). A straight
+     walk on flat ground with an ideal IMU stays inside it and reads exactly
+     zero offsets; a transient past it (a turn, a stop's brace, a shove) leaves
+     the plane it integrated, which the deadband then never unwinds (review 9r:
+     up to 0.5 mm after a turn in place or a shove, 11.6 mm where it cancels
+     the probe's 15 mm HOLD left by a turning stop, B163).
   2. P += e_db dt / tau_s, the step capped at rate_mm_s at stance_radius; only
      in NORMAL with >= min_contacts switches closed, |gyro_xy| < reflex.gyro_calm,
      the tilt <= tilt_max_deg and no hold.
@@ -28,19 +37,23 @@ The law, one tick per 1 / bus_hz, time-based (the sim calls the supervisor at
      so every foot is RAISED 0..raise_mm. Raise-only keeps the probe's 30 mm of
      lowering whole (the void verdict keeps its meaning) and the swing band at
      the bare gait's speed (an unraised foothold binds the envelope, a raised
-     one has room); the body sinks instead, by up to raise_mm / 2. The 30 mm
-     window over the 352 x 335 mm footprint levels fully to 4.9 deg about x
-     and 5.1 deg about y; past that the leveling is partial.
+     one has room); the body sinks instead, by c: up to 16.6 mm on a full
+     window (13.4 for a slope along y, 16.6 at 54 deg). The 30 mm window over
+     the 352 x 335 mm footprint levels fully to 4.87 deg for a slope along x
+     and 5.12 deg along y; past that the leveling is partial.
   4. Per-leg copies: each leg keeps its own (P_x, P_y, c) that follows the
-     plane, rate-limited at its own foot: rate_mm_s in stance; swing_rate_mm_s
-     for an airborne swing foot (swing progress inside swing_blend and lifted
-     >= the 15 mm band); held for a swing foot inside the band, where the swing
-     already spends the loaded budget. (A global band gate would freeze the
-     whole plane whenever any swing foot is low.)
-Every call, not only ticks, evaluates the copies at WaveGait.level_xy: a stance
-foot's own xy (it stays on its plane as it sweeps), a swing foot's lift-off
-point moving to its touchdown point over swing_blend (it lands on its plane);
-clipped to [0, raise_mm] there.
+     plane, rate-limited at its own foot, on EVERY call (the plane moves on the
+     ticks; the copies by rate x the call's dt, so a 500 Hz stream has no 50 Hz
+     staircase): rate_mm_s in stance; swing_rate_mm_s for an airborne swing foot
+     (swing progress inside swing_blend and >= the 15 mm band + BAND_MARGIN_MM
+     over its ground at its REAL xy, after this call's move — the band check()'s
+     support_plane judges); held for a swing foot inside it, where the swing already
+     spends the loaded budget. (A global band gate would freeze the whole plane
+     whenever any swing foot is low.)
+Every call evaluates the copies at WaveGait.level_xy: a stance foot's own xy (it
+stays on its plane as it sweeps), a swing foot's lift-off point moving to its
+touchdown point over swing_blend (it lands on its plane); clipped to
+[0, raise_mm] there.
 
 Holds: the caller's (hold=: the playground's gate hold, void phase, probe_out,
 a foot seeking past its settle window) and BRACE freeze the plane AND the
@@ -51,7 +64,10 @@ slews it to zero at the caps.
 
 The envelope: the transfer keeps a swing foot inside the loaded band longer on
 a tilted plane, so the speed envelope is derated by the plane's slope:
-WaveGait.budget(..., level_slope=leveler.level_slope()).
+WaveGait.budget(..., level_slope=leveler.level_slope()). The ceilings are
+bisected once per 0.0025 slope step; an enabled leveler primes every step up to
+its window's steepest plane (prime()), so budget() in the control step is a
+lookup (computed there it stalled a step 30-77 ms per new step).
 
     lv = BodyLeveler(gait)                        # params level:, enabled from there
     sup = ReflexSupervisor(gait, leveler=lv)      # it ticks lv inside step()
@@ -83,6 +99,9 @@ def _reason(hold):
 
 class BodyLeveler:
     DT_MAX_S = 0.1                    # a late tick integrates at most this: a stalled loop must not jump
+    BAND_MARGIN_MM = 2.0              # an airborne foot clears the 15 mm band by this much more: check()'s
+    #                                   support_plane fits a near-band swing foot into its plane, reading it
+    #                                   ~1.5 mm lower than over the ground (review 9r, 5 deg converging walk)
 
     def __init__(self, gait, enabled=None, tau_s=None, filter_s=None, deadband_deg=None,
                  raise_mm=None, rate_mm_s=None, swing_rate_mm_s=None, tilt_max_deg=None,
@@ -105,6 +124,8 @@ class BodyLeveler:
         self.gyro_calm = float(_rm.reflex_defaults()["gyro_calm"] if gyro_calm is None else gyro_calm)
         self.tick_s = 1.0 / _rm.bus_hz()
         self.reset()
+        if self.enabled:
+            self.prime()
 
     # ------------------------------------------------------------------ state
     def reset(self):
@@ -119,15 +140,35 @@ class BodyLeveler:
         self.hold = "reset"                        # why P did not integrate on the last tick (None: it did)
         self.imu_ok = False                        # the last tick had a usable grav
         self.com_margin_mm = None                  # CoM margin along -grav (enabled ticks with q_meas)
-        self._t_last = None
+        self.ticks = 0                             # law ticks since the reset
+        self._t_last = None                        # the last law tick's t
+        self._t_next = None                        # the next tick's slot (the schedule)
+        self._t_call = None                        # the last call's t (the copies move per call)
+        self._call_dt = None                       # the caller's period, smoothed (the slot tolerance)
 
     def release(self):
         """Level off: the plane slews to zero at its rate cap and the feet follow at theirs."""
         self.enabled = False
 
     def engage(self):
-        """Level on."""
+        """Level on (primes the envelope's ceilings: cached, a lookup after the first)."""
         self.enabled = True
+        self.prime()
+
+    def max_slope(self):
+        """|P| (mm/mm) of the steepest plane the window admits: raise_mm over the
+        footprint's narrowest width (334.7 mm on the D064 stance, so 0.0896 at 30 mm).
+        The copies interpolate between planes inside it, so no slope in use is steeper."""
+        a = np.radians(np.arange(0.0, 180.0, 0.25))
+        w = np.ptp(self.g.p_nom[:, :2] @ np.array([np.cos(a), np.sin(a)]), axis=0).min()
+        return float(self.raise_mm / w)
+
+    def prime(self):
+        """Compute WaveGait.budget's leveled ceilings for every slope step up to
+        max_slope() now, so budget(level_slope=) in the control step is a lookup
+        (each step is a bisection over the swings: 30-77 ms, past a 20 ms tick).
+        Returns how many were computed (0 once primed for this gait)."""
+        return self.g.prime_level(self.max_slope() + self.g.LEVEL_SLOPE_STEP, self.swing_blend)
 
     @property
     def active(self):
@@ -173,26 +214,42 @@ class BodyLeveler:
         return np.clip(xy @ self.P + self.c, 0.0, self.raise_mm)
 
     # ------------------------------------------------------------------ the law
-    def tick(self, t, grav, gyro_xy, state, stance, switches, xy, s, clear, hold=None, q_meas=None):
-        """Call every supervisor step; the law advances once per tick_s of t.
-        grav: body-frame unit gravity or None; gyro_xy: |roll/pitch rate| rad/s;
-        state: the supervisor's; stance (5,) the commanded stance mask; switches
-        (5,) the foot switches (None: never integrates); xy, s, clear: WaveGait.
-        level_xy's (the legs' plane points, swing progress NaN in stance, the swing
-        foot's lift over its own ground); hold: the caller's freeze (bool, reason
-        or reasons); q_meas (5, 3): measured joints, for com_margin_mm.
-        Returns the (5,) offsets (mm, + = foot higher) at xy (None when idle)."""
+    def tick(self, t, grav, gyro_xy, state, stance, switches, xy, s, clear, hold=None, q_meas=None,
+             foot_xy=None):
+        """Call every supervisor step; the law advances once per tick_s slot of t,
+        the copies on every call. grav: body-frame unit gravity or None; gyro_xy:
+        |roll/pitch rate| rad/s; state: the supervisor's; stance (5,) the commanded
+        stance mask; switches (5,) the foot switches (None: never integrates); xy,
+        s, clear, foot_xy: WaveGait.level_xy(foot=True)'s (the legs' plane points,
+        swing progress NaN in stance, the swing foot's lift over its lift-off
+        ground, the feet's real xy; foot_xy None judges the band by clear alone);
+        hold: the caller's freeze (bool, reason or reasons); q_meas (5, 3):
+        measured joints, for com_margin_mm. Returns the (5,) offsets (mm, + = foot
+        higher) at xy (zeros when idle)."""
         xy = None if xy is None else np.asarray(xy, float)
-        if self._t_last is not None and t < self._t_last:
-            self._t_last = None                    # a new time base
-        if self._t_last is None or (t - self._t_last) >= self.tick_s - 1e-9:
+        if self._t_call is not None and t < self._t_call:
+            self._t_last = self._t_next = None     # a new time base
+        dt_call = 0.0 if self._t_call is None else min(float(t - self._t_call), self.DT_MAX_S)
+        self._t_call = t
+        if dt_call > 0.0:
+            self._call_dt = dt_call if self._call_dt is None else self._call_dt + 0.1 * (dt_call - self._call_dt)
+        # a call within half the caller's (smoothed) period, at most half a tick, of the slot
+        # ticks it, and the schedule advances by tick_s: a jittered 50 Hz caller gets one tick
+        # per call, a 500 Hz one every tenth (the slot to 1 ms); a loop a slot behind re-seeds
+        tol = 0.5 * (self.tick_s if self._call_dt is None else min(self.tick_s, self._call_dt))
+        if self._t_next is None or t >= self._t_next - tol - 1e-9:
             dt = 0.0 if self._t_last is None else min(float(t - self._t_last), self.DT_MAX_S)
-            self._t_last = t
+            nxt = (t if self._t_next is None else self._t_next) + self.tick_s
+            self._t_last, self._t_next = t, (nxt if nxt > t else t + self.tick_s)
+            self.ticks += 1
             self._update(dt, grav, gyro_xy, state, stance, switches, xy, s, clear, hold, q_meas)
+        if _reason(hold) is None:
+            self._follow(stance, xy, s, clear, dt_call, foot_xy)
         self.dz = self.dz_at(xy)
         return self.dz.copy()
 
     def _update(self, dt, grav, gyro_xy, state, stance, switches, xy, s, clear, hold, q_meas):
+        """One law tick: the filtered error, the plane's integral (or its hold), the window."""
         up, ok_att = None, False
         if grav is not None:
             g = np.asarray(grav, float).reshape(3)
@@ -230,8 +287,6 @@ class BodyLeveler:
                     dP = dP * (cap / k)
                 self.P = self.P + dP
         self._window()
-        if frozen is None:
-            self._follow(stance, xy, s, clear, dt)
         self.com_margin_mm = None
         if self.enabled and q_meas is not None and up is not None and switches is not None:
             sup = np.asarray(stance, bool) & np.asarray(switches, bool)
@@ -251,18 +306,25 @@ class BodyLeveler:
             m = self.g.p_nom[:, :2] @ self.P
         self.c = 0.0 - float(m.min())
 
-    def _follow(self, stance, xy, s, clear, dt):
-        """Each leg's copy toward the plane, its change at its own point <= its class's rate."""
+    def _follow(self, stance, xy, s, clear, dt, foot_xy=None):
+        """Each leg's copy toward the plane, its change at its own point <= its class's
+        rate x dt. A swing foot is airborne when, after the most this call may move
+        it, it still clears the 15 mm band over the higher of its copy's and the
+        plane's ground under its REAL xy (check()'s support_plane band; the swing's
+        own lift over its lift-off point overstates that on a tilted plane)."""
         T = self.target()
         if xy is None:                                 # idle: the plane and every copy at zero
             if T.any() or self.copies.any():
                 raise ValueError("no points for a leveler that is not idle")
             return
+        if dt <= 0.0:
+            return
         a, b = self.swing_blend
         for i in range(N_LEGS):
             if stance[i]:
                 r = self.rate_mm_s
-            elif a <= s[i] <= b and clear[i] >= SUPPORT_TOL_MM:
+            elif (a <= s[i] <= b and self._clear(i, xy, clear, foot_xy)
+                  >= SUPPORT_TOL_MM + self.BAND_MARGIN_MM + self.swing_rate_mm_s * dt):
                 r = self.swing_rate_mm_s               # airborne
             else:
                 continue                               # a swing foot inside the band: held
@@ -273,6 +335,21 @@ class BodyLeveler:
                 self.copies[i] = T
             else:
                 self.copies[i] = self.copies[i] + d * (lim / dz)
+
+    def _clear(self, i, xy, clear, foot_xy):
+        """Swing foot i's height (mm) over the ground under its real xy: its lift plus
+        its offset at its plane point, minus the highest offset under the foot of the
+        plane and of every leg's copy (the support plane check() fits runs through the
+        stance feet, each on its own copy while they converge; all clipped to the
+        window, as dz_at applies them)."""
+        if foot_xy is None:
+            return float(clear[i])
+        f = np.asarray(foot_xy, float)[i]
+        c = self.copies[i]
+        own = float(np.clip(c[0] * xy[i, 0] + c[1] * xy[i, 1] + c[2], 0.0, self.raise_mm))
+        under = max(float(np.clip(self.copies[:, :2] @ f + self.copies[:, 2], 0.0, self.raise_mm).max()),
+                    float(np.clip(self.P @ f + self.c, 0.0, self.raise_mm)))
+        return float(clear[i]) + own - under
 
     # ------------------------------------------------------------------ report
     def status(self):
