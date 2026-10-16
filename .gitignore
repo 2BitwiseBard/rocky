@@ -36,6 +36,8 @@ MUJOCO_LOG.TXT
 
 # scene memory (sim/scene_memory.py): per-machine robot memory, not source
 sim/out/memory/
+# the cockpit Models panel's note of which Hugging Face repo each download came from (this machine's)
+sim/out/hf_sources.json
 
 # cockpit recordings (sim/cockpit.py REC_DIR): per machine, like the scene memory
 sim/out/recordings/

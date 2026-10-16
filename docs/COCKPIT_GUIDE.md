@@ -26,7 +26,7 @@ If something looks stuck, check the **sim** chip in the header first: `live` is 
 
 ## Talking
 
-The chat box and its 🎤 sit where you are: on the **Drive** tab (the one a phone opens on) they are above the pad, with the brain's last answer under them; on the **Talk** tab they are under the whole conversation. A sentence typed into the console box that is not a console command (`go forward and then wave`) goes to the brain too, as if typed in the chat box.
+The chat box and its 🎤 sit where you are: on the **Drive** tab (the one a phone opens on) they are above the pad, with the brain's last answer under them; on the **Talk** tab they are under the whole conversation. The conversation is the same on every screen: a line sent from the phone shows on the laptop too (marked `[phone]`, and the other way `[desktop]`), a screen opened later shows what was said so far, and **clear** clears it everywhere. The cockpit keeps the last 300 lines in memory; a restart starts a new conversation. A sentence typed into the console box that is not a console command (`go forward and then wave`) goes to the brain too, as if typed in the chat box.
 
 The **Brain & chat** panel picks who answers what you type or say: **Talk**, a regex intent parser with no model (instant and predictable; it knows walking, turning, gestures, words and gotos, and it is the safest voice driver), or a model brain (**Local model**, **Multimodal**, **Claude**) that calls the robot's tools itself. What each mode and role does, and which model to pick: [Choosing a brain](#choosing-a-brain).
 
@@ -53,14 +53,14 @@ What "trusted" means: the brains refuse to move the robot on a voice line unless
 
 ## Choosing a brain
 
-The cockpit gives each job to a model, one per **role**, and the **mode** says which of them answers what you type or say. Both are set in **Brain & chat**: on a phone, the **Talk** tab; on a computer, the Talk group of the sidebar. The role choices are saved (`~/.config/rocky/cockpit.json`, or `ROCKY_COCKPIT_CONF`) and come back when the cockpit restarts; the mode is not saved (`--brain talk|local|multimodal|claude` picks it at start; the default is talk).
+The cockpit gives each job to a model, one per **role**, and the **mode** says which of them answers what you type or say. Both are set in **Brain & chat**: on a phone, the **Talk** tab; on a computer, the Talk group of the sidebar. The roles you pick and the mode are saved (`~/.config/rocky/cockpit.json`, or `ROCKY_COCKPIT_CONF`) and come back when the cockpit restarts; `--brain talk|local|multimodal|claude` overrides the saved mode at start. Only the roles you changed are saved, so the others follow the defaults. The mode is the cockpit's, not the screen's: every screen shows it and follows a change made on another.
 
 The models come from any OpenAI-compatible server: `ROCKY_LLM_BASE_URL` (default `http://127.0.0.1:8080/v1`), with its key in `ROCKY_LLM_API_KEY` or a file named by `ROCKY_LLM_KEY_FILE`. These, and every other machine setting, go in `rocky.env` in the repo (the template `rocky.env.example` lists each one with its default). The model ids in this guide are the **reference setup**: one laptop with a 16 GB GPU running llama-swap, measured in D055. Your server's ids replace them in the pickers or in `rocky.env`.
 
 The four roles:
 
-- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, move, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to. Reference default: `tool-model`, a llama-swap alias for qwen3.6-35b-a3b.
-- **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in every mode, Talk included. Reference default: `vision-model`, an alias for lfm2.5-vl.
+- **brain**: a text model that reads your line and calls the robot's tools (walk, turn, move, goto, gestures, chords, memory). It answers in Local model mode, and it is the last model every other mode falls back to. Reference default: qwen3.6-35b-a3b.
+- **vision**: describes the eye's picture whenever something asks to **look**, and draws the box that **find** turns into a bearing and a distance. It works in Talk and Local model mode; in Multimodal mode the multimodal model looks itself, so a look never unloads it. Reference default: lfm2.5-vl.
 - **multimodal**: one model that gets the eye's picture with every message and calls the tools itself. Only models whose name or description on the server says they can see (vision, multimodal, mmproj or VL) are offered. Reference default: qwen3.5-9b.
 - **stt**: the whisper model name the mic's audio is sent with. Which whisper service answers is `ROCKY_WHISPER_URL` (default :8082); when that is not set, `./rocky.sh cockpit` uses the fast one, `ROCKY_WHISPER_FAST_URL`, if it is set and answers at start.
 
@@ -71,7 +71,7 @@ The four modes:
 - **Multimodal**: the multimodal role sees and acts in one call, with no hand-off between two models.
 - **Claude**: the Anthropic API (model `ROCKY_CLAUDE_MODEL`, reference `claude-sonnet-5`; there is no picker for it). It needs the `anthropic` package (`pip install -e '.[cockpit]'`) and `ANTHROPIC_API_KEY`; without them, run `./rocky.sh chat` in a terminal: Claude Code then drives this same sim over MCP.
 
-Each picker marks a model **● warm** (loaded: it answers at once) or **○ cold** (the first message loads it, which takes seconds, or longer for a big model). Models listed in `ROCKY_QUARANTINED` (or marked QUARANTINED on the server) never appear. A text-only model is refused as vision or multimodal, and the refusal shows in red under the pickers. A model installed while the page is open shows up after a page reload.
+Under the pickers, **This mode loads** names the models the current mode uses, and the rows the mode does not use are dimmed. Picking a mode or a model loads it at once (the **warm up** button does the same), so the first command does not wait for the load. Each picker marks a model **● warm** (loaded: it answers at once) or **○ cold** (a load takes 10 to 40 s; hover an entry for its size and measurements). The **GPU** line lists what holds the graphics memory; it turns red when another program holds so much that no model can load, and names it. While a model call runs, a line under it (and the 🧠 line on the Drive tab) says which model is loading or answering and for how long. Models listed in `ROCKY_QUARANTINED` (or marked QUARANTINED on the server) never appear. A text-only model is refused as vision or multimodal, and the refusal shows in red under the pickers. A model installed while the page is open shows up after a page reload.
 
 ### Which brain for what
 
@@ -92,13 +92,13 @@ curl -s -X POST http://127.0.0.1:8765/api/brain -H 'Content-Type: application/js
   -d '{"mode": "multimodal", "multimodal_model": "qwen3.5-9b"}'
 ```
 
-The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model the server offers, each role's fallback chain and the co-resident pair.
+The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model the server offers, each role's fallback chain and the co-resident pair, plus `plan` (what each mode loads), `gpu` (who holds the graphics memory) and `activity` (the model call running now). `POST /api/brain/warm` (optionally `{"mode": ...}`) loads a mode's models and answers when they are ready.
 
 **One registry.** Every model mode (Local model, Multimodal, Claude) and Claude Code over MCP get their tools from one list, `harness/capabilities.py` (D056). Each tool is written there once: its name, its arguments, the text the model reads, whether a spoken line needs the wake word for it, and what it needs to exist (the eye, the memory, this cockpit). The gesture and chord-word lists inside the tools are this cockpit's current ones, so a gesture saved in the studio or a word saved in the chord designer can be called by name on the next message, and the MCP server's list follows them too, with no restart. Talk mode has no model and does not use the list. `docs/TOOLS.md` shows every tool, which ones need the wake word, and the envelope numbers the descriptions quote (a move is at most 1.5 m; a goto target should stay within ~1.5 m, which its 55 s cap covers at the 34.2 mm/s envelope with a fifth to spare; a goto that has had to detour around something the lidar sees gets 87 s instead, and one farther than 3 m is refused).
 
 ### When a model fails
 
-Each role has a fallback chain, shown under the pickers (on the reference setup, multimodal: qwen3.5-9b → qwen3.5-4b → gemma-4-12b; `ROCKY_FALLBACK_BRAIN`, `_VISION` and `_MULTIMODAL` replace a chain). A model that times out (90 s), returns an error or answers nothing is skipped, and the next one tries. The reply then starts with a note in brackets that names the model that answered and why the earlier ones did not, and the chat shows each skip as a ↪ line. When the multimodal chain runs out, the text brain answers without the picture (it can still call look). When no model answers, the Talk parser does, unless tools already ran: then the reply lists what ran, and nothing is done twice. When the model server is down, the pickers say so and only Talk works. A fallback can mean loading another model, so that reply can take much longer than usual.
+Each role has a fallback chain, shown under the pickers (on the reference setup, multimodal: qwen3.5-9b → qwen3.5-4b → gemma-4-12b; `ROCKY_FALLBACK_BRAIN`, `_VISION` and `_MULTIMODAL` replace a chain). A model that times out (90 s; 240 s while it is still loading), returns an error or answers nothing is skipped, and the next one tries. A fallback that is already loaded is tried freely, but a turn loads at most one model you did not pick (`ROCKY_MAX_COLD_FALLBACKS`): before, a failing turn could load every model in both chains. When the GPU is full, nothing more is tried, and the reply names the program holding it (for an idle ComfyUI: its Unload Models button). The reply then starts with a note in brackets that names the model that answered and why the earlier ones did not, and the chat shows each skip as a ↪ line. When the multimodal chain runs out, the text brain answers without the picture (it can still call look). When no model answers, the Talk parser does, unless tools already ran: then the reply lists what ran, and nothing is done twice. When the model server is down, the pickers say so and only Talk works. A fallback can mean loading another model, so that reply can take much longer than usual. The conversation remembers only the model's own words, not these notes.
 
 ### What fits on the GPU
 
@@ -110,7 +110,7 @@ On the reference setup's 16 GB card only one pair stays loaded together: qwen3.6
 
 ### Adding and measuring a model
 
-Both tools are for llama-swap. A downloaded model goes in with `./rocky.sh brain-install` (it files the GGUF under `ROCKY_MODELS_DIR`, finds its projector, adds a config stanza and restarts llama-swap; `--dry-run` shows the plan and touches nothing) and is measured with `./rocky.sh brain-bench --models ID`. The table of measured models and the full workflow: `docs/BRAINS.md`. Two things to know here: brain-install restarts llama-swap, so every loaded model unloads and this cockpit's next answer starts cold; and before each model's run the bench unloads every loaded GPU model, the one it measures included, so the load it times is cold.
+The **Models** panel (next section) does all of this from the page. Both tools are for llama-swap. A downloaded model goes in with `./rocky.sh brain-install` (it files the GGUF under `ROCKY_MODELS_DIR`, finds its projector, adds a config stanza and restarts llama-swap; `--dry-run` shows the plan and touches nothing) and is measured with `./rocky.sh brain-bench --models ID`. The table of measured models and the full workflow: `docs/BRAINS.md`. Two things to know here: brain-install restarts llama-swap, so every loaded model unloads and this cockpit's next answer starts cold; and before each model's run the bench unloads every loaded GPU model, the one it measures included, so the load it times is cold.
 
 **Leave this cockpit alone while brain-bench runs.** The bench starts its own cockpit on :8792 and never sends anything to this one, but the two share the GPU. Do not type or talk to this cockpit (turn **hands-free** off), and do not ask it to look or find. Any request here that reaches a model loads that model and evicts the one being measured, and the bench's next line loads it back. Rapid load and unload cycles on one consumer GPU are what some drivers handle worst, and they spoil the bench's VRAM and latency numbers.
 
@@ -130,6 +130,48 @@ The bench prints one row per model. What each column tells you:
 - **vision** (with `--vision`): how often find's box saw the object, and its median bearing and distance errors. For the vision role.
 
 The bench runs on clean sim pictures, so its vision numbers are a best case for the real camera.
+
+## Models
+
+The **Models** panel (Talk tab, under Brain & chat; **models ›** beside the GPU line opens it) shows every model in the llama-swap config as a card: loaded (green border), loading or cold; 👁 for a vision model; which of this cockpit's roles it is; the groups, selectors or startup preload that hold it; its size on disk, context, idle unload time and image tokens; and its newest robot bench (commands out of 20, VRAM, speed, cold start; a missed stop in red). A file the config names but the disk lacks is listed in red. **show** switches between the chat models and everything (embeddings, the lab slot).
+
+On each card:
+
+- **load / unload**: load is a 1-token call after the GPU check, so it never loads into a full GPU; unload asks llama-swap to drop it. **unload all** at the top drops every loaded model except the always-on embeddings.
+- **use as…**: makes it this cockpit's brain, eye or multimodal model, and loads it (the same as the pickers above).
+- **bench**: runs the robot bench (`brain-bench`) on it as a job: 5 to 10 minutes, its own cockpit, results under `sim/out/brain_bench/` and on the card. Local and Multimodal chat pause meanwhile, look and warm up too (talk mode and stop still work); cancel ends it.
+- **settings**: idle TTL in seconds (0: stays loaded), context (`-c`), image min / max tokens, description. **check** shows what would change. **save** writes the config, keeping a dated backup beside it; llama-swap uses the change after its next restart. **save + restart llama-swap** does both. Image max over 512 is refused unless the model's command has `-b` and `-ub` at least that big (the server aborts otherwise). More context costs VRAM: warm the model and watch the GPU line.
+- **delete**: removes its llama-swap entry (backup kept) and its restore-manifest entries, moves its files to `.trash/` on the models drive (a file another model also uses stays), and restarts llama-swap. It is refused while the model is in a group, a selector, the startup preload, or one of this cockpit's roles: change those first. `RESTORE.txt` in the trash folder says how to undo it. The disk is only freed by **empty trash**.
+
+**restart llama-swap** unloads every model, for Open WebUI, pi and the digests too: the page asks first, every time.
+
+### Adding a model
+
+**Add a model** searches Hugging Face for GGUF repos (most downloaded first; 👁 marks a vision model, *gated* one that needs a token in `HF_TOKEN`). Pick one, or type a repo id, and **files** lists its GGUFs with size, quant and whether it fits the GPU. Tick one quant; for a vision model the F16 `mmproj` is ticked with it. **download ticked** fetches them into the downloads folder (`ROCKY_DOWNLOADS_DIR`) as `.part` files: a download that stops resumes from where it was, and the size and sha256 are checked against the repo. A split GGUF (`-00001-of-0000N`) is refused: install those by hand. The download first checks for room on both the downloads drive and the models drive.
+
+Complete GGUFs in the downloads folder show under **Ready to install**. **plan** runs `brain-install --dry-run` and shows what it would do; **install** does it as a job: the file moves to the models drive with its vision file, gets an UNMEASURED llama-swap entry, and llama-swap restarts. Then bench it. A vision file downloaded from the same repo is marked **+ 👁 vision file** and installs with its model.
+
+Any model family installs. Qwen3.5, Gemma 4 and LFM2 get the rules measured for them; every other family gets generic rules read from the file itself (the list and how to add a family: `sim/brain_families.yaml`):
+
+- it needs a chat template; a base model, an embedding or reranker model, and a draft head are refused, with the reason in the plan;
+- if its template has tool calls it is a *brain candidate*; if not, it is **chat only: no tools**: it can talk, but it cannot be the brain or the multimodal model (those choices are greyed out on its card);
+- a thinking switch in the template is turned off (robot turns are short tool calls);
+- a MoE, or a model bigger than the GPU, gets no `-ngl`, so llama.cpp's auto-fit puts what does not fit in RAM (slower, but it starts);
+- it can see only when its vision file was downloaded with it.
+
+Each card shows what the file says: **chat only: no tools**, **MoE**, and the architecture's name for a family with no measured rules.
+
+### Who can do what
+
+On the desktop itself (the laptop's own browser at `127.0.0.1:8765`) everything is open. From any other screen, the phone through `./rocky.sh tailnet` included, **download, install, settings (save), delete, empty trash and restart llama-swap** need the PIN in `ROCKY_ADMIN_PIN` (rocky.env, 4 or more characters; restart the cockpit after setting it). Without one they are desktop-only, and those buttons are greyed out. Five wrong PINs lock them for 10 minutes. Everything else (load, unload, use as, bench, check, plan, cancel) works from any screen.
+
+### The GPU line and ComfyUI
+
+The GPU line under the pickers names what holds the card. When ComfyUI holds more than 1 GB, a **free ComfyUI** button appears: it asks ComfyUI to unload its models (its `/free`), and only when ComfyUI's queue is empty, so a running image job is never touched. ComfyUI loads them again on its next job.
+
+### Cancelling a turn
+
+While a model is thinking, **⏹ cancel** sits beside send. It ends the turn at once: no fallback model is tried and no further tool runs; the reply lists what already ran. It does not stop the robot (that is STOP), and the model finishes its current answer in the background. It works from any screen, for any screen's turn.
 
 ## Making gestures
 
@@ -320,6 +362,12 @@ On a phone the page is one tab at a time with a bar at the bottom: **Drive**, **
 
 On a computer the sidebar shows the same five groups as tabs across its top. **pin** shows every group at once, as one long accordion (the old sidebar).
 
+`./rocky.sh tailnet` starts nothing: it puts an https address in front of the cockpit already running on :8765, so the phone and the laptop are two screens on the same robot, the same brain and the same conversation (each shows the other's lines: [Talking](#talking)). The address stays published until `./rocky.sh tailnet off`, also while the cockpit is down (the page then does not load).
+
+### Running it as a service
+
+`./rocky.sh cockpit-service install` makes the cockpit the systemd user unit `rocky-cockpit.service`: it starts at login, comes back after a crash, and the Models panel gets a **⟳ restart cockpit** button (an update to the code needs one). `./rocky.sh cockpit-service start` starts it now, replacing a cockpit running in a terminal; `stop`, `restart`, `status`, `logs [N]`, `disable` (no start at login) and `uninstall` do what they say. A running cockpit takes about half a CPU core for the physics all the time, and about 100 MB of GPU memory. `./rocky.sh cockpit` in a terminal stops the service first (with Ctrl-C you are back to none; `cockpit-service start` brings it back), and `./rocky.sh cockpit-stop` stops either. The page's **quit** stops the service too, until the next login or `start`.
+
 ## Troubleshooting
 
 - **Frozen video.** The page reconnects a stream after 3 s without a new frame. If it stays frozen, look at the **sim** chip: `stalled` or `no feed` means the server is in trouble, `DEAD` means the sim thread stopped (restart with `./rocky.sh cockpit`). On a phone, video only runs on the Drive tab and never in remote mode, by design. Reloading the page always reconnects.
@@ -327,7 +375,7 @@ On a computer the sidebar shows the same five groups as tabs across its top. **p
 - **"nothing heard".** Whisper returned no words. Speak closer to the phone and a little longer. If it keeps happening, check that the whisper service the cockpit uses is up: `ROCKY_WHISPER_URL` (default :8082), or `ROCKY_WHISPER_FAST_URL`, which `./rocky.sh cockpit` prefers when `ROCKY_WHISPER_URL` is not set and the fast one answered at start.
 - **Tailnet: http vs https.** `http://…:9445` does not work and a plain-http address gives no microphone. Use the `https://<machine>.<tailnet>.ts.net:9445` address `./rocky.sh tailnet` prints. If the page does not load at all, check `tailscale status` on both devices.
 - **Two cockpit tabs in one browser freeze.** A browser keeps at most six connections open to one address, and each cockpit tab holds three for good (the state feed and two video streams; four when following). Two full tabs in the same browser use them all and everything else waits. Use remote mode in one of them, or two devices. Lead / follow also needs two devices or two different browsers: the device id is kept per browser, so two tabs of one browser are the same device.
-- **"port 8765 already in use".** Another cockpit is running (maybe started in the background). Stop it with `./rocky.sh cockpit-stop`. `rocky.sh` runs one cockpit at a time (`./rocky.sh cockpit` stops any running one first); a second one needs `.venv/bin/python sim/cockpit.py --port N` started by hand from the repo root, and `ROCKY_COCKPIT_PORT=N ./rocky.sh tailnet` points the phone at it.
+- **"port 8765 already in use".** Another cockpit is running (maybe started in the background). Stop it with `./rocky.sh cockpit-stop` (it also stops `rocky-cockpit.service`). `rocky.sh` runs one cockpit at a time (`./rocky.sh cockpit` stops any running one first); a second one needs `.venv/bin/python sim/cockpit.py --port N` started by hand from the repo root, and `ROCKY_COCKPIT_PORT=N ./rocky.sh tailnet` points the phone at it.
 - **"no shared view" or "the guide is not served".** The shared view (lead / follow) and this guide come from `sim/cockpit_shared.py`; a cockpit whose `make_app` does not mount its routes answers 404 for `/api/ui` and `/api/guide`. Everything else works; the screens stay independent.
 - **A command does nothing.** Look for a red line in the status line or overlay: a guard refused it and says why. Check the header for VOID, LATCHED or locomotion held.
 - **Voice moved nothing.** The line was heard without the name, or the name was not at the start. Say the name first, press Enter on the transcript, or switch the gate to open mic.

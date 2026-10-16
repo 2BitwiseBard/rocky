@@ -12,9 +12,9 @@ are the REFERENCE SETUP's (one 16 GB GPU running llama-swap, measured in
 D055); each is an environment variable (rocky.env.example), and a model
 picked in the cockpit is saved to the conf file:
   brain      [model]            text + tools   ROCKY_BRAIN_MODEL, default
-                                tool-model (a llama-swap selector) -> qwen3.6-35b-a3b
+                                qwen3.6-35b-a3b (a llama-swap selector id still works)
   vision     [vision_model]     describes the eye   ROCKY_VISION_MODEL, default
-                                vision-model (a selector) -> lfm2.5-vl
+                                lfm2.5-vl (multimodal mode: the multimodal model looks itself)
   multimodal [multimodal_model] ONE model sees the eye frame AND calls tools
                                 (brain mode 'multimodal'; off by default)
                                 ROCKY_MULTIMODAL_MODEL, default qwen3.5-9b
@@ -60,6 +60,14 @@ gemma-4-12b -> gemma-4-26b-a4b; multimodal qwen3.5-9b -> qwen3.5-4b ->
 gemma-4-12b -> the text brain chain
 (images stripped). A chain advances on timeout / HTTP error / empty answer
 and the reply SAYS which model answered and why the earlier ones did not.
+BUDGET (2026-10-15): a LOADED fallback is free; a cold one is a model swap,
+and a turn loads at most ROCKY_MAX_COLD_FALLBACKS (1) models the operator did
+not pick. Before any cold load the GPU is asked (sim/gpu_check.py): when
+another program holds it (an idle ComfyUI held 13.3 of 16 GB that day, and
+five spawns failed in one turn), the turn stops trying and the reply names
+the holder. A cold model's call gets COLD_TIMEOUT_S (its load is in it).
+POST /api/brain/warm loads a mode's models; the cockpit's pickers call it.
+The history keeps the model's own words, not the fallback note.
 Quarantined models (ROCKY_QUARANTINED, default none; or a model whose name
 or description on the server says QUARANTINED) are never selected,
 whatever the UI sends.
@@ -154,6 +162,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextvars
 import json
 import math
 import os
@@ -185,6 +194,7 @@ from harness.backend import SIGNED                                              
 from scene_memory import (objects_from_description, parse_note, fmt_age,               # noqa: E402
                           direction_words, forget_scope, GO_MIN_CONF, WORLD_MAX_M, SPAWN_NAME)
 import envfile                                                                        # noqa: E402
+import gpu_check                                                                      # noqa: E402
 
 envfile.load()            # <repo>/rocky.env for a cockpit or bench started without rocky.sh (env wins)
 DEFAULT_BASE = os.environ.get("ROCKY_LLM_BASE_URL") or "http://127.0.0.1:8080/v1"
@@ -199,10 +209,15 @@ QUARANTINED = frozenset(envfile.env_list("ROCKY_QUARANTINED"))
 SKIP_PREFIXES = ("embedding", "reranker", "lab")              # not chat models
 ROLE_KEYS = {"brain": "model", "vision": "vision_model", "multimodal": "multimodal_model",
              "claude": "claude_model", "stt": "stt_model"}
-# Defaults = the reference setup (one 16 GB GPU, llama-swap; 'tool-model' and 'vision-model' are its
-# selector aliases); every one is an environment variable, and a pick in the cockpit is saved to CONF_PATH.
-REFERENCE_ROLES = {"model": "tool-model", "vision_model": "vision-model", "multimodal_model": "qwen3.5-9b",
+# Defaults = the reference setup (one 16 GB GPU, llama-swap); every one is an environment variable, and a
+# pick in the cockpit is saved to CONF_PATH. CONCRETE model ids since 2026-10-15: the llama-swap selectors
+# ('tool-model', 'vision-model') hid which model a role loads — 'vision-model' could resolve to qwen3.8-27b
+# when that was warm — so the cockpit showed one id and the GPU ran another. A selector is still pickable.
+REFERENCE_ROLES = {"model": "qwen3.6-35b-a3b", "vision_model": "lfm2.5-vl", "multimodal_model": "qwen3.5-9b",
                    "claude_model": "claude-sonnet-5", "stt_model": "whisper"}
+# the old defaults: a conf saved before 2026-10-15 wrote EVERY role, picked or not; these values there are
+# not picks, so they follow the defaults now (_load_conf). Since then only a role that differs is saved.
+LEGACY_DEFAULTS = {"model": "tool-model", "vision_model": "vision-model"}
 _ROLE_ENV = {"model": "ROCKY_BRAIN_MODEL", "vision_model": "ROCKY_VISION_MODEL",
              "multimodal_model": "ROCKY_MULTIMODAL_MODEL", "claude_model": "ROCKY_CLAUDE_MODEL"}
 ROLE_DEFAULTS = {k: os.environ.get(_ROLE_ENV[k], v) if k in _ROLE_ENV else v
@@ -224,6 +239,15 @@ GOTO_MAX_M = 3.0          # a goto target farther than this from the robot is an
 LOOK_MAX_TOKENS = 160
 REPLY_MAX_TOKENS = 512
 CATALOG_TTL_S = 20.0      # the server's model list (llama-swap: loaded/cold changes as models swap)
+# FALLBACK BUDGET (2026-10-15): a fallback model that is already loaded costs nothing; one that is cold costs
+# a model load (a 5-20 GB swap that evicts whatever is warm). A turn may load at most this many models the
+# operator did not pick (ROCKY_MAX_COLD_FALLBACKS); the old chains could load five in one failing turn.
+MAX_COLD_FALLBACKS = int(os.environ.get("ROCKY_MAX_COLD_FALLBACKS", "1"))
+COLD_TIMEOUT_S = 240.0    # a call to a cold model includes its load (qwen3.6-35b-a3b: 40 s measured 2026-10-15)
+# llama-swap's answer when a model's process dies while starting (no VRAM, a bad file): the next model in a
+# chain usually dies the same way, so a start failure asks the GPU why before any other cold model is tried
+_START_FAIL_RE = re.compile(r"exited prematurely|unable to start|failed to start|out of memory|"
+                            r"HTTP 503\b|Connection refused", re.I)
 VOICE_RECENT_S = 60.0     # a chat text equal to the last transcript within this is voice
 MAX_TEXT = 2000
 RESULT_CHARS = 4000       # a tool result is cut to this in the transcript
@@ -486,6 +510,23 @@ class ModelFailure(Exception):
     """A model call that did not produce an answer (timeout, HTTP error, empty)."""
 
 
+class TurnCancelled(Exception):
+    """The operator pressed cancel (POST /api/chat/cancel): the turn ends now, no fallback model is
+    tried and no further tool runs. The model call in flight is abandoned, not aborted: llama-server
+    finishes it in the background (a robot turn is at most REPLY_MAX_TOKENS)."""
+
+
+# the running turn's cancel flag (an asyncio.Event): set in Brains.chat, read by every model call of
+# the turn — tasks and to_thread copy the context, so a look inside the turn sees the same flag
+_TURN_CANCEL = contextvars.ContextVar("rocky_turn_cancel", default=None)
+
+
+def _check_cancel():
+    ev = _TURN_CANCEL.get()
+    if ev is not None and ev.is_set():
+        raise TurnCancelled("cancelled by the operator")
+
+
 # ------------------------------------------------------------------ pure helpers
 def intent_stop(text):
     """harness.intent's own verdict: does plan() read this line as a stop? (Its stop
@@ -688,7 +729,7 @@ def classify_models(entries):
         meta = (e.get("meta") or {}).get("llamaswap") or {}
         text = " ".join([mid, str(e.get("name") or ""), str(e.get("description") or "")])
         out.append(dict(
-            id=mid, name=str(e.get("name") or mid),
+            id=mid, name=str(e.get("name") or mid), description=str(e.get("description") or "")[:240],
             vision=bool(_VISION_RE.search(text)) and not _TEXT_ONLY_RE.search(text),
             loaded=(e.get("status") or {}).get("value") == "loaded",
             selector=meta.get("type") == "selector",
@@ -1088,7 +1129,7 @@ class Brains:
     max_tokens) -> {"content": str, "tool_calls": [{"id", "name", "arguments"}]}."""
 
     def __init__(self, sim, base_url=None, api_key=None, conf_path=CONF_PATH, complete=None,
-                 timeout_s=CALL_TIMEOUT_S, catalog=None, stop_first=None):
+                 timeout_s=CALL_TIMEOUT_S, catalog=None, stop_first=None, gpu=None):
         self.sim = sim
         # stop lines skip the model (STOP FIRST); off only for brain_bench, which measures the model's own stop
         self.stop_first = (os.environ.get(STOP_FIRST_ENV, "1").strip() != "0" if stop_first is None
@@ -1110,6 +1151,12 @@ class Brains:
         self.last_look = None                                  # {text, model, t, pose}: the awareness loop reads it
         self.last_find = None                                  # {name, found, detail, t, model}: ditto (find's looks)
         self._embed_client = None                              # D057: the embeddings client (embed())
+        # gpu: () -> gpu_check.status() dict or None. The real GPU only for a real model server: tests and
+        # benches that script the model (complete=...) must not read this machine's nvidia-smi
+        self._gpu = gpu if gpu is not None else (gpu_check.status if complete is None else (lambda: None))
+        self.activity = None          # the model call running now: {mode, model, stage, cold, t0, tried} (UI feed)
+        self.paused = None            # a reason (str) while the Models panel's bench owns the model server
+        self._turns = set()           # the running turns' cancel events (cancel())
         self._load_conf()
         if not self.stop_first:
             self._log(f"brains: stop-first is OFF ({STOP_FIRST_ENV}=0): stop lines go to the model "
@@ -1147,20 +1194,27 @@ class Brains:
             return
         try:
             with open(self.conf_path) as f:
-                saved = json.load(f).get("roles", {})
-        except (OSError, ValueError, AttributeError):
+                conf = json.load(f)
+            saved = dict(conf.get("roles") or {})
+        except (OSError, ValueError, AttributeError, TypeError):
             return
         for k, v in saved.items():
             if k in ROLE_DEFAULTS and isinstance(v, str) and v and v not in QUARANTINED:
+                if LEGACY_DEFAULTS.get(k) == v and ROLE_DEFAULTS[k] != v:
+                    continue                                    # an old conf's unpicked default (2026-10-15)
                 self.state[k] = v
+        if conf.get("mode") in MODES:
+            self.state["mode"] = conf["mode"]
 
     def _save_conf(self):
+        """The roles the operator picked (those that differ from the defaults) and the mode."""
         if not self.conf_path:
             return
         try:
             os.makedirs(os.path.dirname(self.conf_path), exist_ok=True)
             with open(self.conf_path, "w") as f:
-                json.dump({"roles": {k: self.state[k] for k in ROLE_DEFAULTS}}, f, indent=1)
+                json.dump({"roles": {k: self.state[k] for k in ROLE_DEFAULTS if self.state[k] != ROLE_DEFAULTS[k]},
+                           "mode": self.state["mode"]}, f, indent=1)
         except OSError as e:
             self._log(f"brains: could not save {self.conf_path}: {e}")
 
@@ -1243,6 +1297,163 @@ class Brains:
             out.append(c)
         return out, notes
 
+    # ------------------------------------------------- fallback budget (2026-10-15)
+    def _loaded(self, m, cmap=None):
+        """Is model m (or a selector's target) loaded on the server, per the cached catalog."""
+        if cmap is None:
+            cat = self._cat[1]
+            cmap = {e["id"]: e for e in cat} if cat is not None else {}
+        e = cmap.get(m)
+        return bool(e and e["loaded"])
+
+    def _mark_loaded(self, m):
+        """A model that just answered is loaded: say so in the cached catalog (the UI's warm/cold
+        marks and the next call's timeout) without waiting CATALOG_TTL_S for llama-swap's list."""
+        for e in self._cat[1] or []:
+            if e["id"] == m or m in (e.get("targets") or []):
+                e["loaded"] = True
+
+    def _gpu_status(self):
+        try:
+            return self._gpu()
+        except Exception:                                       # noqa: BLE001
+            return None
+
+    def activity_view(self):
+        """The running model call for the UI feed: {mode, stage, model, cold, secs, tried} or None."""
+        a = self.activity
+        if not a:
+            return None
+        return dict({k: a[k] for k in ("mode", "stage", "model", "cold", "tried")},
+                    secs=round(time.time() - a["t0"], 1))
+
+    def _gpu_blocked(self):
+        """gpu_check.blocked() on this brain's probe: a reason no model can load, or None."""
+        try:
+            st = self._gpu()
+        except Exception:                                       # noqa: BLE001 — a probe never breaks a turn
+            return None
+        return gpu_check.blocked(st) if st else None
+
+    @staticmethod
+    def _new_budget():
+        return {"cold": MAX_COLD_FALLBACKS, "stop": None, "picked": True}
+
+    async def _admit(self, m, cmap, budget, notes):
+        """May this turn call model m now? A loaded model always (no swap). A cold one only when the
+        GPU can fit a model (else the turn stops trying: every cold model would die the same way);
+        the operator's pick (the chain's first) then always, a fallback while the budget lasts."""
+        picked, budget["picked"] = budget["picked"], False
+        if budget["stop"]:
+            return False
+        if self._loaded(m, cmap):
+            return True
+        reason = await asyncio.to_thread(self._gpu_blocked)
+        if reason:
+            budget["stop"] = reason
+            notes.append(reason)
+            self._log(f"brains: {reason}")
+            self._event("brain", reason[:80])
+            return False
+        if picked:
+            return True
+        if budget["cold"] <= 0:
+            notes.append(f"{m} not tried (cold: loading it would swap models; "
+                         f"ROCKY_MAX_COLD_FALLBACKS={MAX_COLD_FALLBACKS})")
+            return False
+        budget["cold"] -= 1
+        return True
+
+    def _begin(self, mode, stage, m, cmap, tried):
+        cold = not self._loaded(m, cmap)
+        self.activity = dict(mode=mode, stage=stage, model=m, cold=cold, t0=time.time(), tried=list(tried))
+        if cold:
+            self._event("brain", f"loading {m} (cold) …")
+
+    @staticmethod
+    def _failure_note(m, e):
+        why = str(e)
+        if _START_FAIL_RE.search(why):                      # 'X failed' first: brain_bench.model_failed reads it
+            return f"{m} failed — it could not start ({why[:120]}; see the model server's log)"
+        return f"{m} failed ({why})"
+
+    def plan(self, cat=None):
+        """What each mode loads, in the order it would load it: {mode: [{role, model, resolves, loaded}]}.
+        resolves: a selector's first target (what llama-swap runs for it), else the model itself."""
+        cmap = {e["id"]: e for e in (cat if cat is not None else self._cat[1] or [])}
+
+        def row(role, m):
+            e = cmap.get(m) or {}
+            return dict(role=role, model=m, resolves=(e.get("targets") or [m])[0] if e.get("selector") else m,
+                        loaded=bool(e.get("loaded")), on_server=bool(e) or not cmap)
+        return {"talk": [],
+                "local": [row("brain", self.state["model"]), row("vision", self.state["vision_model"])],
+                "multimodal": [row("multimodal", self.state["multimodal_model"])],
+                "claude": [dict(role="claude", model=self.state["claude_model"], resolves=self.state["claude_model"],
+                                loaded=self.claude_available(), on_server=True)]}
+
+    async def load_one(self, mid):
+        """POST /api/admin/load: one model by id (the Models panel), a 1-token call, warm's rules:
+        the GPU check first, never a fallback, quarantined models refused."""
+        if self.paused:
+            return {"ok": False, "model": mid, "error": self.paused}
+        cat = await self._acatalog()
+        if cat is not None and mid not in cat:
+            return {"ok": False, "model": mid, "error": f"llama-swap serves no chat model {mid!r}"}
+        if mid in QUARANTINED or (cat or {}).get(mid, {}).get("quarantined"):
+            return {"ok": False, "model": mid, "error": f"{mid} is quarantined — never loaded from here"}
+        if self._loaded(mid, cat):
+            return {"ok": True, "model": mid, "was": "warm"}
+        reason = await asyncio.to_thread(self._gpu_blocked)
+        if reason:
+            return {"ok": False, "model": mid, "error": reason}
+        t0 = time.monotonic()
+        self._begin(self.state.get("mode"), "load", mid, cat, [])
+        try:
+            await self._acall(mid, [{"role": "user", "content": "hi"}], None, 1)
+        except ModelFailure as e:
+            return {"ok": False, "model": mid, "error": self._failure_note(mid, e)}
+        finally:
+            self.activity = None
+        return {"ok": True, "model": mid, "was": "cold", "load_s": round(time.monotonic() - t0, 1)}
+
+    async def warm(self, mode=None):
+        """Load the models a mode uses (POST /api/brain/warm) with a 1-token call each, in plan order
+        (local: the brain, then the eye — llama-swap's resident group keeps both). Never walks a
+        fallback chain: it warms what was picked, or says why it cannot."""
+        mode = mode or self.state["mode"]
+        if mode not in MODES:
+            return {"ok": False, "error": f"unknown mode {mode!r}"}
+        if self.paused:
+            return {"ok": False, "mode": mode, "error": self.paused}
+        cat = await self._acatalog()
+        rows = self.plan([e for e in (cat or {}).values()] if cat else None).get(mode, [])
+        if mode == "claude" or not rows:
+            return {"ok": True, "mode": mode, "warmed": [], "note": "nothing to load for this mode"}
+        out, errors = [], []
+        for row in rows:
+            m = row["model"]
+            if self._loaded(m, cat):
+                out.append({"model": m, "was": "warm"})
+                continue
+            reason = await asyncio.to_thread(self._gpu_blocked)
+            if reason:
+                errors.append(reason)
+                break
+            t0 = time.monotonic()
+            self._begin(mode, "warm", m, cat, [])
+            try:
+                await self._acall(m, [{"role": "user", "content": "hi"}], None, 1)
+                out.append({"model": m, "was": "cold", "load_s": round(time.monotonic() - t0, 1)})
+            except ModelFailure as e:
+                errors.append(self._failure_note(m, e))
+                break
+            finally:
+                self.activity = None
+        self._event("brain", ("warm: " + ", ".join(f"{w['model']} ({w['was']})" for w in out)
+                              + ("; " + "; ".join(errors) if errors else ""))[:80])
+        return {"ok": not errors, "mode": mode, "warmed": out, "errors": errors}
+
     def models_payload(self):
         """GET /api/models (blocking: run in a thread)."""
         cat, ok = self.catalog(refresh=True)
@@ -1263,6 +1474,11 @@ class Brains:
             "modes": list(MODES), "brain": self.state, "claude": self.claude_available(),
             "base_url": self.base, "stt": {"url": WHISPER_URL, "model": self.state["stt_model"]},
             "quarantined": sorted(QUARANTINED), "coresident": list(CORESIDENT),
+            # 2026-10-15: what each mode loads, the GPU's holders, and the fallback budget, for the UI
+            "plan": self.plan(cat if ok else None), "gpu": self._gpu_status(), "gpu_blocked": self._gpu_blocked(),
+            "activity": self.activity_view(), "paused": self.paused,
+            "policy": {"max_cold_fallbacks": MAX_COLD_FALLBACKS, "cold_timeout_s": COLD_TIMEOUT_S,
+                       "timeout_s": self.timeout_s},
             "draft": None if self.composed is None else {        # the gesture studio can load it
                 k: self.composed.get(k) for k in ("name", "spec", "ok", "report", "saved")}}
 
@@ -1279,6 +1495,7 @@ class Brains:
         cmap = {m["id"]: m for m in cat} if (cat is not None and ok) else None
         if "mode" in items:
             if items["mode"] in MODES:
+                changed = changed or self.state["mode"] != items["mode"]
                 self.state["mode"] = items["mode"]
             else:
                 errors.append(f"unknown mode {items['mode']!r} (have {', '.join(MODES)})")
@@ -1337,10 +1554,10 @@ class Brains:
                                   timeout=self.timeout_s, max_retries=0)
         return self._client
 
-    def _complete(self, model, messages, tools, max_tokens):
+    def _complete(self, model, messages, tools, max_tokens, timeout_s=None):
         if self._complete_fn is not None:
             return self._complete_fn(model, messages, tools, max_tokens)
-        kw = dict(model=model, messages=messages, max_tokens=max_tokens,
+        kw = dict(model=model, messages=messages, max_tokens=max_tokens, timeout=timeout_s or self.timeout_s,
                   extra_body={"chat_template_kwargs": {"enable_thinking": thinking_for(model)}})
         if tools:
             kw["tools"] = tools
@@ -1352,16 +1569,34 @@ class Brains:
                                for tc in (msg.tool_calls or [])]}
 
     async def _acall(self, model, messages, tools, max_tokens):
+        # a cold model's first call carries its load: COLD_TIMEOUT_S, not the 90 s that made a slow load
+        # look like a dead model (the chain then swapped in ANOTHER cold model)
+        t = self.timeout_s if self._loaded(model) else max(self.timeout_s, COLD_TIMEOUT_S)
+        _check_cancel()
+        ev = _TURN_CANCEL.get()
         try:
-            r = await asyncio.wait_for(
-                asyncio.to_thread(self._complete, model, messages, tools, max_tokens),
-                self.timeout_s + 5.0)
+            call = asyncio.ensure_future(asyncio.wait_for(
+                asyncio.to_thread(self._complete, model, messages, tools, max_tokens, t), t + 5.0))
+            if ev is None:
+                r = await call
+            else:
+                stop = asyncio.ensure_future(ev.wait())
+                await asyncio.wait({call, stop}, return_when=asyncio.FIRST_COMPLETED)
+                stop.cancel()
+                if not call.done():
+                    call.cancel()                       # the thread finishes on its own; its answer is dropped
+                    raise TurnCancelled("cancelled by the operator")
+                r = call.result()
         except asyncio.TimeoutError:
-            raise ModelFailure(f"timed out after {self.timeout_s:.0f} s") from None
-        except ModelFailure:
+            raise ModelFailure(f"timed out after {t:.0f} s") from None
+        except (ModelFailure, TurnCancelled):
             raise
         except Exception as e:
             raise ModelFailure(_short_err(e)) from None
+        self._mark_loaded(model)
+        if t > self.timeout_s and self._complete_fn is None:
+            # it loaded just now: llama-swap may have swapped others out — re-read who is warm
+            await asyncio.to_thread(self.catalog, True)
         r = dict(r or {})
         r["content"] = _THINK_RE.sub("", r.get("content") or "").strip()
         r["tool_calls"] = list(r.get("tool_calls") or [])
@@ -1660,18 +1895,32 @@ class Brains:
         b64 = self._eye_b64()
         if b64 is None:
             return {"ok": False, "error": "no eye frame yet (renderer off?)", "tried": []}
+        if self.paused:
+            return {"ok": False, "error": self.paused, "tried": []}
         cat = await self._acatalog()
+        if model is None and self.state.get("mode") == "multimodal":
+            # the multimodal model sees images and is the loaded one: the vision role (lfm2.5-vl) would
+            # evict it ("runs alone"), so every look and find made the next chat a cold load (2026-10-15)
+            model = self.state["multimodal_model"]
         chain, tried = self.chain("vision", first=model, cat=cat)
+        budget = self._new_budget()
         for m in chain:
+            if not await self._admit(m, cat, budget, tried):
+                if budget["stop"]:
+                    break
+                continue
             msgs = [{"role": "user", "content": [
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}]}]
             t0 = time.monotonic()
+            self._begin(self.state.get("mode"), "look", m, cat, tried)
             try:
                 r = await self._acall(m, msgs, None, max_tokens)
             except ModelFailure as e:
                 tried.append(f"{m}: {e}")
                 continue
+            finally:
+                self.activity = None
             text = r["content"]
             if not text:
                 tried.append(f"{m}: empty answer")
@@ -2307,6 +2556,43 @@ class Brains:
         if not text:
             return {"reply": "", "trace": [], "mode": mode}
         note = self._accept_model(mode, model)
+        if self.paused and mode in ("local", "multimodal") and not (self.stop_first and stop_line(text)):
+            return {"reply": f"[{self.paused}] not sent to a model — switch to talk, or wait for the bench",
+                    "trace": [], "mode": mode, "model": None, "paused": True}
+        ev = asyncio.Event()
+        self._turns.add(ev)
+        tok = _TURN_CANCEL.set(ev)
+        try:
+            r = await self._chat_turn(text, mode, allow, mark)
+        finally:
+            _TURN_CANCEL.reset(tok)
+            self._turns.discard(ev)
+        if note:
+            r["reply"] = f"{note} {r['reply']}"
+        blocked = any(isinstance(t.get("result"), dict) and t["result"].get("error") == "voice_unconfirmed"
+                      for t in r["trace"])
+        r.update(voice=voice, motion_allowed=allow, motion_blocked=blocked)
+        if blocked:
+            r["reply"] += (" (heard by voice without the wake word, so I did not move — say "
+                           "'pebble, …' or press Enter to confirm)")
+        return r
+
+    def cancel(self):
+        """POST /api/chat/cancel: every running model turn ends at its next model call or tool
+        (TurnCancelled). Stops nothing that already moves — that is the STOP button's job.
+        -> how many turns were told."""
+        for ev in list(self._turns):
+            ev.set()
+        return len(self._turns)
+
+    async def _chat_turn(self, text, mode, allow, mark):
+        try:
+            return await self._chat_dispatch(text, mode, allow, mark)
+        except TurnCancelled:
+            return {"reply": "⏹ cancelled before a model answered", "trace": [], "mode": mode,
+                    "model": None, "cancelled": True}
+
+    async def _chat_dispatch(self, text, mode, allow, mark):
         if mode != "talk" and self.stop_first and stop_line(text):
             r = await self._stop_line(text, mode, allow, mark)   # the stop: no model, no lock, never waits
         elif mode == "talk" and intent_stop(text):
@@ -2318,14 +2604,6 @@ class Brains:
                     r = await self._talk(text, allow, stops)
                 else:
                     r = await self._model_turn(mode, text, allow, stops)
-        if note:
-            r["reply"] = f"{note} {r['reply']}"
-        blocked = any(isinstance(t.get("result"), dict) and t["result"].get("error") == "voice_unconfirmed"
-                      for t in r["trace"])
-        r.update(voice=voice, motion_allowed=allow, motion_blocked=blocked)
-        if blocked:
-            r["reply"] += (" (heard by voice without the wake word, so I did not move — say "
-                           "'pebble, …' or press Enter to confirm)")
         return r
 
     async def _stop_first(self, text, mode, allow):
@@ -2379,7 +2657,7 @@ class Brains:
                 r = await self._llm(text, mode, allow, stops, ask=ask)
             if before is not None:
                 r = dict(r, reply=f"{before['reply']} {r['reply']}", trace=before["trace"] + r["trace"],
-                         stop_first=True)
+                         stop_first=True, history_reply=f"{before['reply']} {r.get('history_reply') or r['reply']}")
         finally:
             self._fill(mode, slot, r)
         return r
@@ -2508,7 +2786,10 @@ class Brains:
         if r is None:
             h[:] = [e for e in h if e is not slot]
             return
-        slot.update(reply=r.get("reply") or "(no reply)", tools=[t["tool"] for t in r.get("trace") or []])
+        # the model's own words (history_reply): a '[X failed → answered by Y]' note replayed as the
+        # assistant's past text taught the next model to write such notes itself
+        slot.update(reply=r.get("history_reply") or r.get("reply") or "(no reply)",
+                    tools=[t["tool"] for t in r.get("trace") or []])
         slot.pop("pending", None)
         del h[:-MAX_TURNS]
 
@@ -2532,6 +2813,7 @@ class Brains:
                  "function": {"name": n, "arguments": json.dumps(a if a is not None else {})}}
                 for cid, n, a, _e in parsed]})
             for cid, n, a, err in parsed:
+                _check_cancel()                         # cancel: no further tool of this turn runs
                 if err:
                     res = {"ok": False, "error": f"bad arguments for {n}: {err}"}
                 elif stops is not None and n in GATED and stops.stopped():
@@ -2566,23 +2848,39 @@ class Brains:
             notes += sk
         stages.append(("brain", ch))
         msgs = self._messages(mode, ask or text, image, situation)
+        budget = self._new_budget()                       # one per turn: across the multimodal and brain stages
         for stage, chain in stages:
             tools = self.tools_for(look=True)
             for mdl in chain:
+                if not await self._admit(mdl, cat, budget, notes):
+                    if budget["stop"]:
+                        break
+                    continue
                 msgs[0] = {"role": "system",                      # per-family note (B41)
                            "content": self.system_for(multimodal=mode == "multimodal", model=mdl)}
+                self._begin(mode, stage, mdl, cat, notes)
                 try:
                     reply, gave_up = await self._tool_loop(
                         mdl, msgs, tools, trace, allow,
                         look_model=mdl if stage == "multimodal" else None, stops=stops)
+                except TurnCancelled:
+                    ran = f" — what ran: {summarize_trace(trace)}" if trace else " — nothing ran"
+                    return {"reply": f"⏹ cancelled while {mdl} was thinking{ran}", "trace": trace,
+                            "mode": mode, "model": mdl, "cancelled": True, "fallback": notes,
+                            "history_reply": "(the operator cancelled this turn)"}
                 except ModelFailure as e:
-                    notes.append(f"{mdl} failed ({e})")
+                    notes.append(self._failure_note(mdl, e))
                     self._log(f"brain {mdl} failed: {e}")
                     continue
+                finally:
+                    self.activity = None
+                own = reply
                 if notes:
                     reply = f"[{'; '.join(notes)} → answered by {mdl}] {reply}"
                 return {"reply": reply, "trace": trace, "mode": mode, "model": mdl,
-                        "fallback": notes, "gave_up": gave_up}
+                        "fallback": notes, "gave_up": gave_up, "history_reply": own}
+            if budget["stop"]:
+                break
             if stage == "multimodal":
                 _strip_images(msgs)
                 notes.append("multimodal chain exhausted — text brain + look")

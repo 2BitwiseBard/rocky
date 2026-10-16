@@ -14,13 +14,15 @@ recipes, is archived in [archive/BRAIN_MODELS_2026-09-24.md](archive/BRAIN_MODEL
 | role | what it does | cockpit mode | reference default, then fallbacks | set with |
 |---|---|---|---|---|
 | multimodal | sees the eye frame with every message and calls tools; one model, one load | Multimodal | `qwen3.5-9b` → `qwen3.5-4b` → `gemma-4-12b` | `ROCKY_MULTIMODAL_MODEL`, `ROCKY_FALLBACK_MULTIMODAL` |
-| brain | text + tools, beside a separate eye | Local model | `tool-model` (a llama-swap selector for `qwen3.6-35b-a3b`) → `qwen3.6-35b-a3b` → `qwen3.8-27b-iq4` | `ROCKY_BRAIN_MODEL`, `ROCKY_FALLBACK_BRAIN` |
-| vision | describes the eye for `look` and `find_object`, in every mode | — | `vision-model` (a selector for `lfm2.5-vl`) → `lfm2.5-vl` → `gemma-4-12b` → `gemma-4-26b-a4b` | `ROCKY_VISION_MODEL`, `ROCKY_FALLBACK_VISION` |
+| brain | text + tools, beside a separate eye | Local model | `qwen3.6-35b-a3b` → `qwen3.8-27b-iq4` | `ROCKY_BRAIN_MODEL`, `ROCKY_FALLBACK_BRAIN` |
+| vision | describes the eye for `look` and `find_object` (in Multimodal mode the multimodal model looks itself) | — | `lfm2.5-vl` → `gemma-4-12b` → `gemma-4-26b-a4b` | `ROCKY_VISION_MODEL`, `ROCKY_FALLBACK_VISION` |
 | claude | the cloud brain | Claude | `claude-sonnet-5` (needs the `cockpit` extra and `ANTHROPIC_API_KEY`) | `ROCKY_CLAUDE_MODEL` |
 | embedding | place recognition's description vectors (D057) | — | `embedding` (Qwen3-Embedding-0.6B, CPU) | `ROCKY_EMBED_MODEL` |
 
 A pick in the cockpit's Talk tab is saved (`ROCKY_COCKPIT_CONF`) and wins
-over the defaults. Around every model: the **stop gate** executes a stop
+over the defaults (the defaults are concrete ids since 2026-10-15: a llama-swap
+selector hid which model a role loaded). A turn loads at most one model the
+operator did not pick, and none while another program fills the GPU. Around every model: the **stop gate** executes a stop
 line before any model sees it (D055; `ROCKY_STOP_FIRST=0` turns it off,
 which only the bench does); a **per-family prompt note** for ids starting
 `gemma` or `qwen3.5` (D055a; `ROCKY_FAMILY_NOTES=0` off); thinking off
@@ -104,7 +106,12 @@ suffix, `qwen3.5-9b-q6k`; `--id` overrides), moves the file to
 keeps it), finds or fetches its vision projector (a hard link
 when another id already holds the same one; `--no-fetch` never downloads),
 adds a manifest entry, backs up the config and inserts an **UNMEASURED**
-stanza (16k context, ttl 1800, the family's template rules). It never loads
+stanza (16k context, ttl 1800, the family's rules from
+`sim/brain_families.yaml`: measured ones for qwen35 / gemma4 / lfm2, and for
+any other architecture generic ones read from the GGUF itself (needs a chat
+template; tool calls in it or chat only; thinking switch off; a MoE or a
+model bigger than the card gets llama.cpp's auto-fit instead of `-ngl 99`;
+vision only with a projector on disk)). It never loads
 a model and never edits `groups:`, `selectors:` or `macros:`. It expects a
 llama-swap config that has `${binary}` and `${common_flags}` macros and a
 comment block marked `RETRIEVAL STACK` (the stanza goes right before it);
@@ -169,7 +176,8 @@ for descriptions and chat; tool calls are short.
   4,916 MiB before any KV cache, above the eye's 4,556 MiB slot, so it
   cannot replace `lfm2.5-vl` in the pair. A UD-Q4_K_XL 4B might; measure it
   first.
-- `brain-install` warns when weights + projector exceed
-  `ROCKY_GPU_VRAM_GB` − 2 GB (16 on the reference machine).
+- When weights + projector exceed `ROCKY_GPU_VRAM_GB` − 2 GB (16 on the
+  reference machine), `brain-install` writes no `-ngl` and lets llama.cpp's
+  auto-fit place the model (it said so and kept `-ngl 99` before 2026-10-15).
 - A vision model outside the resident pair swaps with the brain on every
   look (seconds to minutes each time).
