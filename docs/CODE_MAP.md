@@ -38,14 +38,16 @@ rocky/
 ├── sim/                  MuJoCo
 │   ├── mass_audit.py → mass_budget.json, build_mjcf.py → pebble.xml, model_fingerprint.py,
 │   │   check_urdf_parity.py   the model pipeline
-│   ├── playground.py     terminal REPL + viewer · cockpit.py, cockpit_brains.py, cockpit_ui.html   the browser cockpit
+│   ├── playground.py     terminal REPL + viewer · cockpit.py, cockpit_brains.py, cockpit_shared.py,
+│   │   cockpit_ui.html   the browser cockpit · model_admin.py, gpu_check.py   its Models panel
 │   ├── rocky_env.py, rocky_recover_env.py, rl_common.py, train_ppo.py, eval_*.py, righter.py,
 │   │   audit_righter.py, rl_dashboard.py   RL (§2.4) · runs/   checkpoints (git-lfs .pt)
 │   ├── run_sim.py, shove_envelope.py, torque_audit.py, audit_gestures.py, terrain_bench.py   tools that give
 │   │   published numbers
 │   ├── hw_bridge.py      the cockpit's real-servo bridge · servo_model.py, sim_imu.py, sim_lidar.py, shove.py
 │   ├── world_builder.py + worlds/, scenes.py, scene_memory.py, place_memory.py   worlds, memory, places
-│   ├── brain_install.py, brain_bench.py, vision_bench.py, place_bench.py, envfile.py   brains and benches
+│   ├── brain_install.py (+ brain_families.yaml), brain_bench.py, vision_bench.py, place_bench.py,
+│   │   envfile.py   brains and benches
 │   └── experiments/ (one question per script; results/ = the record) · out/ (tool records) · tests/
 ├── harness/              capabilities.py (the tool registry → docs/TOOLS.md), server.py (MCP),
 │                         backends (mock, sim, cockpit), local_brain.py (LLM), intent.py (regex brain)
@@ -269,6 +271,7 @@ MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py
 | command | what |
 |---|---|
 | `./rocky.sh cockpit` | browser cockpit at http://127.0.0.1:8765; `cockpit-stop` ends it; `tailnet` publishes it to the phone |
+| `./rocky.sh cockpit-service install\|start\|restart\|stop\|logs` | the same cockpit as the systemd user unit `rocky-cockpit.service` (starts at login) |
 | `./rocky.sh play` | MuJoCo window + REPL + arrow-key teleop (`sim/playground.py`) |
 | `./rocky.sh chat` | Claude Code drives the robot over MCP (`harness/server.py`, `ROCKY_BACKEND` in `.mcp.json`) |
 | `./rocky.sh brain` · `talk` · `voice` | a local LLM (`harness.local_brain`) · the regex brain · push-to-talk through whisper |
@@ -398,6 +401,21 @@ MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --one W3.stone20.f0.stand --
   docs that quote it; a run on a dirty tree names its code by `code_diff_sha256`
   (`git diff HEAD~1 HEAD -- . ':!*.md' ':!docs' ':!sim/out' ':!sim/experiments/results' | sha256sum`
   after the commit).
+
+### 2.19 Add, try or remove a local model
+
+- From the page: Talk → **Models** (COCKPIT_GUIDE §Models). Search Hugging Face, download,
+  **plan**, **install**, **bench**; **delete** moves the files to `<models>/.trash/`. The routes
+  are `/api/admin/*` in `sim/cockpit.py`; the work is `sim/model_admin.py` (inventory from the
+  llama-swap config, text-level stanza edits, downloads with resume + sha256, jobs, the PIN gate).
+- From a terminal: `./rocky.sh brain-install <gguf> --dry-run`, then without `--dry-run`;
+  `./rocky.sh brain-bench --models ID`; `brain-install --uninstall ID`. Results: docs/BRAINS.md.
+- A family that needs its own stanza rules (sampling, image tokens, thinking kept on): add it
+  to `sim/brain_families.yaml` (keys at its top). Every other architecture gets the generic
+  rules read from the GGUF: chat template required, tool calls or chat only, thinking off,
+  auto-fit for a MoE or a model bigger than the card.
+- Which model a role uses: `REFERENCE_ROLES` / `REFERENCE_FALLBACK` in `sim/cockpit_brains.py`,
+  overridden by rocky.env (`ROCKY_BRAIN_MODEL`, ...) and by a pick in the page.
 
 ## 3. Reading order for a newcomer
 1. [README.md](../README.md): status, setup, the ground rules.
