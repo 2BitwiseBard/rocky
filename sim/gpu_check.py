@@ -7,6 +7,9 @@ qwen3.5-4b, qwen3.6-35b-a3b, qwen3.8-27b-iq4), each a failed spawn, before
 the regex brain answered with "HTTP 500" notes that named no cause. Rapid
 failed spawns are also the bench churn the workstation's GPU notes warn about.
 
+ROCKY_GPU_CHECK=0 turns it off (status() is None: "cannot tell", nothing is blocked); the repo's
+conftest.py sets it for the tests, so a test never depends on what this machine's GPU holds.
+
 status() reads nvidia-smi (best effort: None without it, on another vendor's
 GPU, or on any error) and splits the memory into what the model server can
 reclaim (its own llama-server processes: llama-swap swaps them out) and what
@@ -57,6 +60,8 @@ def status(refresh=False):
     """{total_mib, used_mib, free_mib, reclaimable_mib, holders: [{pid, name, mib, model_server}]}
     for GPU 0, or None (no nvidia-smi / any error)."""
     global _cache
+    if os.environ.get("ROCKY_GPU_CHECK", "1").strip() == "0":
+        return None
     t, st = _cache
     if not refresh and time.monotonic() - t < CACHE_S:
         return st

@@ -23,6 +23,7 @@ If something looks stuck, check the **sim** chip in the header first: `live` is 
 - **Saying stop.** A typed or spoken line with `stop`, `halt`, `freeze`, `whoa` or `abort` in it stops the robot with every brain, and needs no wake word. With a model brain (Local, Multimodal, Claude) the stop runs before any model is asked and does not wait for a turn that is still running; the reply is `stopped (safe-stop).` When the line says more than stop, a question or something to remember (`why did you stop?`, `remember that the stop button is red`) goes to the model after the stop, and its answer follows the stop's reply; the model cannot move the robot in that turn. Anything else in the line (`walk forward 30 cm and then stop`) is not run, and the reply says so. A model brain hands `don't stop`, `non-stop`, `stop sign` and `bus stop` to the model; Talk stops on them.
 - **What a stop cancels.** A stop from anywhere (a stop line, the STOP button or `space`, the console's `stop` in any case, the MCP stop tool) also refuses motion (`operator_stopped`) to every line you sent before it: the turn that is running, and a line still waiting for it, with every brain, Talk included. Send the line again to run it. A line you send after the stop moves as usual.
 - **More driving** has the gesture and chord-word pickers, fixed shoves (20 / 40 / 60 N at the shell rim, 0.4 s), camera presets and an orbit. The camera is shared: every screen watching this cockpit sees the same view.
+- **Move the camera on the video itself.** Drag to orbit around the robot; scroll to zoom (0.25 to 12 m); right-drag or shift-drag to pan, which unhooks the camera from the robot so you can watch a spot while it walks; double-click, or **⟲ follow robot**, hooks it back on. A preset button (follow, wide, top, low) also hooks it back. On a phone, tap **🎥 camera** on the video first: then one finger orbits and two fingers pan and pinch-zoom. With it off, a swipe on the video scrolls the page as before. The phone remembers the choice.
 
 ## Talking
 
@@ -95,6 +96,21 @@ curl -s -X POST http://127.0.0.1:8765/api/brain -H 'Content-Type: application/js
 The other keys are `model` (the brain), `vision_model` and `stt_model`, or `mode` on its own. Refusals come back under `errors`. `GET /api/models` shows the current roles, every model the server offers, each role's fallback chain and the co-resident pair, plus `plan` (what each mode loads), `gpu` (who holds the graphics memory) and `activity` (the model call running now). `POST /api/brain/warm` (optionally `{"mode": ...}`) loads a mode's models and answers when they are ready.
 
 **One registry.** Every model mode (Local model, Multimodal, Claude) and Claude Code over MCP get their tools from one list, `harness/capabilities.py` (D056). Each tool is written there once: its name, its arguments, the text the model reads, whether a spoken line needs the wake word for it, and what it needs to exist (the eye, the memory, this cockpit). The gesture and chord-word lists inside the tools are this cockpit's current ones, so a gesture saved in the studio or a word saved in the chord designer can be called by name on the next message, and the MCP server's list follows them too, with no restart. Talk mode has no model and does not use the list. `docs/TOOLS.md` shows every tool, which ones need the wake word, and the envelope numbers the descriptions quote (a move is at most 1.5 m; a goto target should stay within ~1.5 m, which its 55 s cap covers at the 34.2 mm/s envelope with a fifth to spare; a goto that has had to detour around something the lidar sees gets 87 s instead, and one farther than 3 m is refused).
+
+### Brain settings and what a turn used
+
+**settings** (under the fallbacks in Brain & chat) holds four knobs, saved with the model picks:
+
+- **tool rounds** (default 6, 1–20): how many rounds of tool calls one line may take. Each round can hold several calls; past the limit the brain stops and says "gave up after N tool rounds". Raise it for long errands, lower it to keep a small model from wandering.
+- **reply tokens** (default 512, 128–4096): the longest answer the cockpit asks a model for, per call (a look asks for 160, a find for 120). The context window is separate: it is the model's `-c` in llama-swap, shown here for the model answering in this mode and on its card in **Models** (16k for the robot brains), and it must hold the whole prompt (instructions, tools, the situation line, the turns remembered) plus the answer.
+- **turns remembered** (default 12, 0–40): how many earlier lines and answers go with each new line. More remembers more of the conversation and fills more context.
+- **thinking for** *the model answering now*: off by default, for every model. On, the model reasons before it acts, and 1,536 tokens are added to its reply limit for that. Measured on the robot's commands, Gemma 12B with thinking on got 16 of 20 right instead of 20, about three times slower: leave it off for driving, try it for questions. A model listed in `ROCKY_THINKING_MODELS` (rocky.env) is always on. A model without a thinking switch in its template ignores it.
+
+**defaults** puts all four back. Under settings, **last turn** says what the line just answered cost: model calls, how many tokens the prompt was against the model's context, and the answer tokens. A red note means an answer hit the reply limit and was cut off: raise reply tokens.
+
+### How far it went
+
+`move`, `goto`, `turn` and `gesture` results carry `moved`: the distance walked, how far forward and left that was in the robot's frame when it started, and the degrees it turned, all measured. A model turns by an angle with **turn** (`turn left` = 90°, `turn around` = 180°, + is left); the result's `turned_deg` is the real turn, never exactly the asked one. Before 2026-10-15 a model could only turn with the `turn_in_place` gesture, about 47° a time. The brain bench scores in [Which brain for what](#which-brain-for-what) predate the turn tool; re-bench a model to compare.
 
 ### When a model fails
 
@@ -223,6 +239,16 @@ The header chips that need you:
 - **robot ≠ ckpt** or **robot ?** on the fingerprint chip: see [Model and fingerprint](#model-and-fingerprint).
 
 **The body leveler** (off by default) keeps the body level on a slope or a stone by raising feet, never lowering one. Type `level on` in the console (`level off` slews the feet back; `level` alone prints its state); the overlay's `level` line shows what it does. It levels fully up to about 5°, partly beyond (on 8° the body sits at about 3°), holds still while a foot feels for the floor, and walks about 5 % slower on a levelled plane. It stays off while the sim streams to real legs, and sim → robot will not start while it holds a foot up: `level off` first. Tuning (`set level.tau_s 1.2` and the other `level.` keys) is sim-only. Why it is off and what it measured: [SIM_GUIDE §3](SIM_GUIDE.md).
+
+### Estimated position (odometry)
+
+The sim knows exactly where the robot is; a real robot never does. **estimated position** (World & map, above the presets; `POST /api/odometry {"on": true}`) makes the robot navigate on its own estimate instead: the leg odometry a real Pebble will run (`sim/odometry.py` over `perception/legged_odom.py`), fed only what the hardware will measure: the IMU's gyro and accelerometer with their bias and noise, the servos' positions and speeds, and the foot switches. It starts at the true position when you switch it on (and at the spawn after a world load or reset), then drifts.
+
+- **What changes.** Goto and move steer and decide "arrived" by the estimate; the status pose, the situation line, the memory's positions and the map-frame lidar use it. The brain is told its position is an estimate, with the filter's own uncertainty. Physics, the lidar's rays and the camera stay real.
+- **The map.** The filled dot is where the robot believes it is; a dashed ring is where it really is. Lidar dots are drawn from the belief, so as it drifts they slide off the true walls.
+- **The line beside the switch.** How far off it is now (position and heading), how sure it thinks it is, and how far it has walked. **suspended** means it fell or lost its footing: it stops counting position until it stands steadily again for a second, and it never cheats by looking up the truth.
+- **What to expect** (`sim/odometry_bench.py`, flat floor, 3 seeds; record `sim/out/odometry_bench.json`): a straight 1 m ends 4–8 cm off; a 90° turn in place 1.5 cm and under 2°; three minutes of mixed driving 3–9 cm and up to 7°. Heading is the weak part. The gyro's bias is only calibrated while the robot stands still for 1.2 s or more, so long drives without pauses let it drift: one seed was 28 cm and 23° off after a 1 m square. Pause now and then, and it holds better.
+- Off is the default: every number elsewhere in this guide was measured on the true pose.
 
 ## Memory and awareness
 

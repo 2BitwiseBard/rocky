@@ -26,7 +26,10 @@ operator did not pick, and none while another program fills the GPU. Around ever
 line before any model sees it (D055; `ROCKY_STOP_FIRST=0` turns it off,
 which only the bench does); a **per-family prompt note** for ids starting
 `gemma` or `qwen3.5` (D055a; `ROCKY_FAMILY_NOTES=0` off); thinking off
-unless the id is in `ROCKY_THINKING_MODELS`; `ROCKY_QUARANTINED` ids are
+unless the id is in `ROCKY_THINKING_MODELS` or switched on in the page (Brain & chat →
+settings, with tool rounds, reply tokens and turns remembered; 2026-10-15). Since
+2026-10-15 the models also get `turn(deg)` (it was executor-only), so a re-bench is
+not directly comparable with the rows below; `ROCKY_QUARANTINED` ids are
 never used; `ROCKY_CORESIDENT` names the brain + vision pair that fits the
 GPU together, and the UI warns about any other pair (every look would swap
 models). Box coordinates are read x-first except for the ids in

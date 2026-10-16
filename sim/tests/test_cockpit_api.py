@@ -576,7 +576,7 @@ def test_capabilities_endpoint_shape_and_a_stable_version(cockpit_client):
     assert {n for n, t in tools.items() if t["gated"]} == set(cb.GATED)
     assert tools["gesture"]["parameters"]["properties"]["name"]["enum"] == sim.gesture_names
     assert tools["say"]["parameters"]["properties"]["word"]["enum"] == sim.lexicon
-    assert tools["turn"]["surfaces"] == ["internal"]
+    assert tools["turn"]["surfaces"] == ["openai", "mcp"]          # offered since 2026-10-15
     # what its models are offered is the same registry view
     assert C.to_openai_tools(a) == sim.brains.tools_for(look=True)
     env, mc = a["envelope"], sim.gait.max_command()
@@ -1019,6 +1019,49 @@ def test_sim2real_refusal_covers_a_void_retreat_and_a_hot_servo():
     assert "past the thermal budget" in sim2.sim2real_refusal() and "leg 2 hip" in sim2.sim2real_refusal()
 
 
+def test_motions_report_what_they_did(cockpit_client):
+    """2026-10-15: turn is a model tool, and every motion's result carries `moved`: the measured
+    distance, forward / left in the robot's frame at the start, and the degrees turned."""
+    sim, c = cockpit_client
+    r = c.post("/api/tool/turn", json={"deg": 90}).json()
+    assert r["ok"], r
+    m = r["moved"]
+    assert m["turned_deg"] == r["turned_deg"] and 45 <= m["turned_deg"] <= 135, r     # measured, not asked
+    assert m["distance_m"] < 0.08                                                      # on the spot
+    r = c.post("/api/tool/move", json={"forward_m": 0.15}).json()
+    assert r.get("stopped") == "arrived", r
+    m = r["moved"]
+    assert 0.08 <= m["forward_m"] <= 0.22 and abs(m["left_m"]) < 0.06 and abs(m["turned_deg"]) < 20, m
+    assert m["distance_m"] == pytest.approx((m["forward_m"] ** 2 + m["left_m"] ** 2) ** 0.5, abs=2e-3)
+    assert c.post("/api/tool/turn", json={"deg": 400}).json()["ok"] is False          # 5..180 only
+
+
+def test_odometry_drives_on_the_estimate_and_reports_its_drift(cockpit_client):
+    """2026-10-15: with odometry on, pose() / status / the goto controller use the estimate (sim/odometry.py);
+    the truth stays in the feed for the map's ghost and the drift line; off puts the true pose back."""
+    sim, c = cockpit_client
+    assert c.post("/api/odometry", json={"on": "yes"}).status_code == 400
+    r = c.post("/api/odometry", json={"on": True}).json()
+    try:
+        assert r["ok"] and r["odometry"]["on"] and r["odometry"]["drift"]["pos_m"] < 0.01   # starts at the truth
+        p0 = c.post("/api/tool/status", json={}).json()["pose"]
+        g = c.post("/api/tool/move", json={"forward_m": 0.2}).json()
+        assert g.get("stopped") == "arrived", g
+        st = c.get("/api/state").json()
+        od = st["odometry"]
+        assert od["on"] and st["pose"] == od["estimate"] and od["true"] != od["estimate"]
+        assert od["odometer"]["dist_m"] > 0.1 and od["drift"]["pos_m"] < 0.1, od   # drifts, but not wildly
+        # a goto's end is an ordinary stop (PLANT -> BRACE -> RECOVER), not a fall: no suspension, and the
+        # filter's own uncertainty stays near the real error (it read 43 cm when RECOVER counted as a fall)
+        assert not any("suspended" in str(e) for e in od["events"]) and od["sigma"]["pos_m"] < 0.15, od
+        assert "odometry estimate" in sim.compose_situation()["text"]            # the brain is told
+        assert abs(g["moved"]["forward_m"] - 0.2) < 0.06 and p0 != g["pose"]
+    finally:
+        off = c.post("/api/odometry", json={"on": False}).json()
+    assert off["odometry"] == {"on": False} and c.get("/api/state").json()["odometry"] is None
+    assert sim.odo is None and "odometry" not in sim.compose_situation()["text"]
+
+
 def test_a_line_from_one_screen_shows_on_every_screen(cockpit_client):
     sim, c = cockpit_client
     mode0 = c.get("/api/models").json()["brain"]["mode"]
@@ -1071,3 +1114,24 @@ def test_models_panel_routes_and_the_admin_gate(cockpit_client, tmp_path, monkey
     assert c.post("/api/chat/cancel", json={}).json() == {"ok": True, "cancelled": 0}
     monkeypatch.delenv("INVOCATION_ID", raising=False)                         # not under systemd: refused
     assert c.post("/api/cockpit/restart", json={}).status_code == 409
+
+
+def test_the_camera_orbits_zooms_pans_and_follows_again(cockpit_client):
+    """2026-10-15: the video's drag / wheel / pinch: relative orbit and zoom, a pan that leaves the robot
+    (the camera stops following), follow / a view puts it back; limits hold and junk is a 400."""
+    sim, c = cockpit_client
+    c0 = c.post("/api/camera", json={"view": "wide"}).json()
+    assert c0["follow"] and c0["distance"] == 2.2 and c0["lookat"] is None
+    r = c.post("/api/camera", json={"d_azimuth": -30, "d_elevation": 5, "zoom": 0.5}).json()
+    assert r["azimuth"] == (c0["azimuth"] - 30) % 360 and r["elevation"] == c0["elevation"] + 5
+    assert r["distance"] == 1.1 and r["follow"]
+    r = c.post("/api/camera", json={"pan": [0.5, 0]}).json()
+    assert not r["follow"] and len(r["lookat"]) == 3
+    torso = sim.data.xpos[sim.torso]
+    assert abs(((r["lookat"][0] - torso[0]) ** 2 + (r["lookat"][1] - torso[1]) ** 2) ** 0.5 - 0.55) < 0.05
+    assert c.post("/api/camera", json={"zoom": 1000}).json()["distance"] == sim.CAM_DIST[1]
+    assert c.post("/api/camera", json={"d_elevation": 500}).json()["elevation"] == sim.CAM_ELEV[1]
+    assert c.post("/api/camera", json={"zoom": "far"}).status_code == 400
+    r = c.post("/api/camera", json={"follow": True}).json()
+    assert r["follow"] and r["lookat"] is None
+    c.post("/api/camera", json={"view": "follow"})

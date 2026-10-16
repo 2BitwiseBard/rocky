@@ -238,6 +238,13 @@ CORESIDENT = envfile.env_list("ROCKY_CORESIDENT")
 GOTO_MAX_M = 3.0          # a goto target farther than this from the robot is an argument error
 LOOK_MAX_TOKENS = 160
 REPLY_MAX_TOKENS = 512
+# 2026-10-15: the operator's brain settings (Talk → Brain & chat → settings; saved in CONF_PATH). Defaults are
+# the constants above / harness.local_brain's; a model with thinking ON gets THINK_EXTRA_TOKENS more per call,
+# because its reasoning is spent from the same max_tokens (qwen3.8 once spent a whole 512 thinking).
+SETTINGS_LIMITS = {"max_hops": (1, 20), "reply_tokens": (128, 4096), "history_turns": (0, 40)}
+SETTINGS_DEFAULTS = {"max_hops": MAX_HOPS, "reply_tokens": REPLY_MAX_TOKENS, "history_turns": MAX_TURNS}
+HISTORY_KEEP = SETTINGS_LIMITS["history_turns"][1]     # turns kept per mode; the setting picks how many the model sees
+THINK_EXTRA_TOKENS = 1536
 CATALOG_TTL_S = 20.0      # the server's model list (llama-swap: loaded/cold changes as models swap)
 # FALLBACK BUDGET (2026-10-15): a fallback model that is already loaded costs nothing; one that is cold costs
 # a model load (a 5-20 GB swap that evicts whatever is warm). A turn may load at most this many models the
@@ -506,6 +513,57 @@ def thinking_for(model):
 SYSTEM = build_system(extra=LOOK_NOTE + UNITS_NOTE)
 
 
+# 2026-10-15: what a motion did, measured, on its result — the model reads "went 0.28 m, turned 87 deg"
+# instead of subtracting two poses (the small models got that arithmetic wrong, as they did move's)
+TRAVEL_TOOLS = ("goto", "move", "turn", "gesture")
+
+
+def travelled(before, after):
+    """{distance_m, forward_m, left_m, turned_deg} from pose `before` to `after`: forward / left in the
+    robot's frame AT THE START (+ left), turned_deg wrapped to -180..180 (+ = left, counter-clockwise)."""
+    dx, dy = float(after["x"]) - float(before["x"]), float(after["y"]) - float(before["y"])
+    th = math.radians(float(before["yaw_deg"]))
+    return {"distance_m": round(math.hypot(dx, dy), 3),
+            "forward_m": round(dx * math.cos(th) + dy * math.sin(th), 3),
+            "left_m": round(-dx * math.sin(th) + dy * math.cos(th), 3),
+            "turned_deg": round(_wrap_deg(float(after["yaw_deg"]) - float(before["yaw_deg"])), 1)}
+
+
+def _clean_settings(d):
+    """({key: int} within SETTINGS_LIMITS, [errors]) from a dict of brain settings."""
+    out, errors = {}, []
+    for k, v in (d or {}).items() if isinstance(d, dict) else ():
+        if k not in SETTINGS_LIMITS:
+            continue
+        lo, hi = SETTINGS_LIMITS[k]
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            errors.append(f"{k} must be a whole number {lo}..{hi}")
+            continue
+        if not lo <= n <= hi or isinstance(v, bool):
+            errors.append(f"{k} must be {lo}..{hi}, got {v!r}")
+            continue
+        out[k] = n
+    return out, errors
+
+
+def _note_usage(model, r, max_tokens):
+    """Add one model call's tokens to the running turn's usage (a no-op outside a chat turn)."""
+    u = _TURN_USAGE.get()
+    if u is None:
+        return
+    u["calls"] += 1
+    u["model"], u["max_tokens"] = model, max_tokens
+    got = r.get("usage") or {}
+    if isinstance(got.get("prompt_tokens"), int):
+        u["prompt_tokens"] = max(u["prompt_tokens"], got["prompt_tokens"])
+    if isinstance(got.get("completion_tokens"), int):
+        u["completion_tokens"] += got["completion_tokens"]
+    if r.get("finish_reason") == "length":
+        u["cut_off"] += 1                            # a reply hit max_tokens: raise reply tokens
+
+
 class ModelFailure(Exception):
     """A model call that did not produce an answer (timeout, HTTP error, empty)."""
 
@@ -519,6 +577,8 @@ class TurnCancelled(Exception):
 # the running turn's cancel flag (an asyncio.Event): set in Brains.chat, read by every model call of
 # the turn — tasks and to_thread copy the context, so a look inside the turn sees the same flag
 _TURN_CANCEL = contextvars.ContextVar("rocky_turn_cancel", default=None)
+# per turn: {calls, prompt_tokens (the largest one call sent: how full the context got), completion_tokens (sum)}
+_TURN_USAGE = contextvars.ContextVar("rocky_turn_usage", default=None)
 
 
 def _check_cancel():
@@ -1139,6 +1199,9 @@ class Brains:
         self.timeout_s = float(timeout_s)
         self.conf_path = conf_path
         self.state = dict(mode="talk", **ROLE_DEFAULTS)       # sim.brain IS this dict
+        self.settings = dict(SETTINGS_DEFAULTS)                # max tool rounds, reply tokens, turns the model sees
+        self.thinking = set()                                  # model ids the operator switched thinking ON for
+        self.last_usage = None                                 # the last model turn's token use (the UI shows it)
         self.hist = {}                                         # mode -> [{user, reply, tools, t}]
         self._locks = {}
         self._model_stops = 0                                  # stops model turns noted in cmd_log (not the operator's)
@@ -1205,6 +1268,8 @@ class Brains:
                 self.state[k] = v
         if conf.get("mode") in MODES:
             self.state["mode"] = conf["mode"]
+        self.settings.update(_clean_settings(conf.get("settings"))[0])
+        self.thinking = {str(m) for m in (conf.get("thinking") or []) if isinstance(m, str) and m}
 
     def _save_conf(self):
         """The roles the operator picked (those that differ from the defaults) and the mode."""
@@ -1213,13 +1278,78 @@ class Brains:
         try:
             os.makedirs(os.path.dirname(self.conf_path), exist_ok=True)
             with open(self.conf_path, "w") as f:
-                json.dump({"roles": {k: self.state[k] for k in ROLE_DEFAULTS if self.state[k] != ROLE_DEFAULTS[k]},
-                           "mode": self.state["mode"]}, f, indent=1)
+                conf = {"roles": {k: self.state[k] for k in ROLE_DEFAULTS if self.state[k] != ROLE_DEFAULTS[k]},
+                        "mode": self.state["mode"]}
+                changed = {k: v for k, v in self.settings.items() if v != SETTINGS_DEFAULTS[k]}
+                if changed:
+                    conf["settings"] = changed
+                if self.thinking:
+                    conf["thinking"] = sorted(self.thinking)
+                json.dump(conf, f, indent=1)
         except OSError as e:
             self._log(f"brains: could not save {self.conf_path}: {e}")
 
     def roles(self):
         return {r: self.state[k] for r, k in ROLE_KEYS.items()}
+
+    # ---- the operator's brain settings (2026-10-15)
+    def thinking_on(self, model):
+        """Thinking for this model: switched on in the page, or listed in ROCKY_THINKING_MODELS."""
+        return str(model or "") in self.thinking or thinking_for(model)
+
+    def reply_tokens(self, model):
+        """max_tokens for one reply call: the setting, plus THINK_EXTRA_TOKENS when the model thinks."""
+        return self.settings["reply_tokens"] + (THINK_EXTRA_TOKENS if self.thinking_on(model) else 0)
+
+    def _ctx_sizes(self):
+        """{model id: its context window (llama-swap's -c / --ctx-size)} from the llama-swap config,
+        or {} when the config is not readable (another server, no config)."""
+        try:
+            import model_admin
+            _text, cfg = model_admin.read_config(model_admin.paths()["config"])
+            macros = cfg.get("macros") or {}
+        except Exception:                                   # noqa: BLE001 — a missing config is normal elsewhere
+            return {}
+        out = {}
+        for mid, spec in cfg["models"].items():
+            toks = model_admin.cmd_tokens((spec or {}).get("cmd"), macros)
+            v = model_admin.flag_value(toks, model_admin.CMD_FLAG["ctx"])
+            try:
+                out[str(mid)] = int(v)
+            except (TypeError, ValueError):
+                pass
+        return out
+
+    def set_settings(self, body):
+        """POST /api/brain/settings: {max_hops?, reply_tokens?, history_turns?, thinking?: {model, on}, reset?}.
+        Out-of-range numbers are refused, saying the range; the rest applies."""
+        body = dict(body or {})
+        if body.get("reset"):
+            self.settings, self.thinking = dict(SETTINGS_DEFAULTS), set()
+            self._save_conf()
+            return {"ok": True, "errors": [], **self.settings_view()}
+        clean, errors = _clean_settings({k: v for k, v in body.items() if k in SETTINGS_LIMITS})
+        errors += [f"unknown setting {k!r}" for k in body if k not in SETTINGS_LIMITS and k != "thinking"]
+        th = body.get("thinking")
+        if th is not None:
+            m = str((th or {}).get("model") or "").strip() if isinstance(th, dict) else ""
+            if not m:
+                errors.append("thinking needs {model, on}")
+            elif (th or {}).get("on"):
+                self.thinking.add(m)
+            else:
+                self.thinking.discard(m)
+        self.settings.update(clean)
+        self._save_conf()
+        return {"ok": not errors, "errors": errors, **self.settings_view()}
+
+    def settings_view(self):
+        return {"settings": dict(self.settings), "defaults": dict(SETTINGS_DEFAULTS),
+                "limits": {k: list(v) for k, v in SETTINGS_LIMITS.items()},
+                "thinking": sorted(self.thinking),
+                "thinking_env": [x.strip() for x in os.environ.get("ROCKY_THINKING_MODELS", "").split(",")
+                                 if x.strip()],
+                "think_extra_tokens": THINK_EXTRA_TOKENS, "usage": self.last_usage}
 
     def _log(self, msg):
         try:
@@ -1477,6 +1607,7 @@ class Brains:
             # 2026-10-15: what each mode loads, the GPU's holders, and the fallback budget, for the UI
             "plan": self.plan(cat if ok else None), "gpu": self._gpu_status(), "gpu_blocked": self._gpu_blocked(),
             "activity": self.activity_view(), "paused": self.paused,
+            "ctx": self._ctx_sizes(), **self.settings_view(),
             "policy": {"max_cold_fallbacks": MAX_COLD_FALLBACKS, "cold_timeout_s": COLD_TIMEOUT_S,
                        "timeout_s": self.timeout_s},
             "draft": None if self.composed is None else {        # the gesture studio can load it
@@ -1558,15 +1689,19 @@ class Brains:
         if self._complete_fn is not None:
             return self._complete_fn(model, messages, tools, max_tokens)
         kw = dict(model=model, messages=messages, max_tokens=max_tokens, timeout=timeout_s or self.timeout_s,
-                  extra_body={"chat_template_kwargs": {"enable_thinking": thinking_for(model)}})
+                  extra_body={"chat_template_kwargs": {"enable_thinking": self.thinking_on(model)}})
         if tools:
             kw["tools"] = tools
         r = self._openai().chat.completions.create(**kw)
         msg = r.choices[0].message
+        u = getattr(r, "usage", None)
         return {"content": msg.content or "",
                 "tool_calls": [{"id": tc.id, "name": tc.function.name,
                                 "arguments": tc.function.arguments}
-                               for tc in (msg.tool_calls or [])]}
+                               for tc in (msg.tool_calls or [])],
+                "usage": {"prompt_tokens": getattr(u, "prompt_tokens", None),
+                          "completion_tokens": getattr(u, "completion_tokens", None)} if u else None,
+                "finish_reason": getattr(r.choices[0], "finish_reason", None)}
 
     async def _acall(self, model, messages, tools, max_tokens):
         # a cold model's first call carries its load: COLD_TIMEOUT_S, not the 90 s that made a slow load
@@ -1598,6 +1733,7 @@ class Brains:
             # it loaded just now: llama-swap may have swapped others out — re-read who is warm
             await asyncio.to_thread(self.catalog, True)
         r = dict(r or {})
+        _note_usage(model, r, max_tokens)
         r["content"] = _THINK_RE.sub("", r.get("content") or "").strip()
         r["tool_calls"] = list(r.get("tool_calls") or [])
         return r
@@ -1618,7 +1754,7 @@ class Brains:
         extra = (LOOK_NOTE + " " + COMPOSE_NOTE + UNITS_NOTE + (" " + MULTIMODAL_NOTE if multimodal else "")
                  + (" " + MEMORY_NOTE if self.memory is not None else "")
                  + (" " + PLACE_NOTE if self._recognize_on() else "") + family_note(model))
-        return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra)
+        return build_system(getattr(s, "gesture_names", None), getattr(s, "lexicon", None), extra, turn_tool=True)
 
     # ------------------------------------------------------------ places (D057)
     def _recognize_on(self):
@@ -1709,6 +1845,17 @@ class Brains:
             if name == "look":
                 return await self.look(args.get("model") or look_model)
             fn = self._route(name)
+            if name in TRAVEL_TOOLS:
+                n0 = self._cmd_mark()
+                before = await self._pose()
+                if before and self._operator_stopped(n0):
+                    return dict(MID_TURN_STOP)          # a stop landed during the pose read: as move() does
+                r = await fn(**args)
+                if isinstance(r, dict) and before:
+                    after = await self._pose()
+                    if after:
+                        r["moved"] = travelled(before, after)
+                return r
             return fn(**args) if name in SYNC_ROUTES else await fn(**args)
         except TypeError as e:
             return {"ok": False, "error": f"bad arguments for {name}: {e}"}
@@ -2562,11 +2709,18 @@ class Brains:
         ev = asyncio.Event()
         self._turns.add(ev)
         tok = _TURN_CANCEL.set(ev)
+        usage = {"calls": 0, "prompt_tokens": 0, "completion_tokens": 0, "model": None, "max_tokens": None,
+                 "cut_off": 0}
+        utok = _TURN_USAGE.set(usage)
         try:
             r = await self._chat_turn(text, mode, allow, mark)
         finally:
             _TURN_CANCEL.reset(tok)
+            _TURN_USAGE.reset(utok)
             self._turns.discard(ev)
+        if usage["calls"]:
+            usage.update(t=round(time.time(), 1), mode=mode)
+            r["usage"] = self.last_usage = usage
         if note:
             r["reply"] = f"{note} {r['reply']}"
         blocked = any(isinstance(t.get("result"), dict) and t["result"].get("error") == "voice_unconfirmed"
@@ -2751,7 +2905,9 @@ class Brains:
 
     def _past(self, mode):
         """The mode's finished turns, oldest first (a running turn's slot is pending)."""
-        return [t for t in self.hist.get(mode, []) if not t.get("pending")][-MAX_TURNS:]
+        n = self.settings["history_turns"]
+        past = [t for t in self.hist.get(mode, []) if not t.get("pending")]
+        return past[-n:] if n else []
 
     def _messages(self, mode, text, image_b64=None, situation=None):
         msgs = [{"role": "system", "content": self.system_for(multimodal=mode == "multimodal")}]
@@ -2771,11 +2927,11 @@ class Brains:
         h = self.hist.setdefault(mode, [])
         h.append({"user": text, "reply": reply or "(no reply)", "tools": [t["tool"] for t in trace],
                   "t": round(time.time(), 1)})
-        del h[:-MAX_TURNS]
+        del h[:-HISTORY_KEEP]
 
     def _reserve(self, mode, text):
         """A history slot for a turn that starts now (pending until _fill; the
-        trimming waits for _fill, so a full history still shows MAX_TURNS turns)."""
+        trimming waits for _fill, so a full history still shows HISTORY_KEEP turns)."""
         slot = {"user": text, "reply": "", "tools": [], "t": round(time.time(), 1), "pending": True}
         self.hist.setdefault(mode, []).append(slot)
         return slot
@@ -2791,14 +2947,15 @@ class Brains:
         slot.update(reply=r.get("history_reply") or r.get("reply") or "(no reply)",
                     tools=[t["tool"] for t in r.get("trace") or []])
         slot.pop("pending", None)
-        del h[:-MAX_TURNS]
+        del h[:-HISTORY_KEEP]
 
     async def _tool_loop(self, model, msgs, tools, trace, allow, look_model=None, stops=None):
         """(reply, gave_up). Raises ModelFailure only from a model call — by
         then every earlier tool_call already has its result in msgs.
         stops (_TurnStops): after an operator stop, motion calls are refused."""
-        for hop in range(MAX_HOPS):
-            r = await self._acall(model, msgs, tools, REPLY_MAX_TOKENS)
+        hops = self.settings["max_hops"]
+        for hop in range(hops):
+            r = await self._acall(model, msgs, tools, self.reply_tokens(model))
             calls = r["tool_calls"]
             if not calls:
                 msgs.append({"role": "assistant", "content": r["content"]})
@@ -2823,8 +2980,8 @@ class Brains:
                 trace.append({"tool": n, "args": a or {}, "result": res})
                 msgs.append({"role": "tool", "tool_call_id": cid,
                              "content": json.dumps(res, default=str)[:RESULT_CHARS]})
-        return (f"gave up after {MAX_HOPS} tool rounds without a final answer "
-                f"(last: {summarize_trace(trace)})"), True
+        return (f"gave up after {hops} tool rounds without a final answer "
+                f"(last: {summarize_trace(trace)}; the limit is Brain & chat → settings → tool rounds)"), True
 
     async def _llm(self, text, mode, allow, stops=None, ask=None):
         """A local / multimodal turn -> r (the caller keeps the history: _model_turn).
@@ -2930,10 +3087,11 @@ class Brains:
                      {"role": "assistant", "content": turn["reply"]}]
         msgs.append({"role": "user", "content": self._with_situation(ask or text, await self.situation_text())})
         trace, content, gave_up = [], "", True
-        for _hop in range(MAX_HOPS):
+        hops = self.settings["max_hops"]
+        for _hop in range(hops):
             try:
                 r = await asyncio.wait_for(asyncio.to_thread(lambda: client.messages.create(
-                    model=model, max_tokens=REPLY_MAX_TOKENS, system=system, tools=tools,
+                    model=model, max_tokens=self.settings["reply_tokens"], system=system, tools=tools,
                     messages=msgs)), self.timeout_s + 5.0)
             except Exception as e:
                 err = "timed out" if isinstance(e, asyncio.TimeoutError) else _short_err(e)
@@ -2960,7 +3118,7 @@ class Brains:
                                 "content": json.dumps(res, default=str)[:RESULT_CHARS]})
             msgs.append({"role": "user", "content": results})
         if gave_up:
-            content = (f"gave up after {MAX_HOPS} tool rounds without a final answer "
+            content = (f"gave up after {hops} tool rounds without a final answer "
                        f"(last: {summarize_trace(trace)})")
         return {"reply": content, "trace": trace, "mode": "claude", "model": model, "gave_up": gave_up}
 

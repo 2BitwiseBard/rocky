@@ -6,7 +6,7 @@ Every tool a brain can call, from one registry (`harness/capabilities.py` `REGIS
 
 This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`harness/backend.py`) and every capability on. A running cockpit's lists also carry its saved keyframe gestures and custom chord words.
 
-- snapshot version: `cbec90b4a421` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
+- snapshot version: `b2f9ec205f73` (sha256 of the snapshot JSON, first 12 hex; it changes when a tool, a list or the envelope changes)
 - capabilities: cockpit, eye, memory, places
 
 ## Summary
@@ -31,7 +31,7 @@ This page is the no-cockpit snapshot: the canon gesture and chord-word lists (`h
 | `recall` | memory | no | memory | local brains, MCP |
 | `go_back_to` | motion | yes | memory | local brains, MCP |
 | `forget` | memory | no | memory | local brains, MCP |
-| `turn` | motion | yes | cockpit | cockpit executor only |
+| `turn` | motion | yes | cockpit | local brains, MCP |
 | `where_am_i` | query | no | cockpit, places | local brains, MCP |
 | `name_place` | memory | no | cockpit, places | local brains, MCP |
 | `places` | query | no | cockpit, places | local brains, MCP |
@@ -384,17 +384,18 @@ Description (local brains and MCP):
 
 ### `turn`
 
-- kind: motion; gated: yes; requires: cockpit; offered to: cockpit executor only; backend method: `turn`
-- annotations (not published: no MCP tool today): readOnlyHint=false
-- note: In the cockpit executor (TOOL_NAMES, /api/tool/turn) and GATED, offered to no model.
+- kind: motion; gated: yes; requires: cockpit; offered to: local brains, MCP; backend method: `turn`
+- annotations: readOnlyHint=false
+- MCP arguments: `deg` number
+- note: Offered to the models since 2026-10-15 (was executor-only: find_object's scan turn, recordings); the cockpit's Brains.turn, GATED. Before, a model turned with gesture turn_in_place, a fixed ~47 deg, so '90 degrees' was a guess.
 
 | parameter | type | required | description |
 |---|---|---|---|
 | `deg` | number | yes | degrees, + = left; 5..180 in magnitude |
 
-Description:
+Description (local brains and MCP):
 
-> INTERNAL (never offered to a model): turn on the spot by about deg degrees (+ = left, counter-clockwise) with the turn_in_place gait, timed to the measured turn rate; find_object's scan turn, replayed by recordings. Reports the measured turn.
+> Turn on the spot by deg degrees: + = left (counter-clockwise), - = right; 5..180 in magnitude. 'turn left' = turn(deg=90), 'turn right a little' = turn(deg=-30), 'turn around' = turn(deg=180). Blocks until done; turned_deg in the result is the MEASURED turn (it is never exact: read it, and turn again only if the operator needs the rest).
 
 ### `where_am_i`
 

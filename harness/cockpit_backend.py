@@ -394,6 +394,16 @@ class AutoBackend:
                                           "(./rocky.sh cockpit); the in-process sim has none"}
         return self._tag(await be.find_object(name, max_steps))
 
+    async def turn(self, deg: float) -> dict:
+        """2026-10-15: the cockpit's measured turn; the in-process sim has none (it turns with
+        gesture turn_in_place), so without a cockpit this says so instead of guessing."""
+        be = await self.pick()
+        run = getattr(be, "_tool", None)
+        if not callable(run):
+            return self._tag({"ok": False, "error": "turn needs the cockpit (./rocky.sh cockpit); the in-process "
+                                                    "sim turns with gesture turn_in_place (~47 deg each)"})
+        return self._tag(await run("turn", deg=deg))
+
     async def _mem(self, tool, /, **args):
         be = await self.pick()
         if not hasattr(be, tool):

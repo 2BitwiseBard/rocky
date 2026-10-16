@@ -162,6 +162,10 @@ def move_doc(max_m: float = MOVE_MAX_M) -> str:
             f"{max_m:g} m. goto is for MAP coordinates.")
 
 
+TURN_DOC = ("Turn on the spot by deg degrees: + = left (counter-clockwise), - = right; 5..180 in "
+            "magnitude. 'turn left' = turn(deg=90), 'turn right a little' = turn(deg=-30), 'turn around' "
+            "= turn(deg=180). Blocks until done; turned_deg in the result is the MEASURED turn (it is "
+            "never exact: read it, and turn again only if the operator needs the rest).")
 GOTO_DOC = goto_doc()
 MOVE_DOC = move_doc()
 # server.py appends these to the two docs for MCP
@@ -548,13 +552,13 @@ REGISTRY: tuple = (
         annotations={"readOnlyHint": False, "destructiveHint": True}, requires={"memory"},
         note="Not gated, but the cockpit refuses a spoken forget of 'all' without the wake word."),
     ToolSpec(
-        "turn", "motion",
-        "INTERNAL (never offered to a model): turn on the spot by about deg degrees (+ = left, "
-        "counter-clockwise) with the turn_in_place gait, timed to the measured turn rate; "
-        "find_object's scan turn, replayed by recordings. Reports the measured turn.",
+        "turn", "motion", TURN_DOC,
         _obj({"deg": {"type": "number", "description": "degrees, + = left; 5..180 in magnitude"}}, ["deg"]),
-        annotations=dict(_RW), gated=True, requires={"cockpit"}, surfaces=("internal",),
-        note="In the cockpit executor (TOOL_NAMES, /api/tool/turn) and GATED, offered to no model."),
+        mcp_args=(MCPArg("deg", "number"),),
+        annotations=dict(_RW), gated=True, requires={"cockpit"}, surfaces=("openai", "mcp"),
+        note="Offered to the models since 2026-10-15 (was executor-only: find_object's scan turn, recordings); "
+             "the cockpit's Brains.turn, GATED. Before, a model turned with gesture turn_in_place, a fixed "
+             "~47 deg, so '90 degrees' was a guess."),
     # ---- D057 place recognition (appended: every tool above keeps its place and its text)
     ToolSpec(
         "where_am_i", "query", WHERE_AM_I_DOC,

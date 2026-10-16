@@ -259,7 +259,7 @@ def test_bad_arguments_and_voice_gate():
     assert run(b.tool("turn", {"deg": 30}, voice=True))["error"] == "voice_unconfirmed"
     assert run(b.tool("turn", {"deg": 400}))["ok"] is False
     assert "find_object" in {t["function"]["name"] for t in b.tools_for()}
-    assert "turn" not in {t["function"]["name"] for t in b.tools_for()}   # internal only
+    assert "turn" in {t["function"]["name"] for t in b.tools_for()}   # a model tool since 2026-10-15
 
 
 def test_no_vision_model_is_an_error_not_a_hang():

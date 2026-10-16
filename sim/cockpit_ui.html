@@ -31,6 +31,14 @@
   #eye:not([src]), #chase:not([src]) { visibility:hidden; }
   body.eye-off #eye { display:none; }
   .stage-btn { position:absolute; top:10px; right:10px; font-size:12px; padding:4px 10px; background:rgba(20,18,26,.75); }
+  /* 2026-10-15: drag / wheel / pinch on the video moves the camera; on a touch screen only with 🎥 on */
+  #cam-touch { top:auto; bottom:10px; right:auto; left:10px; display:none; }
+  #cam-follow { right:auto; left:50%; transform:translateX(-50%); }
+  body.touch #cam-touch { display:inline-block; }
+  body.touch.cam-touch #cam-touch { background:var(--accent); color:#fff; }
+  #chase { cursor:grab; }
+  #chase.dragging { cursor:grabbing; }
+  body:not(.touch) #chase, body.touch.cam-touch #chase { touch-action:none; }
   #overlay { position:absolute; left:10px; top:10px; font: 12px/1.5 ui-monospace, monospace; background:rgba(0,0,0,.55); padding:6px 8px; border-radius:6px; white-space:pre; max-width:calc(100% - 20px); overflow:hidden; }
   #overlay .refuse, .refuse { color:var(--bad); font-weight:600; } #overlay .budget, .budget { color:var(--warn); }
   #console { height:160px; background:var(--panel); border-top:1px solid var(--line); display:flex; flex-direction:column; }
@@ -267,6 +275,8 @@
       <img id="eye" alt="robot eye" title="the robot's eye (click: fade / unfade)">
       <div id="overlay">—</div>
       <button id="eye-toggle" class="stage-btn" title="show / hide the robot's eye (a hidden eye is not streamed)">eye</button>
+      <button id="cam-touch" class="stage-btn" title="move the camera by touch: drag = orbit, two fingers = pan + pinch zoom (off: a swipe scrolls the page)">🎥 camera</button>
+      <button id="cam-follow" class="stage-btn" style="display:none" title="the camera was panned off the robot: follow it again (or double-click the video)">⟲ follow robot</button>
     </div>
     <div id="stage-off">Remote mode: the video is off on this screen (no stream is open).<br>Turn it back on with "remote" in the Drive tab.</div>
     <div id="console">
@@ -345,6 +355,15 @@
         <div class="row"><div class="small" id="brain-plan" style="flex:1"></div><button id="brain-warm" title="load this mode's models now, so the first command does not wait for a cold load">warm up</button></div>
         <div class="row"><div class="small" id="brain-gpu" style="flex:1"></div><button id="gpu-free" style="display:none" title="ComfyUI keeps its models on the GPU after a job: this asks it to unload them (only when its queue is empty)">free ComfyUI</button><a href="#" id="to-models" class="small" title="load / unload / download / install / bench / settings">models ›</a></div>
         <div class="small" id="brain-fallbacks"></div>
+        <details id="brain-set"><summary><span>settings</span> <span class="small" id="bs-sum"></span></summary><div class="body">
+          <div class="row"><label title="how many rounds of tool calls one line may take before the brain stops and says so (each round can hold several calls)">tool rounds</label><input id="bs-hops" type="number" min="1" max="20" style="width:5em"><span class="small">per line · 1–20</span></div>
+          <div class="row"><label title="the most tokens one reply may have; with thinking on, the extra shown below is added for the thinking">reply tokens</label><input id="bs-reply" type="number" min="128" max="4096" step="64" style="width:5em"><span class="small">per answer · 128–4096</span></div>
+          <div class="row"><label title="earlier lines (yours + its answers) sent with each new one; more = better memory of the talk, a fuller context, slower answers">turns remembered</label><input id="bs-hist" type="number" min="0" max="40" style="width:5em"><span class="small">0–40</span></div>
+          <div class="row"><label class="tick" for="bs-think"><input type="checkbox" id="bs-think"> thinking for <b id="bs-think-model">—</b></label></div>
+          <div class="small" id="bs-note"></div>
+          <div class="row"><button id="bs-save" class="primary">save</button><button id="bs-reset" title="back to the measured defaults, thinking off everywhere">defaults</button><span class="small" id="bs-msg"></span></div>
+        </div></details>
+        <div class="small" id="brain-usage"></div>
         <div class="small" id="brain-activity"></div>
         <div class="note-warn" id="brain-pair"></div>
         <div class="note-bad" id="brain-err"></div>
@@ -446,6 +465,7 @@
       <details id="p-world" open><summary><span>World &amp; map</span><a href="#" class="qhelp" data-guide="worlds-and-guards" title="guide: worlds and guards">?</a></summary><div class="body">
         <div id="map-wrap"><canvas id="map" width="356" height="260" style="width:100%; background:#0d0c12; border:1px solid var(--line); border-radius:6px"></canvas><div id="map-menu" role="menu"></div></div>
         <div class="small">Top-down map: robot (purple, heading tick), objects from the world spec (grey), lidar hits (blue dots), goto target (cyan), a latched void (red wedge), remembered things (pink rings, see Memory below: dashed = vague, grey = stale). Click the map to send a goto there; click a pink ring to go back to it or forget it; right-click or long-press to pin a name there. The lidar puck sees only what stands above its plane (~0.18 m): low boxes and rubble end a goto as 'stuck', tall ones as 'blocked'.</div>
+        <div class="row"><label class="tick" for="odo-on" title="the robot navigates on its own estimate (IMU + leg motion), as the real one will, instead of the simulator's perfect position; it drifts"><input type="checkbox" id="odo-on"> estimated position</label><span class="small" id="odo-line"></span></div>
         <div class="row"><label>preset</label><select id="preset" style="flex:1"></select><button id="preset-go">load</button><span id="world-msg" class="small"></span></div>
         <div class="row"><label>add</label>
           <select id="obj-kind"></select>
@@ -910,6 +930,7 @@ es.onmessage = e => {
   $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
   $('#h-tilt').textContent = s.tilt + '°'; $('#h-world').textContent = s.world; $('#h-t').textContent = s.t.toFixed(1) + ' s';
   renderBrain(s);
+  try { renderOdometry(s); } catch (e) {}
   if (s.chat_seq !== undefined && (s.chat_seq !== FEED.seq || !FEED.loaded)) syncFeed();
   renderGuards(s); renderFingerprint(s); renderSim2realGate(s);
   const g = s.guards || {};
@@ -1053,7 +1074,61 @@ async function loadRecs() {
 loadRecs();
 $('#toggle-side').onclick = () => document.querySelector('main').classList.toggle('nosidebar');
 $('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === '0.15' ? '1' : '0.15';
-for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
+for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = async () => camShow(await post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value}));
+// ---- the camera on the video (2026-10-15): drag = orbit · right-drag / shift-drag / two fingers = pan (the
+// camera stops following the robot) · wheel / pinch = zoom · double-click = follow the robot again. Moves
+// are summed and sent at most every 50 ms. One camera for every screen (the server's), like the sliders.
+const CAM = {pts: new Map(), az: 0, el: 0, zoom: 1, pan: [0, 0], timer: null, pinch: null,
+             touch: lsGet('rocky.camtouch', '0') === '1'};
+document.body.classList.toggle('touch', matchMedia('(pointer: coarse)').matches);
+document.body.classList.toggle('cam-touch', CAM.touch);
+function camShow(c) {
+  if (!c || c.ok === false) return;
+  if (document.activeElement !== $('#cam-az')) $('#cam-az').value = Math.round(c.azimuth);
+  if (document.activeElement !== $('#cam-el')) $('#cam-el').value = Math.max(-89, Math.min(-2, Math.round(c.elevation)));
+  if (document.activeElement !== $('#cam-d')) $('#cam-d').value = Math.min(3, c.distance);
+  $('#cam-follow').style.display = c.follow === false ? '' : 'none';
+}
+function camFlush() {
+  CAM.timer = null;
+  const b = {};
+  if (CAM.az) b.d_azimuth = CAM.az; if (CAM.el) b.d_elevation = CAM.el;
+  if (CAM.zoom !== 1) b.zoom = CAM.zoom; if (CAM.pan[0] || CAM.pan[1]) b.pan = CAM.pan;
+  CAM.az = CAM.el = 0; CAM.zoom = 1; CAM.pan = [0, 0];
+  if (Object.keys(b).length) post('/api/camera', b).then(camShow).catch(() => {});
+}
+function camQueue() { if (!CAM.timer) CAM.timer = setTimeout(camFlush, 50); }
+function camActive(e) { return e.pointerType === 'mouse' || CAM.touch; }
+const chaseImg = $('#chase');
+chaseImg.addEventListener('dragstart', e => e.preventDefault());
+chaseImg.addEventListener('contextmenu', e => e.preventDefault());
+chaseImg.addEventListener('pointerdown', e => {
+  if (!camActive(e)) return;
+  chaseImg.setPointerCapture(e.pointerId); chaseImg.classList.add('dragging');
+  CAM.pts.set(e.pointerId, {x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey});
+  if (CAM.pts.size === 2) { const [a, b] = [...CAM.pts.values()]; CAM.pinch = {d: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2}; }
+});
+chaseImg.addEventListener('pointermove', e => {
+  const p = CAM.pts.get(e.pointerId); if (!p) return;
+  const h = chaseImg.clientHeight || 300, dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (CAM.pts.size >= 2 && CAM.pinch) {                    // two fingers: pinch = zoom, the midpoint = pan
+    const [a, b] = [...CAM.pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+    if (d > 10 && CAM.pinch.d > 10) CAM.zoom *= CAM.pinch.d / d;
+    CAM.pan[0] -= (cx - CAM.pinch.cx) / h; CAM.pan[1] += (cy - CAM.pinch.cy) / h;
+    CAM.pinch = {d, cx, cy};
+  } else if (p.pan) { CAM.pan[0] -= dx / h; CAM.pan[1] += dy / h; }
+  else { CAM.az -= dx * 0.4; CAM.el -= dy * 0.3; }
+  camQueue();
+});
+for (const ev of ['pointerup', 'pointercancel']) chaseImg.addEventListener(ev, e => {
+  CAM.pts.delete(e.pointerId); if (CAM.pts.size < 2) CAM.pinch = null;
+  if (!CAM.pts.size) chaseImg.classList.remove('dragging');
+});
+chaseImg.addEventListener('wheel', e => { e.preventDefault(); CAM.zoom *= Math.exp(e.deltaY * 0.0015); camQueue(); }, {passive: false});
+chaseImg.addEventListener('dblclick', async () => camShow(await post('/api/camera', {follow: true})));
+$('#cam-follow').onclick = async () => camShow(await post('/api/camera', {follow: true}));
+$('#cam-touch').onclick = () => { CAM.touch = !CAM.touch; lsSet('rocky.camtouch', CAM.touch ? '1' : '0'); document.body.classList.toggle('cam-touch', CAM.touch); };
 
 // ---- brain & chat (D052 roles: brain / vision / multimodal / stt, warm-cold, fallbacks)
 // 2026-10-15: which models a mode loads is shown as a plan (#brain-plan), the GPU's holders under it,
@@ -1119,8 +1194,43 @@ async function loadModels() {
   $('#brain-pair').textContent = paired ? '' :
     `brain ${b.model} + vision ${b.vision_model} are not the ${pair[0]} + ${pair[1]} pair that shares the GPU (ROCKY_CORESIDENT): every look may swap models (seconds to minutes).`;
   $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
+  renderBrainSettings(m);
   return m;
 }
+// ---- brain settings + what a turn used (2026-10-15): tool rounds, reply tokens, turns remembered,
+// thinking for the model answering in this mode; the last turn's tokens against that model's context
+function talkModel(m) { const b = m.brain || {}; return b.mode === 'local' ? b.model : b.mode === 'multimodal' ? b.multimodal_model : null; }
+const kTok = n => n == null ? '?' : n >= 1024 ? (n / 1024).toFixed(n % 1024 ? 1 : 0) + 'k' : String(n);
+function renderBrainSettings(m) {
+  const st = m.settings || {}, dft = m.defaults || {}, mid = talkModel(m), ctx = (m.ctx || {})[mid];
+  const editing = $('#brain-set').contains(document.activeElement);
+  if (!editing) { $('#bs-hops').value = st.max_hops ?? ''; $('#bs-reply').value = st.reply_tokens ?? ''; $('#bs-hist').value = st.history_turns ?? ''; }
+  const envThink = (m.thinking_env || []).some(x => mid && mid.toLowerCase().startsWith(x.toLowerCase()));
+  const on = !!mid && ((m.thinking || []).includes(mid) || envThink);
+  $('#bs-think').checked = on; $('#bs-think').disabled = !mid || envThink;
+  $('#bs-think-model').textContent = mid || '— (Talk / Claude: no local model)';
+  const changed = Object.keys(dft).filter(k => st[k] !== dft[k]);
+  $('#bs-sum').textContent = `${st.max_hops} tool rounds · ${st.reply_tokens} reply tokens · ${st.history_turns} turns` + (on ? ' · thinking ON' : '') + (changed.length ? ' (changed)' : '');
+  $('#bs-note').innerHTML = (mid ? `<b>${esc(mid)}</b>: context <b>${ctx ? kTok(ctx) : '?'}</b> tokens (llama-swap's -c: prompt + history + tools + the answer must fit; change it on the model's card in Models). ` : '')
+    + `A reply may use up to <b>${st.reply_tokens}</b> tokens` + (on ? ` + ${m.think_extra_tokens} for thinking` : '') + '. '
+    + (envThink ? 'Thinking is on through ROCKY_THINKING_MODELS in rocky.env. ' : '')
+    + 'Thinking: off is the measured default for driving (Gemma 12B with it on: 16/20 commands instead of 20/20, about 3× slower); on helps questions that need reasoning.';
+  const u = m.usage;
+  $('#brain-usage').innerHTML = !u ? '' : `last turn (${esc(u.model || '?')}): ${u.calls} model call${u.calls === 1 ? '' : 's'} · prompt ${kTok(u.prompt_tokens)}`
+    + (((m.ctx || {})[u.model]) ? ` of ${kTok(m.ctx[u.model])} context (${Math.round(100 * u.prompt_tokens / m.ctx[u.model])}%)` : '')
+    + ` · answers ${u.completion_tokens} tokens` + (u.cut_off ? ` · <span class="note-bad">${u.cut_off} answer${u.cut_off > 1 ? 's' : ''} hit the reply limit: raise reply tokens</span>` : '');
+}
+$('#bs-save').onclick = async () => {
+  const body = {max_hops: +$('#bs-hops').value, reply_tokens: +$('#bs-reply').value, history_turns: +$('#bs-hist').value};
+  let r; try { r = await post('/api/brain/settings', body); } catch (e) { r = {errors: [e.message]}; }
+  $('#bs-msg').textContent = (r.errors || []).length ? r.errors.join('; ') : 'saved'; $('#bs-msg').className = 'small ' + ((r.errors || []).length ? 'note-bad' : '');
+  document.activeElement.blur(); loadModels();
+};
+$('#bs-reset').onclick = async () => { await post('/api/brain/settings', {reset: true}); $('#bs-msg').textContent = 'defaults'; loadModels(); };
+$('#bs-think').onchange = async () => {
+  const mid = MODELS && talkModel(MODELS); if (!mid) return;
+  await post('/api/brain/settings', {thinking: {model: mid, on: $('#bs-think').checked}}); loadModels();
+};
 loadModels();
 function renderBrain(s) {   // every feed frame: header chip, Drive line, the running call, another screen's picks
   const b = s.brain || {}, act = activeModel(b), a = s.brain_activity;
@@ -1623,7 +1733,7 @@ async function loadWorld() {
   worldSpec = w.spec;
 }
 $('#preset-go').onclick = async () => { $('#world-msg').textContent = 'building…'; const r = await post('/api/world', {preset: $('#preset').value}); $('#world-msg').textContent = 'loaded ' + r.name; post('/api/camera', {view: 'wide'}); loadWorld(); };
-document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { post('/api/camera', {view: b.dataset.view}); publishUI({view: b.dataset.view}); });
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = async () => { publishUI({view: b.dataset.view}); camShow(await post('/api/camera', {view: b.dataset.view})); });
 $('#obj-add').onclick = async () => { await post('/api/world/add', {object: {kind: $('#obj-kind').value, pos: [+$('#obj-x').value, +$('#obj-y').value]}}); loadWorld(); };
 $('#obj-clear').onclick = async () => { await post('/api/world/add', {clear: true}); loadWorld(); };
 $('#fric').oninput = () => $('#fricv').textContent = (+$('#fric').value).toFixed(2);
@@ -1686,8 +1796,29 @@ function drawMap() {
     g.fillStyle = {NORMAL:'#4ade80', PLANT:'#fbbf24', BRACE:'#fb923c', RECOVER:'#60a5fa', FALLEN:'#f87171', RIGHTED:'#a78bfa'}[lastState.state] || '#a78bfa';
     g.beginPath(); g.arc(x, y, 0.11 * MAP.scale, 0, 7); g.fill();
     g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(yaw) * 0.16 * MAP.scale, y - Math.sin(yaw) * 0.16 * MAP.scale); g.stroke();
+    const od = lastState.odometry;
+    if (od && od.on && od.true) {        // odometry on: the dot is the robot's belief; the dashed ring is the truth
+      const [tx, ty] = w2m(od.true.x, od.true.y), ty2 = od.true.yaw_deg * Math.PI / 180;
+      g.setLineDash([3, 3]); g.strokeStyle = '#e5e7eb'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(tx, ty, 0.11 * MAP.scale, 0, 7); g.stroke();
+      g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + Math.cos(ty2) * 0.16 * MAP.scale, ty - Math.sin(ty2) * 0.16 * MAP.scale); g.stroke();
+      g.setLineDash([]);
+    }
   }
 }
+function renderOdometry(s) {
+  const od = s.odometry, on = !!(od && od.on);
+  if (document.activeElement !== $('#odo-on')) $('#odo-on').checked = on;
+  $('#odo-line').innerHTML = !on ? 'off: it knows exactly where it is (no real robot does)'
+    : `off by <b>${Math.round(od.drift.pos_m * 100)} cm</b>, ${od.drift.yaw_deg > 0 ? '+' : ''}${od.drift.yaw_deg}° · it believes ±${Math.round(od.sigma.pos_m * 100)} cm, ±${od.sigma.yaw_deg}° · walked ${od.odometer.dist_m} m`
+      + (od.suspended ? ' · <span class="note-bad">suspended: ' + esc(od.why || 'fall') + '</span>' : '')
+      + (!od.zupts ? ' · <span class="note-warn">gyro not calibrated yet: let it stand still 2 s</span>' : '')
+      + ' · map: dot = its belief, dashed ring = the truth';
+}
+$('#odo-on').onchange = async () => {
+  let r; try { r = await post('/api/odometry', {on: $('#odo-on').checked}); } catch (e) { r = {ok: false}; }
+  if (!r.ok) $('#odo-on').checked = !$('#odo-on').checked;
+};
 $('#map').onclick = async e => {
   if (Date.now() - MEM.pressAt < 700) return;            // the end of a long-press (it pinned a name)
   const p = mapPoint(e), hit = memHit(p);

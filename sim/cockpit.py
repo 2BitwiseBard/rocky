@@ -783,6 +783,10 @@ class CockpitSim(Playground):
         self.awareness = dict(interval_s=AWARENESS_S, curious=False, reactions=False, recognize=False)
         self.situation = dict(text="", t=None)
         self._pose_cache = None             # the last pose the sim thread saw (for other threads)
+        # 2026-10-15: estimated pose (sim/odometry.py: the legged EKF on simulated IMU / encoders /
+        # foot switches). None = the robot navigates on MuJoCo's true pose (the default); on, pose(),
+        # the goto controller, memory and the brains all use what a real robot would know
+        self.odo = None
         self._aw = dict(check_next=0.0, compose_next=0.0, last_react=-1e9, last_curious=-1e9,
                         prev=None, prev_pose=None, pending=None, fails=0, curious_scene=None,
                         curious_task=None)
@@ -794,6 +798,7 @@ class CockpitSim(Playground):
         self._cams_live = False             # a renderer was built once: the cameras work in this process
         self._render_due = False            # render on the next loop turn, paused or not (_forget_scene)
         self.cam = dict(distance=1.4, elevation=-24.0, azimuth=0.0)     # behind the robot, looking +x
+        self.cam_lookat = None              # None: the camera follows the robot; else a fixed [x, y, z] (panned)
         self.render_every = int(round(1 / (15 * self.DT)))      # ~15 fps
         self.last = dict(con=np.zeros(5, bool), tilt=0.0, height=0.0, gxy=0.0)
         self.rec = None                     # recording: dict(frames, t0, cmds, world)
@@ -1214,6 +1219,11 @@ class CockpitSim(Playground):
         if self.walk is not None:
             self._walk_residual()               # sets self.residual for this step's targets
         super().step()
+        if self.odo is not None:
+            moving = (bool(np.any(self.cmd_v)) or self.goto_state is not None
+                      or getattr(self, "_ges", None) is not None or self.gesture is not None
+                      or self.sup.state != "NORMAL")
+            self.odo.step(self.model, self.data, self.t, moving, self.last["con"], self.sup.state)
         if gs is not None and self.goto_state is gs:
             self._goto_post(gs)
         if self.teach is not None:
@@ -1412,7 +1422,7 @@ class CockpitSim(Playground):
         if side is None:                                     # pick the clearer side once, then commit
             left, right = self._cone_min(angles, ranges, hd_goal + mag), self._cone_min(angles, ranges, hd_goal - mag)
             side = gs["side"] = 1.0 if left >= right else -1.0
-        p = self.data.xpos[self.torso]                       # where it began: its progress is away from here
+        p = self._nav_xy()                                   # where it began: its progress is away from here
         gs["detour"] = dict(offset=side * mag, until=self.t + GOTO_DETOUR_S, x0=float(p[0]), y0=float(p[1]),
                             away=0.0)
         gs["detoured"] = True                                # B116: sticky, its cap is GOTO_DETOUR_CAP_S now
@@ -1423,7 +1433,7 @@ class CockpitSim(Playground):
 
     def _goto_pre(self, gs):
         tw = self.t - gs["t0"]
-        p = self.data.xpos[self.torso]
+        p = self._nav_xy()                                   # 2026-10-15: the estimate with odometry on
         dx, dy = gs["tx"] - p[0], gs["ty"] - p[1]
         dist = float(np.hypot(dx, dy))
         det = gs.get("detour")
@@ -1470,7 +1480,7 @@ class CockpitSim(Playground):
         vx = vy = wz = 0.0
         if gs["outcome"] is None and gs.get("void") is None:
             ux, uy = (dx / dist, dy / dist) if dist > 1e-6 else (0.0, 0.0)
-            yaw = self.yaw()
+            yaw = self._nav_yaw()
             cy, sy = np.cos(yaw), np.sin(yaw)
             bx, by = cy * ux + sy * uy, -sy * ux + cy * uy     # target direction, body frame
             hd_goal = float(np.arctan2(by, bx))
@@ -1562,7 +1572,7 @@ class CockpitSim(Playground):
         if self._renderers is False:
             return
         chase, eye, cam, ecam = self._renderers
-        cam.lookat[:] = self.data.xpos[self.torso]
+        cam.lookat[:] = self.data.xpos[self.torso] if self.cam_lookat is None else self.cam_lookat
         cam.distance, cam.elevation, cam.azimuth = self.cam["distance"], self.cam["elevation"], self.cam["azimuth"]
         chase.update_scene(self.data, cam, self._vopt)
         self._overlay(chase.scene)
@@ -1622,6 +1632,7 @@ class CockpitSim(Playground):
         p_xy = old.xpos[self.torso][:2].copy()
         yaw = float(np.arctan2(old.xmat[self.torso].reshape(3, 3)[1, 0], old.xmat[self.torso].reshape(3, 3)[0, 0]))
         same_world = (name == self.world_name) if keep_pose is None else bool(keep_pose)
+        odo_pose = self.odo.estimate() if (self.odo is not None and same_world) else None
         self.model, self.z0 = model, z0
         self.world_spec, self.world_name = dict(spec), name
         self.data = mujoco.MjData(model)
@@ -1631,7 +1642,8 @@ class CockpitSim(Playground):
         self._abandon_goto("world changed")
         self.gesture = None
         self.push = None
-        self._respawn(p_xy if same_world else np.zeros(2), yaw if same_world else 0.0, keep_righter=True)
+        self._respawn(p_xy if same_world else np.zeros(2), yaw if same_world else 0.0, keep_righter=True,
+                      odo_pose=odo_pose)
         self.fingerprint = robot_fingerprint(model)
         # scene memory follows the world: an edit carries it over, another world loads its own.
         # A memory error must never leave the world switch half done (the model is swapped).
@@ -1663,7 +1675,7 @@ class CockpitSim(Playground):
         if gs is not None:
             self._resolve(gs, {"ok": False, "stopped": "preempted", "detail": why, "pose": self.pose()})
 
-    def _respawn(self, xy=(0.0, 0.0), yaw=0.0, keep_righter=False):
+    def _respawn(self, xy=(0.0, 0.0), yaw=0.0, keep_righter=False, odo_pose=None):
         """keep_righter: re-install the chosen righter on the fresh supervisor —
         and keep 'righter off' off (D052: a world change used to bring the
         default checkpoint back)."""
@@ -1682,6 +1694,10 @@ class CockpitSim(Playground):
             self.cmd_v[:] = 0
         self.sup = self._make_sup()                     # D065: the Playground's (with its leveler)
         self.mode = "idle"
+        if self.odo is not None:                        # the spawn is known; an edit keeps the estimate
+            self.odo.bind(self.model)
+            self.odo.reset(odo_pose or {"x": float(xy[0]), "y": float(xy[1]),
+                                        "yaw_deg": float(np.degrees(yaw))}, self.data)
         if keep_righter:
             if old is not None:
                 self.righter_note = self._install_righter(getattr(old, "ckpt", None))
@@ -1894,6 +1910,10 @@ class CockpitSim(Playground):
                      f"reflex {state}, {'idle' if idle else self.mode}"]
         if guards:
             parts.append("GUARDS: " + "; ".join(guards))
+        if self.odo is not None:                         # 2026-10-15: it knows its pose is an estimate
+            sg = self.odo.sigma()
+            parts.append(f"position is its own odometry estimate (±{sg['pos_m'] * 100:.0f} cm, "
+                         f"±{sg['yaw_deg']:.0f} deg)" + ("; SUSPENDED after a fall" if self.odo.suspended else ""))
         parts += [self._lidar_words(lid), mem]
         if heat:
             parts.append(heat)
@@ -3090,11 +3110,93 @@ class CockpitSim(Playground):
                 "detail": detail}
 
     # ------------------------------------------------------ tool surface
+    # ---- the chase camera (2026-10-15: drag / wheel / pinch on the video, a free look-at point)
+    CAM_DIST = (0.25, 12.0)
+    CAM_ELEV = (-89.0, 20.0)
+    CAM_VIEWS = {"follow": dict(distance=0.9, elevation=-18.0), "wide": dict(distance=2.2, elevation=-35.0),
+                 "top": dict(distance=2.6, elevation=-89.0), "low": dict(distance=1.0, elevation=-6.0)}
+
+    def camera_update(self, body):
+        """POST /api/camera. Absolute: view, distance, elevation, azimuth. Relative (the video's drag /
+        wheel / pinch): d_azimuth, d_elevation (deg), zoom (distance x this), pan [right, up] in units of
+        the distance (the look-at point leaves the robot: the camera stops following). follow: true puts
+        it back on the robot. -> the camera state (one camera: every screen sees it)."""
+        c = self.cam
+        if body.get("view") in self.CAM_VIEWS:
+            c.update(self.CAM_VIEWS[body["view"]])
+            self.cam_lookat = None
+        for k in ("distance", "elevation", "azimuth"):
+            if k in body:
+                c[k] = float(body[k])
+        if "d_azimuth" in body:
+            c["azimuth"] = float(c["azimuth"]) + float(body["d_azimuth"])
+        if "d_elevation" in body:
+            c["elevation"] = float(c["elevation"]) + float(body["d_elevation"])
+        if "zoom" in body:
+            c["distance"] = float(c["distance"]) * float(body["zoom"])
+        pan = body.get("pan")
+        if isinstance(pan, (list, tuple)) and len(pan) == 2:
+            look = (np.array(self.data.xpos[self.torso], float) if self.cam_lookat is None
+                    else np.array(self.cam_lookat, float))
+            az, el = np.radians(c["azimuth"]), np.radians(c["elevation"])
+            right = np.array([np.sin(az), -np.cos(az), 0.0])                 # screen right, on the floor
+            up = np.array([-np.cos(az) * np.sin(el), -np.sin(az) * np.sin(el), np.cos(el)])   # screen up
+            look += c["distance"] * (float(pan[0]) * right + float(pan[1]) * up)
+            look[2] = float(np.clip(look[2], -1.0, 3.0))
+            self.cam_lookat = [round(float(v), 4) for v in look]
+        if body.get("follow"):
+            self.cam_lookat = None
+        if not all(np.isfinite([c["distance"], c["elevation"], c["azimuth"]])):
+            c.update(distance=1.4, elevation=-24.0, azimuth=0.0)
+        c["distance"] = round(float(np.clip(c["distance"], *self.CAM_DIST)), 3)
+        c["elevation"] = round(float(np.clip(c["elevation"], *self.CAM_ELEV)), 2)
+        c["azimuth"] = round(float(c["azimuth"]) % 360.0, 2)
+        self._render_due = True                          # the next frame shows it, not in up to 1/15 s
+        return dict(c, follow=self.cam_lookat is None, lookat=self.cam_lookat)
+
     def pose(self):
+        """Where the robot thinks it is: the odometry estimate when it is on, else the true pose."""
+        return self.odo.estimate() if self.odo is not None else self.true_pose()
+
+    def true_pose(self):
+        """MuJoCo's torso: the truth (the map's ghost, drift, the physics). Never what a model is told
+        while odometry is on."""
         p = self.data.xpos[self.torso]
         R = self.data.xmat[self.torso].reshape(3, 3)
         return {"x": round(float(p[0]), 3), "y": round(float(p[1]), 3),
                 "yaw_deg": round(float(np.degrees(np.arctan2(R[1, 0], R[0, 0]))), 1)}
+
+    def _nav_xy(self):
+        """The (x, y) the goto controller steers by: the estimate with odometry on, else the truth."""
+        if self.odo is not None:
+            return np.array(self.odo.ekf.p[:2], dtype=float)
+        return self.data.xpos[self.torso][:2]
+
+    def _nav_yaw(self):
+        """Heading (rad) the goto controller and the map-frame lidar use: estimated or true."""
+        if self.odo is not None:
+            return float(np.radians(self.odo.estimate()["yaw_deg"]))
+        return self.yaw()
+
+    def set_odometry(self, on, seed=0):
+        """Sim thread: drive on the estimated pose (on) or the true one. Switching on starts the
+        estimate at the true pose now (the robot is put down at a known spot); off drops it."""
+        if on and self.odo is None:
+            from odometry import CockpitOdometry
+            self.odo = CockpitOdometry(self.model, seed=seed)
+            self.odo.reset(self.true_pose(), self.data)
+            self.log("odometry ON: the robot now navigates on its own estimate (IMU + legs), which drifts")
+        elif not on and self.odo is not None:
+            d = self.odo.drift(self.true_pose())
+            self.odo = None
+            self.log(f"odometry off (it had drifted {d['pos_m'] * 100:.0f} cm, {d['yaw_deg']:+.0f} deg): "
+                     "back on the true pose")
+        return self.odometry_status()
+
+    def odometry_status(self):
+        if self.odo is None:
+            return {"on": False}
+        return dict(self.odo.status(truth=self.true_pose()), on=True, true=self.true_pose())
 
     def _hw_brief(self):
         """The bridge's state for the 10 Hz feed: attributes only (no bus traffic)."""
@@ -3186,6 +3288,7 @@ class CockpitSim(Playground):
                     events=_jsonable(ev), event_seq=seq, console=list(self.console)[-40:],
                     caps_version=caps_version, caps_seq=caps_seq,
                     brain=self.brain, brain_activity=self.brains.activity_view(), brain_paused=self.brains.paused,
+                    odometry=self.odometry_status() if self.odo is not None else None,
                     chat_seq=getattr(getattr(self, "chat_feed", None), "seq", 0), gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
                                                 duty=self.gait.duty, hstep=self.gait.hstep,
                                                 phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)
@@ -3258,10 +3361,10 @@ class CockpitSim(Playground):
             if err:
                 return {"ok": False, "error": err, "pose": pose}
             why = None
-            p = self.data.xpos[self.torso]
+            p = self._nav_xy()
             u = np.array([tx - p[0], ty - p[1]])
             u = u / max(float(np.linalg.norm(u)), 1e-9)
-            yaw = self.yaw()
+            yaw = self._nav_yaw()
             ub = np.array([np.cos(yaw) * u[0] + np.sin(yaw) * u[1], -np.sin(yaw) * u[0] + np.cos(yaw) * u[1], 0.0])
             vb = self.void_blocks(V_GOTO * ub)
             if hasattr(self, "locomotion_held") and self.locomotion_held():
@@ -3301,8 +3404,7 @@ class CockpitSim(Playground):
         def do_scan():
             mujoco.mj_forward(self.model, self.data)
             angles, ranges, _ = lidar_scan(self.model, self.data, self.torso)
-            R = self.data.xmat[self.torso].reshape(3, 3)
-            yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+            yaw = self._nav_yaw()                    # the map frame is the one the robot believes in
             bear = np.degrees((angles + yaw + np.pi) % (2 * np.pi) - np.pi)
             sectors = []
             for c in range(-180, 180, 45):
@@ -3640,6 +3742,11 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
     async def models(_):
         return JSONResponse(await asyncio.to_thread(sim.brains.models_payload))
 
+    async def brain_settings(request):
+        """Tool rounds, reply tokens, turns the model sees, thinking per model (saved with the roles)."""
+        body = await request.json()
+        return JSONResponse(await asyncio.to_thread(sim.brains.set_settings, body))
+
     async def brain_warm(request):
         """Load the models a mode uses (default: the current mode) — a 1-token call each, so the first
         command does not wait 15-40 s for a cold load. Answers when they are loaded (or why not)."""
@@ -3760,23 +3867,22 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         hb = sim.heartbeat()
         return JSONResponse({"ok": bool(sim.alive), "heartbeat": hb}, status_code=200 if sim.alive else 503)
 
-    VIEWS = {"follow": dict(distance=0.9, elevation=-18.0), "wide": dict(distance=2.2, elevation=-35.0),
-             "top": dict(distance=2.6, elevation=-89.0), "low": dict(distance=1.0, elevation=-6.0)}
-
     async def camera(request):
         body = await request.json()
-        if body.get("view") in VIEWS:
-            sim.cam.update(VIEWS[body["view"]])
-        for k in ("distance", "elevation", "azimuth"):
-            if k in body:
-                sim.cam[k] = float(body[k])
-        return JSONResponse(sim.cam)
+        if not isinstance(body, dict):
+            return JSONResponse({"ok": False, "error": "body must be a JSON object"}, status_code=400)
+        try:
+            return JSONResponse(sim.camera_update(body))
+        except (TypeError, ValueError) as e:
+            return JSONResponse({"ok": False, "error": f"bad camera value: {e}"}, status_code=400)
 
     async def scan(_):
         def do_scan():
             angles, ranges, origin = lidar_scan(sim.model, sim.data, sim.torso)
-            R = sim.data.xmat[sim.torso].reshape(3, 3)
-            yaw = float(np.arctan2(R[1, 0], R[0, 0]))
+            # 2026-10-15: drawn from where the robot BELIEVES it is (odometry on: the estimate), as a
+            # real robot maps its scans — drift shows as the dots sliding off the true walls
+            origin = np.asarray(origin, float)[:2] - np.asarray(sim.data.xpos[sim.torso][:2]) + sim._nav_xy()
+            yaw = sim._nav_yaw()
             pts = []
             for a, r in zip(angles[::4], ranges[::4]):
                 if np.isfinite(r):
@@ -4346,6 +4452,13 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         return JSONResponse(_jsonable({"ok": True, "awareness": sim.awareness_settings(),
                                        "situation": sim.situation}))
 
+    async def odometry_post(request):
+        """POST /api/odometry {on: bool} -> {ok, odometry}: drive on the estimated pose or the true one."""
+        body = await _json_object(request)
+        if body is None or not isinstance(body.get("on"), bool):
+            return JSONResponse({"ok": False, "error": "body must be {\"on\": true|false}"}, status_code=400)
+        return JSONResponse({"ok": True, "odometry": await sim.call(lambda: sim.set_odometry(body["on"]))})
+
     async def awareness_post(request):
         """POST /api/awareness {interval_s?, curious?, reactions?, recognize?, refresh?}
         (refresh: true composes a situation now; recognize: D057 place recognition)."""
@@ -4525,6 +4638,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/cmd", cmd, methods=["POST"]), Route("/api/teleop", teleop, methods=["POST"]),
         Route("/api/chat", chat, methods=["POST"]), Route("/api/chat/clear", chat_clear, methods=["POST"]),
         Route("/api/brain", brain, methods=["POST"]), Route("/api/brain/warm", brain_warm, methods=["POST"]),
+        Route("/api/brain/settings", brain_settings, methods=["POST"]),
         Route("/api/models", models),
         Route("/api/world", world_get), Route("/api/world", world_set, methods=["POST"]),
         Route("/api/world/add", world_add, methods=["POST"]),
@@ -4554,6 +4668,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/hw", hw_status), Route("/api/hw", hw_action, methods=["POST"]),
         Route("/api/memory", memory_get), Route("/api/memory", memory_post, methods=["POST"]),
         Route("/api/awareness", awareness_get), Route("/api/awareness", awareness_post, methods=["POST"]),
+        Route("/api/odometry", odometry_post, methods=["POST"]),
         Route("/api/place", place_get), Route("/api/place", place_post, methods=["POST"]),
         Route("/api/admin/models", admin_models), Route("/api/admin/load", admin_load, methods=["POST"]),
         Route("/api/admin/unload", admin_unload, methods=["POST"]),

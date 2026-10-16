@@ -39,7 +39,8 @@ rocky/
 │   ├── mass_audit.py → mass_budget.json, build_mjcf.py → pebble.xml, model_fingerprint.py,
 │   │   check_urdf_parity.py   the model pipeline
 │   ├── playground.py     terminal REPL + viewer · cockpit.py, cockpit_brains.py, cockpit_shared.py,
-│   │   cockpit_ui.html   the browser cockpit · model_admin.py, gpu_check.py   its Models panel
+│   │   cockpit_ui.html   the browser cockpit · model_admin.py, gpu_check.py   its Models panel ·
+│   │   odometry.py (+ odometry_bench.py)   the estimated pose a real robot would have
 │   ├── rocky_env.py, rocky_recover_env.py, rl_common.py, train_ppo.py, eval_*.py, righter.py,
 │   │   audit_righter.py, rl_dashboard.py   RL (§2.4) · runs/   checkpoints (git-lfs .pt)
 │   ├── run_sim.py, shove_envelope.py, torque_audit.py, audit_gestures.py, terrain_bench.py   tools that give
