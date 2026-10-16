@@ -168,10 +168,11 @@ The part modules (run any of them from `cad/`; each writes `cad/out/<name>.stl/.
   (`hip_floor()`), and drops that start a leg inside the belly are redrawn (`drop_clear_of_belly`).
 - `sim/rl_common.py`: one `Sensors`, `RecoverObs`, `DomainRandomizer`, `ThermalProxy`,
   `checkpoint_contract`, `check_fingerprint`, `action_map_mismatch` (a resume must keep the map).
-- The hand-off: `ReflexSupervisor` runs the learned righter (`sim/righter.py` `PolicyRighter`,
-  `runs/recover1/latest.pt` by default) in FALLEN, clamps its hips to `reflex.righter_hip_min_deg`
-  on `reflex.righter_clamp_legs`, stops it after the 3 s stall rule or the 10 s deadline, and
-  ramps to the planted stance in RIGHTED. `handoff_ok()` is hardware-computable.
+- The hand-off: `ReflexSupervisor` runs the learned righter (`sim/righter.py` `PolicyRighter`:
+  `runs/recover8_d064/latest.pt` by default, `recover1` the fallback; `righter.default_ckpt()`) in
+  FALLEN, clamps its hips to `reflex.righter_hip_min_deg` on `reflex.righter_clamp_legs`, stops it
+  after the 3 s stall rule or the 10 s deadline, and ramps to the planted stance in RIGHTED.
+  `handoff_ok()` is hardware-computable.
 - Train: `./rocky.sh train-recover NAME [--hip-clamp params|none|DEG] [--belly-drops]`,
   `./rocky.sh jobs`; evaluate: `./rocky.sh eval-recover NAME --supervisor` (the system number),
   `cd sim && python audit_righter.py runs/NAME/latest.pt` (jitter), `python sim/rl_dashboard.py --table`.
@@ -284,6 +285,16 @@ MUJOCO_GL=egl .venv/bin/python sim/model_fingerprint.py
   [COCKPIT_GUIDE.md](COCKPIT_GUIDE.md); internals: [SIM_GUIDE.md](SIM_GUIDE.md) §3b.
 - The tools a brain or MCP client can call come from `harness/capabilities.py` `REGISTRY`;
   [TOOLS.md](TOOLS.md) is generated from it (CI checks it). A new tool: DESIGN_CHANGE_GUIDE §8.
+  Offering an existing tool to the models changes the pinned lists: `turn` (2026-10-15) shows how
+  (`harness/test_capabilities.py` header: the D056 snapshots get exactly that row inserted).
+- The brain's knobs (tool rounds, reply tokens, turns remembered, thinking per model) are
+  `Brains.settings` / `Brains.thinking` in `sim/cockpit_brains.py` (`SETTINGS_DEFAULTS`,
+  `SETTINGS_LIMITS`, `POST /api/brain/settings`), saved in `ROCKY_COCKPIT_CONF` with the roles. Every
+  motion's result gets `moved` (`travelled()`, `TRAVEL_TOOLS`).
+- The chase camera: `CockpitSim.camera_update` (`POST /api/camera`: views, absolute or relative
+  orbit / zoom, `pan` off the robot, `follow`); the video's drag / wheel / pinch call it.
+- One conversation on every screen: `sim/cockpit_shared.py` `ChatFeed` (`/api/chat/feed`, the
+  snapshot's `chat_seq`).
 
 ### 2.12 Re-run a published number
 From the repo root with `MUJOCO_GL=egl .venv/bin/python`. Experiments write the tracked record
@@ -296,17 +307,19 @@ From the repo root with `MUJOCO_GL=egl .venv/bin/python`. Experiments write the 
 | standing shove floor (30 N, 1.08 BW) | `sim/shove_envelope.py [--quick]` | `sim/out/shove_envelope.json` |
 | holding torques (self-right knee 1.46 N·m, 49.5 %) | `sim/torque_audit.py` | `sim/out/torque_audit.json` |
 | gestures (19 rows, 0 FAIL) | `sim/audit_gestures.py --json sim/out/audit_gestures.json` | that file |
-| righting, system (20/20; 11/20 without the righter) | `cd sim && …/python eval_recover.py runs/recover1/latest.pt --supervisor` | printed; RL_GUIDE §4 |
-| righter jitter | `cd sim && …/python audit_righter.py runs/recover1/latest.pt` | printed |
+| righting, system with the shipped `recover8_d064` (20/20 vs 12/20 without a righter on the nominal servo; 18/20 vs 8/20 randomised, 3 hand-offs) | `cd sim && …/python eval_recover.py runs/recover8_d064/latest.pt --supervisor` | printed; RL_GUIDE §4 |
+| righter jitter (`recover8_d064`: 31 % pinned, 2.5 rev/s) | `cd sim && …/python audit_righter.py runs/recover8_d064/latest.pt` | printed; RL_GUIDE §4 |
 | rubble (30 mm 3/4, 35 mm 1/4, watchdog 40 mm 3/4) | `sim/experiments/run_stuck.py` | `results/stuck_results.json` |
 | cliff safe-stop (PASS, margin 228.9 mm) | `sim/experiments/run_cliff_safestop.py` | `results/cliff_safestop_results.json` |
 | cliff control (INCONCLUSIVE since D064: it hangs on the tub) | `sim/experiments/run_cliff.py` | `results/cliff_results.json` |
 | void-guard lip band (364 approaches) | `sim/experiments/run_lip_grid.py --jobs 6 [--level]`; the strict xfail in `sim/tests/test_playground_guards.py` | `results/lip_grid[_level]_results.json` |
 | terrain: the leveler's bench (S0 / S1 / S2 × 3 IMUs, P1–P8) | `sim/terrain_bench.py --jobs 6` (§2.18) | `sim/out/terrain_bench.json` |
 | masses, fingerprint | §2.10 | `sim/mass_budget.json` |
+| odometry drift (straight 1 m 4–8 cm; 90° turn 1.5 cm / <2°; 180 s mixed 3–9 cm / ≤7°) | `MUJOCO_GL=disable …/python sim/odometry_bench.py` (§2.20) | `sim/out/odometry_bench.json` |
 
 The 200-seed counts (righting 198/200, 104/200 without the righter) came from a scratch harness
-over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not in the repo.
+over `eval_recover.run_supervisor` and `audit_righter.audit_episode` that is not in the repo, with
+`recover1` (before `recover8_d064` shipped).
 
 ### 2.13 Run the tests, and what CI runs
 - `./rocky.sh test`: `driver/tests`, `harness -m "not slow"`, `gait`, `sim/tests -m "not slow"`, on
@@ -417,6 +430,21 @@ MUJOCO_GL=egl .venv/bin/python sim/terrain_bench.py --one W3.stone20.f0.stand --
   auto-fit for a MoE or a model bigger than the card.
 - Which model a role uses: `REFERENCE_ROLES` / `REFERENCE_FALLBACK` in `sim/cockpit_brains.py`,
   overridden by rocky.env (`ROCKY_BRAIN_MODEL`, ...) and by a pick in the page.
+- A model call never starts while another program fills the GPU (`sim/gpu_check.py`,
+  `ROCKY_GPU_MIN_FREE_MIB`); the tests switch that check off (`ROCKY_GPU_CHECK=0` in `conftest.py`).
+
+### 2.20 Drive on the estimated pose, or measure its drift
+
+- `sim/odometry.py` `CockpitOdometry` runs `perception/legged_odom.py`'s EKF on what the hardware
+  will measure (noisy, biased IMU from `sim/scenes.py`'s calibration; encoders; foot switches). The
+  cockpit steps it every physics tick while World & map → **estimated position** is on
+  (`CockpitSim.set_odometry`, `POST /api/odometry`); `pose()`, `_nav_xy()` / `_nav_yaw()` (the goto
+  controller, the map-frame lidar) then use the estimate, `true_pose()` stays the truth.
+- Falls suspend the position estimate (reflex FALLEN / RIGHTED, tilt, lost footing; RECOVER is the
+  end of every ordinary stop, not a fall). Heading is calibrated only in still pauses of 1.2 s+.
+- Measure: `MUJOCO_GL=disable .venv/bin/python sim/odometry_bench.py` (3 seeds × straight / turn /
+  square / 180 s mixed; `--seeds 0 --paths straight_1m --out /tmp/x.json` for a quick one); tests
+  `sim/tests/test_odometry.py`. A change to the filter re-runs the bench and commits its record.
 
 ## 3. Reading order for a newcomer
 1. [README.md](../README.md): status, setup, the ground rules.
