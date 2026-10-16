@@ -10,6 +10,11 @@ Three layers of proof that the registry changes nothing a model sees:
 If a tool text or schema changes ON PURPOSE, update GOLDEN in the same commit and say
 so; the snapshot files are a one-off record of 2026-09-25.
 
+2026-10-15 OFFERED `turn` (deg) to the models and over MCP (it was executor-only: a model turned with
+gesture turn_in_place, a fixed ~47 deg). Its place in every list is the registry's (after `forget`,
+before the D057 four); _as_of_d063 / _mcp_as_of_d063 insert exactly that one row into the D056
+snapshots, so every other tool is still checked against them byte for byte.
+
 D057 ADDED four tools (where_am_i, name_place, places, forget_place: place recognition,
 appended after `turn`, offered to the local brains only, not MCP) behind a new capability
 flag, `places` (the cockpit's recognition switched on). Adding is allowed, changing is
@@ -52,17 +57,17 @@ GOLDEN = {
     # D063: the compose_gesture example re-timed and goto's timeout clause (~0.034 m/s, 55 s cap);
     # B116: + the detour cap (~87 s) in that clause. Was 469a6144f730... at D056, bc5de4faced2... with
     # the compose change alone, fe8ec983be35... at D063
-    "openai_rep": "db239aed3dd178828da3f578a2796f17a3ade5036ffcf43fa99b9025ee0ddf1e",
+    "openai_rep": "a1e256c33418c05ea94b974b2e6c965db7c0eca90c4c8efa11aaae19e19e2b26",   # 2026-10-15 + turn (was db239aed3dd1...)
     # local_brain.TOOLS = build_tools(GESTURES, CHORD_WORDS); D063, B116: goto's clause (was
     # 7efe2065850c..., then ca30fea22e45...)
     "openai_local_brain_TOOLS": "3cdedb3bcb9164b31a5798f604b578c07fe1e54059947c3041e217b40b300e74",
     # cockpit_brains.TOOLS = build_tools(look=True, extra=EXTRA_TOOLS); D063, B116 as above (was
     # f932d346fe16..., then 0df60970f429..., b3257e6558b2...)
-    "openai_cockpit_brains_TOOLS": "5b0913fd43bbcd723d1ee765198b62b3af6e96511d6b6f6ee1b1b695fe2460d9",
+    "openai_cockpit_brains_TOOLS": "50b8d3a4dede460d758200bc2104e1c57afc87ef2cf06e3456aa1a81eca37975",   # + turn (was 5b0913fd43bb...)
     # build_server(<every capability, live lists REP_*>).list_tools(): {name, description,
     # inputSchema, annotations} rows sorted by name; D063, B116: goto's clause (was 3753dc32f7c8...,
     # then b952da712b17...)
-    "mcp_rep": "071a7fa860c69aae08daa70d2f8c6621cd780d7fd6a10b413854946d7d3a3b44",
+    "mcp_rep": "d2addcbe220699a4a1973042543a0b662df69d3ec08c150a01b3f22aa1611ded",   # + turn (was 071a7fa860c6...)
     # build_server(MockBackend()).list_tools(), same rows; D063, B116: goto's clause (was
     # eec37bf89567..., then 30a5f727c33e...)
     "mcp_mock": "8173b0a042f459a0cd072dfff67cfc43196abab9fbc427e7ba345d8dc25add47",
@@ -73,17 +78,17 @@ GOLDEN_D057 = {       # has_places=True (recognition on); regenerated 2026-09-25
     # D063: the compose_gesture example re-timed and goto's timeout clause (were 0f9b0f0daaa9... /
     # 82039933acaa..., then a06880931cdd... / 6baed84766c7... with the compose change alone);
     # B116: + the detour cap in goto's clause (were c00ebabaa336... / 7bb1a198105f...)
-    "openai_rep": "daf4b01e092964b5216a3de86b8d01ebd29e9a07d37caf8af23ea1a76f50bb31",
-    "openai_cockpit_brains_TOOLS": "09ba1a1f74881f69214b1b0824311c25a6550562bb674c37bdf04ca4cbc6eb90",
+    "openai_rep": "81a0a2cde5941e3c4db3f24538af3565c9cca1c7ad589755468307c75b343926",   # + turn (was daf4b01e0929...)
+    "openai_cockpit_brains_TOOLS": "ad1e4c6a2bef72844f974341996480f67dd3894951799b7db4cba180e3780eb2",   # + turn (was 09ba1a1f7488...)
     # F3: to_mcp_specs(rep_caps(has_places=True)) = build_server over a cockpit reporting `places`,
     # {name, description, inputSchema, annotations} rows sorted by name (the D056 rows + the four);
     # D063, B116: goto's clause (was bb4b0fd415d5..., then 4bfdcee5191c...)
-    "mcp_rep": "d6b4e6f1d87a5cd3ee867ad5285034e18b6c6b234ff5c0e30fbe94f99bbacdd3",
+    "mcp_rep": "b9b3be361040c1118941575bc7d6d390a842ba08dbd0835e603f3038018c07a7",   # + turn (was d6b4e6f1d87a...)
 }
 # the no-cockpit snapshot's version at D056 (docs/TOOLS.md then): with has_places off the
 # snapshot is still exactly that one (the D057 tools add nothing unless recognition is on) —
 # except the robot block's params revision, which D059 moved on (_version_at_d056)
-D056_FALLBACK_VERSION = "abdf9c28edb2"   # D063: the envelope (34.2 mm/s, goto cap 55 s) + the compose
+D056_FALLBACK_VERSION = "be2b61c73bc0"   # 2026-10-15: + turn, offered (was abdf9c28edb2). D063: the envelope (34.2 mm/s, goto cap 55 s) + the compose
 #                                          example + goto's clause (was 99615678f55b, then 912e8613c551);
 #                                          B116: + goto_detour_timeout_s (87 s) and goto's clause quoting
 #                                          it (was 39b67053b588)
@@ -122,13 +127,36 @@ B116_GOTO_TOO_FAR = ("(too far: ~0.034 m/s, 55 s cap — a detour may extend it 
                      "within ~1.5 m)")
 
 
+ADDED_TURN = ("turn",)
+
+
+def _turn_openai():
+    t = next(x for x in C.to_openai_tools(rep_caps()) if x["function"]["name"] == "turn")
+    assert t["function"]["description"] == C.TURN_DOC
+    assert t["function"]["parameters"] == {"type": "object", "properties": {"deg": {
+        "type": "number", "description": "degrees, + = left; 5..180 in magnitude"}}, "required": ["deg"]}
+    return t
+
+
+def _turn_mcp_row():
+    s = next(x for x in C.to_mcp_specs(rep_caps()) if x["name"] == "turn")
+    assert s["description"] == C.TURN_DOC and list(s["input_schema"]["properties"]) == ["deg"]
+    return {"name": "turn", "description": s["description"], "inputSchema": s["input_schema"],
+            "annotations": s["annotations"]}
+
+
 def _goto_as_of_d063(description):
     assert D056_GOTO_TOO_FAR in description, "the snapshot's goto text is not D056's"
     return description.replace(D056_GOTO_TOO_FAR, B116_GOTO_TOO_FAR)
 
 
 def _as_of_d063(tools):
+    """The D056 snapshot list as of today: D063's two texts, and (2026-10-15) `turn` after `forget`
+    in a list that has the cockpit's memory tools (every cockpit list; none without the cockpit)."""
     out = json.loads(json.dumps(tools))
+    names = [t["function"]["name"] for t in out]
+    if "forget" in names and "turn" not in names:
+        out.insert(names.index("forget") + 1, _turn_openai())
     for t in out:
         f = t["function"]
         if f["name"] == "compose_gesture":
@@ -142,6 +170,9 @@ def _as_of_d063(tools):
 def _mcp_as_of_d063(tools):
     """The same for an MCP list (compose_gesture is not an MCP tool; goto is)."""
     out = json.loads(json.dumps(tools))
+    names = [t["name"] for t in out]
+    if "forget" in names and "turn" not in names:                   # 2026-10-15: turn, as above
+        out.insert(names.index("forget") + 1, _turn_mcp_row())
     for t in out:
         if t["name"] == "goto":
             t["description"] = _goto_as_of_d063(t["description"])
@@ -207,6 +238,9 @@ class FullBackend(MockBackend):
 
     async def forget(self, name):
         return {"ok": True}
+
+    async def _tool(self, name, **kw):               # a cockpit (runs any registry tool): since 2026-10-15
+        return {"ok": True}                          # turn is an MCP tool that needs one
 
 
 def _server_rows(backend):
@@ -336,7 +370,8 @@ def test_backend_flags_for_the_proxies():
     # the MCP list on the proxies is every MCP tool in the registry but (F3) the place tools,
     # which need the cockpit to report its recognition on (the `places` flag)
     names = [s["name"] for s in C.to_mcp_specs(C.build(GESTURES, CHORD_WORDS, **auto))]
-    assert names == [t.name for t in C.REGISTRY if "mcp" in t.surfaces and "places" not in t.requires]
+    assert names == [t.name for t in C.REGISTRY if "mcp" in t.surfaces and "places" not in t.requires
+                     and (auto["is_cockpit"] or "cockpit" not in t.requires)]
 
 
 # ---------------------------------------------------------------- sets
@@ -357,7 +392,7 @@ def test_registry_is_the_cockpit_dispatch_set():
     # executor-only ones
     offered = {t["function"]["name"] for t in C.to_openai_tools(rep_caps(has_places=True))}
     internal = {t.name for t in C.REGISTRY if t.surfaces == ("internal",)}
-    assert set(C.TOOL_NAMES) - offered == internal == {"turn"}
+    assert set(C.TOOL_NAMES) - offered == internal == set()          # turn was the one until 2026-10-15
 
 
 def test_sets_equal_the_snapshot():
@@ -365,7 +400,9 @@ def test_sets_equal_the_snapshot():
     assert C.gated_names(rep_caps()) == frozenset(snap["GATED"]) == frozenset(snap["GATED_raw"])
     assert set(C.TOOL_NAMES) - set(ADDED_D057) == set(snap["cockpit_dispatch"])
     offered = {t["function"]["name"] for t in C.to_openai_tools(rep_caps())}
-    assert set(snap["cockpit_dispatch"]) - offered == set(snap["cockpit_not_offered_to_models"])
+    # the snapshot's one executor-only tool, turn, is offered since 2026-10-15
+    assert set(snap["cockpit_not_offered_to_models"]) == set(ADDED_TURN)
+    assert set(snap["cockpit_dispatch"]) - offered == set()
     assert set(snap["MEMORY_TOOLS"]) == set(C.MEMORY_NAMES)
 
 

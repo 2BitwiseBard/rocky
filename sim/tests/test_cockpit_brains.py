@@ -391,9 +391,12 @@ def test_tools_are_built_with_live_enums():
 # The sha256 is over EXTRA_TOOLS' canonical JSON (sort_keys, compact): no file needed.
 EXTRA_BEFORE = ("compose_gesture", "check_gesture", "save_gesture", "find_object", "remember",
                 "where_is", "recall", "go_back_to", "forget")
+# 2026-10-15: turn is offered to the models (it was executor-only); it comes after forget
+EXTRA_NOW = EXTRA_BEFORE + ("turn",)
 # D063: compose_gesture's example re-timed on purpose (1 s per move: the minimum-jerk ease made its
-# 0.8 s arm moves 4.13 rad/s, over the 4.0 free limit); was 5c53a90ca808... at D056
-EXTRA_BEFORE_SHA = "5af48acd8c83b5d63bb2acc0302cf4c22d7db2817ead3eb8405194e3fd7d0421"
+# 0.8 s arm moves 4.13 rad/s, over the 4.0 free limit); was 5c53a90ca808... at D056; 2026-10-15 + turn
+# (was 5af48acd8c83...)
+EXTRA_BEFORE_SHA = "108dfd4cae9d63918b9ead339a3943dc3f4d4575173ff543d2c21380bc1d181f"
 GATED_BEFORE = frozenset({"goto", "gesture", "compose_gesture", "find_object", "go_back_to", "turn", "move"})
 # the D056 compose_gesture text and goto's timeout clause (the texts D063 changed: the compose example
 # re-timed; the 34.2 mm/s envelope and the 55 s cap derived from it; B116 added the 87 s detour cap to
@@ -415,9 +418,15 @@ def _canon_sha(obj):
 
 
 def _as_of_d063(tools):
-    """A D056 OpenAI tool list with D063's compose_gesture and goto texts in place of the D056 ones."""
+    """A D056 OpenAI tool list with D063's compose_gesture and goto texts in place of the D056 ones,
+    and (2026-10-15) the registry's turn after forget: every other tool still the snapshot's."""
     import harness.capabilities as C
     out = json.loads(json.dumps(tools))
+    names = [t["function"]["name"] for t in out]
+    if "forget" in names and "turn" not in names:
+        turn = next(t for t in cb.EXTRA_TOOLS if t["function"]["name"] == "turn")
+        assert turn["function"]["description"] == C.TURN_DOC
+        out.insert(names.index("forget") + 1, turn)
     for t in out:
         f = t["function"]
         if f["name"] == "compose_gesture":
@@ -433,7 +442,7 @@ def test_extra_tools_and_gated_are_registry_views_equal_to_before():
     import harness.capabilities as C
     from harness.intent import MOTION_TOOLS
     assert isinstance(cb.EXTRA_TOOLS, list)
-    assert tuple(t["function"]["name"] for t in cb.EXTRA_TOOLS) == EXTRA_BEFORE
+    assert tuple(t["function"]["name"] for t in cb.EXTRA_TOOLS) == EXTRA_NOW
     assert _canon_sha(cb.EXTRA_TOOLS) == EXTRA_BEFORE_SHA
     assert cb.GATED == GATED_BEFORE == C.GATED_NAMES
     assert set(MOTION_TOOLS) <= cb.GATED and "stop" not in cb.GATED     # talk mode's motion stays gated
@@ -456,7 +465,7 @@ def test_extra_tools_and_gated_equal_the_pre_registry_snapshot():
         before = _as_of_d063(json.load(f)["cockpit_brains.TOOLS (build_tools(look=True, extra=EXTRA_TOOLS))"])
     assert json.dumps(cb.TOOLS) == json.dumps(before)                                  # key order too
     assert json.dumps(cb.EXTRA_TOOLS) == json.dumps(
-        [t for t in before if t["function"]["name"] in EXTRA_BEFORE])
+        [t for t in before if t["function"]["name"] in EXTRA_NOW])
     with open(os.path.join(REGISTRY_SNAPSHOTS, "snapshot_sets.json"), encoding="utf-8") as f:
         sets = json.load(f)
     assert cb.GATED == frozenset(sets["GATED_raw"]) == frozenset(sets["GATED"])
@@ -1623,3 +1632,50 @@ def test_system_prompt_carries_the_family_note_per_model_in_the_chain(monkeypatc
     sys_by_model = {m: msgs[0]["content"] for m, msgs, *_ in s.calls}
     assert "Gemma:" in sys_by_model["gemma-4-26b-a4b"] and "Gemma:" not in sys_by_model["qwen3.5-9b"]
     assert b.system_for(model="tool-model") == b.system_for()
+
+
+# ------------------------------------------------------------------ the operator's brain settings (2026-10-15)
+def test_brain_settings_bound_the_turn_and_survive_a_restart(tmp_path):
+    seen = []
+
+    def complete(model, messages, tools, max_tokens):
+        seen.append((model, max_tokens, len(messages)))
+        return {"content": "", "tool_calls": [call("status", {}, f"s{len(seen)}")],
+                "usage": {"prompt_tokens": 1000 + 10 * len(seen), "completion_tokens": 7}, "finish_reason": "tool_calls"}
+    conf = tmp_path / "cockpit.json"
+    b = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=str(conf),
+                  complete=complete, catalog=CAT)
+    r = b.set_settings({"max_hops": 3, "reply_tokens": 1024, "history_turns": 0, "thinking": {"model": "x", "on": True}})
+    assert r["ok"] and r["settings"] == {"max_hops": 3, "reply_tokens": 1024, "history_turns": 0}
+    assert not b.set_settings({"max_hops": 99, "reply_tokens": "lots"})["ok"]          # refused, saying the range
+    assert b.settings["max_hops"] == 3 and b.settings["reply_tokens"] == 1024
+    r = run(b.chat("where are you", mode="local", model="qwen3.6-35b-a3b"))
+    assert r["gave_up"] and "gave up after 3" in r["reply"] and len(r["trace"]) == 3
+    assert {mt for _m, mt, _n in seen} == {1024}                       # the reply-token setting is max_tokens
+    assert r["usage"] == {"calls": 3, "prompt_tokens": 1030, "completion_tokens": 21, "model": "qwen3.6-35b-a3b",
+                          "max_tokens": 1024, "cut_off": 0, "t": r["usage"]["t"], "mode": "local"}
+    assert b.models_payload()["usage"]["calls"] == 3
+    # history_turns 0: the next line is sent with no earlier turns (system + this line only)
+    seen.clear()
+    run(b.chat("again", mode="local", model="qwen3.6-35b-a3b"))
+    assert seen[0][2] == 2
+    # thinking ON for a model adds the thinking budget to its max_tokens, and is saved with the settings
+    b.set_settings({"thinking": {"model": "qwen3.6-35b-a3b", "on": True}})
+    assert b.reply_tokens("qwen3.6-35b-a3b") == 1024 + cb.THINK_EXTRA_TOKENS and b.reply_tokens("lfm2.5-vl") == 1024
+    saved = json.loads(conf.read_text())
+    assert saved["settings"] == {"max_hops": 3, "reply_tokens": 1024, "history_turns": 0}
+    assert saved["thinking"] == ["qwen3.6-35b-a3b", "x"]
+    b2 = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=str(conf), catalog=CAT)
+    assert b2.settings == b.settings and b2.thinking_on("qwen3.6-35b-a3b")
+    b2.set_settings({"reset": True})
+    assert b2.settings == cb.SETTINGS_DEFAULTS and not b2.thinking
+    assert "settings" not in json.loads(conf.read_text())
+
+
+def test_a_reply_cut_off_at_the_limit_is_counted():
+    def complete(model, messages, tools, max_tokens):
+        return {"content": "a long answ", "tool_calls": [], "usage": {"prompt_tokens": 900, "completion_tokens": 512},
+                "finish_reason": "length"}
+    b = brains(complete)
+    r = run(b.chat("tell me everything", mode="local"))
+    assert r["usage"]["cut_off"] == 1 and r["usage"]["completion_tokens"] == 512

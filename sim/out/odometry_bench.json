@@ -1,0 +1,522 @@
+{
+ "bench": "odometry_bench",
+ "date": "2026-10-15",
+ "commit": "e9c1607",
+ "dirty": true,
+ "setup": {
+  "floor": "flat (pebble.xml)",
+  "righter": "off",
+  "vx_mm_s": 34.0,
+  "wz_rad_s": 0.18,
+  "noise": "sim/scenes.py IMU/encoder calibration",
+  "seeds": [
+   0,
+   1,
+   2
+  ]
+ },
+ "summary": {
+  "straight_1m": {
+   "end_pos_mm_mean": 53.3,
+   "end_pos_mm_max": 76.0,
+   "end_pct_of_path_mean": 5.1,
+   "end_yaw_deg_absmean": 1.93,
+   "end_yaw_deg_absmax": 4.9,
+   "worst_pos_mm_max": 76.0
+  },
+  "turn_90": {
+   "end_pos_mm_mean": 14.3,
+   "end_pos_mm_max": 15.0,
+   "end_pct_of_path_mean": 25.23,
+   "end_yaw_deg_absmean": 0.8,
+   "end_yaw_deg_absmax": 1.8,
+   "worst_pos_mm_max": 15.0
+  },
+  "square_1m": {
+   "end_pos_mm_mean": 115.0,
+   "end_pos_mm_max": 284.0,
+   "end_pct_of_path_mean": 2.63,
+   "end_yaw_deg_absmean": 8.37,
+   "end_yaw_deg_absmax": 23.1,
+   "worst_pos_mm_max": 285.0
+  },
+  "mixed_180s": {
+   "end_pos_mm_mean": 52.0,
+   "end_pos_mm_max": 81.0,
+   "end_pct_of_path_mean": 1.73,
+   "end_yaw_deg_absmean": 5.8,
+   "end_yaw_deg_absmax": 7.3,
+   "worst_pos_mm_max": 93.0
+  }
+ },
+ "runs": [
+  {
+   "path": "straight_1m",
+   "seed": 0,
+   "sim_s": 37.8,
+   "true": {
+    "x": 1.032,
+    "y": 0.018,
+    "yaw_deg": -0.415
+   },
+   "estimate": {
+    "x": 0.995,
+    "y": -0.001,
+    "yaw_deg": -0.1
+   },
+   "path_true_m": 1.041,
+   "path_est_m": 0.981,
+   "turn_true_deg": -0.4,
+   "turn_est_deg": -0.1,
+   "end_drift": {
+    "pos_m": 0.041,
+    "yaw_deg": 0.3
+   },
+   "end_drift_pct_of_path": 3.9,
+   "worst_drift": {
+    "pos_m": 0.042,
+    "yaw_deg": 0.5
+   },
+   "sigma": {
+    "pos_m": 0.042,
+    "yaw_deg": 4.9
+   },
+   "zupts": 205,
+   "gyro_bias_z_err": -0.00068,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 137.4,
+   "ekf_us_per_imu_tick": 754.6,
+   "wall_s": 17.0
+  },
+  {
+   "path": "straight_1m",
+   "seed": 1,
+   "sim_s": 37.8,
+   "true": {
+    "x": 1.032,
+    "y": 0.018,
+    "yaw_deg": -0.415
+   },
+   "estimate": {
+    "x": 0.997,
+    "y": -0.008,
+    "yaw_deg": -1.0
+   },
+   "path_true_m": 1.041,
+   "path_est_m": 0.983,
+   "turn_true_deg": -0.4,
+   "turn_est_deg": -1.0,
+   "end_drift": {
+    "pos_m": 0.043,
+    "yaw_deg": -0.6
+   },
+   "end_drift_pct_of_path": 4.1,
+   "worst_drift": {
+    "pos_m": 0.043,
+    "yaw_deg": 0.6
+   },
+   "sigma": {
+    "pos_m": 0.042,
+    "yaw_deg": 4.8
+   },
+   "zupts": 205,
+   "gyro_bias_z_err": 0.00033,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 114.4,
+   "ekf_us_per_imu_tick": 379.9,
+   "wall_s": 13.0
+  },
+  {
+   "path": "straight_1m",
+   "seed": 2,
+   "sim_s": 37.8,
+   "true": {
+    "x": 1.032,
+    "y": 0.018,
+    "yaw_deg": -0.415
+   },
+   "estimate": {
+    "x": 0.996,
+    "y": -0.049,
+    "yaw_deg": -5.3
+   },
+   "path_true_m": 1.041,
+   "path_est_m": 0.983,
+   "turn_true_deg": -0.4,
+   "turn_est_deg": -5.3,
+   "end_drift": {
+    "pos_m": 0.076,
+    "yaw_deg": -4.9
+   },
+   "end_drift_pct_of_path": 7.3,
+   "worst_drift": {
+    "pos_m": 0.076,
+    "yaw_deg": 5.1
+   },
+   "sigma": {
+    "pos_m": 0.042,
+    "yaw_deg": 4.8
+   },
+   "zupts": 200,
+   "gyro_bias_z_err": 0.00198,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 75.3,
+   "ekf_us_per_imu_tick": 601.7,
+   "wall_s": 8.9
+  },
+  {
+   "path": "turn_90",
+   "seed": 0,
+   "sim_s": 16.3,
+   "true": {
+    "x": 0.008,
+    "y": -0.002,
+    "yaw_deg": 99.228
+   },
+   "estimate": {
+    "x": 0.008,
+    "y": -0.017,
+    "yaw_deg": 99.5
+   },
+   "path_true_m": 0.057,
+   "path_est_m": 0.061,
+   "turn_true_deg": 99.2,
+   "turn_est_deg": 99.5,
+   "end_drift": {
+    "pos_m": 0.015,
+    "yaw_deg": 0.3
+   },
+   "end_drift_pct_of_path": 26.4,
+   "worst_drift": {
+    "pos_m": 0.015,
+    "yaw_deg": 0.5
+   },
+   "sigma": {
+    "pos_m": 0.011,
+    "yaw_deg": 4.9
+   },
+   "zupts": 208,
+   "gyro_bias_z_err": -0.00024,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 73.4,
+   "ekf_us_per_imu_tick": 382.2,
+   "wall_s": 3.5
+  },
+  {
+   "path": "turn_90",
+   "seed": 1,
+   "sim_s": 16.3,
+   "true": {
+    "x": 0.008,
+    "y": -0.002,
+    "yaw_deg": 99.228
+   },
+   "estimate": {
+    "x": 0.008,
+    "y": -0.017,
+    "yaw_deg": 99.5
+   },
+   "path_true_m": 0.057,
+   "path_est_m": 0.061,
+   "turn_true_deg": 99.2,
+   "turn_est_deg": 99.5,
+   "end_drift": {
+    "pos_m": 0.015,
+    "yaw_deg": 0.3
+   },
+   "end_drift_pct_of_path": 26.4,
+   "worst_drift": {
+    "pos_m": 0.015,
+    "yaw_deg": 0.4
+   },
+   "sigma": {
+    "pos_m": 0.011,
+    "yaw_deg": 4.9
+   },
+   "zupts": 209,
+   "gyro_bias_z_err": -0.00056,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 88.2,
+   "ekf_us_per_imu_tick": 432.1,
+   "wall_s": 4.1
+  },
+  {
+   "path": "turn_90",
+   "seed": 2,
+   "sim_s": 16.3,
+   "true": {
+    "x": 0.008,
+    "y": -0.002,
+    "yaw_deg": 99.228
+   },
+   "estimate": {
+    "x": 0.006,
+    "y": -0.015,
+    "yaw_deg": 97.4
+   },
+   "path_true_m": 0.057,
+   "path_est_m": 0.062,
+   "turn_true_deg": 99.2,
+   "turn_est_deg": 97.4,
+   "end_drift": {
+    "pos_m": 0.013,
+    "yaw_deg": -1.8
+   },
+   "end_drift_pct_of_path": 22.9,
+   "worst_drift": {
+    "pos_m": 0.014,
+    "yaw_deg": 1.8
+   },
+   "sigma": {
+    "pos_m": 0.011,
+    "yaw_deg": 4.9
+   },
+   "zupts": 201,
+   "gyro_bias_z_err": 0.00213,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 89.6,
+   "ekf_us_per_imu_tick": 876.2,
+   "wall_s": 4.1
+  },
+  {
+   "path": "square_1m",
+   "seed": 0,
+   "sim_s": 187.6,
+   "true": {
+    "x": 0.34,
+    "y": -0.215,
+    "yaw_deg": 33.739
+   },
+   "estimate": {
+    "x": 0.329,
+    "y": -0.233,
+    "yaw_deg": 35.1
+   },
+   "path_true_m": 4.386,
+   "path_est_m": 4.171,
+   "turn_true_deg": 393.7,
+   "turn_est_deg": 395.1,
+   "end_drift": {
+    "pos_m": 0.021,
+    "yaw_deg": 1.4
+   },
+   "end_drift_pct_of_path": 0.5,
+   "worst_drift": {
+    "pos_m": 0.069,
+    "yaw_deg": 2.1
+   },
+   "sigma": {
+    "pos_m": 0.083,
+    "yaw_deg": 5.0
+   },
+   "zupts": 176,
+   "gyro_bias_z_err": -0.00024,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 81.3,
+   "ekf_us_per_imu_tick": 372.7,
+   "wall_s": 48.2
+  },
+  {
+   "path": "square_1m",
+   "seed": 1,
+   "sim_s": 187.6,
+   "true": {
+    "x": 0.34,
+    "y": -0.215,
+    "yaw_deg": 33.739
+   },
+   "estimate": {
+    "x": 0.305,
+    "y": -0.234,
+    "yaw_deg": 33.1
+   },
+   "path_true_m": 4.386,
+   "path_est_m": 4.176,
+   "turn_true_deg": 393.7,
+   "turn_est_deg": 393.1,
+   "end_drift": {
+    "pos_m": 0.04,
+    "yaw_deg": -0.6
+   },
+   "end_drift_pct_of_path": 0.9,
+   "worst_drift": {
+    "pos_m": 0.064,
+    "yaw_deg": 0.7
+   },
+   "sigma": {
+    "pos_m": 0.084,
+    "yaw_deg": 5.0
+   },
+   "zupts": 175,
+   "gyro_bias_z_err": -7e-05,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 82.8,
+   "ekf_us_per_imu_tick": 418.6,
+   "wall_s": 49.4
+  },
+  {
+   "path": "square_1m",
+   "seed": 2,
+   "sim_s": 187.6,
+   "true": {
+    "x": 0.34,
+    "y": -0.215,
+    "yaw_deg": 33.739
+   },
+   "estimate": {
+    "x": 0.076,
+    "y": -0.111,
+    "yaw_deg": 10.6
+   },
+   "path_true_m": 4.386,
+   "path_est_m": 4.177,
+   "turn_true_deg": 393.7,
+   "turn_est_deg": 370.6,
+   "end_drift": {
+    "pos_m": 0.284,
+    "yaw_deg": -23.1
+   },
+   "end_drift_pct_of_path": 6.5,
+   "worst_drift": {
+    "pos_m": 0.285,
+    "yaw_deg": 23.1
+   },
+   "sigma": {
+    "pos_m": 0.084,
+    "yaw_deg": 5.0
+   },
+   "zupts": 170,
+   "gyro_bias_z_err": 0.00225,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 108.2,
+   "ekf_us_per_imu_tick": 480.2,
+   "wall_s": 63.1
+  },
+  {
+   "path": "mixed_180s",
+   "seed": 0,
+   "sim_s": 190.3,
+   "true": {
+    "x": 0.097,
+    "y": 0.255,
+    "yaw_deg": -63.411
+   },
+   "estimate": {
+    "x": 0.093,
+    "y": 0.207,
+    "yaw_deg": -59.9
+   },
+   "path_true_m": 3.095,
+   "path_est_m": 3.048,
+   "turn_true_deg": -63.4,
+   "turn_est_deg": -59.9,
+   "end_drift": {
+    "pos_m": 0.048,
+    "yaw_deg": 3.5
+   },
+   "end_drift_pct_of_path": 1.6,
+   "worst_drift": {
+    "pos_m": 0.057,
+    "yaw_deg": 3.9
+   },
+   "sigma": {
+    "pos_m": 0.05,
+    "yaw_deg": 5.0
+   },
+   "zupts": 1437,
+   "gyro_bias_z_err": -0.00016,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 128.3,
+   "ekf_us_per_imu_tick": 957.1,
+   "wall_s": 72.3
+  },
+  {
+   "path": "mixed_180s",
+   "seed": 1,
+   "sim_s": 187.8,
+   "true": {
+    "x": -0.069,
+    "y": -0.239,
+    "yaw_deg": 123.451
+   },
+   "estimate": {
+    "x": -0.096,
+    "y": -0.237,
+    "yaw_deg": 116.2
+   },
+   "path_true_m": 2.993,
+   "path_est_m": 2.931,
+   "turn_true_deg": -236.5,
+   "turn_est_deg": -243.8,
+   "end_drift": {
+    "pos_m": 0.027,
+    "yaw_deg": -7.3
+   },
+   "end_drift_pct_of_path": 0.9,
+   "worst_drift": {
+    "pos_m": 0.073,
+    "yaw_deg": 7.7
+   },
+   "sigma": {
+    "pos_m": 0.049,
+    "yaw_deg": 4.9
+   },
+   "zupts": 732,
+   "gyro_bias_z_err": 0.00015,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 127.3,
+   "ekf_us_per_imu_tick": 488.2,
+   "wall_s": 71.8
+  },
+  {
+   "path": "mixed_180s",
+   "seed": 2,
+   "sim_s": 188.1,
+   "true": {
+    "x": -0.081,
+    "y": 0.969,
+    "yaw_deg": 89.123
+   },
+   "estimate": {
+    "x": -0.066,
+    "y": 0.89,
+    "yaw_deg": 95.7
+   },
+   "path_true_m": 2.978,
+   "path_est_m": 2.911,
+   "turn_true_deg": 89.1,
+   "turn_est_deg": 95.7,
+   "end_drift": {
+    "pos_m": 0.081,
+    "yaw_deg": 6.6
+   },
+   "end_drift_pct_of_path": 2.7,
+   "worst_drift": {
+    "pos_m": 0.093,
+    "yaw_deg": 7.5
+   },
+   "sigma": {
+    "pos_m": 0.051,
+    "yaw_deg": 4.9
+   },
+   "zupts": 1257,
+   "gyro_bias_z_err": 0.00092,
+   "events": [],
+   "falls_or_suspends": 0,
+   "ekf_us_per_physics_tick": 121.1,
+   "ekf_us_per_imu_tick": 916.1,
+   "wall_s": 69.0
+  }
+ ]
+}

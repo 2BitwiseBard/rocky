@@ -44,6 +44,11 @@ def small_quat(dtheta):
     return np.concatenate([[1.0], half]) / np.sqrt(1 + half @ half)
 
 
+def cross3(a, b):
+    """a x b for 3-vectors (np.cross is ~20x slower on one pair: axis handling)."""
+    return np.array([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
+
+
 def skew(v):
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
@@ -79,9 +84,12 @@ class LeggedOdomEKF:
                  sigma_g=0.02, sigma_a=0.15,      # noise densities (per-sample)
                  sigma_bg=1e-4, sigma_ba=1e-3,
                  sigma_v_meas=0.03,               # kinematic velocity noise m/s
-                 g=9.81):
-        """fk_body(i, theta) -> foot position in BODY frame (meters)."""
+                 g=9.81, jac_body=None):
+        """fk_body(i, theta) -> foot position in BODY frame (meters).
+        jac_body(i, theta) -> its (3, 3) jacobian d p_foot / d theta (optional:
+        default a forward-difference one, 3 extra fk calls per stance leg)."""
         self.fk = fk_body
+        self.jac = jac_body
         self.n_legs = n_legs
         self.g = np.array([0, 0, -g])
         self.p = np.zeros(3)
@@ -128,18 +136,27 @@ class LeggedOdomEKF:
 
     # ---------------------------------------------------------- update
     def _kinematic_v_body(self, i, theta, theta_dot):
-        """v_body from a stationary stance foot (numeric jacobian)."""
-        eps = 1e-6
+        """v_body from a stationary stance foot (analytic jacobian when given, else numeric)."""
         p0 = self.fk(i, theta)
-        J = np.zeros((3, 3))
-        for k in range(3):
-            tp = np.array(theta, dtype=float)
-            tp[k] += eps
-            J[:, k] = (self.fk(i, tp) - p0) / eps
-        return -(J @ theta_dot + np.cross(self.last_omega, p0)), p0
+        if self.jac is not None:
+            J = self.jac(i, theta)
+        else:
+            eps = 1e-6
+            J = np.zeros((3, 3))
+            for k in range(3):
+                tp = np.array(theta, dtype=float)
+                tp[k] += eps
+                J[:, k] = (self.fk(i, tp) - p0) / eps
+        return -(J @ theta_dot + cross3(self.last_omega, p0)), p0
 
     def update_legs(self, thetas, theta_dots, contacts):
-        """thetas: [n_legs][3] rad; contacts: bool[n_legs]."""
+        """thetas: [n_legs][3] rad; contacts: bool[n_legs].
+
+        H is zero outside columns 3:9 (dv, dtheta), so every product runs on
+        that 6-column slice, and the Joseph update (I-KH)P(I-KH)' + KRK' is
+        expanded as P - KHP - (KHP)' + KSK' (S = HPH' + R): the same matrix,
+        ~4x cheaper than the dense 15x15 form (2026-10-15, the cockpit runs it
+        in the physics thread)."""
         for i in range(self.n_legs):
             if not contacts[i]:
                 continue
@@ -148,19 +165,22 @@ class LeggedOdomEKF:
             z = R @ v_b                       # measured world velocity
             r = z - self.v                    # residual
             # r = dv + R [v_b]x dtheta + n   (first-order error model)
-            H = np.zeros((3, 15))
-            H[:, 3:6] = np.eye(3)
-            H[:, 6:9] = R @ skew(v_b)
-            S = H @ self.P @ H.T + self.Rv
+            Hs = np.empty((3, 6))             # H[:, 3:9]
+            Hs[:, 0:3] = np.eye(3)
+            Hs[:, 3:6] = R @ skew(v_b)
+            PHt = self.P[:, 3:9] @ Hs.T       # (15, 3) = P H'
+            S = Hs @ PHt[3:9] + self.Rv
             # gate: a slipping foot produces a wild residual — skip it
-            m2 = r @ np.linalg.solve(S, r)
+            Sinv = np.linalg.inv(S)
+            m2 = r @ Sinv @ r
             if m2 > 16.27:                    # chi2 0.999, dof 3
                 continue
-            K = self.P @ H.T @ np.linalg.inv(S)
+            K = PHt @ Sinv
             dx = K @ r
             self._inject(dx)
-            IKH = np.eye(15) - K @ H
-            self.P = IKH @ self.P @ IKH.T + K @ self.Rv @ K.T
+            KHP = K @ PHt.T                   # K H P
+            P = self.P - KHP - KHP.T + K @ S @ K.T
+            self.P = 0.5 * (P + P.T)
 
     # ------------------------------------------------ yaw observability
     # Nothing in the IMU+legs stack observes yaw or gyro-z bias: the leg

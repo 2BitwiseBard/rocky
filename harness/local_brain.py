@@ -97,7 +97,7 @@ def validate_move(forward_m, left_m=0.0, max_m=MOVE_MAX_M):
                             f"and left_m are METERS — 30 cm = 0.3; for farther, move in legs")
     if d < MOVE_MIN_M:
         return None, None, ("move needs a distance: forward_m (+ ahead / - back) and/or left_m "
-                            "(+ left / - right) in meters; to turn, use gesture turn_in_place")
+                            "(+ left / - right) in meters; to turn, use turn(deg) (or gesture turn_in_place)")
     return f, l, None
 
 
@@ -201,8 +201,9 @@ MOVE_RULE = (
     f"targets within ~{GOTO_REACH_M:g} m.")
 
 
-def build_system(gestures=None, lexicon=None, extra=""):
-    """The brain's standing orders, with the live lexicon and gesture list."""
+def build_system(gestures=None, lexicon=None, extra="", turn_tool=False):
+    """The brain's standing orders, with the live lexicon and gesture list. turn_tool: the
+    brain has turn(deg) (the cockpit's, 2026-10-15), so turning by an angle uses it."""
     return (
         "You are the brain of Pebble, a five-legged rock robot (a 1:3 prototype of "
         "ROCKY). You act ONLY by calling tools. The robot's only voice is chord-speak "
@@ -214,8 +215,11 @@ def build_system(gestures=None, lexicon=None, extra=""):
         + MOVE_RULE + "\n"
         "- move and goto end as arrived | cliff | stuck | blocked | timeout | user | preempted | "
         "FELL. cliff/stuck/blocked are vetoes: report them; do not retry the same target.\n"
-        "- 'turn left/right' = gesture turn_in_place with direction; a sidestep is gesture "
-        "sidestep with direction.\n"
+        + ("- To turn, call turn(deg): + left / - right ('turn left' = 90, 'turn around' = 180); "
+           "its turned_deg is the measured turn. A sidestep is gesture sidestep with direction.\n"
+           if turn_tool else
+           "- 'turn left/right' = gesture turn_in_place with direction; a sidestep is gesture "
+           "sidestep with direction.\n") +
         "- If a tool returns ok=false, say so plainly in your reply.\n"
         "- When the motion you called has ended (any result), do NOT start another motion "
         "the operator did not ask for: reply. 'find X' and 'go back to X' are complete when "

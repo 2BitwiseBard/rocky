@@ -558,9 +558,11 @@ _BUILD_TOOLS_BEFORE = {
     # fe8ec983be35... / 061c89608de4... / a0710c0a9b6d... / 383d69fa6815...)
     "local_brain.TOOLS": "3cdedb3bcb9164b31a5798f604b578c07fe1e54059947c3041e217b40b300e74",
     # D063: and the compose_gesture example re-timed (were f932d346fe16... / 469a6144f730... / 0f6585445b0e...)
-    "cockpit_brains.TOOLS": "5b0913fd43bbcd723d1ee765198b62b3af6e96511d6b6f6ee1b1b695fe2460d9",
-    "rep look extra": "db239aed3dd178828da3f578a2796f17a3ade5036ffcf43fa99b9025ee0ddf1e",
-    "rep no-look extra": "c8250a8c8883364d5522031293ccc4412048e1dbc1cdb2bd14085d58d16f7537",
+    # 2026-10-15: + turn, offered to the models, in every list with the cockpit's EXTRA_TOOLS
+    # (were 5b0913fd43bb... / db239aed3dd1... / c8250a8c8883...)
+    "cockpit_brains.TOOLS": "50b8d3a4dede460d758200bc2104e1c57afc87ef2cf06e3456aa1a81eca37975",
+    "rep look extra": "a1e256c33418c05ea94b974b2e6c965db7c0eca90c4c8efa11aaae19e19e2b26",
+    "rep no-look extra": "46b21aa50d03a0ec98747342b81ddddecf70e741227065c276cea00d681fb2f2",
     "rep look": "7c81153ffbd2f8e01bca1cff298f80b07086f11d75dcc04834086a859ad17df4",
     "rep signed sidestep": "dffc21bcf60463e0e5a0bdfba8c2186b9d06e5f6532f99ad5cd1237f79bf4bba",
 }
@@ -593,8 +595,16 @@ B116_GOTO_TOO_FAR = ("(too far: ~0.034 m/s, 55 s cap — a detour may extend it 
 
 
 def _as_of_d063(tools):
+    """D063's two texts, and (2026-10-15) turn inserted after forget in a list that has the cockpit's
+    tools (EXTRA_TOOLS): the registry's one row, every other tool still the snapshot's."""
     import harness.capabilities as C
     out = json.loads(json.dumps(tools))
+    names = [t["function"]["name"] for t in out]
+    if "forget" in names and "turn" not in names:
+        turn = next(t for t in C.to_openai_tools(C.build(None, None, has_eye=True, has_memory=True,
+                                                         is_cockpit=True)) if t["function"]["name"] == "turn")
+        assert turn["function"]["description"] == C.TURN_DOC
+        out.insert(names.index("forget") + 1, turn)
     for t in out:
         f = t["function"]
         if f["name"] == "compose_gesture":

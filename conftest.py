@@ -13,6 +13,9 @@ own cockpit, the MCP server) inherit it. `rocky.sh test` does the same.
 import os
 
 os.environ.setdefault("ROCKY_ENV_FILE", os.devnull)
+# and never this machine's GPU: sim/gpu_check.py would refuse model calls while another program
+# (ComfyUI, a game) fills it, so a test's answer would depend on what happens to be running
+os.environ.setdefault("ROCKY_GPU_CHECK", "0")
 
 # cad/test_viewer.py is a browser script (it drives the viewer at import time), not a
 # pytest module: run it directly (`python3 cad/test_viewer.py`), never collect it.
