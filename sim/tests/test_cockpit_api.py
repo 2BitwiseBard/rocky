@@ -1017,3 +1017,57 @@ def test_sim2real_refusal_covers_a_void_retreat_and_a_hot_servo():
     assert sim2.sim2real_refusal() is None
     sim2.thermal.heat[7] = 1.1 * sim2.thermal.budget
     assert "past the thermal budget" in sim2.sim2real_refusal() and "leg 2 hip" in sim2.sim2real_refusal()
+
+
+def test_a_line_from_one_screen_shows_on_every_screen(cockpit_client):
+    sim, c = cockpit_client
+    mode0 = c.get("/api/models").json()["brain"]["mode"]
+    c.post("/api/brain", json={"mode": "talk"})
+    seq0 = c.get("/api/chat/feed?after=0").json()["seq"]
+    r = c.post("/api/chat", json={"text": "stop", "page": "phoneA1", "label": "phone"}).json()
+    assert r["mode"] == "talk"
+    _wait(lambda: c.get("/api/state").json().get("chat_seq", 0) > seq0)
+    assert c.get("/api/state").json()["chat_seq"] > seq0                   # rides the state feed
+    lines = c.get(f"/api/chat/feed?after={seq0}").json()["entries"]
+    assert lines[0]["kind"] == "u" and lines[0]["text"] == "you: stop" and lines[0]["label"] == "phone"
+    assert lines[-1]["kind"] == "b" and lines[-1]["text"].startswith("pebble-brain [talk")
+    assert {e["page"] for e in lines} == {"phoneA1"}
+    c.post("/api/chat/clear", json={"mode": "talk", "page": "deskB2"})
+    assert c.get(f"/api/chat/feed?after={lines[-1]['seq']}").json()["entries"][0]["kind"] == "clear"
+    c.post("/api/brain", json={"mode": mode0})
+
+
+def test_models_panel_routes_and_the_admin_gate(cockpit_client, tmp_path, monkeypatch):
+    """2026-10-15: /api/admin/*. TestClient's peer is 'testclient', not loopback: it stands for the
+    phone, so a risky action is desktop-only without a PIN (403), opens with the right PIN, and the
+    reads and dry runs answer either way."""
+    sim, c = cockpit_client
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text('models:\n  "m":\n    name: "M"\n    cmd: |\n      /bin/x\n      -m /nonexistent/M.gguf\n      -c 4096\n')
+    (tmp_path / "manifest.json").write_text('{"models": []}\n')
+    for k, v in {"ROCKY_SWAP_CONFIG": cfg, "ROCKY_SWAP_MANIFEST": tmp_path / "manifest.json",
+                 "ROCKY_MODELS_DIR": tmp_path, "ROCKY_DOWNLOADS_DIR": tmp_path / "dl",
+                 "ROCKY_BENCH_DIR": tmp_path / "bench", "ROCKY_HF_SOURCES": tmp_path / "hf_sources.json"}.items():
+        monkeypatch.setenv(k, str(v))
+    monkeypatch.setattr(sim.model_admin, "running", lambda: ([], False))     # no llama-swap in a test
+    monkeypatch.setattr(sim.model_admin.gate, "pin", "")
+    r = c.get("/api/admin/models").json()
+    assert [m["id"] for m in r["models"]] == ["m"] and r["models"][0]["missing"] == ["/nonexistent/M.gguf"]
+    assert r["gate"]["local"] is False and "jobs" in r and "disk" in r
+    chk = c.post("/api/admin/edit", json={"id": "m", "changes": {"ctx": 8192}})
+    assert chk.status_code == 200 and chk.json()["changes"] == ["-c: 4096 → 8192"]
+    for url, body in (("/api/admin/edit", {"id": "m", "changes": {"ctx": 8192}, "apply": True}),
+                      ("/api/admin/delete", {"id": "m", "apply": True}), ("/api/admin/restart-swap", {}),
+                      ("/api/admin/trash/empty", {}), ("/api/admin/download", {"repo": "a/b", "files": ["x.gguf"]}),
+                      ("/api/admin/install", {"file": "x.gguf"})):
+        res = c.post(url, json=body)
+        assert res.status_code == 403 and "desktop-only" in res.json()["error"], url
+    assert "-c 4096" in cfg.read_text()                                        # nothing was written
+    monkeypatch.setattr(sim.model_admin.gate, "pin", "2468")
+    bad = c.post("/api/admin/edit", json={"id": "m", "changes": {"ctx": 8192}, "apply": True, "pin": "1111"})
+    assert bad.status_code == 403 and "wrong PIN" in bad.json()["error"]
+    ok = c.post("/api/admin/edit", json={"id": "m", "changes": {"ctx": 8192}, "apply": True, "pin": "2468"})
+    assert ok.status_code == 200 and ok.json()["applied"] and "-c 8192" in cfg.read_text()
+    assert c.post("/api/chat/cancel", json={}).json() == {"ok": True, "cancelled": 0}
+    monkeypatch.delenv("INVOCATION_ID", raising=False)                         # not under systemd: refused
+    assert c.post("/api/cockpit/restart", json={}).status_code == 409

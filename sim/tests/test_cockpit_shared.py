@@ -196,3 +196,41 @@ def test_guide_names_the_tailnet_address_and_every_verdict_code():
     pf = pytest.importorskip("pebble_feasibility")
     for code in pf.FAIL_CODES + pf.WARN_CODES:
         assert f"`{code}`" in guide, code
+
+
+# ------------------------------------------------------------------ the chat feed (every screen's conversation)
+def test_a_turn_is_logged_in_the_order_the_page_draws_it():
+    f = cs.ChatFeed()
+    n = f.turn("walk forward", "voice", page="pA1", label="phone")
+    f.finish(n, {"mode": "local", "model": "qwen3.5-9b", "reply": "walking", "fallback": ["9b was cold"],
+                 "trace": [{"tool": "move", "args": {"forward_m": 0.3}, "result": {"ok": True}}],
+                 "motion_blocked": True}, 2.04, page="pA1", label="phone")
+    seq, lines = f.since(0)
+    assert seq == 5 and [e["kind"] for e in lines] == ["u", "n", "t", "n", "b"]
+    assert lines[0]["text"] == "🎤 you: walk forward" and lines[1]["text"] == "↪ 9b was cold"
+    assert lines[2]["text"] == 'move({"forward_m":0.3}) → {"ok":true}'
+    assert lines[4]["text"] == "pebble-brain [local · qwen3.5-9b · 2.0 s]: walking"
+    assert {(e["turn"], e["page"], e["label"]) for e in lines} == {(n, "pA1", "phone")}
+    assert [e["seq"] for e in f.since(3)[1]] == [4, 5]
+
+
+def test_the_feed_is_a_ring_and_cleans_what_a_page_sends():
+    f = cs.ChatFeed(keep=3)
+    for i in range(5):
+        f.add("n", f"line {i}", page="bad page id!", label="Robot<script>")
+    seq, lines = f.since(0)
+    assert seq == 5 and [e["text"] for e in lines] == ["line 2", "line 3", "line 4"]
+    assert all(e["page"] is None and e["label"] is None for e in lines)
+    with pytest.raises(ValueError):
+        f.add("html", "x")
+    f.finish(f.turn("x"), {"error": "no brain", "trace": []}, 0.1)
+    assert f.since(5)[1][-1]["text"] == "chat failed: no brain"
+
+
+def test_the_feed_route():
+    sim, c = _client()
+    cs.chat_feed(sim).add("b", "hello", page="pB2", label="desktop")
+    r = c.get("/api/chat/feed?after=0").json()
+    assert r["ok"] and r["seq"] == 1 and r["entries"][0]["text"] == "hello"
+    assert c.get("/api/chat/feed?after=1").json()["entries"] == []
+    assert c.get("/api/chat/feed?after=x").status_code == 400

@@ -13,7 +13,13 @@
 #                                  It binds loopback only: for the phone use `rocky.sh tailnet`
 #                                  (HTTPS, tailnet-only); --unsafe-lan is the one way to bind a
 #                                  non-loopback address and it has no auth (D052)
-#   rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background)
+#   rocky.sh cockpit-stop          stop a cockpit started elsewhere (e.g. in the background, or the service)
+#   rocky.sh cockpit-service [install|start|restart|stop|status|logs [N]|disable|uninstall]
+#                                  the cockpit as the systemd user unit rocky-cockpit.service: starts at
+#                                  login, restarts after a crash and on the page's ⟳ restart button.
+#                                  install writes + enables it (starts at the next login; `start` now
+#                                  replaces a cockpit running in a terminal); disable keeps the unit but
+#                                  not the login start. While it runs, `rocky.sh cockpit` stops it first
 #   rocky.sh tailnet [PORT]        publish the cockpit on the tailnet over HTTPS via
 #                                  `tailscale serve` (https port: PORT, else ROCKY_TAILNET_PORT,
 #                                  default 9445) and print its https://<machine>.<tailnet>.ts.net
@@ -104,6 +110,11 @@ case "$cmd" in
     # world editor, RL panel — on one running sim; `chat` drives it too. The LLM key comes
     # from ROCKY_LLM_API_KEY / ROCKY_LLM_KEY_FILE (sim/envfile.py)
     cd "$ROCKY_REPO"
+    # a terminal run while the service has it: stop the service (else systemd and this fight over :8765)
+    if [[ -z "${INVOCATION_ID:-}" ]] && systemctl --user is-active --quiet rocky-cockpit.service 2>/dev/null; then
+      echo "cockpit: stopping rocky-cockpit.service for this terminal run (back with: ./rocky.sh cockpit-service start)"
+      systemctl --user stop rocky-cockpit.service
+    fi
     for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p"; done   # one cockpit at a time
     # D052 voice: a fast whisper (the reference setup: base.en, CPU greedy, ~1 s per command) when
     # ROCKY_WHISPER_FAST_URL answers, else ROCKY_WHISPER_URL (default :8082; the reference's
@@ -115,7 +126,52 @@ case "$cmd" in
     MUJOCO_GL=egl exec "$PY" sim/cockpit.py "$@" ;;
 
   cockpit-stop)
+    if systemctl --user is-active --quiet rocky-cockpit.service 2>/dev/null; then
+      systemctl --user stop rocky-cockpit.service && echo "stopped rocky-cockpit.service"
+    fi
     for p in $(pgrep -f "^[^ ]*python sim/cockpit.py"); do kill "$p" && echo "stopped $p"; done ;;
+
+  cockpit-service)
+    # 2026-10-15: the owner's cockpit as a user unit. Exit 75 = the page's restart button
+    # (RestartForceExitStatus); the page's quit (exit 0) and cockpit-stop leave it stopped.
+    UNIT=rocky-cockpit.service
+    UDIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+    case "${1:-status}" in
+      install)
+        mkdir -p "$UDIR"
+        cat > "$UDIR/$UNIT" <<UNIT_EOF
+# written by rocky.sh cockpit-service install — rerun it after moving the repo
+[Unit]
+Description=ROCKY cockpit (browser playground, 127.0.0.1:${ROCKY_COCKPIT_PORT:-8765})
+Documentation=file://$ROCKY_REPO/docs/COCKPIT_GUIDE.md
+After=llama-swap.service
+
+[Service]
+Type=simple
+WorkingDirectory=$ROCKY_REPO
+ExecStart=$ROCKY_REPO/rocky.sh cockpit
+Restart=on-failure
+RestartSec=3
+RestartForceExitStatus=75
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target
+UNIT_EOF
+        systemctl --user daemon-reload
+        systemctl --user enable "$UNIT"
+        echo "installed + enabled $UDIR/$UNIT — it starts at login; start it now with: ./rocky.sh cockpit-service start" ;;
+      start|restart)
+        systemctl --user restart "$UNIT" && echo "rocky-cockpit.service (re)started — http://127.0.0.1:${ROCKY_COCKPIT_PORT:-8765}" ;;
+      stop) systemctl --user stop "$UNIT" ;;
+      disable) systemctl --user disable "$UNIT" && echo "no longer starts at login (still installed)" ;;
+      status) systemctl --user status "$UNIT" --no-pager || true ;;
+      logs) journalctl --user -u "$UNIT" -n "${2:-80}" --no-pager ;;
+      uninstall)
+        systemctl --user disable --now "$UNIT" 2>/dev/null || true
+        rm -f "$UDIR/$UNIT"; systemctl --user daemon-reload; echo "removed $UNIT" ;;
+      *) echo "usage: rocky.sh cockpit-service [install|start|restart|stop|status|logs [N]|disable|uninstall]" >&2; exit 2 ;;
+    esac ;;
 
   tailnet)
     # D051: the cockpit stays bound to 127.0.0.1; tailscale serve terminates HTTPS with a

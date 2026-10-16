@@ -69,6 +69,8 @@
   .verdict { font: 12px/1.45 ui-monospace, monospace; padding:6px 8px; border-radius:6px; background:var(--bg); border:1px solid var(--line); white-space:pre-wrap; overflow-wrap:anywhere; }
   .v-pass { border-color:var(--ok); color:var(--ok); } .v-warn { border-color:var(--warn); color:var(--warn); } .v-fail { border-color:var(--bad); color:var(--bad); }
   .note-warn { color:var(--warn); font-size:12px; } .note-bad { color:var(--bad); font-size:12px; }
+  #g-talk .row.unused label, #g-talk .row.unused select { opacity:.45; } #g-talk .row.unused label::after { content:' (not this mode)'; font-size:11px; }
+  #brain-activity:not(:empty), #drive-brain .busy { color:var(--warn); }
   .banner { background:#3b1d24; color:var(--bad); padding:6px 8px; border-radius:6px; font-weight:600; }
   .legstrip { display:flex; gap:4px; flex-wrap:wrap; }
   .leg { padding:3px 7px; border-radius:6px; background:var(--panel2); font-size:12px; min-width:62px; }
@@ -84,6 +86,26 @@
   #status-clear { align-self:flex-start; }
   #guide-back { align-self:flex-start; position:sticky; top:52px; z-index:4; box-shadow:0 2px 10px rgba(0,0,0,.5); }   /* stays in reach while reading */
   kbd { background:var(--panel2); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-size:11px; }
+
+  /* ---- Models panel (2026-10-15): one card per llama-swap model, add / install / bench jobs */
+  #mdl-list, #mdl-jobs, #hf-results, #dl-list { display:flex; flex-direction:column; gap:6px; }
+  .mcard { border:1px solid var(--line); border-radius:8px; padding:8px; background:var(--bg); display:flex; flex-direction:column; gap:4px; min-width:0; }
+  .mcard.loaded { border-color:var(--ok); } .mcard.quar { opacity:.55; }
+  .mcard .mhead { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .mcard .mid { font-weight:600; overflow-wrap:anywhere; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:999px; background:var(--panel2); color:var(--muted); white-space:nowrap; }
+  .tag.ok { color:var(--ok); } .tag.warn { color:var(--warn); } .tag.bad { color:var(--bad); } .tag.acc { color:var(--accent); }
+  .mdesc { font-size:12px; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; overflow-wrap:anywhere; }
+  .mdesc.open { display:block; }
+  .acts { display:flex; gap:4px; flex-wrap:wrap; } .acts button, .acts select { font-size:12px; padding:4px 8px; }
+  .medit { display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 8px; align-items:center; font-size:12px; }
+  .medit input, .medit textarea { width:100%; } .medit label { color:var(--muted); }
+  .mmsg:empty { display:none; } .mmsg { font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .hfrow { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:6px; align-items:center; font-size:12px; }
+  .hfrow .fname { overflow-wrap:anywhere; }
+  progress.job { width:100%; height:8px; accent-color:var(--accent); }
+  .job { border:1px solid var(--line); border-radius:8px; padding:6px 8px; background:var(--bg); }
+  .job pre { font-size:11px; margin:4px 0 0; max-height:120px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; color:var(--muted); }
 
   /* ---- tabs: five groups of panels (Drive / Talk / Make / World / Robot) */
   .group { display:none; }
@@ -277,7 +299,7 @@
         <div id="status-line">—</div>
         <button id="status-clear" class="danger" style="display:none" title="release the void guard / the latched safe-stop (the console's clear)">clear the guard</button>
         <div id="sit-ticker" role="button" tabindex="0" title="the robot's situation (awareness): tap for the Memory panel"><b>◉</b><span id="sit-text">no situation yet</span><span id="sit-age"></span></div>
-        <div id="drive-talk"><div class="small" id="drive-reply" title="the brain's last answer — the whole conversation is in the Talk tab"></div></div>
+        <div id="drive-talk"><div class="small" id="drive-brain" role="button" tabindex="0" title="the brain answering the chat box: tap for the Talk tab (mode and models)"></div><div class="small" id="drive-reply" title="the brain's last answer — the whole conversation is in the Talk tab"></div></div>
         <div class="note-warn" id="teleop-held" style="display:none"></div>
         <div class="grid3 dpad">
           <button data-k="Q" class="mv" title="turn left (Q)">↺ Q</button><button data-k="up" class="mv" title="forward (W / ↑)">▲</button><button data-k="E" class="mv" title="turn right (E)">↻ E</button>
@@ -316,17 +338,39 @@
             <option value="claude">Claude (API key)</option>
           </select>
         </div>
-        <div class="row"><label>brain</label><select id="model" style="flex:1"></select></div>
-        <div class="row"><label>vision</label><select id="vmodel" style="flex:1"></select><button id="look">👁 look</button></div>
-        <div class="row"><label>multimodal</label><select id="mmodel" style="flex:1"></select></div>
+        <div class="row" data-role="local"><label title="Local mode: this model reads your line and calls the tools">brain</label><select id="model" style="flex:1"></select></div>
+        <div class="row" data-role="local"><label title="Local mode: the brain's look tool (and find) ask this model what the eye sees">vision</label><select id="vmodel" style="flex:1"></select><button id="look" title="describe the eye now (multimodal mode: the multimodal model looks)">👁 look</button></div>
+        <div class="row" data-role="multimodal"><label title="Multimodal mode: ONE model sees the eye, reads your line and calls the tools (it also does the looks)">multimodal</label><select id="mmodel" style="flex:1"></select></div>
         <div class="row"><label>stt</label><input id="stt" style="flex:1" title="whisper model name"><button id="stt-set">set</button></div>
+        <div class="row"><div class="small" id="brain-plan" style="flex:1"></div><button id="brain-warm" title="load this mode's models now, so the first command does not wait for a cold load">warm up</button></div>
+        <div class="row"><div class="small" id="brain-gpu" style="flex:1"></div><button id="gpu-free" style="display:none" title="ComfyUI keeps its models on the GPU after a job: this asks it to unload them (only when its queue is empty)">free ComfyUI</button><a href="#" id="to-models" class="small" title="load / unload / download / install / bench / settings">models ›</a></div>
         <div class="small" id="brain-fallbacks"></div>
+        <div class="small" id="brain-activity"></div>
         <div class="note-warn" id="brain-pair"></div>
         <div class="note-bad" id="brain-err"></div>
         <div id="chat"></div>
-        <div id="talkbar"><div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1; min-width:160px"><button id="chat-send" class="primary">send</button><button id="mic" title="hold to talk, or tap to start / tap to stop">🎤</button><label class="small tick" for="handsfree" title="listen continuously: speak, pause, and it goes — the voice gate below decides what may move the robot"><input id="handsfree" type="checkbox"> hands-free</label><button id="chat-clear" title="forget the conversation">clear</button></div>
+        <div id="talkbar"><div class="row"><input id="chat-in" placeholder="say hi and walk forward 30 cm · what do you see? · go to (0.5, 0)" style="flex:1; min-width:160px"><button id="chat-send" class="primary">send</button><button id="chat-cancel" class="danger" style="display:none" title="cancel the model turn that is running (moving legs keep going: STOP stops them)">⏹ cancel</button><button id="mic" title="hold to talk, or tap to start / tap to stop">🎤</button><label class="small tick" for="handsfree" title="listen continuously: speak, pause, and it goes — the voice gate below decides what may move the robot"><input id="handsfree" type="checkbox"> hands-free</label><button id="chat-clear" title="forget the conversation">clear</button></div>
         <div class="note-warn" id="voice-note"></div></div>
         <div class="small" id="claude-note"></div>
+      </div></details>
+      <details id="p-models"><summary><span>Models</span><a href="#" class="qhelp" data-guide="models" title="guide: models">?</a></summary><div class="body">
+        <div class="small" id="mdl-head">open to load…</div>
+        <div class="row"><button id="mdl-unload-all" title="unload every model llama-swap has loaded (the always-on embeddings stay)">unload all</button><button id="mdl-restart-swap" class="danger" title="restart llama-swap: needed after a settings change; unloads EVERY model (Open WebUI, pi and the digests too)">restart llama-swap</button><button id="mdl-refresh">refresh</button><button id="mdl-trash" class="danger" style="display:none" title="delete the trashed model files for good (frees the disk)">empty trash</button></div>
+        <div class="row" id="mdl-gate-row"><span class="small" id="mdl-gate" style="flex:1"></span><input id="mdl-pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" style="width:110px; display:none" title="ROCKY_ADMIN_PIN from rocky.env"></div>
+        <div class="row"><label>show</label><select id="mdl-filter"><option value="chat">chat models</option><option value="all">everything (embeddings, lab)</option></select></div>
+        <div id="mdl-jobs"></div>
+        <div id="mdl-list"></div>
+        <details id="p-mdl-add"><summary><span>Add a model</span></summary><div class="body">
+          <div class="row"><input id="hf-q" placeholder="search Hugging Face: qwen3.5, gemma 4 …" style="flex:1; min-width:140px"><button id="hf-search">search</button></div>
+          <div id="hf-results"></div>
+          <div class="row"><input id="hf-repo" placeholder="repo: unsloth/Qwen3.5-4B-GGUF" style="flex:1; min-width:140px"><button id="hf-list">files</button></div>
+          <div id="hf-files"></div>
+          <div class="small">Downloads land in the downloads folder (<span id="dl-dir">~/Downloads</span>) as <i>.part</i> until complete (resumable; size + sha256 checked). Then <b>Install</b> moves it to the models drive, finds its vision file, writes a llama-swap entry (UNMEASURED until benched) and restarts llama-swap.</div>
+          <div class="small"><b>Ready to install</b></div>
+          <div id="dl-list"></div>
+          <pre id="install-plan" class="report" style="display:none"></pre>
+        </div></details>
+        <div class="row small" id="mdl-service"></div>
       </div></details>
       <details id="p-wake" open><summary><span>Wake word</span><a href="#" class="qhelp" data-guide="the-wake-word" title="guide: the wake word">?</a></summary><div class="body">
         <div class="small" id="wake-explain">
@@ -865,7 +909,8 @@ es.onmessage = e => {
   $('#h-mode').textContent = s.mode + (s.gesture_phase ? ` (gesture ${s.gesture_phase})` : '');
   $('#h-pose').textContent = `${s.pose.x.toFixed(2)}, ${s.pose.y.toFixed(2)} m  ${s.pose.yaw_deg}°`;
   $('#h-tilt').textContent = s.tilt + '°'; $('#h-world').textContent = s.world; $('#h-t').textContent = s.t.toFixed(1) + ' s';
-  $('#h-brain').textContent = s.brain.mode + (s.brain.model ? ' · ' + s.brain.model : '');
+  renderBrain(s);
+  if (s.chat_seq !== undefined && (s.chat_seq !== FEED.seq || !FEED.loaded)) syncFeed();
   renderGuards(s); renderFingerprint(s); renderSim2realGate(s);
   const g = s.guards || {};
   const probe = (g.probe_state || []).map((p, i) => p[0] + (g.probe_dz && g.probe_dz[i] > 0.5 ? Math.round(g.probe_dz[i]) : '')).join(' ');
@@ -1011,36 +1056,104 @@ $('#eye').onclick = () => $('#eye').style.opacity = $('#eye').style.opacity === 
 for (const id of ['cam-az','cam-el','cam-d']) $('#' + id).oninput = () => post('/api/camera', {azimuth: +$('#cam-az').value, elevation: +$('#cam-el').value, distance: +$('#cam-d').value});
 
 // ---- brain & chat (D052 roles: brain / vision / multimodal / stt, warm-cold, fallbacks)
-let pendingVoice = null;
+// 2026-10-15: which models a mode loads is shown as a plan (#brain-plan), the GPU's holders under it,
+// rows the mode does not use are dimmed, the running call ticks in #brain-activity / #drive-brain,
+// and the mode follows the server (another screen's pick) instead of each screen sending its own.
+let pendingVoice = null, MODELS = null;
+const MODE_ROWS = {talk: [], local: ['local'], multimodal: ['multimodal'], claude: []};
+function activeModel(b) { return ({talk: '', local: b.model, multimodal: b.multimodal_model, claude: b.claude_model})[b.mode] || ''; }
+function modelState(id) {   // 'tool-model → qwen3.6-35b-a3b ● warm' from the last catalog
+  const e = MODELS && (MODELS.catalog || []).find(x => x.id === id);
+  if (!e) return id;
+  return id + (e.selector && e.targets && e.targets.length ? ' → ' + e.targets[0] : '') + (e.loaded ? ' ● warm' : ' ○ cold');
+}
 function roleOptions(list, cur) {
   const ids = list.map(e => e.id); if (cur && !ids.includes(cur)) list = [{id: cur, loaded: false, missing: true}, ...list];
-  return list.map(e => `<option value="${esc(e.id)}"${e.id === cur ? ' selected' : ''}>${esc(e.id)} ${e.missing ? '(not on the server)' : e.loaded ? '● warm' : '○ cold'}${e.selector ? ' · selector' : ''}</option>`).join('');
+  return list.map(e => {
+    const to = e.selector && e.targets && e.targets.length ? ` → ${e.targets[0]}` : '';
+    const about = (e.name || '') + (e.description ? ' — ' + e.description : '');
+    const slow = /EXPERIMENTAL|PREFILL|SSD-stream/i.test(about) ? ' ⚠ slow' : '';
+    const st = e.missing ? '(not on the server)' : e.loaded ? '● warm' : '○ cold';
+    return `<option value="${esc(e.id)}" title="${esc(about)}"${e.id === cur ? ' selected' : ''}>${esc(e.id + to)} ${st}${slow}</option>`;
+  }).join('');
+}
+function markRoles(mode) {
+  const used = MODE_ROWS[mode] || [];
+  document.querySelectorAll('#g-talk .row[data-role]').forEach(r => r.classList.toggle('unused', !used.includes(r.dataset.role)));
 }
 async function loadModels() {
-  const m = await getj('/api/models');
-  const cat = (m.catalog || []).filter(e => !e.quarantined), b = m.brain || {};
+  let m;
+  try { m = await getj('/api/models'); } catch (e) { $('#brain-plan').textContent = 'the cockpit did not answer: ' + e.message; return null; }
+  MODELS = m;
+  const cat = (m.catalog || []).filter(e => !e.quarantined), b = m.brain || {}, mode = b.mode;
   $('#model').innerHTML = roleOptions(cat, b.model) || '<option>(model server not reachable)</option>';
   $('#vmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.vision_model);
   $('#mmodel').innerHTML = roleOptions(cat.filter(e => e.vision), b.multimodal_model);
   $('#stt').value = b.stt_model || (m.stt && m.stt.model) || '';
-  $('#mode').value = b.mode;
-  const fb = m.fallbacks || {};
-  $('#brain-fallbacks').textContent = (m.reachable ? '' : 'model server NOT reachable — talk mode only. ') +
-    Object.entries(fb).map(([r, c]) => `${r}: ${c.join(' → ')}`).join(' · ') + (m.quarantined && m.quarantined.length ? ` · quarantined (never used): ${m.quarantined.join(', ')}` : '');
+  if (document.activeElement !== $('#mode')) $('#mode').value = mode;
+  $('#mode').querySelector('option[value=claude]').textContent = m.claude ? 'Claude (API key)' : 'Claude (no API key — see below)';
+  markRoles(mode);
+  const plan = (m.plan || {})[mode] || [];
+  $('#brain-plan').innerHTML = !m.reachable ? '<span class="note-bad">model server NOT reachable — only Talk (regex) works</span>'
+    : mode === 'talk' ? 'Talk mode uses no model (the regex brain).'
+    : mode === 'claude' ? `Claude mode: ${esc(b.claude_model)} over the API${m.claude ? '' : ' — no API key'}; nothing loads here.`
+    : 'This mode loads: ' + plan.map(r => `${esc(r.role)} <b>${esc(r.resolves)}</b>${r.resolves !== r.model ? ` (via ${esc(r.model)})` : ''} ${r.loaded ? '● warm' : '○ cold'}`).join(' + ');
+  $('#brain-warm').disabled = !m.reachable || !['local', 'multimodal'].includes(mode) || (plan.length > 0 && plan.every(r => r.loaded));
+  const g = m.gpu;
+  $('#brain-gpu').className = m.gpu_blocked ? 'note-bad' : 'small';
+  $('#brain-gpu').textContent = m.gpu_blocked ? '⚠ ' + m.gpu_blocked
+    : g ? `GPU ${(g.used_mib / 1024).toFixed(1)} / ${(g.total_mib / 1024).toFixed(0)} GB — ` + ((g.holders || []).map(h => `${h.name} ${(h.mib / 1024).toFixed(1)} GB`).join(', ') || 'nothing loaded') : '';
+  const comfy = g && (g.holders || []).find(h => /comfyui/i.test(h.name) && h.mib > 1024);
+  $('#gpu-free').style.display = comfy ? '' : 'none';
+  $('#gpu-free').textContent = comfy ? `free ComfyUI (${(comfy.mib / 1024).toFixed(1)} GB)` : 'free ComfyUI';
+  const fb = m.fallbacks || {}, pol = m.policy || {};
+  const chainOf = r => (fb[r] || []).join(' → ');
+  const fbText = mode === 'local' ? `brain ${chainOf('brain')} · look ${chainOf('vision')}`
+    : mode === 'multimodal' ? `${chainOf('multimodal')}, then the text brain ${chainOf('brain')}` : '';
+  $('#brain-fallbacks').textContent = fbText ? `if a model fails: ${fbText}. Warm models are tried freely; at most ${pol.max_cold_fallbacks ?? 1} model you did not pick is loaded per turn.`
+    + (m.quarantined && m.quarantined.length ? ` Never used: ${m.quarantined.join(', ')}.` : '') : '';
   const byId = Object.fromEntries((m.catalog || []).map(e => [e.id, e]));
   const weights = id => { const e = byId[id]; return e && e.selector && e.targets && e.targets.length ? e.targets : [id]; };   // a selector resolves to its targets
   const pair = m.coresident || [];   // ROCKY_CORESIDENT: the brain + vision pair that fits the GPU together (none: no check)
-  const paired = pair.length < 2 || (weights(b.model).includes(pair[0]) && weights(b.vision_model).includes(pair[1]));
+  const paired = mode !== 'local' || pair.length < 2 || (weights(b.model).includes(pair[0]) && weights(b.vision_model).includes(pair[1]));
   $('#brain-pair').textContent = paired ? '' :
     `brain ${b.model} + vision ${b.vision_model} are not the ${pair[0]} + ${pair[1]} pair that shares the GPU (ROCKY_CORESIDENT): every look may swap models (seconds to minutes).`;
   $('#claude-note').textContent = m.claude ? 'Claude API: available' : 'Claude mode without an API key: run ./rocky.sh chat in a terminal — with the cockpit up, Claude Code drives this sim over MCP.';
   return m;
 }
 loadModels();
-async function setRole(body) {
-  const r = await post('/api/brain', body);
-  $('#brain-err').textContent = (r.errors || []).join('; ');
+function renderBrain(s) {   // every feed frame: header chip, Drive line, the running call, another screen's picks
+  const b = s.brain || {}, act = activeModel(b), a = s.brain_activity;
+  $('#h-brain').textContent = b.mode + (act ? ' · ' + act : '');
+  const sig = [b.mode, b.model, b.vision_model, b.multimodal_model].join('|');
+  if (renderBrain.sig !== undefined && sig !== renderBrain.sig) loadModels();
+  renderBrain.sig = sig;
+  const busy = a ? `${a.cold ? '⏳ loading' : '🧠 asking'} ${a.model} (${a.stage}${a.cold ? ', cold: a load takes 10–40 s' : ''}) · ${Math.round(a.secs)} s`
+    + (a.tried && a.tried.length ? ` — after: ${a.tried.join('; ')}` : '') : '';
+  $('#brain-activity').textContent = s.brain_paused ? '⏸ ' + s.brain_paused : busy;
+  $('#chat-cancel').style.display = (chatInflight > 0 || a) && b.mode !== 'talk' ? '' : 'none';
+  $('#drive-brain').innerHTML = `🧠 ${esc(b.mode)}${act ? ' · ' + esc(MODELS ? modelState(act) : act) : ' (regex, no model)'}` + (busy ? ` <span class="busy">· ${esc(busy)}</span>` : '');
+  if (renderBrain.busy && !a) loadModels();          // a model call ended: warm / cold changed
+  renderBrain.busy = !!a;
+}
+async function warmUp(auto) {
+  const btn = $('#brain-warm'); btn.disabled = true; btn.textContent = 'loading…';
+  let r; try { r = await post('/api/brain/warm', {}); } catch (e) { r = {ok: false, errors: [e.message]}; }
+  btn.textContent = 'warm up';
+  if (!r.ok) $('#brain-err').textContent = 'warm up: ' + (r.errors || [r.error]).join('; ');
+  else if (!auto || (r.warmed || []).some(w => w.was === 'cold'))
+    addChat('n', 'warm: ' + ((r.warmed || []).map(w => w.model + (w.was === 'cold' ? ` loaded in ${w.load_s} s` : ' was already loaded')).join(', ') || r.note || 'nothing to load'));
   loadModels();
+}
+$('#brain-warm').onclick = () => warmUp(false);
+$('#drive-brain').onclick = () => openPanel('p-brain');
+$('#drive-brain').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel('p-brain'); } });
+async function setRole(body) {
+  let r; try { r = await post('/api/brain', body); } catch (e) { r = {errors: [e.message]}; }
+  $('#brain-err').textContent = (r.errors || []).join('; ');
+  const m = await loadModels();
+  // a pick loads what it picked, now — not on the first command, and never a model it did not pick
+  if (m && !(r.errors || []).length && ['local', 'multimodal'].includes((m.brain || {}).mode)) warmUp(true);
 }
 $('#mode').onchange = () => setRole({mode: $('#mode').value});
 $('#model').onchange = () => setRole({brain: $('#model').value});
@@ -1050,13 +1163,47 @@ $('#stt-set').onclick = () => setRole({stt: $('#stt').value.trim()});
 function addChat(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; $('#chat').appendChild(d); $('#chat').scrollTop = $('#chat').scrollHeight;
   if (cls === 'u') $('#drive-reply').textContent = text + '  …'; else if (cls === 'b' || cls === 'n') $('#drive-reply').textContent = text;   // the Drive tab's last-answer line
   return d; }
+// ---- one conversation on every screen (2026-10-15, cockpit_shared.ChatFeed): the server logs every
+// turn's lines; the feed's seq rides the state stream, and a page draws the lines OTHER pages sent (its own
+// it drew as they happened). A page opened mid-conversation backfills from the feed first.
+const PAGE_ID = 'p' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+const SCREEN_LABEL = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 700 ? 'phone' : 'desktop';
+const FEED = {seq: 0, busy: false, again: false, loaded: false};
+async function syncFeed() {
+  if (FEED.busy) { FEED.again = true; return; }
+  FEED.busy = true;
+  try {
+    do {
+      FEED.again = false;
+      const r = await getj('/api/chat/feed?after=' + FEED.seq);
+      if (!r.ok) break;
+      if (r.seq < FEED.seq) { FEED.seq = 0; FEED.again = true; continue; }   // the cockpit restarted: a new feed
+      for (const e of r.entries) {
+        if (FEED.loaded && e.page === PAGE_ID) continue;                       // drawn already, live
+        if (e.kind === 'clear') { $('#chat').innerHTML = ''; $('#drive-reply').textContent = ''; continue; }
+        const from = e.page !== PAGE_ID && e.kind === 'u' && e.label ? `[${e.label}] ` : '';
+        addChat(e.kind, from + e.text);
+      }
+      FEED.seq = r.seq; FEED.loaded = true;
+    } while (FEED.again);
+  } catch (e) { /* the next state message retries */ }
+  finally { FEED.busy = false; }
+}
 async function sendChat(t, source, trusted) {
   addChat('u', (source === 'voice' ? '🎤 you: ' : 'you: ') + t); const wait = addChat('t', '…');
   $('#voice-note').textContent = ''; pendingVoice = null;
-  const r = await post('/api/chat', {text: t, mode: $('#mode').value, source, trusted: !!trusted});
-  wait.remove();
+  const t0 = Date.now();
+  const tick = setInterval(() => { const a = lastState && lastState.brain_activity;
+    wait.textContent = `… ${Math.round((Date.now() - t0) / 1000)} s` + (a ? ` · ${a.cold ? 'loading' : 'asking'} ${a.model}` : ''); }, 500);
+  let r; chatInflight++; $('#chat-cancel').style.display = '';
+  // no mode in the body: the server's mode is the one the Talk tab shows (a phone left on another
+  // mode used to switch the desktop's back with its next line)
+  try { r = await post('/api/chat', {text: t, source, trusted: !!trusted, page: PAGE_ID, label: SCREEN_LABEL}); }
+  catch (e) { addChat('n', `chat failed: ${e.message} — the turn may still finish on the cockpit (see the console)`); return; }
+  finally { clearInterval(tick); wait.remove(); chatInflight--; if (!chatInflight && !(lastState && lastState.brain_activity)) $('#chat-cancel').style.display = 'none'; }
+  const took = ((Date.now() - t0) / 1000).toFixed(1);
   if (r.error && !r.trace) { addChat('n', 'chat failed: ' + r.error); return; }
-  for (const n of (r.fallback || [])) addChat('n', '↪ ' + n);
+  if (!String(r.reply || '').startsWith('[')) for (const n of (r.fallback || [])) addChat('n', '↪ ' + n);   // else the reply carries them
   if (r.gave_up) addChat('n', 'the brain gave up (hop limit) — answer below is partial');
   for (const c of (r.trace || [])) {
     const d = addChat('t', `${c.tool}(${JSON.stringify(c.args || {})}) → ${JSON.stringify(c.result).slice(0, 300)}`);
@@ -1069,7 +1216,7 @@ async function sendChat(t, source, trusted) {
     }
   }
   if (r.motion_blocked) addChat('n', `⚠ motion was blocked: a spoken motion command needs the name ("${WAKE.name}, …") or your Enter`);
-  addChat('b', `pebble-brain [${r.mode}${r.model ? ' · ' + r.model : ''}]: ${r.reply || '(no text)'}`);
+  addChat('b', `pebble-brain [${r.mode}${r.model ? ' · ' + r.model : ''} · ${took} s]: ${r.reply || '(no text)'}`);
 }
 $('#chat-send').onclick = () => {
   const t = $('#chat-in').value.trim(); if (!t) return; $('#chat-in').value = '';
@@ -1077,8 +1224,283 @@ $('#chat-send').onclick = () => {
   else sendChat(t, 'typed', false);
 };
 $('#chat-in').addEventListener('keydown', e => { if (e.key === 'Enter') $('#chat-send').click(); });
-$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value}); $('#chat').innerHTML = ''; $('#drive-reply').textContent = ''; };
-$('#look').onclick = async () => { const w = addChat('t', 'look…'); const r = await post('/api/look', {model: $('#vmodel').value}); w.remove(); addChat('b', r.ok ? `eye (${r.model}${r.fallback ? ', fallback' : ''}): ${r.description}` : 'look failed: ' + r.error); };
+$('#chat-clear').onclick = () => { post('/api/chat/clear', {mode: $('#mode').value, page: PAGE_ID, label: SCREEN_LABEL}); $('#chat').innerHTML = ''; $('#drive-reply').textContent = ''; };
+// the server picks the eye: the vision role, or in multimodal mode the multimodal model (no swap)
+$('#look').onclick = async () => { const w = addChat('t', 'look…'); let r;
+  try { r = await post('/api/look', {}); } catch (e) { r = {ok: false, error: e.message}; } finally { w.remove(); }
+  addChat('b', r.ok ? `eye (${r.model}${r.latency_s != null ? ', ' + r.latency_s + ' s' : ''}${r.fallback ? ', after: ' + r.fallback.join('; ') : ''}): ${r.description}` : 'look failed: ' + r.error); };
+// ---- Models panel (2026-10-15, sim/model_admin.py): every llama-swap model as a card — load /
+// unload, use as a role, bench, settings (ttl, context, image tokens, description), delete to the
+// trash — plus Add a model (Hugging Face search → download → install) and the jobs that run them.
+// Risky actions (download, install, settings, delete, restart, empty trash) need the desktop or
+// the PIN (ROCKY_ADMIN_PIN); the server decides, the page only greys out what it would refuse.
+let ADM = null, admTimer = null, admJobs = {}, admMsg = {};   // admMsg: a card's last message survives the refresh
+const GiB = 2 ** 30;
+const gbs = b => b == null ? '?' : (b / GiB).toFixed(1) + ' GB';
+const kctx = n => n == null ? 'model default' : n >= 1024 ? Math.round(n / 1024) + 'k' : String(n);
+const ttlTxt = t => !t ? 'stays loaded' : t >= 3600 ? `unloads after ${+(t / 3600).toFixed(1)} h idle` : `unloads after ${Math.round(t / 60)} min idle`;
+const ROLE_NAME = {model: 'brain', vision_model: 'eye', multimodal_model: 'multimodal'};
+const riskyOK = () => !!(ADM && ADM.gate && (ADM.gate.local || ADM.gate.pin_set));
+async function admPost(url, body, risky) {
+  body = body || {};
+  if (risky) body.pin = $('#mdl-pin').value;
+  let r; try { r = await post(url, body); } catch (e) { r = {ok: false, error: e.message}; }
+  if (r && r.ok === false && /PIN/.test(r.error || '')) $('#mdl-pin').focus();
+  return r;
+}
+function admSchedule() {
+  clearTimeout(admTimer);
+  if (!$('#p-models').open) return;
+  const busy = ADM && ((ADM.jobs || []).some(j => j.state === 'running') || (ADM.models || []).some(m => m.state === 'starting'));
+  admTimer = setTimeout(loadAdmin, busy ? 1500 : 8000);
+}
+async function loadAdmin() {
+  let a; try { a = await getj('/api/admin/models'); } catch (e) { $('#mdl-head').textContent = 'the cockpit did not answer: ' + e.message; admSchedule(); return; }
+  if (a.ok === false) { $('#mdl-head').innerHTML = `<span class="note-bad">${esc(a.error)}</span>`; admSchedule(); return; }
+  ADM = a; renderAdmin(); admSchedule();
+}
+function renderAdmin() {
+  const a = ADM, d = a.disk || {}, dm = d.models || {}, dd = d.downloads || {};
+  $('#mdl-head').innerHTML = `llama-swap ${esc(a.swap.version || '')} ${a.swap.up ? '<span class="tag ok">up</span>' : '<span class="tag bad">NOT reachable</span>'}`
+    + ` · models drive <b>${gbs(dm.free)}</b> free of ${gbs(dm.total)}` + (dm.trash_bytes ? ` · trash ${gbs(dm.trash_bytes)}` : '')
+    + (d.same_drive ? '' : ` · downloads ${gbs(dd.free)} free`)
+    + (a.paused ? `<div class="note-warn">${esc(a.paused)}</div>` : '');
+  $('#dl-dir').textContent = dd.path || '~/Downloads';
+  $('#mdl-trash').style.display = dm.trash_bytes ? '' : 'none';
+  $('#mdl-trash').textContent = `empty trash (${gbs(dm.trash_bytes)})`;
+  const g = a.gate || {};
+  $('#mdl-pin').style.display = g.needs_pin ? '' : 'none';
+  $('#mdl-gate').innerHTML = g.local ? 'This is the desktop: every action is open.'
+    : g.pin_set ? (g.locked ? '<span class="note-bad">Too many wrong PINs — locked for a while.</span>' : 'Download, install, settings, delete and restart need the PIN on this screen.')
+    : 'On this screen: load, unload, use, bench. Download / install / settings / delete / restart are desktop-only — set <span class="mono">ROCKY_ADMIN_PIN</span> in rocky.env (then restart the cockpit) to allow them here.';
+  for (const id of ['#mdl-restart-swap', '#mdl-trash']) $(id).disabled = !riskyOK();
+  renderCards(); renderJobs(); renderDownloads();
+  $('#mdl-service').innerHTML = a.service
+    ? 'Cockpit: running as <span class="mono">rocky-cockpit.service</span> <button data-cockpit-restart title="restart the cockpit (the service brings it back; this page reloads)">⟳ restart cockpit</button>'
+    : 'Cockpit: started from a terminal. <span class="mono">./rocky.sh cockpit-service install</span> makes it a service (starts at login, a restart button here).';
+  if ($('[data-cockpit-restart]')) $('[data-cockpit-restart]').onclick = restartCockpit;
+}
+function cardHTML(c) {
+  const st = c.state === 'ready' ? '<span class="tag ok">● loaded</span>' : c.state === 'starting' ? '<span class="tag warn">… loading</span>' : '<span class="tag">○ cold</span>';
+  const tags = [st, c.vision ? '<span class="tag">👁 vision</span>' : '', c.quarantined ? '<span class="tag bad">quarantined</span>' : '',
+    ...(c.roles || []).map(r => `<span class="tag acc">this cockpit's ${ROLE_NAME[r] || r}</span>`),
+    ...(c.member_of || []).map(m => `<span class="tag">${esc(m)}</span>`),
+    c.kind !== 'chat' ? `<span class="tag">${esc(c.kind)}</span>` : '',
+    c.caps && !c.caps.tools ? '<span class="tag warn" title="its chat template has no tool calls: it can talk, but it cannot drive the robot">chat only: no tools</span>' : '',
+    c.caps && c.caps.experts ? `<span class="tag" title="a mixture of experts (${c.caps.experts}); only some weights run per token">MoE</span>` : '',
+    c.caps && c.caps.family === 'generic' && c.kind === 'chat' ? `<span class="tag" title="architecture ${esc(c.caps.arch)}: no measured family rules in sim/brain_families.yaml">${esc(c.caps.arch)}</span>` : ''].join(' ');
+  const b = c.bench;
+  const bench = b ? `bench <b>${esc(b.commands)}</b> commands (${esc(String(b.date).slice(0, 10))}, ${esc(b.mode)})`
+    + (b.vram_mib ? ` · ${(b.vram_mib / 1024).toFixed(1)} GB VRAM` : '') + (b.tps ? ` · ${b.tps} t/s` : '') + (b.first_answer_s ? ` · cold ${b.first_answer_s} s` : '')
+    + (b.stop_missed ? ` · <span class="note-bad">${b.stop_missed} stop missed</span>` : '')
+    : (c.kind === 'chat' ? 'not benched on the robot' : '');
+  const facts = `${gbs(c.disk_bytes)} on disk · context ${kctx(c.ctx)} · ${ttlTxt(c.ttl)}` + (c.image_tokens ? ` · image ${c.image_tokens.map(x => x ?? '?').join('–')} tokens` : '');
+  const chat = c.kind === 'chat' && !c.quarantined;
+  const noTools = c.caps && !c.caps.tools ? ' disabled title="no tool calls in its template"' : '';
+  const use = chat ? `<select data-use="${esc(c.id)}" title="make this model one of the cockpit's roles (it loads now)"><option value="">use as…</option><option value="brain"${noTools}>brain (Local)</option>`
+    + (c.vision ? `<option value="vision">eye (Local)</option><option value="multimodal"${noTools}>multimodal</option>` : '') + '</select>' : '';
+  const R = riskyOK() ? '' : ' disabled title="desktop or PIN only"';
+  return `<div class="mcard${c.loaded ? ' loaded' : ''}${c.quarantined ? ' quar' : ''}" data-card="${esc(c.id)}">
+    <div class="mhead"><span class="mid">${esc(c.id)}</span> ${tags}</div>
+    <div class="mdesc" title="tap to expand">${esc(c.name)}${c.description ? ' — ' + esc(c.description) : ''}</div>
+    <div class="small">${facts}</div>
+    ${bench ? `<div class="small">${bench}</div>` : ''}
+    ${c.missing && c.missing.length ? `<div class="note-bad">missing on disk: ${esc(c.missing.join(', '))}</div>` : ''}
+    <div class="acts">
+      ${chat ? (c.state === 'ready' || c.state === 'starting' ? `<button data-act="unload">unload</button>` : `<button data-act="load" title="load it now (a 1-token call; the GPU check first)">load</button>`) : (c.state === 'ready' ? `<button data-act="unload">unload</button>` : '')}
+      ${use}
+      ${chat ? `<button data-act="bench" title="run the robot's brain bench on it (5–10 min; Local / Multimodal chat pauses meanwhile)">bench</button>` : ''}
+      ${c.editable ? `<button data-act="settings"${R}>settings</button>` : ''}
+      <button data-act="delete" class="danger"${c.deletable ? R : ` disabled title="${esc('kept: ' + c.delete_blockers.join('; '))}"`}>delete</button>
+    </div>
+    <div class="medit" style="display:none"></div>
+    <div class="mmsg ${(admMsg[c.id] || {}).cls || ''}">${(admMsg[c.id] || {}).html || ''}</div></div>`;
+}
+function renderCards() {
+  const f = $('#mdl-filter').value, rank = c => (c.loaded ? 0 : 4) + ((c.roles || []).length ? 0 : 2) + (c.quarantined ? 8 : 0);
+  const open = new Set([...document.querySelectorAll('.mcard')].filter(e => e.querySelector('.medit').style.display !== 'none').map(e => e.dataset.card));
+  const list = (ADM.models || []).filter(c => f === 'all' || c.kind === 'chat').sort((x, y) => rank(x) - rank(y));
+  if (open.size) {   // a settings form is open: refresh the facts only, never the form under the operator's fingers
+    for (const c of list) { const el = document.querySelector(`.mcard[data-card="${CSS.escape(c.id)}"]`); if (el && !open.has(c.id)) { el.outerHTML = cardHTML(c); } }
+  } else $('#mdl-list').innerHTML = list.map(cardHTML).join('') || '<span class="small">no models in the llama-swap config</span>';
+  document.querySelectorAll('.mcard').forEach(wireCard);
+}
+function cardMsg(el, html, cls) { const m = el.querySelector('.mmsg'); m.className = 'mmsg ' + (cls || ''); m.innerHTML = html; admMsg[el.dataset.card] = {html, cls}; }
+function wireCard(el) {
+  if (el.dataset.wired) return; el.dataset.wired = '1';
+  const id = el.dataset.card, c = () => (ADM.models || []).find(x => x.id === id) || {};
+  el.querySelector('.mdesc').onclick = e => e.currentTarget.classList.toggle('open');
+  const use = el.querySelector('[data-use]');
+  if (use) use.onchange = async () => { const role = use.value; if (!role) return; use.disabled = true; cardMsg(el, `making ${id} the ${role}… (it loads now)`);
+    await setRole({[role]: id}); use.disabled = false; use.value = ''; cardMsg(el, ''); loadAdmin(); };
+  el.querySelectorAll('[data-act]').forEach(btn => btn.onclick = async () => {
+    const act = btn.dataset.act; btn.disabled = true;
+    try {
+      if (act === 'load') {
+        cardMsg(el, `loading ${id}… (a cold load takes 10–40 s)`);
+        const r = await post('/api/admin/load', {id});
+        cardMsg(el, r.ok ? (r.was === 'warm' ? 'already loaded' : `loaded in ${r.load_s} s`) : esc(r.error), r.ok ? '' : 'note-bad');
+        loadModels();
+      } else if (act === 'unload') {
+        const r = await admPost('/api/admin/unload', {id});
+        cardMsg(el, r.ok ? 'unloaded' : esc(r.error), r.ok ? '' : 'note-bad'); loadModels();
+      } else if (act === 'bench') {
+        if (!confirm(`Bench ${id} on the robot's jobs?\n\nIt runs its own cockpit, loads ${id} (unloading the others) and takes 5–10 minutes. Local and Multimodal chat here pause meanwhile; Talk mode still works.`)) return;
+        const r = await admPost('/api/admin/bench', {id});
+        cardMsg(el, r.ok === false ? esc(r.error) : 'bench started — see the job above', r.ok === false ? 'note-bad' : '');
+      } else if (act === 'settings') {
+        openSettings(el, c());
+      } else if (act === 'delete') {
+        const p = await admPost('/api/admin/delete', {id, apply: false});
+        if (p.ok === false) { cardMsg(el, esc(p.error), 'note-bad'); return; }
+        const msg = `Delete ${id}?\n\n• its llama-swap entry is removed (backup kept) and llama-swap restarts — EVERY loaded model unloads (Open WebUI, pi too)\n`
+          + `• files moved to the trash on the models drive (undo: RESTORE.txt there):\n   ${p.move.join('\n   ') || '(none)'}\n`
+          + (p.keep.length ? `• kept: ${p.keep.join('; ')}\n` : '') + (p.manifest.length ? `• ${p.manifest.length} restore-manifest entr${p.manifest.length > 1 ? 'ies' : 'y'} removed\n` : '')
+          + `\nThe disk is freed (${gbs(p.frees_after_empty)}) when you empty the trash.`;
+        if (!confirm(msg)) return;
+        cardMsg(el, 'deleting…');
+        const r = await admPost('/api/admin/delete', {id, apply: true}, true);
+        cardMsg(el, r.ok === false ? esc(r.error) : `moved to ${esc(r.trash)} · ${esc(r.restart)}`, r.ok === false ? 'note-bad' : '');
+        loadModels(); setTimeout(loadAdmin, 300);
+      }
+    } finally { btn.disabled = false; }
+  });
+}
+function openSettings(el, c) {
+  const f = el.querySelector('.medit');
+  if (f.style.display !== 'none') { f.style.display = 'none'; return; }
+  const img = c.image_tokens;
+  f.innerHTML = `<label title="seconds idle before llama-swap unloads it; 0 = stays loaded">idle TTL, s</label><input data-k="ttl" type="number" min="0" max="86400" value="${c.ttl ?? 0}">`
+    + (c.ctx != null ? `<label title="-c: more context costs VRAM (unmeasured until warmed)">context</label><input data-k="ctx" type="number" min="2048" max="262144" step="1024" value="${c.ctx}">` : '')
+    + (img ? `<label>image min</label><input data-k="image_min_tokens" type="number" min="16" max="4096" value="${img[0] ?? ''}"><label title="over 512 needs -b/-ub as big (the server aborts otherwise — refused here)">image max</label><input data-k="image_max_tokens" type="number" min="16" max="4096" value="${img[1] ?? ''}">` : '')
+    + `<label>description</label><textarea data-k="description" rows="3">${esc(c.description)}</textarea>`
+    + `<span></span><div class="acts"><button data-s="check">check</button><button data-s="save" title="write the config (backup kept); llama-swap uses it after its next restart">save</button><button data-s="restart" class="primary" title="write it and restart llama-swap now (unloads every model)">save + restart llama-swap</button><button data-s="close">close</button></div>`;
+  f.style.display = 'grid';
+  const changes = () => { const o = {};
+    f.querySelectorAll('[data-k]').forEach(i => { const k = i.dataset.k, v = i.value.trim(), was = k === 'description' ? c.description : k === 'ttl' ? (c.ttl ?? 0) : k === 'ctx' ? c.ctx : img ? img[k === 'image_min_tokens' ? 0 : 1] : null;
+      if (v !== '' && String(v) !== String(was ?? '')) o[k] = k === 'description' ? v : +v; });
+    return o; };
+  f.querySelectorAll('[data-s]').forEach(b => b.onclick = async () => {
+    const s = b.dataset.s;
+    if (s === 'close') { f.style.display = 'none'; return; }
+    const ch = changes();
+    if (!Object.keys(ch).length) { cardMsg(el, 'nothing changed'); return; }
+    if (s === 'restart' && !confirm('Restart llama-swap now? Every loaded model unloads (Open WebUI, pi and the digests too).')) return;
+    b.disabled = true;
+    const r = await admPost('/api/admin/edit', {id: c.id, changes: ch, apply: s !== 'check', restart: s === 'restart'}, s !== 'check');
+    b.disabled = false;
+    if (r.ok === false) { cardMsg(el, esc(r.error), 'note-bad'); return; }
+    cardMsg(el, (r.applied ? 'saved: ' : 'would change: ') + esc(r.changes.join('; ')) + (r.warnings.length ? '\n⚠ ' + esc(r.warnings.join('\n⚠ ')) : '')
+      + (r.applied ? `\n${esc(r.restart)} (backup ${esc(r.config_backup)})` : ''), r.warnings.length ? 'note-warn' : '');
+    if (r.applied) { f.style.display = 'none'; setTimeout(loadAdmin, 300); loadModels(); }
+  });
+}
+function renderJobs() {
+  const jobs = (ADM.jobs || []).slice(0, 6);
+  for (const j of jobs) {   // a job that just finished: the brain pickers may have changed
+    if (admJobs[j.id] === 'running' && j.state !== 'running') { loadModels(); if (j.kind === 'download') renderDownloads(); }
+    admJobs[j.id] = j.state;
+  }
+  $('#mdl-jobs').innerHTML = jobs.map(j => {
+    const p = j.progress, pct = p && p.total ? Math.min(100, 100 * p.done / p.total) : null;
+    const st = j.state === 'running' ? '<span class="tag warn">running</span>' : j.state === 'done' ? '<span class="tag ok">done</span>' : `<span class="tag bad">${esc(j.state)}</span>`;
+    return `<div class="job"><div class="row"><b style="flex:1; overflow-wrap:anywhere">${esc(j.title)}</b>${st}<span class="small">${Math.round(j.elapsed_s)} s</span>`
+      + (j.state === 'running' ? `<button data-jcancel="${esc(j.id)}" class="danger">cancel</button>` : '') + '</div>'
+      + (pct != null && j.state === 'running' ? `<progress class="job" max="100" value="${pct.toFixed(1)}"></progress><div class="small">${p.verifying ? 'checking sha256 ' : ''}${esc(p.file)} ${gbs(p.done)} / ${gbs(p.total)} (${pct.toFixed(0)}%)</div>` : '')
+      + (j.error ? `<div class="note-bad">${esc(j.error)}</div>` : '')
+      + `<pre>${esc((j.log || []).slice(-8).join('\n'))}</pre></div>`;
+  }).join('');
+  document.querySelectorAll('[data-jcancel]').forEach(b => b.onclick = async () => { b.disabled = true; await post('/api/admin/jobs/cancel', {id: b.dataset.jcancel}); loadAdmin(); });
+}
+function renderDownloads() {
+  const files = (ADM.downloads || []).filter(f => !f.mmproj);
+  const R = riskyOK() ? '' : ' disabled title="desktop or PIN only"';
+  $('#dl-list').innerHTML = files.length ? files.map(f => `<div class="hfrow"><span class="tag">${gbs(f.bytes)}</span><span class="fname mono">${esc(f.file)}`
+    + (f.with ? ` <span class="tag" title="${esc(f.with)} — downloaded from the same repo, installed with it">+ 👁 vision file</span>` : '')
+    + (f.repo ? `<br><span class="small">${esc(f.repo)}</span>` : '') + '</span>'
+    + (f.split ? '<span class="small">split: by hand</span>' : `<span class="acts"><button data-plan="${esc(f.file)}">plan</button><button data-install="${esc(f.file)}" class="primary"${R}>install</button></span>`) + '</div>').join('')
+    : '<span class="small">no complete GGUF in the downloads folder</span>';
+  document.querySelectorAll('[data-plan]').forEach(b => b.onclick = async () => {
+    b.disabled = true; const pre = $('#install-plan'); pre.style.display = ''; pre.textContent = 'planning (a dry run: nothing moves)…';
+    const r = await admPost('/api/admin/install/plan', {file: b.dataset.plan}); b.disabled = false;
+    pre.textContent = r.ok === false && r.error ? r.error : (r.plan || []).join('\n') || '(no plan text)';
+    pre.className = 'report ' + (r.ok ? '' : 'note-bad');
+  });
+  document.querySelectorAll('[data-install]').forEach(b => b.onclick = async () => {
+    if (!confirm(`Install ${b.dataset.install}?\n\nIt moves to the models drive with its vision file, gets an UNMEASURED llama-swap entry, and llama-swap restarts — every loaded model unloads (Open WebUI, pi too). Press "plan" first to see exactly what it does.`)) return;
+    b.disabled = true; const r = await admPost('/api/admin/install', {file: b.dataset.install}, true); b.disabled = false;
+    if (r.ok === false) { const pre = $('#install-plan'); pre.style.display = ''; pre.textContent = r.error; pre.className = 'report note-bad'; }
+    loadAdmin();
+  });
+}
+async function hfSearch() {
+  const q = $('#hf-q').value.trim(); if (!q) return;
+  $('#hf-results').innerHTML = '<span class="small">searching…</span>';
+  let r; try { r = await getj('/api/admin/hf/search?q=' + encodeURIComponent(q)); } catch (e) { r = {ok: false, error: e.message}; }
+  if (r.ok === false) { $('#hf-results').innerHTML = `<span class="note-bad">${esc(r.error)}</span>`; return; }
+  $('#hf-results').innerHTML = (r.results || []).map(x => `<div class="hfrow"><span class="tag">${x.downloads >= 1e6 ? (x.downloads / 1e6).toFixed(1) + 'M' : Math.round((x.downloads || 0) / 1e3) + 'k'} ↓</span>`
+    + `<a href="#" class="fname" data-repo="${esc(x.id)}">${esc(x.id)}</a><span>${x.vision ? '<span class="tag">👁</span>' : ''}${x.gated ? '<span class="tag warn">gated</span>' : ''}</span></div>`).join('') || '<span class="small">nothing found</span>';
+  document.querySelectorAll('[data-repo]').forEach(a => a.onclick = e => { e.preventDefault(); $('#hf-repo').value = a.dataset.repo; hfFiles(); });
+}
+async function hfFiles() {
+  const repo = $('#hf-repo').value.trim(); if (!repo) return;
+  $('#hf-files').innerHTML = '<span class="small">listing…</span>';
+  let r; try { r = await getj('/api/admin/hf/files?repo=' + encodeURIComponent(repo)); } catch (e) { r = {ok: false, error: e.message}; }
+  if (r.ok === false) { $('#hf-files').innerHTML = `<span class="note-bad">${esc(r.error)}</span>`; return; }
+  const vram = ADM && ADM.gpu ? ADM.gpu.total_mib * 2 ** 20 : 16 * GiB;
+  const fit = f => f.mmproj ? 'vision file' : f.size * 1.15 < vram ? 'fits the GPU' : 'bigger than the GPU: slow';
+  const R = riskyOK() ? '' : ' disabled title="desktop or PIN only"';
+  $('#hf-files').innerHTML = `<div class="small"><a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.repo)}</a> — tick a quant (Q4_K_M / UD-Q4_K_XL are the usual picks); a vision model also wants its mmproj (F16 ticked for you).</div>`
+    + r.files.map(f => `<label class="hfrow"><input type="checkbox" data-f="${esc(f.path)}" data-mm="${f.mmproj ? 1 : 0}"${f.split ? ' disabled' : ''}>`
+      + `<span class="fname mono">${esc(f.path)}${f.have ? ' <span class="tag ok">downloaded</span>' : f.partial ? ' <span class="tag warn">partial: resumes</span>' : ''}${f.split ? ' <span class="tag">split: by hand</span>' : ''}</span>`
+      + `<span class="small">${gbs(f.size)} · ${esc(fit(f))}</span></label>`).join('')
+    + `<div class="acts"><button data-hf-dl class="primary"${R}>download ticked</button><span class="small" data-hf-sum></span></div>`;
+  const boxes = [...document.querySelectorAll('#hf-files [data-f]')];
+  const sum = () => { const t = boxes.filter(b => b.checked); $('[data-hf-sum]').textContent = t.length ? `${t.length} file${t.length > 1 ? 's' : ''}, ${gbs(t.reduce((s, b) => s + (r.files.find(f => f.path === b.dataset.f) || {}).size, 0))}` : ''; };
+  boxes.forEach(b => b.onchange = () => {
+    if (b.checked && b.dataset.mm === '0') { const f16 = boxes.find(x => x.dataset.mm === '1' && /F16/i.test(x.dataset.f) && !/BF16/i.test(x.dataset.f)); if (f16) f16.checked = true; }
+    sum(); });
+  $('[data-hf-dl]').onclick = async () => {
+    const files = boxes.filter(b => b.checked).map(b => b.dataset.f); if (!files.length) return;
+    $('[data-hf-dl]').disabled = true; const r2 = await admPost('/api/admin/download', {repo: r.repo, files}, true); $('[data-hf-dl]').disabled = false;
+    $('[data-hf-sum]').innerHTML = r2.ok === false ? `<span class="note-bad">${esc(r2.error)}</span>` : 'downloading — see the job above';
+    loadAdmin();
+  };
+}
+async function restartCockpit() {
+  if (!confirm('Restart the cockpit? The robot resets; every screen reconnects in a few seconds.')) return;
+  const r = await post('/api/cockpit/restart', {});
+  if (r.ok === false) { alert(r.error); return; }
+  $('#mdl-service').textContent = 'restarting…';
+  const t0 = Date.now();
+  const wait = async () => { try { await getj('/api/ping'); if (Date.now() - t0 > 2500) { location.reload(); return; } } catch (e) {}
+    if (Date.now() - t0 < 60000) setTimeout(wait, 1000); else $('#mdl-service').textContent = 'it did not come back in 60 s: ./rocky.sh cockpit-service logs'; };
+  setTimeout(wait, 1500);
+}
+$('#p-models').addEventListener('toggle', () => { if ($('#p-models').open) loadAdmin(); else clearTimeout(admTimer); });
+$('#mdl-refresh').onclick = loadAdmin;
+$('#mdl-filter').onchange = () => { $('#mdl-list').innerHTML = ''; renderCards(); };
+$('#mdl-unload-all').onclick = async () => { const r = await admPost('/api/admin/unload', {}); if (r.ok === false) alert(r.error); loadModels(); loadAdmin(); };
+$('#mdl-restart-swap').onclick = async () => {
+  if (!confirm('Restart llama-swap? Every loaded model unloads (Open WebUI, pi and the digests too); a config change takes effect.')) return;
+  $('#mdl-head').textContent = 'restarting llama-swap…';
+  const r = await admPost('/api/admin/restart-swap', {}, true); if (r.ok === false) alert(r.error); loadModels(); loadAdmin(); };
+$('#mdl-trash').onclick = async () => {
+  if (!confirm('Empty the trash? The trashed model files are deleted for good (this frees the disk).')) return;
+  const r = await admPost('/api/admin/trash/empty', {}, true); if (r.ok === false) alert(r.error); else alert(`freed ${gbs(r.freed)}`); loadAdmin(); };
+$('#hf-search').onclick = hfSearch; $('#hf-q').addEventListener('keydown', e => { if (e.key === 'Enter') hfSearch(); });
+$('#hf-list').onclick = hfFiles; $('#hf-repo').addEventListener('keydown', e => { if (e.key === 'Enter') hfFiles(); });
+$('#to-models').onclick = e => { e.preventDefault(); openPanel('p-models'); };
+$('#gpu-free').onclick = async () => {
+  $('#gpu-free').disabled = true; let r; try { r = await post('/api/gpu/free', {}); } catch (e) { r = {ok: false, error: e.message}; }
+  $('#gpu-free').disabled = false;
+  $('#brain-err').textContent = r.ok ? '' : 'free ComfyUI: ' + r.error;
+  if (r.ok) addChat('n', `ComfyUI unloaded its models${r.freed_mib != null ? ` (${(r.freed_mib / 1024).toFixed(1)} GB freed)` : ''}`);
+  loadModels();
+};
+// cancel a running model turn: any screen's (the server ends every running turn at its next model call or tool)
+let chatInflight = 0;
+$('#chat-cancel').onclick = async () => { $('#chat-cancel').disabled = true; try { await post('/api/chat/cancel', {}); } finally { $('#chat-cancel').disabled = false; } };
 // voice: hold to talk, or tap to start / tap to stop (phones lose a long press to the
 // callout, a scroll or a synthetic mouse event — pointer capture + toggle mode survive that).
 let mediaRec = null, chunks = [], recT0 = 0, recTimer = null, recStream = null;

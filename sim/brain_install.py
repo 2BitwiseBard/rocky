@@ -32,15 +32,23 @@ CONVENTIONS (set 2026-09-24 with qwen3.5-9b)
     gemma-4-12b, LFM2.5-VL 3B -> lfm2.5-vl-3b. --id overrides. If the id is
     already configured for a DIFFERENT file, the quant is appended
     (UD-Q6_K_XL -> qwen3.5-9b-q6k, Q8_0 -> -q8, IQ4_XS -> -iq4).
-  * families with a template: qwen35 (Qwen3.5: thinking off at the template,
-    Qwen's non-thinking sampling), gemma4 (Gemma 4: image tokens 140..280,
-    because Gemma decodes an image non-causally in ONE ubatch and more than
-    512 without raising -b/-ub aborts the server), lfm2 (plain). Qwen3.5 and
-    Gemma 4 are always vision; LFM2 only when the name says VL. Anything else
-    (an MTP draft head, a diffusion GGUF, a qwen35moe that needs a measured
-    -ncmoe) is reported and left where it is.
+  * families (sim/brain_families.yaml, read every run): qwen35 (Qwen3.5:
+    thinking off at the template, Qwen's non-thinking sampling), gemma4 (Gemma
+    4: image tokens 140..280, because Gemma decodes an image non-causally in
+    ONE ubatch and more than 512 without raising -b/-ub aborts the server),
+    lfm2 (plain). Qwen3.5 and Gemma 4 are always vision; LFM2 only when the
+    name says VL. EVERY OTHER architecture gets the generic rules, read from
+    the file: it needs a chat template (none = a base / embedding model,
+    refused; so is a pooling head, an MTP draft head (*-assistant) and the
+    yaml's refuse: list), "tools" in the template decides brain candidate vs
+    chat only, an enable_thinking switch is turned off, and it sees only when
+    a projector for it is on disk (one named beside it on the command line
+    pairs with it whatever its header says). A MoE, or weights bigger than the
+    card, gets no -ngl so llama.cpp's auto-fit places it. A split GGUF is
+    reported and left where it is.
   * every stanza is UNMEASURED (the description says so, with the file sizes),
-    ttl 1800, -c 16384, -ngl 99, ${common_flags}, and goes right before the
+    ttl 1800, -c 16384 (or the trained length when shorter), -ngl 99 (unless
+    auto-fit, above), ${common_flags}, and goes right before the
     RETRIEVAL STACK comment block. A vision stanza's name says "vision
     (mmproj)": the cockpit decides a model can see from that text.
 
@@ -128,8 +136,26 @@ PARTIAL_EXT = (".crdownload", ".part", ".partial", ".download")
 PARTIAL_SIBLING = PARTIAL_EXT + (".aria2",)   # X.gguf + X.gguf.part (Firefox) / X.gguf.aria2 (aria2c)
 MARKER = "RETRIEVAL STACK"
 PROTECTED = ("groups", "selectors", "macros")
-TEMPLATE_FAMILIES = ("qwen35", "gemma4", "lfm2")
-FAMILY_TITLE = {"qwen35": "Qwen3.5", "gemma4": "Gemma 4", "lfm2": "LFM2"}
+FAMILIES_FILE = os.path.join(HERE, "brain_families.yaml")
+DEFAULT_CTX = 16384
+
+
+def load_families(path=None):
+    """{'families': {arch: rules}, 'refuse': {arch: why}} from brain_families.yaml:
+    the families with measured rules; every other architecture gets the generic ones."""
+    with open(path or FAMILIES_FILE) as f:
+        d = yaml.safe_load(f) or {}
+    fams = {str(k): dict(v or {}) for k, v in (d.get("families") or {}).items()}
+    for k, v in fams.items():
+        v.setdefault("title", k)
+        if v.get("vision", "if_projector") not in ("always", "name_vl", "if_projector"):
+            raise ValueError(f"{path or FAMILIES_FILE}: {k}.vision must be always / name_vl / if_projector")
+        if str(v.get("thinking", "auto")) not in ("auto", "off", "keep"):
+            raise ValueError(f"{path or FAMILIES_FILE}: {k}.thinking must be auto / off / keep")
+    return {"families": fams, "refuse": {str(k): str(v) for k, v in (d.get("refuse") or {}).items()}}
+
+
+FAMILIES = load_families()
 
 
 # ------------------------------------------------------------------ GGUF header (pure Python)
@@ -353,23 +379,51 @@ def base_key(meta, filename, is_mmproj=False):
 
 
 def family_of(meta, key):
-    """qwen35 / gemma4 / lfm2 / unknown. Exact architecture match for a model
-    (so gemma4-assistant, an MTP draft head, is NOT gemma4); the base-model
-    name for a projector (its architecture is always 'clip')."""
+    """A family in brain_families.yaml (exact architecture match for a model, so
+    gemma4-assistant, an MTP draft head, is NOT gemma4), else 'generic'. A
+    projector (architecture 'clip') is matched by its base-model name, else
+    'unknown'."""
     arch = str(meta.get("general.architecture") or "")
-    if arch in TEMPLATE_FAMILIES:
+    fams = FAMILIES["families"]
+    if arch in fams:
         return arch
     if arch == "clip":
-        for fam, pat in (("qwen35", r"^qwen3\.5"), ("gemma4", r"^gemma-?4"), ("lfm2", r"^lfm2")):
-            if re.match(pat, key):
+        for fam, rules in fams.items():
+            if rules.get("projector_key") and re.match(rules["projector_key"], key):
                 return fam
-    return "unknown"
+        return "unknown"
+    return "generic"
 
 
-def is_vision_family(family, key):
-    if family in ("qwen35", "gemma4"):
-        return True
-    return family == "lfm2" and bool(re.search(r"(^|-)vl($|-)", key))
+def family_rules(family):
+    """The rules for a family; the generic ones for anything not in the file."""
+    return FAMILIES["families"].get(family) or {"title": "generic rules"}
+
+
+def vision_rule(family, key):
+    """'yes' (must have a projector), 'no', or 'if_projector' (vision only when one is on disk)."""
+    v = family_rules(family).get("vision", "if_projector")
+    if v == "always":
+        return "yes"
+    if v == "name_vl":
+        return "yes" if re.search(r"(^|-)vl($|-)", key) else "no"
+    return "if_projector"
+
+
+def refusal(info):
+    """Why this GGUF is not something a brain can be made from, or None."""
+    arch = info.get("arch") or ""
+    if arch.endswith("-assistant"):
+        return f"architecture '{arch}' is an MTP draft head, not a model"
+    why = FAMILIES["refuse"].get(arch)
+    if why:
+        return f"architecture '{arch}': {why}"
+    if info.get("pooling"):
+        return f"architecture '{arch}' with a pooling head: an embedding / reranker model, not a chat model"
+    if info.get("family") == "generic" and not info.get("chat_template"):
+        return (f"architecture '{arch}' with no chat template in the file: a base, embedding or "
+                "non-text model — nothing the cockpit can talk to")
+    return None
 
 
 def header_info(path, check=False):
@@ -393,7 +447,19 @@ def header_info(path, check=False):
         "n_tensors": h["n_tensors"], "gguf_version": h["version"],
         "split_no": m.get("split.no"), "split_count": m.get("split.count"),
         "key": key, "family": family_of(m, key), "quant": "" if is_mmproj else quant_of(name, m),
+        **template_facts(m, arch),
     }
+
+
+def template_facts(meta, arch):
+    """What the file itself says about chatting: a chat template, tool calls in it,
+    a thinking switch, experts (a MoE), a pooling head (embeddings / reranker)."""
+    t = meta.get("tokenizer.chat_template")
+    t = t if isinstance(t, str) else ""
+    experts = meta.get(f"{arch}.expert_count")
+    return {"chat_template": bool(t.strip()), "tools": "tools" in t, "thinking_switch": "enable_thinking" in t,
+            "experts": experts if isinstance(experts, int) and not isinstance(experts, bool) else 0,
+            "pooling": meta.get(f"{arch}.pooling_type") is not None}
 
 
 def split_of(name, info):
@@ -673,11 +739,8 @@ class Installer:
             it.status = "skipped"
             it.notes.append(why + " — left where it is")
             return it
-        if i["family"] not in TEMPLATE_FAMILIES:
-            why = (f"architecture '{i['arch']}' has no brain template ({' / '.join(TEMPLATE_FAMILIES)})"
-                   + (" — an MTP draft head, not a model" if i["arch"].endswith("-assistant") else "")
-                   + (" — a MoE needs a measured -ncmoe, write its stanza by hand"
-                      if i["arch"].endswith("moe") else ""))
+        why = refusal(i)
+        if why:
             if it.explicit:
                 return it.fail(why)
             it.status = "skipped"
@@ -732,9 +795,17 @@ class Installer:
         present = self.taken.get(it.id) == it.name or it.id in self._config_ids()
         self.taken.setdefault(it.id, it.name)
         # projector: only for a stanza this run writes (a configured id already names its own)
-        vision = is_vision_family(i["family"], i["key"])
-        if vision and not present:
-            it.mmproj = self._find_mmproj(it)
+        vision = vision_rule(i["family"], i["key"])
+        if vision != "no" and not present:
+            it.mmproj = self._find_mmproj(it, fetch=vision == "yes" and
+                                          bool(family_rules(i["family"]).get("fetch_projector")))
+            if vision == "if_projector":
+                if it.mmproj is None:
+                    vision = "no"
+                    it.notes.append("no projector for it on disk: installed as text only (download the "
+                                    "repo's mmproj file with it, then reinstall, to make it see)")
+                else:
+                    vision = "yes"
         # manifest
         repo = self.a.hf_repo or f"unsloth/{file_base(it.name)}-GGUF"
         rel_model = os.path.relpath(it.dest, self.models_dir)
@@ -759,7 +830,7 @@ class Installer:
         if present:
             it.config = "present"
             it.notes.append(f"'{it.id}' is already in the config — config step skipped")
-        elif vision and (not mm or mm["how"] == "missing"):
+        elif vision == "yes" and (not mm or mm["how"] == "missing"):
             it.config = "blocked"
             self._plan_fail(it, f"no projector for {i['key']}: nothing moved, no stanza (a 'vision' model "
                                 "that cannot see would fool the cockpit) — get the projector (see the note), "
@@ -816,7 +887,10 @@ class Installer:
         return None
 
     # ---------------- projector
-    def _find_mmproj(self, it):
+    def _find_mmproj(self, it, fetch=True):
+        """Where this model's projector comes from: a dict (how = in-folder / rename /
+        downloads / sibling / fetch / missing), or None when fetch=False and none is
+        on disk (a family whose vision depends on having one)."""
         # the model's own folder: <models-dir>/<id> for an install, wherever it sits for an in-place finish
         key, folder = it.info["key"], os.path.dirname(it.dest)
         base = file_base(it.name)
@@ -851,6 +925,20 @@ class Installer:
                 return {"how": "downloads", "src": mm.source, "dest": dest, "name": os.path.basename(dest),
                         "size": mm.size, "hf_file": f"mmproj-{prec}.gguf", "info": mm.info,
                         "projector": mm.info["projector"]}
+        # 2b. one projector named on the command line beside exactly one model: the user paired them,
+        #     whatever its header calls its base model (other uploaders name them their own way)
+        named = [mm for mm in self.pool if mm.status == "pool" and mm.explicit]
+        models = [x for x in self.items if x.explicit and x.info and not x.info.get("is_mmproj")]
+        if it.explicit and len(named) == 1 and len(models) == 1:
+            mm = named[0]
+            prec = self._prec(mm.name)
+            mm.status, mm.id = "claimed", it.id
+            if mm.info["key"] != key:
+                it.notes.append(f"{mm.name} says it is for '{mm.info['key']}', not '{key}' — used anyway, "
+                                "because the two were named together")
+            dest = os.path.join(folder, f"mmproj-{base}-{prec}.gguf")
+            return {"how": "downloads", "src": mm.source, "dest": dest, "name": os.path.basename(dest),
+                    "size": mm.size, "hf_file": mm.name, "info": mm.info, "projector": mm.info["projector"]}
         # 3. the same projector already installed for another id: hard-link it in
         for p in sorted(self.stable_installed):
             if os.path.dirname(p) == folder:
@@ -865,6 +953,8 @@ class Installer:
                 return {"how": "sibling", "src": p, "dest": dest, "name": os.path.basename(dest),
                         "size": os.path.getsize(p), "hf_file": f"mmproj-{prec}.gguf", "info": mi,
                         "projector": mi["projector"]}
+        if not fetch:
+            return None
         # 4. fetch it
         repo = self.a.hf_repo or f"unsloth/{base}-GGUF"
         cmd = [HF_BIN, "download", repo, "mmproj-F16.gguf", "--local-dir", folder]
@@ -899,6 +989,7 @@ class Installer:
     # ---------------- stanza
     def stanza(self, it):
         i, mm, fam = it.info, it.mmproj, it.info["family"]
+        rules = family_rules(fam)
 
         def path(abs_path):
             rel = os.path.relpath(abs_path, self.models_dir)
@@ -911,43 +1002,67 @@ class Installer:
         mtp = sorted(os.path.basename(p) for p in glob.glob(os.path.join(glob.escape(folder), "mtp-*.gguf"))
                      if base in os.path.basename(p).lower())
         title = f"{file_base(it.name)} ({i['quant'] or '?'})"
-        c = [f"  # ---- added {self.date} by rocky sim/brain_install.py — {FAMILY_TITLE[fam]} "
-             f"{i.get('size_label') or ''}, UNMEASURED until a bench says otherwise.",
+        generic = fam not in FAMILIES["families"]
+        family = (f"{i.get('basename') or file_base(it.name)} (architecture '{i['arch']}', generic rules)"
+                  if generic else rules["title"])
+        tools = i.get("tools") or not generic          # a measured family's tools are its bench's business
+        think = str(rules.get("thinking", "auto"))
+        think_off = think == "off" or (think == "auto" and i.get("thinking_switch"))
+        trained = i.get("context_length")
+        ctx = min(DEFAULT_CTX, trained) if isinstance(trained, int) and trained >= 2048 else DEFAULT_CTX
+        big = size_m + size_p > VRAM_WARN_B
+        autofit = big or i.get("experts", 0) > 0
+        card = f"{GPU_VRAM_GB:g} GB"
+        size_label = f" {i['size_label']}" if i.get("size_label") and not generic else ""
+        c = [f"  # ---- added {self.date} by rocky sim/brain_install.py — {family}{size_label}, "
+             "UNMEASURED until a bench says otherwise.",
              "  # One folder per model id under the models dir (rocky convention 2026-09-24). Runs ALONE:",
              "  # never add it to the resident group (group logic does not check VRAM -> CUDA OOM at spawn)."]
-        if fam == "qwen35":
-            c.append("  # Thinking OFF at the template level (robot turns are short tool calls); Qwen's")
-            c.append("  # recommended non-thinking sampling.")
-        if fam == "gemma4":
-            c.append("  # Gemma decodes an image NON-CAUSALLY, so the whole image must land in one ubatch:")
-            c.append("  # --image-max-tokens above 512 WITHOUT raising -b/-ub aborts the server (GGML_ASSERT")
-            c.append("  # in llama-context). 140..280 fits the default n_ubatch 512.")
+        c += [f"  # {x}" for x in rules.get("comments") or ()]
+        if generic:
+            c.append("  # Generic rules (sim/brain_families.yaml), read from the file: "
+                     + ("its template has tool calls" if tools else "its template has NO tool calls (chat only)")
+                     + ("; thinking switched off" if think_off else "") + ".")
         if mtp:
             c.append(f"  # MTP draft on disk ({', '.join(mtp)}) — not enabled here; try it via the lab slot.")
-        if size_m + size_p > VRAM_WARN_B:
-            card = f"{GPU_VRAM_GB:g} GB"
-            c.append(f"  # WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit the {card}")
-            c.append("  # card: expect a CUDA OOM at spawn; drop -ngl 99 (auto-fit) or pick a smaller quant.")
-            it.notes.append(f"WARNING: {gb(size_m + size_p)} of weights at -ngl 99 will not fit in {card}")
-        if vision:
-            name = f"{title} — vision (mmproj), rocky brain candidate"
-            mm_size = f"{gb(size_p)} mmproj" if size_p else "mmproj (size once fetched)"
-            desc = (f"UNMEASURED — {gb(size_m)} model + {mm_size}, fully on GPU (-ngl 99), 16k ctx. "
-                    "Vision (mmproj) + chat; tool calls untested. Runs alone.")
+        if autofit:
+            why = (f"a MoE ({i['experts']} experts)" if i.get("experts") else
+                   f"{gb(size_m + size_p)} of weights, more than the {card} card holds")
+            c.append(f"  # No -ngl: {why}, so llama.cpp's auto-fit places it (experts / layers it cannot")
+            c.append("  # fit go to RAM). Slower than all-on-GPU; a measured -ncmoe can beat it by a few %.")
+            it.notes.append(f"auto-fit placement: {why}")
+            where = "auto-fit (part in RAM)"
         else:
-            name = f"{title} — rocky brain candidate"
-            desc = (f"UNMEASURED — {gb(size_m)} model, fully on GPU (-ngl 99), 16k ctx. Chat; tool calls "
-                    "untested. Runs alone.")
+            where = "fully on GPU (-ngl 99)"
+        if ctx < DEFAULT_CTX:
+            it.notes.append(f"context {ctx}: the model was trained to {trained} tokens")
+        if not tools:
+            it.notes.append("its chat template has no tool calls: chat only, it cannot drive the robot")
+        role = "rocky brain candidate" if tools else "chat only (no tools)"
+        what = (("Chat; tool calls untested" if tools else "Chat only: its template has NO tool calls")
+                + (", thinking off" if generic and think_off else ""))
+        ctx_s = f"{ctx // 1024}k ctx" if ctx % 1024 == 0 else f"{ctx} ctx"
+        if vision:
+            name = f"{title} — vision (mmproj), {role}"
+            mm_size = f"{gb(size_p)} mmproj" if size_p else "mmproj (size once fetched)"
+            desc = (f"UNMEASURED — {gb(size_m)} model + {mm_size}, {where}, {ctx_s}. "
+                    f"Vision (mmproj) + {what[0].lower()}{what[1:]}. Runs alone.")
+        else:
+            name = f"{title} — {role}"
+            desc = f"UNMEASURED — {gb(size_m)} model, {where}, {ctx_s}. {what}. Runs alone."
         lines = c + [f"  {yq(it.id)}:", f"    name: {yq(name)}", f"    description: {yq(desc)}",
                      "    ttl: 1800", "    cmd: |", "      ${binary}", f"      -m {path(it.dest)}"]
         if vision:
             lines.append(f"      --mmproj {path(mm['dest'])}")
-        lines += ["      -c 16384", "      -ngl 99", "      ${common_flags}"]
-        if fam == "qwen35":
+        lines.append(f"      -c {ctx}")
+        if not autofit:
+            lines.append("      -ngl 99")
+        lines.append("      ${common_flags}")
+        if think_off:
             lines.append("      --chat-template-kwargs '{\"enable_thinking\":false}'")
-            lines.append("      --temp 0.7 --top-p 0.8 --top-k 20 --presence-penalty 1.5")
-        if fam == "gemma4" and vision:
-            lines.append("      --image-min-tokens 140 --image-max-tokens 280")
+        lines += [f"      {x}" for x in rules.get("flags") or ()]
+        if vision:
+            lines += [f"      {x}" for x in rules.get("vision_flags") or ()]
         return "\n".join(lines) + "\n"
 
     # ---------------- plan everything

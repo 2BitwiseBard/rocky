@@ -17,6 +17,14 @@ restart; an empty state means followers do nothing.
     routes += shared_routes(sim)          # inside cockpit.make_app, before Starlette(...)
     name = wake_name(sim)                 # 'Pebble', or None when nobody set one
 
+The chat feed (ChatFeed, 2026-10-15) is the other shared thing: every
+/api/chat turn's lines (the operator's, the tool calls, the notes, the reply)
+in one in-memory ring, so a line typed on the phone shows on the desktop
+too, and a screen opened mid-conversation backfills it. The snapshot carries
+chat_seq; a page that sees it move GETs /api/chat/feed?after=<its seq> and
+draws the lines another page sent (its own it drew already). Display only:
+the brains keep their own history for the model's context.
+
 Routes:
     GET  /api/ui         -> {ok, state}
     POST /api/ui         {panel?, tab?, view?, remote?, leader_id?, wake_name?}
@@ -25,15 +33,18 @@ Routes:
                             (checked 4x a second), a comment every 10 s otherwise;
                             ends when the client goes away or the sim dies
     GET  /api/guide      -> docs/COCKPIT_GUIDE.md as text/markdown
+    GET  /api/chat/feed?after=N -> {ok, seq, entries: [{seq, t, turn, page, label, kind, text}]}
 """
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import os
 import re
 import threading
 import time
+from collections import deque
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GUIDE_PATH = os.path.join(HERE, "..", "docs", "COCKPIT_GUIDE.md")
@@ -112,6 +123,78 @@ class SharedUI:
             return self._state.get("wake_name")
 
 
+CHAT_KEEP = 300                                  # lines the feed keeps (a long session's worth)
+CHAT_KINDS = ("u", "t", "n", "b", "clear")       # the page's addChat classes: you / tool / note / brain; clear
+_LABEL = re.compile(r"^[a-z][a-z ]{0,15}$")
+
+
+class ChatFeed:
+    """Every chat turn's lines, for every screen. Thread-safe; in memory only."""
+
+    def __init__(self, keep=CHAT_KEEP):
+        self._lock = threading.Lock()
+        self._lines = deque(maxlen=keep)
+        self._turns = itertools.count(1)
+        self.seq = 0
+
+    def add(self, kind, text, turn=0, page=None, label=None):
+        if kind not in CHAT_KINDS:
+            raise ValueError(f"kind must be one of {CHAT_KINDS}")
+        page = page if isinstance(page, str) and _ID.match(page) else None
+        label = label if isinstance(label, str) and _LABEL.match(label) else None
+        with self._lock:
+            self.seq += 1
+            self._lines.append(dict(seq=self.seq, t=round(time.time(), 3), turn=turn, page=page, label=label,
+                                    kind=kind, text=str(text)[:4000]))
+            return self.seq
+
+    def since(self, after=0):
+        with self._lock:
+            return self.seq, [dict(e) for e in self._lines if e["seq"] > after]
+
+    def turn(self, text, source=None, page=None, label=None):
+        """Start a turn: the operator's line. Returns the turn id the rest of its lines carry."""
+        n = next(self._turns)
+        self.add("u", ("🎤 you: " if source == "voice" else "you: ") + str(text), n, page, label)
+        return n
+
+    def finish(self, n, r, took_s, page=None, label=None):
+        """The rest of a turn from /api/chat's answer, in the order the page draws them."""
+        def add(kind, text):
+            self.add(kind, text, n, page, label)
+        if r.get("error") and not r.get("trace"):
+            add("n", f"chat failed: {r['error']}")
+            return
+        if not str(r.get("reply") or "").startswith("["):
+            for note in r.get("fallback") or ():
+                add("n", f"↪ {note}")
+        if r.get("gave_up"):
+            add("n", "the brain gave up (hop limit) — answer below is partial")
+        for c in r.get("trace") or ():
+            add("t", f"{c.get('tool')}({_js(c.get('args') or {})}) → {_js(c.get('result'))[:300]}")
+        if r.get("motion_blocked"):
+            add("n", "⚠ motion was blocked: a spoken motion command needs the robot's name or your Enter")
+        model = f" · {r['model']}" if r.get("model") else ""
+        add("b", f"pebble-brain [{r.get('mode')}{model} · {took_s:.1f} s]: {r.get('reply') or '(no text)'}")
+
+
+def _js(v):
+    """JSON the way the page's JSON.stringify writes it (no spaces), so a line reads the same on every screen."""
+    return json.dumps(v, separators=(",", ":"), ensure_ascii=False)
+
+
+def chat_feed(sim):
+    """The ChatFeed attached to this sim (created on first use)."""
+    f = getattr(sim, "chat_feed", None)
+    if f is None:
+        f = ChatFeed()
+        try:
+            sim.chat_feed = f
+        except AttributeError:
+            pass
+    return f
+
+
 def shared_state(sim):
     """The SharedUI attached to this sim (created on first use)."""
     st = getattr(sim, "ui_shared", None)
@@ -159,6 +242,7 @@ def routes(sim, guide_path=None):
     from starlette.routing import Route
 
     state = shared_state(sim)
+    feed = chat_feed(sim)
     gpath = guide_path or GUIDE_PATH
 
     def alive():
@@ -190,7 +274,16 @@ def routes(sim, guide_path=None):
         return Response(text, media_type="text/markdown; charset=utf-8",
                         headers={"Cache-Control": "no-cache"})
 
+    async def chat_feed_get(request):
+        try:
+            after = max(0, int(request.query_params.get("after", "0")))
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "after must be a whole number"}, status_code=400)
+        seq, entries = feed.since(after)
+        return JSONResponse({"ok": True, "seq": seq, "entries": entries})
+
     return [
         Route("/api/ui", ui_get), Route("/api/ui", ui_post, methods=["POST"]),
         Route("/api/ui/events", ui_events), Route("/api/guide", guide),
+        Route("/api/chat/feed", chat_feed_get),
     ]

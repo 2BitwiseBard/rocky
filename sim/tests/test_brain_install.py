@@ -275,7 +275,8 @@ def test_names_quants_and_keys():
     lfm_mm = {"general.architecture": "clip", "general.basename": "LFM2.5-VL", "general.finetune": "3b",
               "general.size_label": "426M"}
     assert bi.base_key(lfm_mm, "mmproj-F16.gguf", is_mmproj=True) == "lfm2.5-vl-3b"
-    assert bi.family_of({"general.architecture": "gemma4-assistant"}, "gemma-4-423m") == "unknown"
+    assert bi.family_of({"general.architecture": "gemma4-assistant"}, "gemma-4-423m") == "generic"
+    assert bi.refusal({"arch": "gemma4-assistant", "family": "generic"}).endswith("an MTP draft head, not a model")
 
 
 REAL_HEADERS = {                            # the reference setup's files, relative to the models dir
@@ -967,3 +968,108 @@ def test_uninstall_restart_waits_for_the_id_to_go(tmp_path, monkeypatch, capsys)
     s = json.loads(out.strip().splitlines()[-1])
     assert code == 0 and calls == [["systemctl", "--user", "restart", "llama-swap"]]
     assert "gone from /v1/models" in s["restart"]
+
+
+# ------------------------------------------------------------------ any family: the generic rules
+TOOLS_TMPL = "{% if tools %}{{ tools | tojson }}{% endif %}{% for m in messages %}{{ m.content }}{% endfor %}"
+PLAIN_TMPL = "{% for m in messages %}<|im_start|>{{ m.role }}{{ m.content }}{% endfor %}"
+THINK_TMPL = TOOLS_TMPL + "{% if enable_thinking is defined and not enable_thinking %}<think></think>{% endif %}"
+
+
+def llama(base="Mistral-Small-3.2", size="24B", tmpl=TOOLS_TMPL, arch="llama", **extra):
+    meta = {"general.architecture": arch, "general.type": "model", "general.name": base,
+            "general.basename": base, "general.size_label": size, "general.file_type": 15}
+    if tmpl is not None:
+        meta["tokenizer.chat_template"] = tmpl
+    meta.update(extra)
+    return meta
+
+
+def test_any_family_with_a_chat_template_installs_by_the_generic_rules(env, capsys):
+    env.dl("Mistral-Small-3.2-24B-Q4_K_M.gguf", llama(), 200)
+    env.dl("SmolLM2-135M-Instruct-Q8_0.gguf",
+           llama("SmolLM2", "135M", PLAIN_TMPL, **{"llama.context_length": 8192}), 100)
+    env.dl("Qwen3-8B-Q4_K_M.gguf", llama("Qwen3", "8B", THINK_TMPL, arch="qwen3"), 120)
+    code, out, s = run(env, capsys)
+    assert code == 0, out
+    items = by_name(s)
+    assert {n: i["status"] for n, i in items.items()} == dict.fromkeys(items, "done")
+    cfg = yaml.safe_load(env.text())["models"]
+    mistral, smol, qwen3 = cfg["mistral-small-3.2-24b"], cfg["smollm2-135m"], cfg["qwen3-8b"]
+    # tools in the template: a brain candidate, all on the GPU, nothing family-specific
+    assert mistral["name"].endswith("rocky brain candidate") and "-ngl 99" in mistral["cmd"]
+    assert "tool calls untested" in mistral["description"] and "enable_thinking" not in mistral["cmd"]
+    assert "--mmproj" not in mistral["cmd"] and "--temp" not in mistral["cmd"]
+    # no tools: chat only, said in the name, the description and the plan; its own shorter context
+    assert smol["name"].endswith("chat only (no tools)") and "NO tool calls" in smol["description"]
+    assert "-c 8192" in smol["cmd"] and "8k ctx" in smol["description"]
+    assert any("cannot drive the robot" in n for n in items["SmolLM2-135M-Instruct-Q8_0.gguf"]["notes"])
+    # a thinking switch in the template: turned off
+    assert "--chat-template-kwargs '{\"enable_thinking\":false}'" in qwen3["cmd"]
+    assert "thinking off" in qwen3["description"]
+    assert "generic rules" in env.text()
+
+
+def test_a_moe_or_a_model_bigger_than_the_card_gets_auto_fit(env, capsys, monkeypatch):
+    env.dl("Qwen3-30B-A3B-Q4_K_M.gguf",
+           llama("Qwen3", "30B-A3B", THINK_TMPL, arch="qwen3moe", **{"qwen3moe.expert_count": 128}), 150)
+    env.dl("Llama-3.3-70B-Instruct-Q4_K_M.gguf", llama("Llama-3.3", "70B"), 400)
+    monkeypatch.setattr(bi, "VRAM_WARN_B", 300)              # the 400-byte "70B" no longer fits the "card"
+    code, out, s = run(env, capsys)
+    assert code == 0, out
+    cfg = yaml.safe_load(env.text())["models"]
+    for mid in ("qwen3-30b-a3b", "llama-3.3-70b"):
+        assert "-ngl" not in cfg[mid]["cmd"] and "auto-fit" in cfg[mid]["description"], mid
+    assert "a MoE (128 experts)" in env.text()
+    assert any("auto-fit placement" in n for n in by_name(s)["Llama-3.3-70B-Instruct-Q4_K_M.gguf"]["notes"])
+
+
+def test_embeddings_draft_heads_and_base_models_are_refused(env, capsys):
+    env.dl("Qwen3-Embedding-0.6B-Q8_0.gguf",
+           llama("Qwen3-Embedding", "0.6B", THINK_TMPL, arch="qwen3", **{"qwen3.pooling_type": 3}))
+    env.dl("eagle3-gpt-oss-20b-Q8_0.gguf", llama("gpt-oss", "20B", arch="eagle3"))
+    env.dl("Llama-3.1-8B-Q4_K_M.gguf", llama("Llama-3.1", "8B", None))
+    before = env.text()
+    code, out, s = run(env, capsys)
+    assert code == 0 and env.text() == before, out
+    items = by_name(s)
+    assert {i["status"] for i in items.values()} == {"skipped"}
+    assert "embedding / reranker" in out and "EAGLE-3" in out and "no chat template" in out
+
+
+def test_a_generic_projector_named_beside_its_model_pairs_and_none_means_text_only(env, capsys):
+    model = env.dl("Mistral-Small-3.2-24B-Q4_K_M.gguf", llama(), 200)
+    mm = env.dl("mmproj-mistralai_Mistral-Small-3.2-f16.gguf",
+                {"general.architecture": "clip", "general.type": "mmproj",
+                 "general.basename": "Mistral-Small-3.2-24B-Instruct-2506"}, 60)
+    code, out, s = run(env, capsys, model, mm)
+    assert code == 0, out
+    spec = yaml.safe_load(env.text())["models"]["mistral-small-3.2-24b"]
+    assert "vision (mmproj)" in spec["name"]
+    assert "--mmproj ${models_dir}/mistral-small-3.2-24b/mmproj-Mistral-Small-3.2-24B-F16.gguf" in spec["cmd"]
+    assert any("used anyway" in n for n in by_name(s)["Mistral-Small-3.2-24B-Q4_K_M.gguf"]["notes"])
+    assert os.listdir(env.downloads) == []
+    entry = [e for e in env.mani()["models"] if e["filename"].endswith("-F16.gguf")
+             and e["filename"].startswith("mistral")][0]
+    assert entry["hf_file"] == "mmproj-mistralai_Mistral-Small-3.2-f16.gguf"   # the repo's real name
+
+
+def test_a_generic_model_with_no_projector_is_text_only_and_never_fetches(env, capsys):
+    env.dl("Phi-4-mini-instruct-Q4_K_M.gguf", llama("Phi-4-mini", "3.8B", arch="phi3"), 90)
+    code, out, s = run(env, capsys, fetch=True)                    # a fetch would fail (no hf binary)
+    assert code == 0, out
+    spec = yaml.safe_load(env.text())["models"]["phi-4-mini-3.8b"]
+    assert "--mmproj" not in spec["cmd"] and "vision" not in spec["name"]
+    assert any("text only" in n for n in by_name(s)["Phi-4-mini-instruct-Q4_K_M.gguf"]["notes"])
+
+
+def test_the_families_file_is_checked(tmp_path):
+    p = tmp_path / "f.yaml"
+    p.write_text("families:\n  x:\n    vision: sometimes\n")
+    with pytest.raises(ValueError, match="vision"):
+        bi.load_families(str(p))
+    p.write_text("families:\n  x:\n    thinking: maybe\n")
+    with pytest.raises(ValueError, match="thinking"):
+        bi.load_families(str(p))
+    real = bi.load_families()
+    assert set(real["families"]) >= {"qwen35", "gemma4", "lfm2"} and "eagle3" in real["refuse"]

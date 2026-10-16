@@ -155,9 +155,14 @@ def answer(text):
     return {"content": text, "tool_calls": []}
 
 
-def brains(script=None, **kw):
-    return cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
-                     complete=script, catalog=CAT, **kw)
+def brains(script=None, roles=True, **kw):
+    """roles=True: the brain and vision roles on llama-swap's selectors (tool-model, vision-model), as these
+    chain tests were written — the defaults are concrete ids since 2026-10-15 (test_default_roles_...)."""
+    b = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
+                  complete=script, catalog=CAT, **kw)
+    if roles:
+        b.state.update(model="tool-model", vision_model="vision-model")
+    return b
 
 
 def run(coro):
@@ -191,6 +196,114 @@ def test_vision_detection_uses_llama_swap_metadata():
     assert by["glm-flash-reap"]["quarantined"] and by["gpt-oss-20b"]["quarantined"]
 
 
+def test_default_roles_are_concrete_and_an_old_conf_follows_them(tmp_path):
+    """2026-10-15: the defaults name the models they load (no selector in between), and a conf saved
+    before then — which wrote EVERY role, picked or not — keeps only its real picks."""
+    b = brains(roles=False)
+    assert b.roles()["brain"] == "qwen3.6-35b-a3b" and b.roles()["vision"] == "lfm2.5-vl"
+    conf = tmp_path / "cockpit.json"
+    conf.write_text(json.dumps({"roles": {"model": "tool-model", "vision_model": "vision-model",
+                                          "multimodal_model": "gemma-4-26b-a4b"}}))
+    b = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=str(conf), catalog=CAT)
+    assert b.roles()["brain"] == "qwen3.6-35b-a3b" and b.roles()["multimodal"] == "gemma-4-26b-a4b"
+    assert b.set_roles({"mode": "multimodal"})["ok"]
+    saved = json.loads(conf.read_text())
+    assert saved == {"roles": {"multimodal_model": "gemma-4-26b-a4b"}, "mode": "multimodal"}
+    b2 = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=str(conf), catalog=CAT)
+    assert b2.state["mode"] == "multimodal"                     # the mode survives a restart
+
+
+def test_a_turn_loads_at_most_one_model_it_was_not_asked_for():
+    """Warm fallbacks are free; a cold one is a model swap. The old chains tried every model in
+    turn (2026-10-15: five failed spawns in one turn, qwen3.8 among them, never picked)."""
+    s = Script()                                                # every model fails
+    b = brains(s)
+    b.state["multimodal_model"] = "gemma-4-26b-a4b"            # cold, like qwen3.5-9b and qwen3.8-27b-iq4
+    r = run(b.chat("hello there", mode="multimodal"))
+    called = [c[0] for c in s.calls]
+    assert called == ["gemma-4-26b-a4b", "qwen3.5-9b", "tool-model"]   # pick, ONE cold fallback, the warm brain
+    assert "qwen3.8-27b-iq4" not in called and any("not tried" in n for n in r["fallback"])
+    assert r["model"] == "talk" and "regex brain" in r["reply"]
+
+
+def test_a_full_gpu_stops_the_chain_and_names_the_holder():
+    full = dict(total_mib=16384, used_mib=13544, free_mib=2840, reclaimable_mib=0,
+                holders=[dict(pid=212809, name="ComfyUI/main.py", mib=13332, model_server=False)])
+    s = Script(qwen3_5_9b=[answer("never reached")], tool_model=[answer("warm brain answers")])
+    b = brains(s, gpu=lambda: full)
+    r = run(b.chat("hello there", mode="multimodal"))
+    assert s.calls == []                                        # no spawn was even tried
+    assert "ComfyUI/main.py (pid 212809)" in r["reply"] and "regex brain" in r["reply"]
+    r = run(b.chat("hello", mode="local"))                      # a LOADED model needs no room: it answers
+    assert r["model"] == "tool-model" and r["reply"] == "warm brain answers"
+    look = run(b.look(model="gemma-4-26b-a4b"))                 # cold eye, full GPU: refused with the reason
+    assert look["ok"] is False and "GPU is full" in look["error"]
+
+
+def test_cancel_ends_the_turn_without_trying_a_fallback():
+    import threading
+    gate = threading.Event()
+
+    def slow(model, messages, tools, max_tokens):           # the brain thinks until the test lets it go
+        slow.models.append(model)
+        gate.wait(5)
+        return answer("too late")
+    slow.models = []
+    b = brains(slow)
+
+    async def go():
+        t = asyncio.ensure_future(b.chat("tell me a long story", mode="local"))
+        while not slow.models:
+            await asyncio.sleep(0.01)
+        assert b.cancel() == 1
+        r = await asyncio.wait_for(t, 2.0)
+        gate.set()
+        return r
+    r = run(go())
+    assert r.get("cancelled") and r["reply"].startswith("⏹ cancelled") and slow.models == ["tool-model"]
+    assert b.hist["local"][-1]["reply"] == "(the operator cancelled this turn)"
+    assert b.cancel() == 0                                     # nothing running: nothing told
+
+
+def test_cancel_between_tools_runs_no_further_tool():
+    s = Script(tool_model=[{"content": "", "tool_calls": [call("gesture", {"name": "wave"}, "a"),
+                                                          call("say", {"word": "greeting"}, "b")]},
+                           answer("never")])
+    b = brains(s)
+    real_tool = b.tool
+
+    async def tool(name, args, **kw):
+        res = await real_tool(name, args, **kw)
+        b.cancel()                                             # the operator presses cancel after the first one
+        return res
+    b.tool = tool
+    r = run(b.chat("wave and say hello", mode="local"))
+    assert r.get("cancelled") and [t["tool"] for t in r["trace"]] == ["gesture"]
+    assert "what ran" in r["reply"]
+
+
+def test_a_bench_pauses_the_model_modes_but_not_talk_or_stop():
+    s = Script(tool_model=[answer("hi")])
+    b = brains(s)
+    b.paused = "the brain bench is running on x"
+    r = run(b.chat("hello", mode="local"))
+    assert r.get("paused") and "bench" in r["reply"] and s.calls == []
+    assert run(b.chat("stop", mode="local"))["trace"][0]["tool"] == "stop"   # stop never waits for anything
+    assert run(b.chat("hello", mode="talk"))["mode"] == "talk"
+    assert run(b.warm("local"))["ok"] is False
+    assert run(b.load_one("tool-model"))["ok"] is False
+    b.paused = None
+    assert run(b.chat("hello", mode="local"))["reply"] == "hi"
+
+
+def test_the_history_keeps_the_models_words_not_the_fallback_note():
+    s = Script(tool_model=[TimeoutError("read timed out")], qwen3_8_27b_iq4=[answer("done by the fallback")])
+    b = brains(s)
+    r = run(b.chat("hello", mode="local"))
+    assert r["reply"].startswith("[tool-model failed")
+    assert b.hist["local"][-1]["reply"] == "done by the fallback"
+
+
 def test_default_chains_are_the_co_resident_pair_then_fallbacks():
     b = brains()
     cmap = {m["id"]: m for m in CAT}
@@ -209,7 +322,7 @@ def test_set_roles_refuses_quarantined_and_text_only_and_persists(tmp_path):
     r = b.set_roles({"brain": "gpt-oss-20b", "vision": "gemma-4-31b", "multimodal": "qwen3.8-27b",
                      "mode": "multimodal"})
     assert not r["ok"] and len(r["errors"]) == 2
-    assert r["roles"]["brain"] == "tool-model" and r["roles"]["vision"] == "vision-model"
+    assert r["roles"]["brain"] == "qwen3.6-35b-a3b" and r["roles"]["vision"] == "lfm2.5-vl"
     assert r["roles"]["multimodal"] == "qwen3.8-27b" and r["brain"]["mode"] == "multimodal"
     assert json.loads(conf.read_text())["roles"]["multimodal_model"] == "qwen3.8-27b"
     b2 = cb.Brains(FakeSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=str(conf),
@@ -854,6 +967,7 @@ def test_motion_after_an_operator_stop_is_refused_for_the_rest_of_the_turn():
         answer("The operator stopped me.")])
     b = cb.Brains(LoggedSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
                   complete=s, catalog=CAT)
+    b.state.update(model="tool-model", vision_model="vision-model")   # as written (selector roles)
     stop, turn = _stop_mid_walk(b, "local", "walk to the door")
     assert stop["reply"] == cb.STOP_FIRST_REPLY
     res = [(t["tool"], t["result"].get("stopped") or t["result"].get("error") or t["result"]["ok"])
@@ -882,6 +996,7 @@ def test_the_turns_own_stop_is_not_an_operator_stop():
                            answer("stopped, then waved")])
     b = cb.Brains(LoggedSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
                   complete=s, catalog=CAT)
+    b.state.update(model="tool-model", vision_model="vision-model")   # as written (selector roles)
     r = run(b.chat("hold still, then wave", mode="local"))            # no stop word: the model decides
     assert [t["tool"] for t in r["trace"]] == ["stop", "gesture"] and r["trace"][1]["result"]["ok"]
     assert [x[0] for x in b.sim.started] == ["wave"]
@@ -949,8 +1064,10 @@ class PoseSim(FakeSim):
 
 
 def pose_brains(script=None, **pose):
-    return cb.Brains(PoseSim(**pose), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
+    b = cb.Brains(PoseSim(**pose), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
                      complete=script, catalog=CAT)
+    b.state.update(model="tool-model", vision_model="vision-model")   # as written (selector roles)
+    return b
 
 
 def test_move_is_in_the_schema_with_robot_frame_parameters():
@@ -1097,8 +1214,10 @@ def test_surface_move_goes_through_the_tool():
 
 # ------------------------------------------- review fixes (2026-09-25, second pass)
 def _logged(script=None, sim=None):
-    return cb.Brains(sim or LoggedSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
+    b = cb.Brains(sim or LoggedSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
                      complete=script, catalog=CAT)
+    b.state.update(model="tool-model", vision_model="vision-model")   # as written (selector roles)
+    return b
 
 
 def _cmd_order(sim):
@@ -1278,6 +1397,7 @@ def test_a_question_with_stop_in_it_stops_and_then_gets_an_answer(mode):
                                 answer("The void guard stopped me at the edge.")])
     b = cb.Brains(PoseSim(), base_url="http://127.0.0.1:1/v1", api_key="x", conf_path=None,
                   complete=s, catalog=CAT)
+    b.state.update(model="tool-model", vision_model="vision-model")   # as written (selector roles)
     b.sim.cmd_log = []
     b.sim.note_cmd = lambda line: b.sim.cmd_log.append((0.0, line))
     r = run(b.chat("why did you stop?", mode=mode, source="typed"))
@@ -1289,7 +1409,9 @@ def test_a_question_with_stop_in_it_stops_and_then_gets_an_answer(mode):
     sent = s.calls[0][1][-1]["content"]
     sent = sent if isinstance(sent, str) else sent[0]["text"]
     assert sent.startswith("why did you stop?") and cb.STOP_ASK_NOTE.strip() in sent
-    assert [(h["user"], h["reply"]) for h in b.hist[mode]] == [("why did you stop?", r["reply"])]
+    # the history keeps the stop and the model's own words — not the multimodal chain's fallback note
+    assert [(h["user"], h["reply"]) for h in b.hist[mode]] == [
+        ("why did you stop?", f"{cb.STOP_FIRST_REPLY} The void guard stopped me at the edge.")]
     assert "[The cockpit" not in b.hist[mode][0]["user"]
 
 

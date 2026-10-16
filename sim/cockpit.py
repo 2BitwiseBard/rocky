@@ -3185,7 +3185,8 @@ class CockpitSim(Playground):
                     gesture_phase=self.gesture_phase,
                     events=_jsonable(ev), event_seq=seq, console=list(self.console)[-40:],
                     caps_version=caps_version, caps_seq=caps_seq,
-                    brain=self.brain, gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
+                    brain=self.brain, brain_activity=self.brains.activity_view(), brain_paused=self.brains.paused,
+                    chat_seq=getattr(getattr(self, "chat_feed", None), "seq", 0), gait=dict(T=self.gait.T, h=self.gait.h, R0=self.gait.R0,
                                                 duty=self.gait.duty, hstep=self.gait.hstep,
                                                 phase=round(float((self.sup.t_gait / self.gait.T) % 1.0), 3)
                                                 if self.gait.T > 0 else None),
@@ -3528,6 +3529,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
     from starlette.middleware import Middleware
     from starlette.responses import JSONResponse, HTMLResponse, StreamingResponse, Response
     from starlette.routing import Route
+    from cockpit_shared import chat_feed
 
     ui_path = os.path.join(HERE, "cockpit_ui.html")
 
@@ -3607,8 +3609,17 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     async def chat(request):
         body = await request.json()
-        r = await sim.chat(str(body.get("text", "")), body.get("mode"), body.get("model"),
-                           source=body.get("source"), trusted=bool(body.get("trusted", False)))
+        feed, page, label = chat_feed(sim), body.get("page"), body.get("label")
+        text = str(body.get("text", ""))
+        turn = feed.turn(text, body.get("source"), page, label)      # every screen shows the turn
+        t0 = time.monotonic()
+        try:
+            r = await sim.chat(text, body.get("mode"), body.get("model"),
+                               source=body.get("source"), trusted=bool(body.get("trusted", False)))
+        except Exception as e:
+            feed.add("n", f"chat failed: {e}", turn, page, label)
+            raise
+        feed.finish(turn, r, time.monotonic() - t0, page, label)
         sim.log(f"[{r['mode']}] {body.get('text', '')[:80]}")
         for tcall in r["trace"]:
             sim.log(f"  {tcall['tool']}({json.dumps(tcall.get('args', {}))}) -> {json.dumps(tcall['result'])[:120]}")
@@ -3619,6 +3630,7 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
     async def chat_clear(request):
         body = await request.json()
         sim.brains.clear(body.get("mode", "local"))
+        chat_feed(sim).add("clear", "", 0, body.get("page"), body.get("label"))
         return JSONResponse({"ok": True})
 
     async def brain(request):
@@ -3627,6 +3639,15 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
 
     async def models(_):
         return JSONResponse(await asyncio.to_thread(sim.brains.models_payload))
+
+    async def brain_warm(request):
+        """Load the models a mode uses (default: the current mode) — a 1-token call each, so the first
+        command does not wait 15-40 s for a cold load. Answers when they are loaded (or why not)."""
+        try:
+            body = await request.json()
+        except Exception:                                # noqa: BLE001 — an empty POST warms the current mode
+            body = {}
+        return JSONResponse(await sim.brains.warm((body or {}).get("mode")))
 
     async def world_get(_):
         return JSONResponse({"presets": list(PRESETS), "kinds": list(KINDS), "name": sim.world_name,
@@ -4382,12 +4403,129 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         return JSONResponse({"teleop": TELEOP_HELP, "rl": HELP_RL,
                              "commands": __import__("playground").__doc__.split("Commands")[1].split("HONESTY")[0]})
 
+    # ---------------------------------------------------------- 2026-10-15: the Models panel (sim/model_admin.py)
+    import model_admin
+    admin = model_admin.ModelAdmin(sim.brains, log=sim.log)
+    sim.model_admin = admin
+
+    def _who(request):
+        return (request.client.host if request.client else None), dict(request.headers)
+
+    async def _admin_call(request, fn, risky=False, body=None):
+        """fn(body) in a thread; AdminError -> its status. risky: AdminGate (desktop, or the PIN)."""
+        try:
+            if risky:
+                host, hdrs = _who(request)
+                admin.gate.check(host, hdrs, (body or {}).get("pin"))
+            return JSONResponse(await asyncio.to_thread(fn, body or {}))
+        except model_admin.AdminError as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=e.status)
+
+    async def _body(request):
+        try:
+            b = await request.json()
+        except Exception:                                # noqa: BLE001
+            b = {}
+        return b if isinstance(b, dict) else {}
+
+    async def admin_models(request):
+        host, hdrs = _who(request)
+        return await _admin_call(request, lambda _b: admin.payload(host, hdrs))
+
+    async def admin_load(request):
+        b = await _body(request)
+        return JSONResponse(await sim.brains.load_one(str(b.get("id", ""))))
+
+    async def admin_unload(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.unload(str(b["id"]) if b.get("id") else None), body=b)
+
+    async def admin_edit(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.edit(str(b.get("id", "")), b.get("changes") or {},
+                                                               apply=bool(b.get("apply")),
+                                                               restart=bool(b.get("restart"))),
+                                 risky=bool(b.get("apply")), body=b)
+
+    async def admin_delete(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.delete(str(b.get("id", "")), apply=bool(b.get("apply"))),
+                                 risky=bool(b.get("apply")), body=b)
+
+    async def admin_trash_empty(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.empty_trash(), risky=True, body=b)
+
+    async def admin_restart_swap(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: {"ok": True, "restart": admin.restart_swap()}, risky=True, body=b)
+
+    async def admin_hf_search(request):
+        q = request.query_params.get("q", "")
+        return await _admin_call(request, lambda _b: {"results": admin.hf_search(q)})
+
+    async def admin_hf_files(request):
+        repo = request.query_params.get("repo", "")
+        return await _admin_call(request, lambda _b: admin.hf_files(repo))
+
+    async def admin_download(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.download(b.get("repo"), b.get("files") or []),
+                                 risky=True, body=b)
+
+    async def admin_install_plan(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.install_plan(b.get("file")), body=b)
+
+    async def admin_install(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.install(b.get("file")), risky=True, body=b)
+
+    async def admin_bench(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.bench(str(b.get("id", "")), b.get("mode")), body=b)
+
+    async def admin_job_cancel(request):
+        b = await _body(request)
+        return await _admin_call(request, lambda b: admin.jobs.cancel(str(b.get("id", ""))), body=b)
+
+    async def gpu_free(request):
+        return await _admin_call(request, lambda _b: admin.free_comfyui())
+
+    async def chat_cancel(_):
+        n = sim.brains.cancel()
+        if n:
+            sim.log(f"chat: cancel pressed ({n} turn{'s' if n > 1 else ''})")
+        return JSONResponse({"ok": True, "cancelled": n})
+
+    async def cockpit_restart(_):
+        """The page's restart button: only under rocky-cockpit.service (systemd restarts on exit 75,
+        RestartForceExitStatus). From a terminal there is nothing to bring it back."""
+        if not os.environ.get("INVOCATION_ID"):
+            return JSONResponse({"ok": False, "error": "this cockpit was started from a terminal — restart it "
+                                 "there (or run it as the service: rocky.sh cockpit-service install)"},
+                                status_code=409)
+        sim.log("restart requested from the page (the service brings it back in a few seconds)")
+        try:
+            await asyncio.to_thread(sim.hw_disconnect)
+        except Exception as e:                             # noqa: BLE001
+            sim.log(f"hw disconnect on restart: {e}")
+        sim.alive = False
+        sim.flush_memories()
+
+        def bye():
+            time.sleep(0.4)
+            os._exit(75)
+        threading.Thread(target=bye, daemon=True).start()
+        return JSONResponse({"ok": True})
+
     routes = [
         Route("/", index), Route("/api/state", state), Route("/api/events", events), Route("/api/ping", ping),
         Route("/video/{cam}.mjpg", video), Route("/frame/{cam}.jpg", frame),
         Route("/api/cmd", cmd, methods=["POST"]), Route("/api/teleop", teleop, methods=["POST"]),
         Route("/api/chat", chat, methods=["POST"]), Route("/api/chat/clear", chat_clear, methods=["POST"]),
-        Route("/api/brain", brain, methods=["POST"]), Route("/api/models", models),
+        Route("/api/brain", brain, methods=["POST"]), Route("/api/brain/warm", brain_warm, methods=["POST"]),
+        Route("/api/models", models),
         Route("/api/world", world_get), Route("/api/world", world_set, methods=["POST"]),
         Route("/api/world/add", world_add, methods=["POST"]),
         Route("/api/rl/runs", rl_runs), Route("/api/rl/righter", rl_righter, methods=["POST"]),
@@ -4417,13 +4555,28 @@ def make_app(sim: CockpitSim, extra_hosts=(), check_host=True):
         Route("/api/memory", memory_get), Route("/api/memory", memory_post, methods=["POST"]),
         Route("/api/awareness", awareness_get), Route("/api/awareness", awareness_post, methods=["POST"]),
         Route("/api/place", place_get), Route("/api/place", place_post, methods=["POST"]),
+        Route("/api/admin/models", admin_models), Route("/api/admin/load", admin_load, methods=["POST"]),
+        Route("/api/admin/unload", admin_unload, methods=["POST"]),
+        Route("/api/admin/edit", admin_edit, methods=["POST"]),
+        Route("/api/admin/delete", admin_delete, methods=["POST"]),
+        Route("/api/admin/trash/empty", admin_trash_empty, methods=["POST"]),
+        Route("/api/admin/restart-swap", admin_restart_swap, methods=["POST"]),
+        Route("/api/admin/hf/search", admin_hf_search), Route("/api/admin/hf/files", admin_hf_files),
+        Route("/api/admin/download", admin_download, methods=["POST"]),
+        Route("/api/admin/install/plan", admin_install_plan, methods=["POST"]),
+        Route("/api/admin/install", admin_install, methods=["POST"]),
+        Route("/api/admin/bench", admin_bench, methods=["POST"]),
+        Route("/api/admin/jobs/cancel", admin_job_cancel, methods=["POST"]),
+        Route("/api/gpu/free", gpu_free, methods=["POST"]),
+        Route("/api/chat/cancel", chat_cancel, methods=["POST"]),
+        Route("/api/cockpit/restart", cockpit_restart, methods=["POST"]),
     ]
 
     async def sim_dead(_request, exc):
         return JSONResponse({"ok": False, "error": f"sim thread stopped: {exc}", "alive": False}, status_code=503)
 
     from cockpit_shared import routes as shared_routes
-    routes += shared_routes(sim)          # GET/POST /api/ui, GET /api/ui/events (4 Hz SSE), GET /api/guide (docs/COCKPIT_GUIDE.md)
+    routes += shared_routes(sim)          # /api/ui (+ /events, 4 Hz SSE), /api/guide, /api/chat/feed (every screen's chat)
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
@@ -4445,7 +4598,8 @@ def main(argv=None):
                          "reaches the port drives the robot (and the real servos when connected). Prefer "
                          "./rocky.sh tailnet (tailscale serve, tailnet-only HTTPS)")
     ap.add_argument("--world", default=os.environ.get("ROCKY_WORLD", "flat"))
-    ap.add_argument("--brain", default="talk", choices=["talk", "local", "multimodal", "claude"])
+    ap.add_argument("--brain", default=None, choices=["talk", "local", "multimodal", "claude"],
+                    help="start in this brain mode (default: the mode saved in the cockpit conf, else talk)")
     ap.add_argument("--awareness-s", type=float, default=AWARENESS_S,
                     help="compose the situation every N s while idle (0 = off; default %(default)s)")
     ap.add_argument("--curious", action="store_true",
@@ -4470,7 +4624,8 @@ def main(argv=None):
               "check — every device that reaches this port can drive the robot.", file=sys.stderr, flush=True)
     import uvicorn
     sim = CockpitSim(args.world if args.world in PRESETS else "flat")
-    sim.brain["mode"] = args.brain
+    if args.brain:
+        sim.brain["mode"] = args.brain
     if not args.no_memory:
         mem_dir = os.environ.get("ROCKY_MEMORY_DIR") or MEMORY_DIR
         sim.memory.set_directory(mem_dir)

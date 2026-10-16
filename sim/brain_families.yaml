@@ -1,0 +1,69 @@
+# How sim/brain_install.py writes a llama-swap stanza, keyed by the GGUF's
+# general.architecture. Read on every run, so an edit here is the whole change.
+#
+# A family listed here carries rules somebody MEASURED (a bench, a crash, a
+# vendor note). Every other architecture gets the GENERIC rules, which are
+# read from the file itself, never guessed from its name:
+#   * it must carry a chat template (tokenizer.chat_template): no template =
+#     a base or embedding model, nothing the cockpit can talk to -> refused;
+#     so is anything with a pooling type (embedding / reranker heads);
+#   * tool calls: "tools" in the template = it CAN emit them (untested until a
+#     bench); no "tools" = chat only, it can never drive the robot;
+#   * thinking: when the template has an enable_thinking switch it is turned
+#     OFF (robot turns are short tool calls) unless the family says keep;
+#   * placement: -ngl 99 when the weights fit the card and it is not a MoE,
+#     otherwise no -ngl at all so llama.cpp's auto-fit places it (measured on
+#     gemma-4-26b-a4b 2026-09-01: within 3% of the best hand-picked -ncmoe);
+#   * vision: only when a projector for it is on disk (the model's folder,
+#     the downloads folder, or one named beside it on the command line);
+#   * context: 16384, or the model's own trained length when that is shorter.
+#
+# Keys per family (all optional except title):
+#   title          what the stanza comment and the plan call it
+#   vision         always | name_vl | if_projector (default)   always = refuse
+#                  to install without a projector; name_vl = only when the id
+#                  says -vl-
+#   fetch_projector  true = `hf download <repo> mmproj-F16.gguf` when none is
+#                  on disk (Unsloth's naming; only for families that use it)
+#   projector_key  regex on a projector's base name, for families whose clip
+#                  header names them
+#   thinking       off (default) | keep
+#   flags          extra cmd lines, as written
+#   vision_flags   extra cmd lines for a vision stanza only
+#   comments       extra comment lines above the stanza
+
+families:
+  qwen35:
+    title: Qwen3.5
+    vision: always
+    fetch_projector: true
+    projector_key: '^qwen3\.5'
+    thinking: "off"
+    comments:
+      - "Thinking OFF at the template level (robot turns are short tool calls); Qwen's"
+      - "recommended non-thinking sampling."
+    flags:
+      - "--temp 0.7 --top-p 0.8 --top-k 20 --presence-penalty 1.5"
+
+  gemma4:
+    title: Gemma 4
+    vision: always
+    fetch_projector: true
+    projector_key: '^gemma-?4'
+    thinking: keep
+    comments:
+      - "Gemma decodes an image NON-CAUSALLY, so the whole image must land in one ubatch:"
+      - "--image-max-tokens above 512 WITHOUT raising -b/-ub aborts the server (GGML_ASSERT"
+      - "in llama-context). 140..280 fits the default n_ubatch 512."
+    vision_flags:
+      - "--image-min-tokens 140 --image-max-tokens 280"
+
+  lfm2:
+    title: LFM2
+    vision: name_vl
+    fetch_projector: true
+    projector_key: '^lfm2'
+
+# Architectures that are never a brain, whatever their header says.
+refuse:
+  eagle3: "an EAGLE-3 speculative draft head, not a model"
